@@ -1,5 +1,9 @@
 import React, { useEffect, useState, useRef } from "react";
-import { Send, Sparkles, BrainCircuit, Bot, User, Bookmark, FileSpreadsheet, Cpu, ChevronDown } from "lucide-react";
+import { Send, Sparkles, BrainCircuit, Bot, User, FileSpreadsheet, Cpu } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
 import { askCopilot, getCopilotSuggestions, getAvailableModels } from "../api/client";
 
 export default function CopilotPage({ onSelectEmployee }) {
@@ -172,7 +176,14 @@ export default function CopilotPage({ onSelectEmployee }) {
             </div>
             <div className="message-content">
               <div className="message-bubble">
-                <div style={{ whiteSpace: "pre-line" }}>{m.content}</div>
+                <div className="markdown-content">
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm, remarkMath]}
+                    rehypePlugins={[rehypeKatex]}
+                  >
+                    {m.content}
+                  </ReactMarkdown>
+                </div>
                 {m.model_used && m.role === "assistant" && (
                   <div style={{
                     display: "flex",
