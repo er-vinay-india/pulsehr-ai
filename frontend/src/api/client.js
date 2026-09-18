@@ -97,3 +97,9 @@ export async function openExecutivePrintReport() {
     printWindow.document.close();
   }
 }
+
+export async function deleteDataset(id) {
+  const res = await fetch(`${API_BASE}/upload/datasets/${id}`, { method: "DELETE" });
+  if (!res.ok) throw new Error("Failed to delete dataset");
+  return res.json();
+}

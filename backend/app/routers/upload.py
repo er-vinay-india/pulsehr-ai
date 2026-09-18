@@ -192,3 +192,40 @@ def list_datasets():
 def reseed_kaggle():
     res = load_and_seed_kaggle_dataset(force=True)
     return {"message": "Kaggle attendance & ratings dataset re-seeded successfully", "details": res}
+
+
+@router.delete("/datasets/{dataset_id}")
+def delete_dataset(dataset_id: int):
+    conn = get_connection()
+    try:
+        row = conn.execute("SELECT filename FROM dataset_uploads WHERE id = ?", (dataset_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Dataset not found")
+        
+        filename = row["filename"]
+        
+        # Get chunks
+        chunk_ids = [r[0] for r in conn.execute("SELECT id FROM tabular_chunks WHERE dataset_id = ?", (dataset_id,)).fetchall()]
+        if chunk_ids:
+            chunk_ph = ",".join(["?"] * len(chunk_ids))
+            conn.execute(f"DELETE FROM tabular_vectors WHERE id IN ({chunk_ph})", chunk_ids)
+            conn.execute(f"DELETE FROM tabular_chunks WHERE id IN ({chunk_ph})", chunk_ids)
+
+        # Delete alerts referencing this file
+        conn.execute("DELETE FROM hr_alerts WHERE title LIKE ?", (f"%{filename}%",))
+
+        # Delete dataset upload entry
+        conn.execute("DELETE FROM dataset_uploads WHERE id = ?", (dataset_id,))
+        conn.commit()
+
+        # Delete file if exists on disk
+        target_file = config.UPLOADS_DIR / filename
+        if target_file.exists():
+            try:
+                target_file.unlink()
+            except Exception:
+                pass
+
+        return {"message": f"Successfully deleted dataset '{filename}' and associated vector chunks."}
+    finally:
+        conn.close()

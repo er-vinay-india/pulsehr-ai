@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { UploadCloud, FileSpreadsheet, CheckCircle2, RefreshCw, Database, Layers, ArrowUpRight, Link2 } from "lucide-react";
-import { uploadDatasetFile, listDatasets, reseedKaggle } from "../api/client";
+import { UploadCloud, FileSpreadsheet, CheckCircle2, RefreshCw, Database, Layers, ArrowUpRight, Link2, Trash2 } from "lucide-react";
+import { uploadDatasetFile, listDatasets, reseedKaggle, deleteDataset } from "../api/client";
 
 export default function IngestionPage() {
   const [datasets, setDatasets] = useState([]);
@@ -50,6 +50,16 @@ export default function IngestionPage() {
       alert("Failed to re-seed: " + err.message);
     } finally {
       setReseedLoading(false);
+    }
+  };
+
+  const handleDelete = async (datasetId, filename) => {
+    if (!window.confirm(`Delete '${filename}' and remove its vector chunks from the database?`)) return;
+    try {
+      await deleteDataset(datasetId);
+      loadData();
+    } catch (err) {
+      alert("Failed to delete dataset: " + err.message);
     }
   };
 
@@ -199,6 +209,25 @@ export default function IngestionPage() {
                   <span>Ingested {new Date(ds.uploaded_at).toLocaleDateString()}</span>
                 </div>
               </div>
+
+              {ds.filename !== "attendance_2023_2024.csv" && (
+                <button
+                  type="button"
+                  onClick={() => handleDelete(ds.id, ds.filename)}
+                  style={{
+                    color: "var(--fg-secondary)",
+                    background: "rgba(255, 180, 190, 0.08)",
+                    border: "1px solid rgba(255, 180, 190, 0.2)",
+                    borderRadius: "6px",
+                    padding: "0.45rem",
+                    cursor: "pointer",
+                    transition: "all 0.15s ease"
+                  }}
+                  title={`Delete ${ds.filename}`}
+                >
+                  <Trash2 size={16} color="var(--rose-tier)" />
+                </button>
+              )}
             </div>
           ))}
         </div>
