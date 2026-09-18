@@ -16,15 +16,7 @@ export default function CopilotPage({ onSelectEmployee }) {
   const [suggestions, setSuggestions] = useState([]);
   const [models, setModels] = useState([]);
   const [selectedModel, setSelectedModel] = useState(() => localStorage.getItem("pulsehr_selected_model") || "llama3.1:8b");
-  const [collapsedCitations, setCollapsedCitations] = useState({});
   const messagesEndRef = useRef(null);
-
-  const toggleCitations = (idx) => {
-    setCollapsedCitations(prev => ({
-      ...prev,
-      [idx]: !prev[idx]
-    }));
-  };
 
   useEffect(() => {
     getCopilotSuggestions().then(res => setSuggestions(res.suggestions || []));
@@ -197,55 +189,6 @@ export default function CopilotPage({ onSelectEmployee }) {
                   </div>
                 )}
               </div>
-
-              {/* Citations / Semantic Grounding */}
-              {m.citations && m.citations.length > 0 && (
-                <div className="citations-tray">
-                  <div
-                    className="citations-header"
-                    onClick={() => toggleCitations(idx)}
-                    style={{ cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}
-                  >
-                    <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
-                      <Bookmark size={13} color="var(--accent-500)" />
-                      <span>
-                        {m.citations.some(c => c.is_exact) ? "Verified Ground Truth Sources" : "Retrieved Data Sources"} ({m.citations.length})
-                      </span>
-                    </div>
-                    <ChevronDown
-                      size={14}
-                      style={{
-                        transform: collapsedCitations[idx] ? "rotate(-90deg)" : "rotate(0deg)",
-                        transition: "transform 0.2s ease",
-                        color: "var(--fg-secondary)"
-                      }}
-                    />
-                  </div>
-                  {!collapsedCitations[idx] && (
-                    <div className="citations-list">
-                      {m.citations.map((cit, cIdx) => (
-                        <div
-                          key={cIdx}
-                          className="citation-card"
-                          onClick={() => cit.metadata?.employee_id !== undefined && onSelectEmployee(cit.metadata.employee_id)}
-                          title={cit.metadata?.employee_id !== undefined ? "Click to view employee profile" : ""}
-                        >
-                          <div className="citation-top">
-                            <span className="cit-name">
-                              {cit.employee_name || cit.metadata?.employee_name || cit.metadata?.name || cit.sheet_name}
-                              {cit.employee_code ? ` (${cit.employee_code})` : (cit.metadata?.employee_code ? ` (${cit.metadata.employee_code})` : "")}
-                            </span>
-                            <span className="cit-score" style={{ color: cit.is_exact ? "var(--emerald-tier)" : "var(--brand-400)", fontWeight: 600 }}>
-                              {cit.is_exact ? "Verified Match (100%)" : `Relevance: ${(cit.relevance_score * 100).toFixed(0)}%`}
-                            </span>
-                          </div>
-                          <p className="cit-text">{cit.text}</p>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
             </div>
           </div>
         ))}
