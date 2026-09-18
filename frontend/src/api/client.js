@@ -27,11 +27,11 @@ export async function getEmployeeDetail(id) {
   return res.json();
 }
 
-export async function askCopilot(query) {
+export async function askCopilot(query, model = null) {
   const res = await fetch(`${API_BASE}/copilot/query`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ query })
+    body: JSON.stringify({ query, model })
   });
   if (!res.ok) throw new Error("Failed to query AI copilot");
   return res.json();
@@ -101,5 +101,11 @@ export async function openExecutivePrintReport() {
 export async function deleteDataset(id) {
   const res = await fetch(`${API_BASE}/upload/datasets/${id}`, { method: "DELETE" });
   if (!res.ok) throw new Error("Failed to delete dataset");
+  return res.json();
+}
+
+export async function getAvailableModels() {
+  const res = await fetch(`${API_BASE}/copilot/models`);
+  if (!res.ok) return { models: [] };
   return res.json();
 }
