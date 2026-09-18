@@ -8,6 +8,7 @@ import pandas as pd
 from ..core import config
 from ..db.database import get_connection
 from ..services.rag_service import index_uploaded_dataset
+from ..services.sheet_merger import merge_uploaded_sheet_into_database
 from ..services.kaggle_loader import load_and_seed_kaggle_dataset
 
 router = APIRouter(prefix="/api/upload", tags=["upload"])
@@ -15,15 +16,10 @@ router = APIRouter(prefix="/api/upload", tags=["upload"])
 
 def clean_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     """Cleans trailing empty columns, normalizes headers, and handles nulls safely."""
-    # Drop columns that are completely empty
     df = df.dropna(axis=1, how="all")
-    
-    # Drop Unnamed columns with all nulls
     unnamed_empty = [c for c in df.columns if str(c).startswith("Unnamed") and df[c].isna().all()]
     if unnamed_empty:
         df = df.drop(columns=unnamed_empty)
-    
-    # Strip whitespace from string column names
     df.columns = [str(c).strip() for c in df.columns]
     return df
 
@@ -68,7 +64,6 @@ async def upload_file(file: UploadFile = File(...)):
                 df = pd.read_excel(xls, sheet_name=s)
                 sheets_data[s] = clean_dataframe(df)
         else:
-            # Try reading with multiple encodings
             df = None
             for enc in ["utf-8", "utf-8-sig", "latin1", "cp1252"]:
                 try:
@@ -91,33 +86,10 @@ async def upload_file(file: UploadFile = File(...)):
         raw_preview = primary_df.head(5).to_dict(orient="records")
         preview_records = sanitize_for_json(raw_preview)
 
-        # Connect & match employees for semantic enrichment
+        # Record dataset entry
         conn = get_connection()
-        linked_employees_count = 0
+        dataset_id = None
         try:
-            # Check if any column refers to Employee ID or Employee Name
-            id_col = None
-            for c in primary_df.columns:
-                if c.lower().replace(" ", "").replace("_", "") in ["employeeid", "empid", "id", "code"]:
-                    id_col = c
-                    break
-            
-            if id_col:
-                emp_codes = [str(val).strip() for val in primary_df[id_col].dropna().unique()]
-                if emp_codes:
-                    placeholders = ",".join(["?"] * len(emp_codes))
-                    match_count = conn.execute(
-                        f"SELECT COUNT(*) FROM employees WHERE employee_code IN ({placeholders})",
-                        emp_codes
-                    ).fetchone()[0]
-                    linked_employees_count = match_count
-
-            summary_note = (
-                f"Ingested {len(sheets_data)} sheet(s) with {total_rows} total rows and {len(columns)} columns. "
-            )
-            if linked_employees_count > 0:
-                summary_note += f"Semantically linked to {linked_employees_count} existing employee profile(s) for unified RAG reasoning."
-
             cursor = conn.execute("""
                 INSERT INTO dataset_uploads (
                     filename, original_name, file_type, sheet_count, row_count, col_count,
@@ -132,15 +104,32 @@ async def upload_file(file: UploadFile = File(...)):
                 len(columns),
                 json.dumps(columns),
                 json.dumps(preview_records),
-                summary_note
+                f"Ingested {len(sheets_data)} sheet(s) with {total_rows} total rows and {len(columns)} columns."
             ))
             dataset_id = cursor.lastrowid
             conn.commit()
         finally:
             conn.close()
 
+        # Merge sheet into database (update employees, recalculate metrics, trigger alerts)
+        merge_result = merge_uploaded_sheet_into_database(dataset_id, primary_df, filename)
+
         # Index vectors into SQLite
         indexed_chunks = index_uploaded_dataset(dataset_id, dest_path)
+
+        # Update summary insights with merge details
+        conn = get_connection()
+        try:
+            summary_text = (
+                f"Ingested {total_rows} rows from {filename}. "
+                f"Merged and updated {merge_result['updated_employees']} live employee records, "
+                f"inserted {merge_result['inserted_employees']} new members, "
+                f"and generated {merge_result['new_alerts_count']} fresh HR risk alerts."
+            )
+            conn.execute("UPDATE dataset_uploads SET summary_insights = ? WHERE id = ?", (summary_text, dataset_id))
+            conn.commit()
+        finally:
+            conn.close()
 
         return {
             "status": "success",
@@ -151,9 +140,10 @@ async def upload_file(file: UploadFile = File(...)):
             "columns": columns,
             "sample_preview": preview_records,
             "indexed_chunks": indexed_chunks,
-            "linked_employees": linked_employees_count,
-            "message": f"Successfully parsed and vectorized {indexed_chunks} rows into SQLite vector DB." + (
-                f" Linked with {linked_employees_count} employee profiles." if linked_employees_count else ""
+            "merge_result": merge_result,
+            "message": (
+                f"Successfully parsed and vectorized {indexed_chunks} rows. "
+                f"Updated {merge_result['updated_employees']} employee profiles and generated {merge_result['new_alerts_count']} new alerts."
             )
         }
     except Exception as e:

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Users, CheckCircle2, Award, AlertTriangle, TrendingUp, Clock, ArrowRight, ShieldAlert, Sparkles } from "lucide-react";
+import { Users, CheckCircle2, Award, AlertTriangle, TrendingUp, Clock, ArrowRight, ShieldAlert, Sparkles, Database, FileSpreadsheet, Check } from "lucide-react";
 import { getAnalyticsOverview } from "../api/client";
 
 export default function OverviewPage({ onSelectEmployee, onNavigateTab }) {
@@ -17,7 +17,8 @@ export default function OverviewPage({ onSelectEmployee, onNavigateTab }) {
     return <div className="page-loading">Loading workforce analytics...</div>;
   }
 
-  const { stats, departments, alerts, rating_distribution } = data || {};
+  const { stats, departments, alerts, rating_distribution, latest_upload, sources } = data || {};
+  const customUploadsCount = sources?.filter(s => s.filename !== "attendance_2023_2024.csv").length || 0;
 
   return (
     <div className="overview-page">
@@ -30,7 +31,7 @@ export default function OverviewPage({ onSelectEmployee, onNavigateTab }) {
           </div>
           <h2>Workforce Health & Attendance Intelligence</h2>
           <p>
-            Autonomous HR synthesis across 100 enterprise employees, 712 attendance punch logs, and 7 business divisions.
+            Autonomous HR synthesis across {stats?.total_employees || 100} enterprise employees, 712 attendance punch logs, and {departments?.length || 7} business divisions.
           </p>
         </div>
         <div className="banner-actions">
@@ -41,6 +42,43 @@ export default function OverviewPage({ onSelectEmployee, onNavigateTab }) {
         </div>
       </div>
 
+      {/* Active Data Ingestion Source Bar */}
+      <div style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        background: "var(--surface-card)",
+        border: "1px solid var(--border)",
+        borderRadius: "var(--radius-sm)",
+        padding: "0.75rem 1.25rem",
+        marginBottom: "1.75rem",
+        flexWrap: "wrap",
+        gap: "0.75rem"
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+          <div style={{
+            width: "10px",
+            height: "10px",
+            borderRadius: "50%",
+            background: "var(--emerald-tier)",
+            boxShadow: "0 0 8px var(--emerald-tier)"
+          }} />
+          <span style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--fg-primary)" }}>
+            Active Workforce Data Stream:
+          </span>
+          <span style={{ fontSize: "0.85rem", color: "var(--fg-secondary)" }}>
+            Baseline + {customUploadsCount} Uploaded Sheet(s) Synced
+          </span>
+        </div>
+
+        {latest_upload && (
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.775rem", color: "var(--brand-400)" }}>
+            <FileSpreadsheet size={15} />
+            <span>Latest Merged File: <strong>{latest_upload.original_name}</strong></span>
+          </div>
+        )}
+      </div>
+
       {/* KPI Cards */}
       <div className="kpi-grid">
         <div className="kpi-card kpi-accent">
@@ -49,7 +87,7 @@ export default function OverviewPage({ onSelectEmployee, onNavigateTab }) {
             <Users className="kpi-icon" size={20} />
           </div>
           <div className="kpi-value">{stats?.total_employees || 100}</div>
-          <div className="kpi-subtext">Active personnel across 7 departments</div>
+          <div className="kpi-subtext">Active personnel across {departments?.length || 7} departments</div>
         </div>
 
         <div className="kpi-card kpi-success">
@@ -67,7 +105,7 @@ export default function OverviewPage({ onSelectEmployee, onNavigateTab }) {
             <Award className="kpi-icon" size={20} />
           </div>
           <div className="kpi-value">{stats?.avg_rating || 3.8} <span style={{ fontSize: "1.1rem", color: "var(--fg-secondary)" }}>/ 5.0</span></div>
-          <div className="kpi-subtext">{stats?.top_performers_count || 14} Elite performers (≥ 4.5)</div>
+          <div className="kpi-subtext">{stats?.top_performers_count || 20} Elite performers (≥ 4.5)</div>
         </div>
 
         <div className="kpi-card kpi-danger">
@@ -129,7 +167,7 @@ export default function OverviewPage({ onSelectEmployee, onNavigateTab }) {
                 <ShieldAlert size={18} color="var(--rose-tier)" />
                 Proactive Talent Risk Alerts
               </h3>
-              <p className="panel-sub">Autonomous AI anomaly detection triggers</p>
+              <p className="panel-sub">Autonomous AI anomaly detection triggers (Baseline & Uploaded)</p>
             </div>
             <span className="badge badge-rose">{alerts?.length || 0} Alerts</span>
           </div>

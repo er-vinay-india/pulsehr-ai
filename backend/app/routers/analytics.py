@@ -38,7 +38,7 @@ def get_analytics_overview():
             ORDER BY 
                 CASE severity WHEN 'high' THEN 1 WHEN 'warning' THEN 2 ELSE 3 END,
                 id DESC
-            LIMIT 10
+            LIMIT 12
         """).fetchall()
 
         rating_dist = conn.execute("""
@@ -55,11 +55,26 @@ def get_analytics_overview():
             ORDER BY count DESC
         """).fetchall()
 
+        # Ingested datasets provenance
+        recent_uploads = conn.execute("""
+            SELECT id, filename, original_name, row_count, col_count, uploaded_at
+            FROM dataset_uploads
+            ORDER BY id DESC
+        """).fetchall()
+
+        latest_upload = None
+        for u in recent_uploads:
+            if u["filename"] != "attendance_2023_2024.csv":
+                latest_upload = dict(u)
+                break
+
         return {
             "stats": dict(emp_stats),
             "departments": [dict(d) for d in dept_stats],
             "alerts": [dict(a) for a in alerts],
-            "rating_distribution": [dict(r) for r in rating_dist]
+            "rating_distribution": [dict(r) for r in rating_dist],
+            "sources": [dict(u) for u in recent_uploads],
+            "latest_upload": latest_upload
         }
     finally:
         conn.close()

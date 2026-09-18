@@ -1,12 +1,12 @@
 import React, { useEffect, useState, useRef } from "react";
-import { Send, Sparkles, BrainCircuit, Bot, User, Bookmark, ExternalLink, HelpCircle } from "lucide-react";
+import { Send, Sparkles, BrainCircuit, Bot, User, Bookmark, FileSpreadsheet, CheckCircle2 } from "lucide-react";
 import { askCopilot, getCopilotSuggestions } from "../api/client";
 
 export default function CopilotPage({ onSelectEmployee }) {
   const [messages, setMessages] = useState([
     {
       role: "assistant",
-      content: "Hello! I am **PulseHR AI**, your workforce analytics & tabular intelligence assistant.\n\nI can analyze attendance patterns, detect burnout and overtime anomalies, benchmark department performance, or inspect individual employee records using vector semantic search.\n\nWhat would you like to explore today?",
+      content: "Hello! I am **PulseHR AI**, your workforce analytics & tabular intelligence assistant.\n\nI am actively grounded in both your **Kaggle Baseline Attendance Logs** and all **User-Uploaded Spreadsheets** (e.g. `employee_absent_data.csv`, `employee_performance_data.csv`).\n\nYou can ask about overall trends, specific employee records, or inquire directly about data in your uploaded files!",
       citations: []
     }
   ]);
@@ -66,13 +66,30 @@ export default function CopilotPage({ onSelectEmployee }) {
         <p className="subtitle">
           Query raw attendance timestamps, department aggregates, and performance correlations in natural language.
         </p>
+
+        {/* Multi-Source Grounding Indicator */}
+        <div style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: "0.5rem",
+          background: "rgba(126, 231, 217, 0.08)",
+          border: "1px solid rgba(126, 231, 217, 0.25)",
+          padding: "0.25rem 0.75rem",
+          borderRadius: "var(--radius-full)",
+          fontSize: "0.75rem",
+          color: "var(--accent-500)",
+          marginTop: "0.5rem"
+        }}>
+          <FileSpreadsheet size={13} />
+          <span>Multi-Source Grounded: Baseline + Uploaded Sheets Synced</span>
+        </div>
       </div>
 
       {/* Suggested Prompt Chips */}
       <div className="suggestions-container">
         <div className="suggestions-label">
           <Sparkles size={14} color="var(--brand-400)" />
-          <span>Suggested Inquiries:</span>
+          <span>Suggested Inquiries (Including Uploaded Files):</span>
         </div>
         <div className="chips-row">
           {suggestions.map((s, idx) => (
@@ -105,7 +122,7 @@ export default function CopilotPage({ onSelectEmployee }) {
                 <div className="citations-tray">
                   <div className="citations-header">
                     <Bookmark size={13} />
-                    <span>Vector Retrieved Profiles & Context ({m.citations.length})</span>
+                    <span>Vector Retrieved Records & Sources ({m.citations.length})</span>
                   </div>
                   <div className="citations-list">
                     {m.citations.map((cit, cIdx) => (
@@ -115,7 +132,7 @@ export default function CopilotPage({ onSelectEmployee }) {
                         onClick={() => cit.metadata?.employee_id !== undefined && onSelectEmployee(cit.metadata.employee_id)}
                       >
                         <div className="citation-top">
-                          <span className="cit-name">{cit.metadata?.name || cit.sheet_name}</span>
+                          <span className="cit-name">{cit.metadata?.name || cit.metadata?.employee_name || cit.sheet_name}</span>
                           <span className="cit-score">Relevance: {(cit.relevance_score * 100).toFixed(0)}%</span>
                         </div>
                         <p className="cit-text">{cit.text}</p>
@@ -133,7 +150,7 @@ export default function CopilotPage({ onSelectEmployee }) {
             <div className="avatar-icon"><Bot size={18} /></div>
             <div className="message-content">
               <div className="message-bubble loading-bubble">
-                <span className="dot-pulse" /> PulseHR AI is reasoning over tabular vectors...
+                <span className="dot-pulse" /> PulseHR AI is reasoning over uploaded sheets and vector tables...
               </div>
             </div>
           </div>
@@ -146,7 +163,7 @@ export default function CopilotPage({ onSelectEmployee }) {
         <form onSubmit={e => { e.preventDefault(); handleSend(); }}>
           <input
             type="text"
-            placeholder="Ask anything about employee attendance, ratings, burnout risk, or department metrics..."
+            placeholder="Ask anything about employee attendance, ratings, burnout risk, or uploaded files..."
             value={input}
             onChange={e => setInput(e.target.value)}
             disabled={loading}
