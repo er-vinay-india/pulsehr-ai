@@ -60,7 +60,7 @@ def index_all_employees():
     """Indexes all employees into tabular_chunks and tabular_vectors."""
     conn = get_connection()
     try:
-        rows = conn.execute("SELECT id, summary_profile, department, role, name FROM employees").fetchall()
+        rows = conn.execute("SELECT id, summary_profile, department, role, name, employee_code FROM employees").fetchall()
         if not rows:
             return 0
         
@@ -71,7 +71,6 @@ def index_all_employees():
         if existing_chunks >= len(rows):
             return existing_chunks
 
-        # Clear employee chunks
         conn.execute("DELETE FROM tabular_chunks WHERE metadata_json LIKE '%employee_id%'")
         conn.commit()
 
@@ -82,6 +81,7 @@ def index_all_employees():
             meta = json.dumps({
                 "type": "employee",
                 "employee_id": emp_id,
+                "employee_code": r["employee_code"],
                 "name": r["name"],
                 "department": r["department"],
                 "role": r["role"]
@@ -106,7 +106,7 @@ def index_all_employees():
 
 
 def index_uploaded_dataset(dataset_id: int, file_path: Path):
-    """Indexes an uploaded Excel or CSV file into tabular_chunks and tabular_vectors."""
+    """Indexes an uploaded Excel or CSV file into tabular_chunks and tabular_vectors with semantic linking."""
     conn = get_connection()
     try:
         suffix = file_path.suffix.lower()
@@ -114,36 +114,85 @@ def index_uploaded_dataset(dataset_id: int, file_path: Path):
         if suffix in (".xlsx", ".xls"):
             xls = pd.ExcelFile(file_path)
             for sheet in xls.sheet_names:
-                dfs[sheet] = pd.read_excel(xls, sheet_name=sheet)
+                df = pd.read_excel(xls, sheet_name=sheet)
+                dfs[sheet] = df
         elif suffix == ".csv":
-            dfs["Sheet1"] = pd.read_csv(file_path)
+            df = None
+            for enc in ["utf-8", "utf-8-sig", "latin1", "cp1252"]:
+                try:
+                    df = pd.read_csv(file_path, encoding=enc)
+                    break
+                except UnicodeDecodeError:
+                    continue
+            if df is None:
+                raise ValueError("Could not decode CSV file.")
+            dfs["Sheet1"] = df
         else:
             raise ValueError(f"Unsupported file format: {suffix}")
 
+        # Build lookup table of existing employees for semantic linking
+        emp_lookup = {}
+        emp_rows = conn.execute("SELECT id, employee_code, name, department, role, rating, attendance_rate FROM employees").fetchall()
+        for er in emp_rows:
+            code_key = er["employee_code"].strip().upper()
+            name_key = er["name"].strip().lower()
+            emp_lookup[code_key] = dict(er)
+            emp_lookup[name_key] = dict(er)
+
         total_chunks = 0
         for sheet_name, df in dfs.items():
-            # sample up to 250 rows to keep indexing snappy
-            sample_df = df.head(250)
+            # Clean empty unnamed columns
+            unnamed_empty = [c for c in df.columns if str(c).startswith("Unnamed") and df[c].isna().all()]
+            if unnamed_empty:
+                df = df.drop(columns=unnamed_empty)
+            df.columns = [str(c).strip() for c in df.columns]
+
+            sample_df = df.head(300)
             columns = [str(c) for c in df.columns]
 
             for row_idx, row in sample_df.iterrows():
-                # Formulate natural sentence
                 parts = []
+                matched_emp = None
+
                 for col in columns:
+                    if str(col).startswith("Unnamed"):
+                        continue
                     val = row.get(col)
-                    if pd.notna(val):
-                        parts.append(f"{col}: {val}")
-                
-                chunk_text = f"[{sheet_name} Row {row_idx+1}] " + ", ".join(parts)
-                meta = json.dumps({
+                    if pd.notna(val) and str(val).strip() != "":
+                        val_str = str(val).strip()
+                        parts.append(f"{col}: {val_str}")
+                        
+                        # Check for matching employee code or name
+                        val_upper = val_str.upper()
+                        val_lower = val_str.lower()
+                        if val_upper in emp_lookup and not matched_emp:
+                            matched_emp = emp_lookup[val_upper]
+                        elif val_lower in emp_lookup and not matched_emp:
+                            matched_emp = emp_lookup[val_lower]
+
+                if not parts:
+                    continue
+
+                chunk_text = f"[{sheet_name} Record {row_idx+1}] " + ", ".join(parts)
+                if matched_emp:
+                    chunk_text += (
+                        f" | Semantically Linked Employee: {matched_emp['name']} ({matched_emp['employee_code']}), "
+                        f"{matched_emp['role']} in {matched_emp['department']} (Rating: {matched_emp['rating']}/5.0, Attendance: {matched_emp['attendance_rate']}%)."
+                    )
+
+                meta_data = {
                     "dataset_id": dataset_id,
                     "sheet_name": sheet_name,
                     "row_index": int(row_idx)
-                })
+                }
+                if matched_emp:
+                    meta_data["employee_id"] = matched_emp["id"]
+                    meta_data["employee_code"] = matched_emp["employee_code"]
+                    meta_data["employee_name"] = matched_emp["name"]
 
                 cursor = conn.execute(
                     "INSERT INTO tabular_chunks (dataset_id, sheet_name, row_index, chunk_text, metadata_json) VALUES (?, ?, ?, ?, ?)",
-                    (dataset_id, sheet_name, int(row_idx), chunk_text, meta)
+                    (dataset_id, sheet_name, int(row_idx), chunk_text, json.dumps(meta_data))
                 )
                 chunk_id = cursor.lastrowid
                 emb = get_embedding(chunk_text)
