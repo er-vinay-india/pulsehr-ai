@@ -86,10 +86,18 @@ async def upload_file(file: UploadFile = File(...)):
         raw_preview = primary_df.head(5).to_dict(orient="records")
         preview_records = sanitize_for_json(raw_preview)
 
-        # Record dataset entry
+        # Record dataset entry (cleaning up previous uploads of the same file to prevent duplicate chunks)
         conn = get_connection()
         dataset_id = None
         try:
+            prev_rows = conn.execute("SELECT id FROM dataset_uploads WHERE filename = ?", (filename,)).fetchall()
+            for prev in prev_rows:
+                old_id = prev["id"]
+                conn.execute("DELETE FROM tabular_vectors WHERE id IN (SELECT id FROM tabular_chunks WHERE dataset_id = ?)", (old_id,))
+                conn.execute("DELETE FROM tabular_chunks WHERE dataset_id = ?", (old_id,))
+                conn.execute("DELETE FROM hr_alerts WHERE title LIKE ?", (f"%{filename}%",))
+                conn.execute("DELETE FROM dataset_uploads WHERE id = ?", (old_id,))
+
             cursor = conn.execute("""
                 INSERT INTO dataset_uploads (
                     filename, original_name, file_type, sheet_count, row_count, col_count,

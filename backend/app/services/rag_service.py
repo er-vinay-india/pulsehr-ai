@@ -1,5 +1,6 @@
 import json
 import math
+import re
 import struct
 import httpx
 import pandas as pd
@@ -130,14 +131,13 @@ def index_uploaded_dataset(dataset_id: int, file_path: Path):
         else:
             raise ValueError(f"Unsupported file format: {suffix}")
 
-        # Build lookup table of existing employees for semantic linking
-        emp_lookup = {}
+        # Build lookup tables of existing employees for accurate linking
+        emp_by_code = {}
+        emp_by_name = {}
         emp_rows = conn.execute("SELECT id, employee_code, name, department, role, rating, attendance_rate FROM employees").fetchall()
         for er in emp_rows:
-            code_key = er["employee_code"].strip().upper()
-            name_key = er["name"].strip().lower()
-            emp_lookup[code_key] = dict(er)
-            emp_lookup[name_key] = dict(er)
+            emp_by_code[er["employee_code"].strip().upper()] = dict(er)
+            emp_by_name[er["name"].strip().lower()] = dict(er)
 
         total_chunks = 0
         for sheet_name, df in dfs.items():
@@ -150,45 +150,66 @@ def index_uploaded_dataset(dataset_id: int, file_path: Path):
             sample_df = df.head(300)
             columns = [str(c) for c in df.columns]
 
-            for row_idx, row in sample_df.iterrows():
-                parts = []
-                matched_emp = None
+            # Identify key columns for accurate semantic linking
+            name_col = None
+            id_col = None
+            dept_col = None
+            for c in columns:
+                c_clean = re.sub(r"[^a-zA-Z0-9]", "", str(c).lower())
+                if not name_col and ("employeename" in c_clean or c_clean == "name" or "fullname" in c_clean):
+                    name_col = c
+                elif not id_col and ("employeeid" in c_clean or c_clean in ["empid", "id", "code"]):
+                    id_col = c
+                elif not dept_col and ("department" in c_clean or c_clean in ["dept", "division"]):
+                    dept_col = c
 
+            for row_idx, row in sample_df.iterrows():
+                row_name = str(row[name_col]).strip() if name_col and pd.notna(row.get(name_col)) else None
+                row_code = str(row[id_col]).strip() if id_col and pd.notna(row.get(id_col)) else None
+                row_dept = str(row[dept_col]).strip() if dept_col and pd.notna(row.get(dept_col)) else None
+
+                parts = []
                 for col in columns:
                     if str(col).startswith("Unnamed"):
                         continue
                     val = row.get(col)
                     if pd.notna(val) and str(val).strip() != "":
-                        val_str = str(val).strip()
-                        parts.append(f"{col}: {val_str}")
-                        
-                        # Check for matching employee code or name
-                        val_upper = val_str.upper()
-                        val_lower = val_str.lower()
-                        if val_upper in emp_lookup and not matched_emp:
-                            matched_emp = emp_lookup[val_upper]
-                        elif val_lower in emp_lookup and not matched_emp:
-                            matched_emp = emp_lookup[val_lower]
+                        parts.append(f"{col}: {str(val).strip()}")
 
                 if not parts:
                     continue
 
+                # Match employee with strict name-first consistency to prevent identity clashes
+                matched_emp = None
+                if row_name and row_name.lower() in emp_by_name:
+                    matched_emp = emp_by_name[row_name.lower()]
+                elif row_code and row_code.upper() in emp_by_code:
+                    cand = emp_by_code[row_code.upper()]
+                    # Only link if the row doesn't specify a conflicting name
+                    if not row_name or cand["name"].strip().lower() == row_name.lower():
+                        matched_emp = cand
+
                 chunk_text = f"[{sheet_name} Record {row_idx+1}] " + ", ".join(parts)
                 if matched_emp:
                     chunk_text += (
-                        f" | Semantically Linked Employee: {matched_emp['name']} ({matched_emp['employee_code']}), "
+                        f" | Ground Truth Profile: {matched_emp['name']} ({matched_emp['employee_code']}), "
                         f"{matched_emp['role']} in {matched_emp['department']} (Rating: {matched_emp['rating']}/5.0, Attendance: {matched_emp['attendance_rate']}%)."
                     )
+
+                emp_display_name = row_name or (matched_emp["name"] if matched_emp else None)
+                emp_display_code = row_code or (matched_emp["employee_code"] if matched_emp else None)
+                emp_display_dept = row_dept or (matched_emp["department"] if matched_emp else None)
 
                 meta_data = {
                     "dataset_id": dataset_id,
                     "sheet_name": sheet_name,
-                    "row_index": int(row_idx)
+                    "row_index": int(row_idx),
+                    "employee_id": matched_emp["id"] if matched_emp else None,
+                    "employee_code": emp_display_code,
+                    "employee_name": emp_display_name,
+                    "name": emp_display_name,
+                    "department": emp_display_dept
                 }
-                if matched_emp:
-                    meta_data["employee_id"] = matched_emp["id"]
-                    meta_data["employee_code"] = matched_emp["employee_code"]
-                    meta_data["employee_name"] = matched_emp["name"]
 
                 cursor = conn.execute(
                     "INSERT INTO tabular_chunks (dataset_id, sheet_name, row_index, chunk_text, metadata_json) VALUES (?, ?, ?, ?, ?)",

@@ -61,3 +61,16 @@ def test_executive_html_report():
     assert response.status_code == 200
     assert "PulseHR AI" in response.text
     assert "Workforce" in response.text
+
+def test_copilot_exact_entity_citations():
+    from app.services.ai_copilot import find_exact_employee_matches, query_copilot
+    matches = find_exact_employee_matches("How many days was Sofia Sharma absent?")
+    assert len(matches) >= 1
+    assert matches[0]["employee"]["name"] == "Sofia Sharma"
+    assert matches[0]["employee"]["employee_code"] == "EMP-002"
+
+def test_unrelated_query_no_citation_flood():
+    from app.services.ai_copilot import query_copilot
+    res = query_copilot("What is 2 + 2?")
+    # An unrelated query should not flood 7 citations
+    assert len(res["citations"]) == 0

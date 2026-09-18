@@ -82,10 +82,11 @@ def find_exact_employee_matches(query: str) -> list[dict]:
             if is_match:
                 # Fetch exact chunks for this employee from uploaded spreadsheets
                 emp_chunks = conn.execute("""
-                    SELECT chunk_text, sheet_name 
+                    SELECT DISTINCT chunk_text, sheet_name 
                     FROM tabular_chunks 
-                    WHERE chunk_text LIKE ? OR metadata_json LIKE ?
-                    LIMIT 5
+                    WHERE (chunk_text LIKE ? OR metadata_json LIKE ?) AND dataset_id IS NOT NULL
+                    ORDER BY id DESC
+                    LIMIT 3
                 """, (f"%{emp['name']}%", f"%\"employee_id\": {emp['id']}%")).fetchall()
 
                 matches.append({
@@ -281,6 +282,77 @@ def query_copilot(user_query: str, selected_model: str | None = None) -> dict:
                 + "\n".join([f"- {c['text']}" for c in vector_results[:4]])
             )
 
+    # 7. Curate high-confidence, non-repetitive citations for the UI
+    display_citations = []
+    if exact_matches:
+        # When specific employees are mentioned, display only their verified ground truth and exact rows
+        for m in exact_matches:
+            emp = m["employee"]
+            for ch in m["exact_chunks"]:
+                display_citations.append({
+                    "chunk_id": f"exact-row-{emp['id']}",
+                    "type": "exact_match",
+                    "is_exact": True,
+                    "relevance_score": 1.0,
+                    "employee_name": emp["name"],
+                    "employee_code": emp["employee_code"],
+                    "department": emp["department"],
+                    "text": ch["chunk_text"],
+                    "sheet_name": ch.get("sheet_name", "Uploaded Sheet"),
+                    "metadata": {
+                        "employee_id": emp["id"],
+                        "employee_name": emp["name"],
+                        "name": emp["name"],
+                        "employee_code": emp["employee_code"],
+                        "department": emp["department"],
+                    }
+                })
+            # Also add verified database baseline
+            display_citations.append({
+                "chunk_id": f"emp-profile-{emp['id']}",
+                "type": "exact_match",
+                "is_exact": True,
+                "relevance_score": 1.0,
+                "employee_name": emp["name"],
+                "employee_code": emp["employee_code"],
+                "department": emp["department"],
+                "text": f"Verified Database Profile: {emp['name']} ({emp['employee_code']}), {emp['role']} in {emp['department']} · Attendance: {emp['attendance_rate']}% · Rating: {emp['rating']}/5.0 · Overtime: {emp['overtime_hours']}h · Risk: {emp['attrition_risk']}",
+                "sheet_name": "Workforce DB",
+                "metadata": {
+                    "employee_id": emp["id"],
+                    "employee_name": emp["name"],
+                    "name": emp["name"],
+                    "employee_code": emp["employee_code"],
+                    "department": emp["department"],
+                }
+            })
+    else:
+        # General query: filter by relevance threshold, deduplicate, and limit to top 3
+        seen_keys = set()
+        for v in vector_results:
+            if v["relevance_score"] < 0.55:
+                continue
+            meta = v.get("metadata", {})
+            dedup_key = meta.get("employee_code") or meta.get("name") or v["text"][:60]
+            if dedup_key in seen_keys:
+                continue
+            seen_keys.add(dedup_key)
+
+            display_citations.append({
+                "chunk_id": v["chunk_id"],
+                "type": "vector_search",
+                "is_exact": False,
+                "relevance_score": v["relevance_score"],
+                "employee_name": meta.get("employee_name") or meta.get("name"),
+                "employee_code": meta.get("employee_code"),
+                "department": meta.get("department"),
+                "text": v["text"],
+                "sheet_name": v.get("sheet_name", "Vector Chunk"),
+                "metadata": meta
+            })
+            if len(display_citations) >= 3:
+                break
+
     suggestions = [
         "How many absent days were recorded in employee_absent_data.csv?",
         "Who has high overtime in the latest performance sheet?",
@@ -293,6 +365,6 @@ def query_copilot(user_query: str, selected_model: str | None = None) -> dict:
         "model_used": target_model,
         "answer": answer_text,
         "exact_matches": [m["employee"]["name"] for m in exact_matches],
-        "citations": vector_results,
+        "citations": display_citations,
         "suggested_questions": suggestions
     }

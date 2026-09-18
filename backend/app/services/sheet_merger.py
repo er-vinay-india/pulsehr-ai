@@ -75,12 +75,18 @@ def merge_uploaded_sheet_into_database(dataset_id: int, df: pd.DataFrame, filena
             if not code_val and not name_val:
                 continue
 
+            dept_val = str(row.get(dept_col)).strip() if dept_col and pd.notna(row.get(dept_col)) else None
+            role_val = str(row.get(role_col)).strip() if role_col and pd.notna(row.get(role_col)) else None
+
             # Look up existing employee
+            # Priority 1: Match by name (case-insensitive)
             emp = None
-            if code_val:
-                emp = conn.execute("SELECT * FROM employees WHERE UPPER(employee_code) = ?", (code_val.upper(),)).fetchone()
-            if not emp and name_val:
+            if name_val:
                 emp = conn.execute("SELECT * FROM employees WHERE LOWER(name) = ?", (name_val.lower(),)).fetchone()
+
+            # Priority 2: Match by code if not found by name
+            if not emp and code_val:
+                emp = conn.execute("SELECT * FROM employees WHERE UPPER(employee_code) = ?", (code_val.upper(),)).fetchone()
 
             # Extracted values from row
             new_att = parse_percentage(row.get(att_col)) if att_col else None
@@ -92,6 +98,23 @@ def merge_uploaded_sheet_into_database(dataset_id: int, df: pd.DataFrame, filena
 
             if emp:
                 emp_id = emp["id"]
+                resolved_name = name_val or emp["name"]
+                resolved_code = code_val or emp["employee_code"]
+                resolved_dept = dept_val or emp["department"]
+                resolved_role = role_val or emp["role"]
+
+                # If the code belongs to another employee, reassign the other employee to avoid collision
+                if code_val and code_val.upper() != emp["employee_code"].upper():
+                    clash = conn.execute(
+                        "SELECT id FROM employees WHERE UPPER(employee_code) = ? AND id != ?",
+                        (code_val.upper(), emp_id)
+                    ).fetchone()
+                    if clash:
+                        conn.execute(
+                            "UPDATE employees SET employee_code = ? WHERE id = ?",
+                            (f"EMP-SYN-{clash['id']:03d}", clash["id"])
+                        )
+
                 current_att = new_att if new_att is not None else emp["attendance_rate"]
                 current_rating = new_rating if new_rating is not None else emp["rating"]
                 current_ot = new_ot if new_ot is not None else emp["overtime_hours"]
@@ -113,33 +136,37 @@ def merge_uploaded_sheet_into_database(dataset_id: int, df: pd.DataFrame, filena
 
                 conn.execute("""
                     UPDATE employees
-                    SET attendance_rate = ?,
+                    SET name = ?,
+                        employee_code = ?,
+                        department = ?,
+                        role = ?,
+                        attendance_rate = ?,
                         rating = ?,
                         overtime_hours = ?,
                         attrition_risk = ?,
                         summary_profile = ?
                     WHERE id = ?
-                """, (current_att, current_rating, current_ot, current_risk, updated_profile, emp_id))
+                """, (resolved_name, resolved_code, resolved_dept, resolved_role, current_att, current_rating, current_ot, current_risk, updated_profile, emp_id))
 
                 # Check for new alerts triggered by uploaded figures
                 if current_ot > 25 and current_rating >= 4.5:
                     new_alerts.append((
                         "high", "burnout",
-                        f"Severe Overtime Alert ({filename}): {emp['name']}",
+                        f"Severe Overtime Alert ({filename}): {resolved_name}",
                         f"Updated data shows {current_ot}h monthly overtime with high rating ({current_rating}/5.0). Immediate retention priority.",
                         emp_id, current_ot
                     ))
                 elif new_absent and new_absent >= 5:
                     new_alerts.append((
                         "high", "attendance_drop",
-                        f"Elevated Absence Alert ({filename}): {emp['name']}",
-                        f"Uploaded record indicates {int(new_absent)} absent days in {emp['department']}.",
+                        f"Elevated Absence Alert ({filename}): {resolved_name}",
+                        f"Uploaded record indicates {int(new_absent)} absent days in {resolved_dept}.",
                         emp_id, new_absent
                     ))
                 elif current_att < 85.0 and current_rating >= 4.5:
                     new_alerts.append((
                         "warning", "rating_disconnect",
-                        f"Attendance Disconnect ({filename}): {emp['name']}",
+                        f"Attendance Disconnect ({filename}): {resolved_name}",
                         f"Attendance at {current_att}% with high performance rating ({current_rating}/5.0).",
                         emp_id, current_att
                     ))
