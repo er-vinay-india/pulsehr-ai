@@ -24,6 +24,10 @@ export default function CopilotTools({ loading, onRun }) {
   }, [open]);
   useEffect(() => {
     if (!open) return;
+    if ((!dataset && !relationship) || (dataset && !sheet)) {
+      setColumns([]); setColumn(''); setGroup(''); setFilterColumn(''); setError(''); setFetching(false);
+      return;
+    }
     let active = true;
     setFetching(true);
     setColumns([]); setColumn(''); setGroup(''); setFilterColumn(''); setError('');
@@ -47,8 +51,8 @@ export default function CopilotTools({ loading, onRun }) {
     {open && <fieldset disabled={loading} style={{ margin: '12px 0', padding: 16, border: '1px solid var(--border)', borderRadius: 8 }}>
       <legend>Verified calculations</legend>
       <p>Choose a full data source. Count counts rows; averages exclude missing values. Joined rows can repeat a source value, so choose the appropriate measure.</p>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
-        <label>Source <select value={dataset} onChange={e => { setDataset(e.target.value); setSheet(''); setRelationship(''); }}><option value="">Choose a source</option>{datasets.map(d => <option key={d.id} value={d.id}>{d.original_name || d.filename}</option>)}</select></label>
+      <div className="calculation-fields">
+        <label>Source <select value={dataset} onChange={e => { setDataset(e.target.value); const chosen = datasets.find(d => String(d.id) === e.target.value); setSheet(chosen?.sheets?.length === 1 ? chosen.sheets[0].name : ''); setRelationship(''); }}><option value="">Choose a source</option>{datasets.map(d => <option key={d.id} value={d.id}>{d.original_name || d.filename}</option>)}</select></label>
         {dataset && <label>Sheet <select value={sheet} onChange={e => setSheet(e.target.value)}><option value="">Choose a sheet</option>{(datasets.find(d => String(d.id) === dataset)?.sheets || []).map(s => <option key={s.id} value={s.name}>{s.name}</option>)}</select></label>}
         <label>Or connected view <select value={relationship} onChange={e => { setRelationship(e.target.value); setDataset(''); setSheet(''); }}><option value="">No join</option>{relationships.map(r => <option key={r.id} value={r.id}>{r.left_file} [{r.left_column}] ↔ {r.right_file} [{r.right_column}]</option>)}</select></label>
         <label>Operation <select value={operation} onChange={e => setOperation(e.target.value)}>{['count', 'sum', 'mean', 'min', 'max', 'median'].map(o => <option key={o}>{o}</option>)}</select></label>

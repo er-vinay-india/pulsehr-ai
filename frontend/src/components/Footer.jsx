@@ -13,7 +13,7 @@ export default function Footer() {
         </div>
         <div className="footer-badge">
           <span className="dot" />
-          <span>Local Engine Online · Ollama Qwen2.5 + nomic-embed-text</span>
+          <span>Spreadsheet analytics · Source-linked answers</span>
         </div>
       </div>
     </footer>

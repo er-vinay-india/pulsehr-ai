@@ -148,11 +148,11 @@ export default function IngestionPage() {
         <div className="hero-content">
           <div className="banner-tag">
             <UploadCloud size={15} />
-            <span>Universal Tabular RAG Ingestion Pipeline</span>
+            <span>Your data workspace</span>
           </div>
-          <h2>Excel & CSV Tabular Ingestion Studio</h2>
+          <h2>Upload your sheets</h2>
           <p>
-            Upload any workforce spreadsheet or roster. PulseHR AI automatically extracts sheets, sanitizes missing cells, infers column schemas, preserves every row, discovers shared keys across files, and updates your overview.
+            Add a CSV or Excel workbook. Analyse every sheet, discover shared keys, and connect related records in one workspace.
           </p>
         </div>
       </div>
@@ -260,7 +260,7 @@ export default function IngestionPage() {
             <div className="dropzone-icon">
               <FileSpreadsheet size={36} color="var(--brand-500)" />
             </div>
-            <h3>{isDragging ? "Release File to Upload" : "Drop Excel or CSV File Here"}</h3>
+            <h3>{isDragging ? "Release File to Upload" : "Add a spreadsheet"}</h3>
             <p className="dropzone-hint">
               Supports .xlsx, .xls, and .csv formats · All sheets and rows retained · 20 MB, 20,000 rows, 200 columns per file
             </p>
@@ -363,8 +363,8 @@ export default function IngestionPage() {
       <div className="card-panel" style={{ marginTop: "2rem" }}>
         <div className="panel-header">
           <div>
-            <h3>Active Ingested Datasets</h3>
-            <p className="panel-sub">Spreadsheets indexed in SQLite and available for vector RAG querying</p>
+            <h3>Your datasets</h3>
+            <p className="panel-sub">Uploaded files, ready to explore and ask questions about</p>
           </div>
         </div>
 

@@ -26,6 +26,8 @@ export default function App() {
     return () => window.removeEventListener("hashchange", handleHashChange);
   }, []);
 
+  useEffect(() => { window.scrollTo(0, 0); }, [activeTab]);
+
   const handleSelectTab = tab => {
     window.location.hash = tab;
     setActiveTab(tab);
@@ -33,9 +35,10 @@ export default function App() {
 
   return (
     <div className="app">
+      <a className="skip-link" href="#main-content" onClick={e => { e.preventDefault(); document.getElementById("main-content")?.focus(); }}>Skip to content</a>
       <Header activeTab={activeTab} onSelectTab={handleSelectTab} />
 
-      <main className="app-main">
+      <main id="main-content" className="app-main" tabIndex={-1}>
         {activeTab === "overview" && (
           <OverviewPage
             onSelectEmployee={setSelectedEmployeeId}

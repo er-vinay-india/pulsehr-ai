@@ -12,7 +12,7 @@ export default function CopilotPage({ onSelectEmployee }) {
   const [messages, setMessages] = useState([
     {
       role: "assistant",
-      content: "Hello! I am **PulseHR AI**, your workforce analytics & tabular intelligence assistant.\n\nI am actively grounded in both your **uploaded sheets** and their **exact-key relationships**.\n\nYou can use the **AI Model Dropdown** above to select your preferred open-source model (e.g. Meta Llama 3.1 or Qwen 2.5) for analysis grounded in your records. Use **Calculate from data** for verified arithmetic and **Create sheet report** for a downloadable report.",
+      content: "Hello! Ask me about your **uploaded sheets** and the records that connect them.\n\nUse **Calculate from data** for exact totals and comparisons, or **Create sheet PowerPoint** to prepare a report.",
       citations: [],
       model_used: "System"
     }
@@ -38,7 +38,7 @@ export default function CopilotPage({ onSelectEmployee }) {
   }, []);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (messages.length > 1) messagesEndRef.current?.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
   }, [messages, loading]);
 
   const handleModelChange = (modelId) => {
@@ -88,11 +88,11 @@ export default function CopilotPage({ onSelectEmployee }) {
           <div>
             <div className="brand-badge">
               <BrainCircuit size={18} color="var(--brand-400)" />
-              <span>Multi-Model Open Source Inference Engine</span>
+              <span>Your workspace assistant</span>
             </div>
-            <h2>Workforce AI Copilot & Anomaly Reasoning</h2>
+            <h2>HR Copilot</h2>
             <p className="subtitle">
-              Strict factual extraction over uploaded sheets and core attendance tables.
+              Ask questions, calculate metrics, and turn your sheets into reports.
             </p>
           </div>
 
@@ -111,6 +111,7 @@ export default function CopilotPage({ onSelectEmployee }) {
               Active Model:
             </span>
             <select
+              aria-label="AI model"
               value={selectedModel}
               onChange={e => handleModelChange(e.target.value)}
               style={{
@@ -154,7 +155,7 @@ export default function CopilotPage({ onSelectEmployee }) {
       <div className="suggestions-container">
         <div className="suggestions-label">
           <Sparkles size={14} color="var(--brand-400)" />
-          <span>Suggested Fact-Checked Questions:</span>
+          <span>Start with a question:</span>
         </div>
         <div className="chips-row">
           {suggestions.map((s, idx) => (
@@ -231,12 +232,13 @@ export default function CopilotPage({ onSelectEmployee }) {
         <form onSubmit={e => { e.preventDefault(); handleSend(); }}>
           <input
             type="text"
+            aria-label="Message the HR copilot"
             placeholder={`Ask ${selectedModel} anything about attendance, ratings, or uploaded files...`}
             value={input}
             onChange={e => setInput(e.target.value)}
             disabled={loading}
           />
-          <button type="submit" className="btn-primary" disabled={loading || !input.trim()}>
+          <button type="submit" aria-label="Send message" className="btn-primary" disabled={loading || !input.trim()}>
             <Send size={16} />
             <span>Send</span>
           </button>

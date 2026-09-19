@@ -4,11 +4,11 @@ import { triggerPresentationGeneration, openExecutivePrintReport } from "../api/
 
 export default function Header({ activeTab, onSelectTab }) {
   const tabs = [
-    { id: "overview", label: "Executive Overview", icon: LayoutDashboard },
-    { id: "explorer", label: "Data Explorer", icon: Table },
-    { id: "copilot", label: "AI HR Copilot", icon: BrainCircuit },
-    { id: "presentations", label: "Presentations", icon: Presentation },
-    { id: "ingestion", label: "Ingestion Studio", icon: UploadCloud }
+    { id: "overview", label: "Executive Overview", short: "Overview", icon: LayoutDashboard },
+    { id: "explorer", label: "Data Explorer", short: "Explore", icon: Table },
+    { id: "copilot", label: "AI HR Copilot", short: "Copilot", icon: BrainCircuit },
+    { id: "presentations", label: "Presentations", short: "Reports", icon: Presentation },
+    { id: "ingestion", label: "Ingestion Studio", short: "Upload", icon: UploadCloud }
   ];
 
   return (
@@ -25,15 +25,18 @@ export default function Header({ activeTab, onSelectTab }) {
         </div>
 
         <nav className="tabs-nav-segmented" aria-label="Primary Navigation">
-          {tabs.map(({ id, label, icon: Icon }) => (
+          {tabs.map(({ id, label, short, icon: Icon }) => (
             <button
               key={id}
               type="button"
               className={`nav-segment ${activeTab === id ? "active" : ""}`}
               onClick={() => onSelectTab(id)}
+              aria-label={label}
+              aria-current={activeTab === id ? "page" : undefined}
             >
               <Icon size={16} />
-              <span>{label}</span>
+              <span className="nav-label-long" aria-hidden="true">{label}</span>
+              <span className="nav-label-short" aria-hidden="true">{short}</span>
             </button>
           ))}
         </nav>
@@ -44,6 +47,7 @@ export default function Header({ activeTab, onSelectTab }) {
             className="btn-secondary"
             onClick={openExecutivePrintReport}
             title="Open Printable Executive Report"
+            aria-label="Open printable report"
           >
             <FileText size={15} />
             <span>PDF Report</span>
@@ -53,6 +57,7 @@ export default function Header({ activeTab, onSelectTab }) {
             className="btn-primary"
             onClick={() => triggerPresentationGeneration().catch(err => window.alert(err.message))}
             title="Export PowerPoint (.pptx) Presentation"
+            aria-label="Export PowerPoint"
           >
             <Download size={15} />
             <span>Export .PPTX</span>
