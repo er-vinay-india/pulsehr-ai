@@ -1,8 +1,11 @@
+import csv
+import io
 import json
 from pathlib import Path
 from uuid import uuid4
 
 from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi.responses import FileResponse, Response
 
 from ..core import config
 from ..db.database import get_connection
@@ -66,6 +69,65 @@ def list_datasets():
             item['sheets'] = [dict(s) for s in conn.execute('SELECT id,name,row_count FROM sheets WHERE dataset_id=?', (row['id'],))]
             datasets.append(item)
         return {'datasets': datasets}
+    finally:
+        conn.close()
+
+
+@router.get('/datasets/{dataset_id}/download')
+def download_dataset(dataset_id: int):
+    conn = get_connection()
+    try:
+        row = conn.execute('SELECT * FROM dataset_uploads WHERE id=?', (dataset_id,)).fetchone()
+        if row is None:
+            raise HTTPException(404, 'Dataset not found')
+
+        orig_name = (row['original_name'] or 'dataset').replace('"', '').replace('/', '_').replace('\\', '_')
+        file_type = (row['file_type'] or 'csv').lower()
+        if not orig_name.lower().endswith(f".{file_type}"):
+            orig_name = f"{orig_name}.{file_type}"
+
+        disk_path = (config.UPLOADS_DIR / row['filename']).resolve()
+        if disk_path.is_file() and disk_path.is_relative_to(config.UPLOADS_DIR.resolve()):
+            media = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' if file_type in ('xlsx', 'xls') else 'text/csv; charset=utf-8'
+            return FileResponse(disk_path, filename=orig_name, media_type=media)
+
+        # Fail-safe reconstruction from SQLite sheets and sheet_rows
+        sheets = conn.execute('SELECT id, name, columns_json FROM sheets WHERE dataset_id=? ORDER BY id', (dataset_id,)).fetchall()
+        if not sheets:
+            raise HTTPException(404, 'No sheets found for dataset')
+
+        if len(sheets) == 1 or file_type == 'csv':
+            sheet = sheets[0]
+            cols = json.loads(sheet['columns_json'] or '[]')
+            rows = [json.loads(r['data_json']) for r in conn.execute('SELECT data_json FROM sheet_rows WHERE sheet_id=? ORDER BY row_index', (sheet['id'],))]
+            buf = io.StringIO()
+            writer = csv.DictWriter(buf, fieldnames=cols, extrasaction='ignore')
+            writer.writeheader()
+            for r in rows:
+                writer.writerow(r)
+            csv_bytes = buf.getvalue().encode('utf-8-sig')
+            csv_name = orig_name if orig_name.lower().endswith('.csv') else f"{Path(orig_name).stem}.csv"
+            return Response(
+                content=csv_bytes,
+                media_type='text/csv; charset=utf-8',
+                headers={'Content-Disposition': f'attachment; filename="{csv_name}"'}
+            )
+        else:
+            import pandas as pd
+            buf = io.BytesIO()
+            with pd.ExcelWriter(buf, engine='openpyxl') as writer:
+                for sheet in sheets:
+                    cols = json.loads(sheet['columns_json'] or '[]')
+                    rows = [json.loads(r['data_json']) for r in conn.execute('SELECT data_json FROM sheet_rows WHERE sheet_id=? ORDER BY row_index', (sheet['id'],))]
+                    df = pd.DataFrame(rows, columns=cols)
+                    title = (sheet['name'] or 'Sheet')[:31]
+                    df.to_excel(writer, sheet_name=title, index=False)
+            xlsx_name = orig_name if orig_name.lower().endswith(('.xlsx', '.xls')) else f"{Path(orig_name).stem}.xlsx"
+            return Response(
+                content=buf.getvalue(),
+                media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                headers={'Content-Disposition': f'attachment; filename="{xlsx_name}"'}
+            )
     finally:
         conn.close()
 

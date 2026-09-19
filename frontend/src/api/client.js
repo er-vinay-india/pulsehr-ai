@@ -63,6 +63,14 @@ export async function listDatasets() {
   return res.json();
 }
 
+export function getDatasetDownloadUrl(datasetId) {
+  return `${API_BASE}/upload/datasets/${datasetId}/download`;
+}
+
+export function getSheetDownloadUrl(sheetId, format = "csv") {
+  return `${API_BASE}/sheets/${sheetId}/download?format=${format}`;
+}
+
 export function getPresentationDownloadUrl() {
   return `${API_BASE}/reports/presentation/latest`;
 }

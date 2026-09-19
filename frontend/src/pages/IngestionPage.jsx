@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { UploadCloud, FileSpreadsheet, CheckCircle2, RefreshCw, Database, Layers, ArrowUpRight, Link2, Trash2 } from "lucide-react";
-import { uploadDatasetFile, listDatasets, deleteDataset } from "../api/client";
+import { UploadCloud, FileSpreadsheet, CheckCircle2, RefreshCw, Database, Layers, ArrowUpRight, Link2, Trash2, Download, Table } from "lucide-react";
+import { uploadDatasetFile, listDatasets, deleteDataset, getDatasetDownloadUrl, getSheetDownloadUrl } from "../api/client";
 
 export default function IngestionPage() {
   const [datasets, setDatasets] = useState([]);
@@ -109,6 +109,26 @@ export default function IngestionPage() {
                   </span>
                 )}
               </div>
+              <div style={{ marginTop: "10px", display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                <a
+                  href={getDatasetDownloadUrl(uploadResult.dataset_id)}
+                  download={uploadResult.filename}
+                  className="btn-secondary"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    textDecoration: "none",
+                    fontSize: "0.8rem",
+                    padding: "0.35rem 0.75rem",
+                    color: "var(--accent-500)",
+                    borderColor: "rgba(126, 231, 217, 0.3)"
+                  }}
+                >
+                  <Download size={14} />
+                  <span>Download Ingested File</span>
+                </a>
+              </div>
             </div>
           </div>
 
@@ -183,26 +203,132 @@ export default function IngestionPage() {
                   <span><strong>{ds.sheet_count}</strong> Sheet(s)</span> · 
                   <span>Ingested {new Date(ds.uploaded_at).toLocaleDateString()}</span>
                 </div>
+
+                {ds.sheets && ds.sheets.length > 0 && (
+                  <div style={{ marginTop: "0.85rem" }}>
+                    <div style={{ fontSize: "0.72rem", fontWeight: 700, color: "var(--fg-secondary)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.4rem" }}>
+                      Uploaded Sheets ({ds.sheets.length}):
+                    </div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+                      {ds.sheets.map(sheet => (
+                        <div
+                          key={sheet.id}
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "8px",
+                            background: "rgba(255, 255, 255, 0.04)",
+                            border: "1px solid var(--border-subtle)",
+                            borderRadius: "6px",
+                            padding: "0.35rem 0.65rem",
+                            fontSize: "0.8rem"
+                          }}
+                        >
+                          <Layers size={13} color="var(--accent-500)" />
+                          <span style={{ fontWeight: 600, color: "var(--fg-primary)" }}>{sheet.name}</span>
+                          <span style={{ color: "var(--fg-secondary)", fontSize: "0.75rem" }}>({sheet.row_count} rows)</span>
+                          <a
+                            href={getSheetDownloadUrl(sheet.id, "csv")}
+                            download={`${sheet.name}.csv`}
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "4px",
+                              marginLeft: "4px",
+                              padding: "0.2rem 0.5rem",
+                              borderRadius: "4px",
+                              background: "rgba(126, 231, 217, 0.12)",
+                              border: "1px solid rgba(126, 231, 217, 0.3)",
+                              color: "var(--accent-500)",
+                              textDecoration: "none",
+                              fontSize: "0.725rem",
+                              fontWeight: 600,
+                              cursor: "pointer",
+                              transition: "all 0.15s ease"
+                            }}
+                            title={`Download '${sheet.name}' as CSV`}
+                          >
+                            <Download size={12} />
+                            <span>Download Sheet</span>
+                          </a>
+                          <a
+                            href={getSheetDownloadUrl(sheet.id, "xlsx")}
+                            download={`${sheet.name}.xlsx`}
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "4px",
+                              padding: "0.2rem 0.5rem",
+                              borderRadius: "4px",
+                              background: "rgba(255, 255, 255, 0.06)",
+                              border: "1px solid var(--border-subtle)",
+                              color: "var(--fg-secondary)",
+                              textDecoration: "none",
+                              fontSize: "0.725rem",
+                              fontWeight: 500,
+                              cursor: "pointer",
+                              transition: "all 0.15s ease"
+                            }}
+                            title={`Download '${sheet.name}' as Excel (.xlsx)`}
+                          >
+                            <Download size={12} />
+                            <span>Excel</span>
+                          </a>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
-              {(
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem", alignItems: "flex-end", flexShrink: 0 }}>
+                <a
+                  href={getDatasetDownloadUrl(ds.id)}
+                  download={ds.original_name}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    background: "rgba(126, 231, 217, 0.1)",
+                    border: "1px solid rgba(126, 231, 217, 0.3)",
+                    borderRadius: "6px",
+                    padding: "0.45rem 0.8rem",
+                    color: "var(--accent-500)",
+                    textDecoration: "none",
+                    fontSize: "0.8rem",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    whiteSpace: "nowrap",
+                    transition: "all 0.15s ease"
+                  }}
+                  title={`Download full ${ds.original_name} file`}
+                >
+                  <Download size={14} />
+                  <span>Download File</span>
+                </a>
+
                 <button
                   type="button"
                   onClick={() => handleDelete(ds.id, ds.original_name)}
                   style={{
-                    color: "var(--fg-secondary)",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "5px",
+                    color: "var(--rose-tier)",
                     background: "rgba(255, 180, 190, 0.08)",
                     border: "1px solid rgba(255, 180, 190, 0.2)",
                     borderRadius: "6px",
-                    padding: "0.45rem",
+                    padding: "0.4rem 0.65rem",
                     cursor: "pointer",
+                    fontSize: "0.775rem",
                     transition: "all 0.15s ease"
                   }}
                   title={`Delete ${ds.original_name}`}
                 >
-                  <Trash2 size={16} color="var(--rose-tier)" />
+                  <Trash2 size={14} color="var(--rose-tier)" />
+                  <span>Delete</span>
                 </button>
-              )}
+              </div>
             </div>
           ))}
         </div>

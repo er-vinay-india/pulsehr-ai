@@ -1,7 +1,11 @@
+import csv
+import io
 import json
 import math
+from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query
+from fastapi.responses import Response
 from ..db.database import get_connection
 from ..services.sheet_catalog import catalogue, relationships
 
@@ -55,3 +59,50 @@ def sheet_rows(sheet_id: int, page: int = Query(1, ge=1), limit: int = Query(25,
         return {'sheet_id': sheet_id, 'columns': json.loads(sheet['columns_json']), 'rows': [{'row_number': r['row_index']+1, 'values': json.loads(r['data_json'])} for r in rows], 'total': total, 'page': page, 'pages': max(1, math.ceil(total/limit))}
     finally:
         conn.close()
+
+
+@router.get('/{sheet_id}/download')
+def download_sheet(sheet_id: int, format: str = Query('csv', pattern='^(csv|xlsx)$')):
+    conn = get_connection()
+    try:
+        sheet = conn.execute(
+            'SELECT s.*, d.original_name as dataset_name, d.file_type FROM sheets s LEFT JOIN dataset_uploads d ON d.id=s.dataset_id WHERE s.id=?',
+            (sheet_id,)
+        ).fetchone()
+        if sheet is None:
+            raise HTTPException(404, 'Sheet not found')
+
+        cols = json.loads(sheet['columns_json'] or '[]')
+        rows = [json.loads(r['data_json']) for r in conn.execute('SELECT data_json FROM sheet_rows WHERE sheet_id=? ORDER BY row_index', (sheet_id,))]
+
+        sheet_name = (sheet['name'] or 'Sheet').replace('"', '').replace('/', '_').replace('\\', '_')
+        dataset_name = (sheet['dataset_name'] or '').replace('"', '').replace('/', '_').replace('\\', '_')
+        clean_ds = Path(dataset_name).stem if dataset_name else ''
+        file_base = f"{clean_ds}_{sheet_name}" if clean_ds and clean_ds != sheet_name else sheet_name
+
+        if format == 'xlsx':
+            import pandas as pd
+            buf = io.BytesIO()
+            with pd.ExcelWriter(buf, engine='openpyxl') as writer:
+                df = pd.DataFrame(rows, columns=cols)
+                df.to_excel(writer, sheet_name=sheet_name[:31], index=False)
+            return Response(
+                content=buf.getvalue(),
+                media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                headers={'Content-Disposition': f'attachment; filename="{file_base}.xlsx"'}
+            )
+        else:
+            buf = io.StringIO()
+            writer = csv.DictWriter(buf, fieldnames=cols, extrasaction='ignore')
+            writer.writeheader()
+            for r in rows:
+                writer.writerow(r)
+            csv_bytes = buf.getvalue().encode('utf-8-sig')
+            return Response(
+                content=csv_bytes,
+                media_type='text/csv; charset=utf-8',
+                headers={'Content-Disposition': f'attachment; filename="{file_base}.csv"'}
+            )
+    finally:
+        conn.close()
+
