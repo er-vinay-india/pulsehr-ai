@@ -1,10 +1,14 @@
 import React, { useEffect, useState } from "react";
-import { UploadCloud, FileSpreadsheet, CheckCircle2, RefreshCw, Database, Layers, ArrowUpRight, Link2, Trash2, Download, Table, AlertTriangle, X, ShieldAlert } from "lucide-react";
+import { UploadCloud, FileSpreadsheet, CheckCircle2, RefreshCw, Database, Layers, ArrowUpRight, Link2, Trash2, Download, Table, AlertTriangle, X, ShieldAlert, Loader2, Clock, ShieldCheck } from "lucide-react";
 import { uploadDatasetFile, listDatasets, deleteDataset, getDatasetDownloadUrl, getSheetDownloadUrl } from "../api/client";
 
 export default function IngestionPage() {
   const [datasets, setDatasets] = useState([]);
   const [uploading, setUploading] = useState(false);
+  const [uploadingFile, setUploadingFile] = useState(null);
+  const [uploadElapsed, setUploadElapsed] = useState(0);
+  const [uploadStep, setUploadStep] = useState(1);
+  const [isDragging, setIsDragging] = useState(false);
   const [uploadResult, setUploadResult] = useState(null);
   const [error, setError] = useState(null);
 
@@ -23,6 +27,28 @@ export default function IngestionPage() {
     loadData();
   }, []);
 
+  // Timer and progress steps for large file uploads
+  useEffect(() => {
+    let timer;
+    if (uploading) {
+      setUploadElapsed(0);
+      setUploadStep(1);
+      timer = setInterval(() => {
+        setUploadElapsed(prev => {
+          const next = prev + 1;
+          if (next >= 20) setUploadStep(5);
+          else if (next >= 12) setUploadStep(4);
+          else if (next >= 5) setUploadStep(3);
+          else if (next >= 2) setUploadStep(2);
+          return next;
+        });
+      }, 1000);
+    }
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [uploading]);
+
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === "Escape" && datasetToDelete && !deleting) {
@@ -34,23 +60,64 @@ export default function IngestionPage() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [datasetToDelete, deleting]);
 
-  const handleFileUpload = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const formatFileSize = (bytes) => {
+    if (!bytes && bytes !== 0) return "";
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  };
+
+  const processFile = async (file) => {
+    if (!file || uploading) return;
 
     setUploading(true);
+    setUploadingFile({ name: file.name, size: formatFileSize(file.size) });
     setError(null);
     setUploadResult(null);
 
     try {
       const res = await uploadDatasetFile(file);
+      setUploadStep(5);
       setUploadResult(res);
       loadData();
     } catch (err) {
       setError(err.message);
     } finally {
       setUploading(false);
-      e.target.value = "";
+      setUploadingFile(null);
+    }
+  };
+
+  const handleFileInputChange = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      processFile(file);
+    }
+    e.target.value = "";
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!uploading) {
+      setIsDragging(true);
+    }
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    if (uploading) return;
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      processFile(file);
     }
   };
 
@@ -88,31 +155,121 @@ export default function IngestionPage() {
             Upload any workforce spreadsheet or roster. PulseHR AI automatically extracts sheets, sanitizes missing cells, infers column schemas, preserves every row, discovers shared keys across files, and updates your overview.
           </p>
         </div>
-
       </div>
 
-      {/* Upload Drop Zone */}
-      <div className="upload-dropzone">
+      {/* Upload Drop Zone / Progress Container */}
+      <div
+        className={`upload-dropzone ${uploading ? "is-disabled" : ""} ${isDragging ? "is-dragging" : ""}`}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
         <input
           type="file"
           id="file-upload-input"
           accept=".xlsx, .xls, .csv"
-          onChange={handleFileUpload}
+          onChange={handleFileInputChange}
           disabled={uploading}
         />
-        <label htmlFor="file-upload-input" className="dropzone-label">
-          <div className="dropzone-icon">
-            <FileSpreadsheet size={36} color="var(--brand-500)" />
+
+        {uploading ? (
+          <div className="ingestion-progress-card">
+            <div className="progress-card-header">
+              <div className="progress-spinner-wrap">
+                <Loader2 size={32} className="spin-animation" color="var(--brand-400)" />
+              </div>
+              <div className="progress-title-block">
+                <h3>Ingesting & Vectorizing Spreadsheet</h3>
+                <p className="progress-file-info">
+                  <FileSpreadsheet size={16} color="var(--accent-500)" />
+                  <strong>{uploadingFile?.name || "Processing spreadsheet"}</strong>
+                  {uploadingFile?.size && <span className="file-size-badge">{uploadingFile.size}</span>}
+                </p>
+              </div>
+              <div className="progress-timer-badge">
+                <Clock size={14} />
+                <span>{uploadElapsed}s elapsed</span>
+              </div>
+            </div>
+
+            {/* Visual Animated Progress Bar */}
+            <div className="progress-bar-container">
+              <div className="progress-bar-fill animated-gradient-bar" />
+            </div>
+
+            {/* Pipeline Stage Checklist */}
+            <div className="pipeline-steps-list">
+              <div className={`pipeline-step ${uploadStep >= 1 ? (uploadStep > 1 ? "completed" : "active") : "pending"}`}>
+                <div className="step-icon">
+                  {uploadStep > 1 ? <CheckCircle2 size={16} color="var(--emerald-tier)" /> : (uploadStep === 1 ? <Loader2 size={16} className="spin-animation" color="var(--brand-400)" /> : <div className="step-bullet" />)}
+                </div>
+                <div className="step-text">
+                  <span className="step-title">1. Uploading file & verifying schema bounds</span>
+                  <span className="step-sub">Checking file format (.csv, .xlsx, .xls) and validating contents</span>
+                </div>
+              </div>
+
+              <div className={`pipeline-step ${uploadStep >= 2 ? (uploadStep > 2 ? "completed" : "active") : "pending"}`}>
+                <div className="step-icon">
+                  {uploadStep > 2 ? <CheckCircle2 size={16} color="var(--emerald-tier)" /> : (uploadStep === 2 ? <Loader2 size={16} className="spin-animation" color="var(--brand-400)" /> : <div className="step-bullet" />)}
+                </div>
+                <div className="step-text">
+                  <span className="step-title">2. Extracting worksheets & normalizing rows</span>
+                  <span className="step-sub">Sanitizing empty cells and retaining 100% of source records</span>
+                </div>
+              </div>
+
+              <div className={`pipeline-step ${uploadStep >= 3 ? (uploadStep > 3 ? "completed" : "active") : "pending"}`}>
+                <div className="step-icon">
+                  {uploadStep > 3 ? <CheckCircle2 size={16} color="var(--emerald-tier)" /> : (uploadStep === 3 ? <Loader2 size={16} className="spin-animation" color="var(--brand-400)" /> : <div className="step-bullet" />)}
+                </div>
+                <div className="step-text">
+                  <span className="step-title">3. Profiling columns & statistical summaries</span>
+                  <span className="step-sub">Computing min/max/mean metrics and detecting unique identifiers</span>
+                </div>
+              </div>
+
+              <div className={`pipeline-step ${uploadStep >= 4 ? (uploadStep > 4 ? "completed" : "active") : "pending"}`}>
+                <div className="step-icon">
+                  {uploadStep > 4 ? <CheckCircle2 size={16} color="var(--emerald-tier)" /> : (uploadStep === 4 ? <Loader2 size={16} className="spin-animation" color="var(--brand-400)" /> : <div className="step-bullet" />)}
+                </div>
+                <div className="step-text">
+                  <span className="step-title">4. Generating vector embeddings & BM25 search indices</span>
+                  <span className="step-sub">Batching rows through local embedding model for high-precision retrieval</span>
+                </div>
+              </div>
+
+              <div className={`pipeline-step ${uploadStep >= 5 ? "active" : "pending"}`}>
+                <div className="step-icon">
+                  {uploadStep >= 5 ? <Loader2 size={16} className="spin-animation" color="var(--brand-400)" /> : <div className="step-bullet" />}
+                </div>
+                <div className="step-text">
+                  <span className="step-title">5. Discovering cross-sheet key joins & updating catalog</span>
+                  <span className="step-sub">Connecting foreign keys and updating the real-time overview</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="progress-safety-footer">
+              <ShieldCheck size={16} color="var(--accent-500)" style={{ flexShrink: 0 }} />
+              <span>Large spreadsheets with thousands of rows take 15–40s for full vector embedding. Duplicate uploads are blocked while this job runs.</span>
+            </div>
           </div>
-          <h3>{uploading ? "Parsing, Sanitizing & Vectorizing Spreadsheet..." : "Drop Excel or CSV File Here"}</h3>
-          <p className="dropzone-hint">
-            Supports .xlsx, .xls, and .csv formats · All sheets and rows retained · 20 MB, 20,000 rows, 200 columns per file
-          </p>
-          <div className="btn-primary" style={{ marginTop: "1rem" }}>
-            <UploadCloud size={16} />
-            <span>Browse Files</span>
-          </div>
-        </label>
+        ) : (
+          <label htmlFor="file-upload-input" className="dropzone-label">
+            <div className="dropzone-icon">
+              <FileSpreadsheet size={36} color="var(--brand-500)" />
+            </div>
+            <h3>{isDragging ? "Release File to Upload" : "Drop Excel or CSV File Here"}</h3>
+            <p className="dropzone-hint">
+              Supports .xlsx, .xls, and .csv formats · All sheets and rows retained · 20 MB, 20,000 rows, 200 columns per file
+            </p>
+            <div className="btn-primary" style={{ marginTop: "1rem" }}>
+              <UploadCloud size={16} />
+              <span>Browse Files</span>
+            </div>
+          </label>
+        )}
       </div>
 
       {/* Success / Error Message */}

@@ -37,7 +37,7 @@ def model_embeddings(texts):
     if not texts:
         return []
     try:
-        with httpx.Client(timeout=8) as client:
+        with httpx.Client(timeout=15) as client:
             response = client.post(f'{config.OLLAMA_BASE_URL}/api/embed', json={
                 'model': config.OLLAMA_EMBED_MODEL, 'input': texts, 'truncate': True})
             response.raise_for_status()

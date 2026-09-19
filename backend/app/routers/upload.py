@@ -2,6 +2,7 @@ import csv
 import io
 import json
 from pathlib import Path
+import threading
 from uuid import uuid4
 
 from fastapi import APIRouter, UploadFile, File, HTTPException
@@ -12,49 +13,51 @@ from ..db.database import get_connection
 from ..services.sheet_catalog import read_sheets, prepare_sheets, insert_sheets, rebuild_relationships, prepare_existing_column_vectors
 
 router = APIRouter(prefix='/api/upload', tags=['upload'])
+_upload_lock = threading.Lock()
 
 
 @router.post('/file')
 def upload_file(file: UploadFile = File(...)):
-    original = Path((file.filename or 'uploaded.csv').replace('\\', '/')).name
-    suffix = Path(original).suffix.lower()
-    if suffix not in ('.csv', '.xlsx', '.xls'):
-        raise HTTPException(400, 'Upload a CSV or Excel file.')
-    path = config.UPLOADS_DIR / f'{uuid4().hex}{suffix}'
-    conn = None
-    try:
-        content = file.file.read(20 * 1024 * 1024 + 1)
-        if len(content) > 20 * 1024 * 1024:
-            raise ValueError('Maximum upload size is 20 MB.')
-        path.write_bytes(content)
-        frames = read_sheets(path)
-        prepared = prepare_sheets(frames, original)
-        total = sum(len(s['records']) for s in prepared)
-        first = prepared[0]
-        column_updates = prepare_existing_column_vectors()
-        conn = get_connection()
-        with conn:
-            dataset_id = conn.execute('''INSERT INTO dataset_uploads(filename,original_name,file_type,sheet_count,row_count,col_count,columns_json,sample_preview_json,summary_insights)
-                VALUES (?,?,?,?,?,?,?,?,?)''', (path.name, original, suffix[1:], len(prepared), total, len(first['columns']), json.dumps(first['columns']), json.dumps(first['records'][:5]),
-                f'{len(prepared)} sheets and {total} rows. All original values retained.')).lastrowid
-            for sid, profiles in column_updates:
-                conn.execute('UPDATE sheets SET profile_json=? WHERE id=?', (json.dumps(profiles), sid))
-            insert_sheets(conn, dataset_id, prepared)
-            rebuild_relationships(conn)
-            linked = conn.execute("SELECT COUNT(*) FROM sheet_relationships WHERE status='linked' AND (left_sheet IN (SELECT id FROM sheets WHERE dataset_id=?) OR right_sheet IN (SELECT id FROM sheets WHERE dataset_id=?))", (dataset_id, dataset_id)).fetchone()[0]
-        return {'status': 'success', 'dataset_id': dataset_id, 'filename': original,
-                'sheets': list(frames), 'total_rows': total, 'columns': first['columns'], 'sample_preview': first['records'][:5],
-                'indexed_chunks': total, 'vector_chunks': sum(len(s['vectors']) for s in prepared), 'linked_relationships': linked,
-                'message': f'Indexed all {total} rows. Found {linked} exact key relationships. Overview and explorer now include these sheets.'}
-    except (ValueError, OSError, ImportError) as exc:
-        path.unlink(missing_ok=True)
-        raise HTTPException(400, str(exc)) from exc
-    except Exception:
-        path.unlink(missing_ok=True)
-        raise
-    finally:
-        if conn:
-            conn.close()
+    with _upload_lock:
+        original = Path((file.filename or 'uploaded.csv').replace('\\', '/')).name
+        suffix = Path(original).suffix.lower()
+        if suffix not in ('.csv', '.xlsx', '.xls'):
+            raise HTTPException(400, 'Upload a CSV or Excel file.')
+        path = config.UPLOADS_DIR / f'{uuid4().hex}{suffix}'
+        conn = None
+        try:
+            content = file.file.read(20 * 1024 * 1024 + 1)
+            if len(content) > 20 * 1024 * 1024:
+                raise ValueError('Maximum upload size is 20 MB.')
+            path.write_bytes(content)
+            frames = read_sheets(path)
+            prepared = prepare_sheets(frames, original)
+            total = sum(len(s['records']) for s in prepared)
+            first = prepared[0]
+            column_updates = prepare_existing_column_vectors()
+            conn = get_connection()
+            with conn:
+                dataset_id = conn.execute('''INSERT INTO dataset_uploads(filename,original_name,file_type,sheet_count,row_count,col_count,columns_json,sample_preview_json,summary_insights)
+                    VALUES (?,?,?,?,?,?,?,?,?)''', (path.name, original, suffix[1:], len(prepared), total, len(first['columns']), json.dumps(first['columns']), json.dumps(first['records'][:5]),
+                    f'{len(prepared)} sheets and {total} rows. All original values retained.')).lastrowid
+                for sid, profiles in column_updates:
+                    conn.execute('UPDATE sheets SET profile_json=? WHERE id=?', (json.dumps(profiles), sid))
+                insert_sheets(conn, dataset_id, prepared)
+                rebuild_relationships(conn)
+                linked = conn.execute("SELECT COUNT(*) FROM sheet_relationships WHERE status='linked' AND (left_sheet IN (SELECT id FROM sheets WHERE dataset_id=?) OR right_sheet IN (SELECT id FROM sheets WHERE dataset_id=?))", (dataset_id, dataset_id)).fetchone()[0]
+            return {'status': 'success', 'dataset_id': dataset_id, 'filename': original,
+                    'sheets': list(frames), 'total_rows': total, 'columns': first['columns'], 'sample_preview': first['records'][:5],
+                    'indexed_chunks': total, 'vector_chunks': sum(len(s['vectors']) for s in prepared), 'linked_relationships': linked,
+                    'message': f'Indexed all {total} rows. Found {linked} exact key relationships. Overview and explorer now include these sheets.'}
+        except (ValueError, OSError, ImportError) as exc:
+            path.unlink(missing_ok=True)
+            raise HTTPException(400, str(exc)) from exc
+        except Exception:
+            path.unlink(missing_ok=True)
+            raise
+        finally:
+            if conn:
+                conn.close()
 
 
 @router.get('/datasets')
