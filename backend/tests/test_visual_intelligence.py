@@ -5,9 +5,8 @@ import pytest
 from app.db.database import get_connection
 from app.services.visual_intelligence import (
     build_workspace_visual_dashboard,
+    get_sheet_raw_projections,
     generate_comparative_insight,
-    generate_bar_insight,
-    generate_donut_insight,
     is_name_or_text_column,
     clean_file_label,
 )
@@ -30,21 +29,7 @@ def test_clean_file_label():
     assert len(clean_file_label(long_name)) <= 32
 
 
-def test_insights_generation():
-    bars = [{'label': 'Engineering', 'value': 90.5}, {'label': 'Sales', 'value': 75.0}]
-    bar_insight = generate_bar_insight('Department', 'Performance Score', 'pts', bars)
-    assert 'Engineering' in bar_insight
-    assert '90.5 pts' in bar_insight
-    assert '**' in bar_insight
-
-    slices = [
-        {'label': 'Low Risk', 'count': 6, 'pct': 60.0, 'color': '#10b981'},
-        {'label': 'High Risk', 'count': 4, 'pct': 40.0, 'color': '#f43f5e'},
-    ]
-    donut_insight = generate_donut_insight('Risk Level', slices, 10)
-    assert 'Low Risk' in donut_insight
-    assert '60.0%' in donut_insight
-
+def test_comparative_insight_generation():
     items = [
         {'label': 'Engineering', 'val1': 92.0, 'val2': 1.5},
         {'label': 'Operations', 'val1': 76.0, 'val2': 4.5},
@@ -64,14 +49,14 @@ def seed_test_datasets(conn):
     ).lastrowid
     s1 = conn.execute(
         "INSERT INTO sheets(dataset_id, name, columns_json, profile_json, row_count) VALUES (?,?,?,?,?)",
-        (d1, "Sheet1", json.dumps(["Employee ID", "Department", "Performance Score", "Risk Level"]), json.dumps([]), 4)
+        (d1, "Sheet1", json.dumps(["Employee ID", "Department", "Performance Score", "Risk Level", "Overtime Hours"]), json.dumps([]), 4)
     ).lastrowid
 
     p_rows = [
-        {"Employee ID": "E1", "Department": "Tech", "Performance Score": 92.0, "Risk Level": "Low"},
-        {"Employee ID": "E2", "Department": "Tech", "Performance Score": 88.0, "Risk Level": "Medium"},
-        {"Employee ID": "E3", "Department": "Sales", "Performance Score": 78.0, "Risk Level": "High"},
-        {"Employee ID": "E4", "Department": "Sales", "Performance Score": 82.0, "Risk Level": "Low"},
+        {"Employee ID": "E1", "Department": "Tech", "Performance Score": 92.0, "Risk Level": "Low", "Overtime Hours": 10.0},
+        {"Employee ID": "E2", "Department": "Tech", "Performance Score": 88.0, "Risk Level": "Medium", "Overtime Hours": 15.0},
+        {"Employee ID": "E3", "Department": "Sales", "Performance Score": 78.0, "Risk Level": "High", "Overtime Hours": 5.0},
+        {"Employee ID": "E4", "Department": "Sales", "Performance Score": 82.0, "Risk Level": "Low", "Overtime Hours": 8.0},
     ]
     for idx, r in enumerate(p_rows):
         conn.execute("INSERT INTO sheet_rows(sheet_id, row_index, data_json) VALUES (?,?,?)", (s1, idx, json.dumps(r)))
@@ -110,11 +95,14 @@ def test_build_workspace_visual_dashboard_multi_sheet():
         s1, s2 = seed_test_datasets(conn)
         dash = build_workspace_visual_dashboard(conn)
         assert isinstance(dash, dict)
-        assert dash['total_visualizations'] >= 4
+        assert dash['total_visualizations'] >= 3
         assert 'All' in dash['categories']
-        assert 'Cross-Sheet Intelligence' in dash['categories']
-        assert 'Performance & Talent' in dash['categories']
-        assert 'Attendance & Leave' in dash['categories']
+        assert 'Industrial People Analytics' in dash['categories']
+
+        # Ensure Industrial Models exist
+        types = [v['chart_type'] for v in dash['visualizations']]
+        assert 'talent_9box' in types
+        assert 'bradford_factor' in types
 
         # Ensure Cross-Sheet Comparative Chart exists
         cross_charts = [v for v in dash['visualizations'] if v['chart_type'] == 'comparative_bar']
@@ -124,23 +112,30 @@ def test_build_workspace_visual_dashboard_multi_sheet():
         assert comp['sheet_ids'] == [s1, s2]
         assert len(comp['comparative_data']['items']) == 2
         assert 'ai_insight' in comp
+    finally:
+        conn.close()
 
-        # Ensure Bar Chart exists
-        bars = [v for v in dash['visualizations'] if v['chart_type'] == 'bar']
+
+def test_get_sheet_raw_projections_for_data_explorer():
+    conn = get_connection()
+    try:
+        s1, s2 = seed_test_datasets(conn)
+        proj = get_sheet_raw_projections(conn, s1)
+        assert proj['available'] is True
+        assert proj['sheet_id'] == s1
+        assert len(proj['column_stats']) >= 4
+        assert len(proj['projections']) >= 2
+
+        # Verify bar charts exist for numeric measures
+        bars = [p for p in proj['projections'] if p['type'] == 'bar']
         assert len(bars) >= 2
+        titles = [b['title'] for b in bars]
+        assert any('Performance Score' in t for t in titles)
+        assert any('Overtime Hours' in t for t in titles)
 
-        # Ensure Donut Chart exists
-        donuts = [v for v in dash['visualizations'] if v['chart_type'] == 'donut']
+        # Verify donut chart for Risk Level
+        donuts = [p for p in proj['projections'] if p['type'] == 'donut']
         assert len(donuts) >= 1
-
-        # Test sheet-specific filtering
-        s1_dash = build_workspace_visual_dashboard(conn, sheet_id=s1)
-        for v in s1_dash['visualizations']:
-            assert s1 in v['sheet_ids']
-
-        s2_dash = build_workspace_visual_dashboard(conn, sheet_id=s2)
-        for v in s2_dash['visualizations']:
-            assert s2 in v['sheet_ids']
     finally:
         conn.close()
 

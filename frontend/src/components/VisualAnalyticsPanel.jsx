@@ -2,7 +2,206 @@ import React, { useState } from 'react';
 import MarkdownView from './MarkdownView';
 
 // ============================================================================
-// 1. Grouped Comparative Bar Chart (Cross-Sheet Intelligence)
+// 1. McKinsey / GE 9-Box Talent & Risk Matrix Component
+// ============================================================================
+function Talent9BoxMatrix({ data }) {
+  const [selectedCell, setSelectedCell] = useState(null);
+  const cells = data?.cells || [];
+
+  return (
+    <div className="talent-9box-container">
+      <div className="talent-9box-grid">
+        {cells.map((cell) => {
+          const isSelected = selectedCell?.id === cell.id;
+          const hasStaff = cell.count > 0;
+
+          return (
+            <div
+              key={cell.key}
+              className={`box-cell ${isSelected ? 'active' : ''} ${hasStaff ? 'has-staff' : ''}`}
+              style={{ borderTop: `3px solid ${cell.color}` }}
+              onClick={() => setSelectedCell(isSelected ? null : cell)}
+            >
+              <div className="cell-top">
+                <span className="cell-title">{cell.title}</span>
+                <span className="cell-count-badge" style={{ backgroundColor: cell.color }}>
+                  {cell.count}
+                </span>
+              </div>
+              <p className="cell-desc">{cell.desc}</p>
+              {hasStaff && (
+                <span className="cell-action-hint">
+                  {isSelected ? 'Hide Roster ▲' : `View ${cell.count} Personnel ▼`}
+                </span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Roster Drilldown Panel when a cell is clicked */}
+      {selectedCell && selectedCell.roster && selectedCell.roster.length > 0 && (
+        <div className="roster-drilldown-drawer">
+          <div className="drawer-header">
+            <span style={{ color: selectedCell.color, fontWeight: 700 }}>● {selectedCell.title}</span>
+            <span className="drawer-subtitle">{selectedCell.roster.length} Staff Mapped ({selectedCell.pct}% of evaluated workforce)</span>
+            <button className="btn-close-drilldown" onClick={() => setSelectedCell(null)}>✕</button>
+          </div>
+          <div className="roster-list-chips">
+            {selectedCell.roster.map((person, pIdx) => (
+              <div key={pIdx} className="roster-person-card">
+                <span className="person-name">👤 {person.name}</span>
+                <span className="person-dept">{person.department}</span>
+                <span className="person-perf">Score: <strong>{person.performance} pts</strong></span>
+                <span className={`person-risk risk-${person.risk_level?.toLowerCase()}`}>Risk: {person.risk_level}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================================
+// 2. Bradford Factor Absenteeism Disruption Spectrum
+// ============================================================================
+function BradfordFactorChart({ data }) {
+  const departments = data?.departments || [];
+  const maxScore = Math.max(...departments.map(d => d.avg_bradford_score || 0), 250);
+
+  return (
+    <div className="bradford-spectrum-container">
+      {/* Reference Tiers Legend */}
+      <div className="bradford-tiers-legend">
+        <span className="tier-tag tier-normal">● &lt; 50: Normal</span>
+        <span className="tier-tag tier-moderate">● 51–200: Moderate</span>
+        <span className="tier-tag tier-high">● 201–500: High Disruption</span>
+        <span className="tier-tag tier-critical">● &gt; 500: Critical Escalation</span>
+      </div>
+
+      {/* Department Breakdown Bars */}
+      <div className="bradford-dept-list">
+        {departments.map((dept, idx) => {
+          const score = dept.avg_bradford_score;
+          const barWidthPct = Math.min(100, Math.max(8, (score / maxScore) * 100));
+
+          let tierColor = '#10b981';
+          let tierLabel = 'Normal';
+          if (score > 500) { tierColor = '#f43f5e'; tierLabel = 'Critical Disruption'; }
+          else if (score > 200) { tierColor = '#f59e0b'; tierLabel = 'High Disruption'; }
+          else if (score > 50) { tierColor = '#06b6d4'; tierLabel = 'Moderate'; }
+
+          return (
+            <div key={idx} className="bradford-dept-row">
+              <div className="dept-label-col">
+                <span className="dept-name">{dept.department}</span>
+                <span className="dept-headcount">{dept.headcount} staff · {dept.total_absent_days}d lost</span>
+              </div>
+              <div className="dept-bar-track">
+                <div
+                  className="dept-bar-fill"
+                  style={{ width: `${barWidthPct}%`, backgroundColor: tierColor }}
+                >
+                  <span className="bar-val-text">{score} pts</span>
+                </div>
+              </div>
+              <div className="dept-tier-badge" style={{ color: tierColor, borderColor: `${tierColor}55` }}>
+                {tierLabel}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// 3. Workforce Workload & Burnout Strain Diagnostic
+// ============================================================================
+function BurnoutStrainChart({ data }) {
+  const departments = data?.departments || [];
+
+  return (
+    <div className="burnout-strain-container">
+      <div className="strain-header-note">
+        <span>Sustainable Strain Threshold: <strong>&lt; 10%</strong></span>
+        <span style={{ color: '#f43f5e', fontWeight: 600 }}>Critical Burnout Limit: <strong>&gt; 20%</strong></span>
+      </div>
+
+      <div className="strain-dept-grid">
+        {departments.map((dept, idx) => {
+          const strain = dept.strain_index_pct;
+          const isCritical = strain >= 20.0;
+          const isElevated = strain >= 10.0 && strain < 20.0;
+
+          return (
+            <div key={idx} className={`strain-dept-card ${isCritical ? 'critical' : (isElevated ? 'elevated' : 'sustainable')}`}>
+              <div className="card-top">
+                <span className="dept-title">{dept.department}</span>
+                <span className="strain-badge" style={{ backgroundColor: dept.status_color }}>
+                  {dept.status}
+                </span>
+              </div>
+              <div className="strain-metric-val">
+                <span className="big-pct">{strain}%</span>
+                <span className="metric-label">Workload Strain</span>
+              </div>
+              <div className="strain-sub-stats">
+                <span>Avg Overtime: <strong>{dept.avg_overtime_hours} hrs</strong></span>
+                <span>Avg Absent: <strong>{dept.avg_absent_days} days</strong></span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// 4. Statistical Cross-Sheet Elasticity & Tipping Point
+// ============================================================================
+function ElasticityChart({ data }) {
+  return (
+    <div className="elasticity-container">
+      <div className="elasticity-kpi-grid">
+        <div className="el-kpi-box">
+          <span className="el-label">Empirical Penalty (β)</span>
+          <span className="el-value" style={{ color: data.beta_coefficient < 0 ? '#f43f5e' : '#10b981' }}>
+            {data.beta_coefficient} pts
+          </span>
+          <small>Performance loss per absent day</small>
+        </div>
+        <div className="el-kpi-box">
+          <span className="el-label">Critical Tipping Point</span>
+          <span className="el-value" style={{ color: '#f59e0b' }}>
+            {data.tipping_point_days} Days
+          </span>
+          <small>Productivity steep degradation threshold</small>
+        </div>
+        <div className="el-kpi-box">
+          <span className="el-label">Model Fit (R²)</span>
+          <span className="el-value">
+            {data.r_squared}
+          </span>
+          <small>Pearson r = {data.pearson_correlation}</small>
+        </div>
+        <div className="el-kpi-box">
+          <span className="el-label">Matched Sample</span>
+          <span className="el-value">
+            {data.matched_records} Staff
+          </span>
+          <small>Verified cross-table equality joins</small>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// 5. Grouped Comparative Bar Chart (Cross-Sheet Intelligence)
 // ============================================================================
 function ComparativeBarChart({ data }) {
   const [hoveredIdx, setHoveredIdx] = useState(null);
@@ -16,14 +215,13 @@ function ComparativeBarChart({ data }) {
     return <div className="chart-empty">No comparative data points available.</div>;
   }
 
-  const s1 = series[0] || { name: 'Metric 1', unit: '', color: '#10b981' };
-  const s2 = series[1] || { name: 'Metric 2', unit: '', color: '#f43f5e' };
-
+  const s1 = series[0];
+  const s2 = series[1];
   const maxVal1 = Math.max(...items.map(d => d.val1 || 0), 1);
   const maxVal2 = Math.max(...items.map(d => d.val2 || 0), 1);
 
   const svgW = 560;
-  const svgH = 220;
+  const svgH = 210;
   const margin = { top: 25, right: 20, bottom: 42, left: 45 };
   const innerW = svgW - margin.left - margin.right;
   const innerH = svgH - margin.top - margin.bottom;
@@ -46,24 +244,19 @@ function ComparativeBarChart({ data }) {
 
       <div className="chart-svg-wrap">
         <svg viewBox={`0 0 ${svgW} ${svgH}`} className="responsive-svg">
-          {/* Horizontal gridlines */}
-          {[0, 0.25, 0.5, 0.75, 1].map((ratio) => {
-            const y = margin.top + innerH * (1 - ratio);
-            return (
-              <line
-                key={ratio}
-                x1={margin.left}
-                y1={y}
-                x2={svgW - margin.right}
-                y2={y}
-                stroke="var(--border-color, #334155)"
-                strokeDasharray="3 3"
-                opacity={0.3}
-              />
-            );
-          })}
+          {[0, 0.25, 0.5, 0.75, 1].map((ratio) => (
+            <line
+              key={ratio}
+              x1={margin.left}
+              y1={margin.top + innerH * (1 - ratio)}
+              x2={svgW - margin.right}
+              y2={margin.top + innerH * (1 - ratio)}
+              stroke="var(--border-color, #334155)"
+              strokeDasharray="3 3"
+              opacity={0.3}
+            />
+          ))}
 
-          {/* Grouped Bars */}
           {items.map((d, i) => {
             const centerX = margin.left + i * slotW + slotW / 2;
             const x1 = centerX - barW - 2;
@@ -74,7 +267,6 @@ function ComparativeBarChart({ data }) {
 
             const y1 = margin.top + innerH - h1;
             const y2 = margin.top + innerH - h2;
-
             const isHovered = hoveredIdx === i;
 
             return (
@@ -84,7 +276,6 @@ function ComparativeBarChart({ data }) {
                 onMouseLeave={() => setHoveredIdx(null)}
                 style={{ cursor: 'pointer' }}
               >
-                {/* Highlight band */}
                 {isHovered && (
                   <rect
                     x={margin.left + i * slotW + 2}
@@ -96,60 +287,13 @@ function ComparativeBarChart({ data }) {
                     rx="4"
                   />
                 )}
+                <rect x={x1} y={y1} width={barW} height={h1} rx="3" fill={s1.color} opacity={isHovered ? 1 : 0.85} />
+                <text x={x1 + barW / 2} y={y1 - 4} textAnchor="middle" fontSize="9" fontWeight="600" fill={s1.color}>{d.val1}</text>
 
-                {/* Bar 1 */}
-                <rect
-                  x={x1}
-                  y={y1}
-                  width={barW}
-                  height={h1}
-                  rx="3"
-                  fill={s1.color}
-                  opacity={isHovered ? 1 : 0.85}
-                  style={{ transition: 'all 0.2s ease' }}
-                />
-                <text
-                  x={x1 + barW / 2}
-                  y={y1 - 4}
-                  textAnchor="middle"
-                  fontSize="9"
-                  fontWeight="600"
-                  fill={s1.color}
-                >
-                  {d.val1}
-                </text>
+                <rect x={x2} y={y2} width={barW} height={h2} rx="3" fill={s2.color} opacity={isHovered ? 1 : 0.85} />
+                <text x={x2 + barW / 2} y={y2 - 4} textAnchor="middle" fontSize="9" fontWeight="600" fill={s2.color}>{d.val2}</text>
 
-                {/* Bar 2 */}
-                <rect
-                  x={x2}
-                  y={y2}
-                  width={barW}
-                  height={h2}
-                  rx="3"
-                  fill={s2.color}
-                  opacity={isHovered ? 1 : 0.85}
-                  style={{ transition: 'all 0.2s ease' }}
-                />
-                <text
-                  x={x2 + barW / 2}
-                  y={y2 - 4}
-                  textAnchor="middle"
-                  fontSize="9"
-                  fontWeight="600"
-                  fill={s2.color}
-                >
-                  {d.val2}
-                </text>
-
-                {/* X Axis Label */}
-                <text
-                  x={centerX}
-                  y={svgH - 12}
-                  textAnchor="middle"
-                  fontSize="10"
-                  fontWeight={isHovered ? '600' : '400'}
-                  fill={isHovered ? 'var(--text-bright, #fff)' : 'var(--text-muted, #94a3b8)'}
-                >
+                <text x={centerX} y={svgH - 12} textAnchor="middle" fontSize="10" fontWeight={isHovered ? '600' : '400'} fill={isHovered ? 'var(--text-bright, #fff)' : 'var(--text-muted, #94a3b8)'}>
                   {d.label.length > 10 ? `${d.label.slice(0, 9)}…` : d.label}
                 </text>
               </g>
@@ -158,7 +302,6 @@ function ComparativeBarChart({ data }) {
         </svg>
       </div>
 
-      {/* Floating Hover Details */}
       {hoveredIdx != null && items[hoveredIdx] && (
         <div className="hover-tooltip-strip">
           <span className="tooltip-dept"><strong>{items[hoveredIdx].label}</strong>:</span>
@@ -172,223 +315,7 @@ function ComparativeBarChart({ data }) {
 }
 
 // ============================================================================
-// 2. Single Metric Bar Chart
-// ============================================================================
-function SingleBarChart({ data }) {
-  const [hoveredIdx, setHoveredIdx] = useState(null);
-  const bars = data?.bars || [];
-  const unit = data?.unit || '';
-
-  if (!bars.length) {
-    return <div className="chart-empty">No distribution data available.</div>;
-  }
-
-  const maxVal = Math.max(...bars.map(b => b.value || 0), 1);
-  const svgW = 540;
-  const svgH = 200;
-  const margin = { top: 22, right: 20, bottom: 40, left: 45 };
-  const innerW = svgW - margin.left - margin.right;
-  const innerH = svgH - margin.top - margin.bottom;
-
-  const slotW = innerW / Math.max(bars.length, 1);
-  const barW = Math.min(32, slotW * 0.55);
-
-  return (
-    <div className="single-bar-wrap">
-      <div className="chart-svg-wrap">
-        <svg viewBox={`0 0 ${svgW} ${svgH}`} className="responsive-svg">
-          {[0, 0.25, 0.5, 0.75, 1].map((ratio) => {
-            const y = margin.top + innerH * (1 - ratio);
-            const val = Math.round(maxVal * ratio);
-            return (
-              <g key={ratio}>
-                <line
-                  x1={margin.left}
-                  y1={y}
-                  x2={svgW - margin.right}
-                  y2={y}
-                  stroke="var(--border-color, #334155)"
-                  strokeDasharray="3 3"
-                  opacity={0.3}
-                />
-                <text
-                  x={margin.left - 6}
-                  y={y + 3}
-                  textAnchor="end"
-                  fontSize="9"
-                  fill="var(--text-muted, #94a3b8)"
-                >
-                  {val}
-                </text>
-              </g>
-            );
-          })}
-
-          {bars.map((b, idx) => {
-            const h = Math.max(3, (b.value / maxVal) * innerH);
-            const x = margin.left + idx * slotW + (slotW - barW) / 2;
-            const y = margin.top + innerH - h;
-            const isHovered = hoveredIdx === idx;
-
-            return (
-              <g
-                key={idx}
-                onMouseEnter={() => setHoveredIdx(idx)}
-                onMouseLeave={() => setHoveredIdx(null)}
-                style={{ cursor: 'pointer' }}
-              >
-                <rect
-                  x={x}
-                  y={y}
-                  width={barW}
-                  height={h}
-                  rx="3"
-                  fill={isHovered ? '#38bdf8' : '#0ea5e9'}
-                  opacity={isHovered ? 1 : 0.85}
-                  style={{ transition: 'all 0.2s ease' }}
-                />
-                <text
-                  x={x + barW / 2}
-                  y={y - 5}
-                  textAnchor="middle"
-                  fontSize="10"
-                  fontWeight="600"
-                  fill={isHovered ? '#ffffff' : 'var(--text-muted, #94a3b8)'}
-                >
-                  {b.value}
-                </text>
-                <text
-                  x={x + barW / 2}
-                  y={svgH - 12}
-                  textAnchor="middle"
-                  fontSize="10"
-                  fontWeight={isHovered ? '600' : '400'}
-                  fill={isHovered ? '#ffffff' : 'var(--text-muted, #94a3b8)'}
-                >
-                  {b.label.length > 9 ? `${b.label.slice(0, 8)}…` : b.label}
-                </text>
-              </g>
-            );
-          })}
-        </svg>
-      </div>
-
-      {hoveredIdx != null && bars[hoveredIdx] && (
-        <div className="hover-tooltip-strip">
-          <span>{bars[hoveredIdx].label}: <strong>{bars[hoveredIdx].value} {unit}</strong></span>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ============================================================================
-// 3. Donut Distribution Chart
-// ============================================================================
-function DonutChart({ data }) {
-  const [hoveredSlice, setHoveredSlice] = useState(null);
-  const slices = data?.slices || [];
-  const total = data?.total || slices.reduce((acc, s) => acc + (s.count || 0), 0);
-
-  if (!slices.length) {
-    return <div className="chart-empty">No categorical composition available.</div>;
-  }
-
-  const size = 180;
-  const radius = 78;
-  const innerRadius = 48;
-  const center = size / 2;
-
-  let cumulativeAngle = -Math.PI / 2;
-  const arcs = slices.map((slice) => {
-    const angle = total > 0 ? (slice.count / total) * (2 * Math.PI) : 0;
-    const start = cumulativeAngle;
-    const end = cumulativeAngle + angle;
-    cumulativeAngle += angle;
-
-    const x1 = center + radius * Math.cos(start);
-    const y1 = center + radius * Math.sin(start);
-    const x2 = center + radius * Math.cos(end);
-    const y2 = center + radius * Math.sin(end);
-
-    const ix1 = center + innerRadius * Math.cos(end);
-    const iy1 = center + innerRadius * Math.sin(end);
-    const ix2 = center + innerRadius * Math.cos(start);
-    const iy2 = center + innerRadius * Math.sin(start);
-
-    const largeArc = angle > Math.PI ? 1 : 0;
-    const path = total > 0 && slice.count > 0 ? `
-      M ${x1} ${y1}
-      A ${radius} ${radius} 0 ${largeArc} 1 ${x2} ${y2}
-      L ${ix1} ${iy1}
-      A ${innerRadius} ${innerRadius} 0 ${largeArc} 0 ${ix2} ${iy2}
-      Z
-    ` : '';
-
-    return { ...slice, path };
-  });
-
-  return (
-    <div className="donut-layout">
-      <div className="donut-svg-wrap">
-        <svg viewBox={`0 0 ${size} ${size}`} className="donut-svg">
-          {arcs.map((arc, idx) => (
-            <path
-              key={idx}
-              d={arc.path}
-              fill={arc.color || `hsl(${idx * 55 + 160}, 75%, 55%)`}
-              stroke="var(--bg-card, #0f172a)"
-              strokeWidth="2"
-              opacity={hoveredSlice === idx ? 1 : 0.88}
-              transform={hoveredSlice === idx ? 'scale(1.03) translate(-2, -2)' : ''}
-              onMouseEnter={() => setHoveredSlice(idx)}
-              onMouseLeave={() => setHoveredSlice(null)}
-              style={{ cursor: 'pointer', transition: 'transform 0.15s ease' }}
-            />
-          ))}
-          <text
-            x={center}
-            y={center - 2}
-            textAnchor="middle"
-            fontSize="17"
-            fontWeight="700"
-            fill="var(--text-bright, #fff)"
-          >
-            {hoveredSlice != null ? slices[hoveredSlice]?.count : total}
-          </text>
-          <text
-            x={center}
-            y={center + 14}
-            textAnchor="middle"
-            fontSize="9"
-            fill="var(--text-muted, #94a3b8)"
-          >
-            {hoveredSlice != null ? `${slices[hoveredSlice]?.pct}%` : 'Total'}
-          </text>
-        </svg>
-      </div>
-
-      <div className="donut-legend">
-        {slices.map((slice, idx) => (
-          <div
-            key={idx}
-            className={`legend-item ${hoveredSlice === idx ? 'active' : ''}`}
-            onMouseEnter={() => setHoveredSlice(idx)}
-            onMouseLeave={() => setHoveredSlice(null)}
-          >
-            <span className="legend-dot" style={{ backgroundColor: slice.color }} />
-            <span className="legend-label">{slice.label}</span>
-            <span className="legend-count">{slice.count}</span>
-            <span className="legend-pct">({slice.pct}%)</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ============================================================================
-// 4. Time-Series / Longitudinal Forecast Chart
+// 6. Longitudinal 712-Day Attendance Trajectory Forecast
 // ============================================================================
 function ForecastChart({ data }) {
   const [hoveredPt, setHoveredPt] = useState(null);
@@ -415,14 +342,8 @@ function ForecastChart({ data }) {
   const minVal = Math.max(0, Math.min(...allPoints.map(p => Math.min(p.val, p.lower_95 != null ? p.lower_95 : p.val)), 0));
   const maxVal = Math.max(...allPoints.map(p => Math.max(p.val, p.upper_95 != null ? p.upper_95 : p.val)), 10) * 1.08;
 
-  const getX = (i) => {
-    if (allPoints.length <= 1) return margin.left + innerW / 2;
-    return margin.left + (i / (allPoints.length - 1)) * innerW;
-  };
-
-  const getY = (val) => {
-    return margin.top + innerH - ((val - minVal) / (maxVal - minVal || 1)) * innerH;
-  };
+  const getX = (i) => allPoints.length <= 1 ? margin.left + innerW / 2 : margin.left + (i / (allPoints.length - 1)) * innerW;
+  const getY = (val) => margin.top + innerH - ((val - minVal) / (maxVal - minVal || 1)) * innerH;
 
   let histPath = '';
   historical.forEach((p, i) => {
@@ -436,9 +357,7 @@ function ForecastChart({ data }) {
     const lastHist = historical[historical.length - 1];
     forecastPath = `M ${getX(historical.length - 1)} ${getY(lastHist.actual)}`;
     forecast.forEach((p, i) => {
-      const x = getX(historical.length + i);
-      const y = getY(p.forecast);
-      forecastPath += ` L ${x} ${y}`;
+      forecastPath += ` L ${getX(historical.length + i)} ${getY(p.forecast)}`;
     });
   }
 
@@ -448,9 +367,8 @@ function ForecastChart({ data }) {
     const topPts = [`${getX(historical.length - 1)},${getY(lastHist.actual)}`];
     const botPts = [`${getX(historical.length - 1)},${getY(lastHist.actual)}`];
     forecast.forEach((p, i) => {
-      const x = getX(historical.length + i);
-      topPts.push(`${x},${getY(p.upper_95)}`);
-      botPts.push(`${x},${getY(p.lower_95)}`);
+      topPts.push(`${getX(historical.length + i)},${getY(p.upper_95)}`);
+      botPts.push(`${getX(historical.length + i)},${getY(p.lower_95)}`);
     });
     botPts.reverse();
     ciPolygon = topPts.concat(botPts).join(' ');
@@ -461,15 +379,9 @@ function ForecastChart({ data }) {
   return (
     <div className="forecast-chart-wrap">
       <div className="forecast-badge-row">
-        <span className={`trend-badge ${trendClass}`}>
-          {metrics.trend_direction || 'Holt Damped Trend'}
-        </span>
-        <span className="forecast-chip">
-          Shift: <strong>{metrics.projected_change_pct >= 0 ? `+${metrics.projected_change_pct}%` : `${metrics.projected_change_pct}%`}</strong>
-        </span>
-        <span className="forecast-chip">
-          Fit: <strong>R² = {metrics.r_squared}</strong>
-        </span>
+        <span className={`trend-badge ${trendClass}`}>{metrics.trend_direction || 'Holt Damped Trend'}</span>
+        <span className="forecast-chip">Shift: <strong>{metrics.projected_change_pct >= 0 ? `+${metrics.projected_change_pct}%` : `${metrics.projected_change_pct}%`}</strong></span>
+        <span className="forecast-chip">Fit: <strong>R² = {metrics.r_squared}</strong></span>
       </div>
 
       <div className="chart-svg-wrap">
@@ -481,103 +393,50 @@ function ForecastChart({ data }) {
             </linearGradient>
           </defs>
 
-          {/* Gridlines */}
           {[0, 0.33, 0.66, 1].map((ratio) => {
             const y = margin.top + innerH * (1 - ratio);
             const val = (minVal + (maxVal - minVal) * ratio).toFixed(1);
             return (
               <g key={ratio}>
-                <line
-                  x1={margin.left}
-                  y1={y}
-                  x2={svgW - margin.right}
-                  y2={y}
-                  stroke="var(--border-color, #334155)"
-                  strokeDasharray="3 3"
-                  opacity={0.3}
-                />
-                <text
-                  x={margin.left - 6}
-                  y={y + 3}
-                  textAnchor="end"
-                  fontSize="9"
-                  fill="var(--text-muted, #94a3b8)"
-                >
-                  {val}
-                </text>
+                <line x1={margin.left} y1={y} x2={svgW - margin.right} y2={y} stroke="var(--border-color, #334155)" strokeDasharray="3 3" opacity={0.3} />
+                <text x={margin.left - 6} y={y + 3} textAnchor="end" fontSize="9" fill="var(--text-muted, #94a3b8)">{val}</text>
               </g>
             );
           })}
 
-          {/* 95% Confidence Interval Polygon */}
-          {ciPolygon && (
-            <polygon points={ciPolygon} fill="url(#forecastConeGrad2)" />
-          )}
+          {ciPolygon && <polygon points={ciPolygon} fill="url(#forecastConeGrad2)" />}
+          {histPath && <path d={histPath} fill="none" stroke="#06b6d4" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />}
+          {forecastPath && <path d={forecastPath} fill="none" stroke="#f59e0b" strokeWidth="2.5" strokeDasharray="5 4" strokeLinecap="round" strokeLinejoin="round" />}
 
-          {/* Historical Path */}
-          {histPath && (
-            <path
-              d={histPath}
-              fill="none"
-              stroke="#06b6d4"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
+          {historical.map((p, i) => (
+            <circle
+              key={`h-${i}`}
+              cx={getX(i)}
+              cy={getY(p.actual)}
+              r={hoveredPt?.idx === i ? 5 : 3}
+              fill="#06b6d4"
+              stroke="#0f172a"
+              strokeWidth="1.5"
+              onMouseEnter={() => setHoveredPt({ ...p, idx: i, val: p.actual, isForecast: false })}
+              onMouseLeave={() => setHoveredPt(null)}
+              style={{ cursor: 'pointer' }}
             />
-          )}
+          ))}
 
-          {/* Forecast Path */}
-          {forecastPath && (
-            <path
-              d={forecastPath}
-              fill="none"
-              stroke="#f59e0b"
-              strokeWidth="2.5"
-              strokeDasharray="5 4"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          )}
-
-          {/* Historical Points */}
-          {historical.map((p, i) => {
-            const x = getX(i);
-            const y = getY(p.actual);
-            const isHov = hoveredPt?.idx === i;
-            return (
-              <circle
-                key={`h-${i}`}
-                cx={x}
-                cy={y}
-                r={isHov ? 5 : 3}
-                fill="#06b6d4"
-                stroke="#0f172a"
-                strokeWidth="1.5"
-                onMouseEnter={() => setHoveredPt({ ...p, idx: i, val: p.actual, isForecast: false })}
-                onMouseLeave={() => setHoveredPt(null)}
-                style={{ cursor: 'pointer', transition: 'r 0.15s ease' }}
-              />
-            );
-          })}
-
-          {/* Forecast Points */}
           {forecast.map((p, i) => {
             const idx = historical.length + i;
-            const x = getX(idx);
-            const y = getY(p.forecast);
-            const isHov = hoveredPt?.idx === idx;
             return (
               <circle
                 key={`f-${i}`}
-                cx={x}
-                cy={y}
-                r={isHov ? 5.5 : 3.5}
+                cx={getX(idx)}
+                cy={getY(p.forecast)}
+                r={hoveredPt?.idx === idx ? 5.5 : 3.5}
                 fill="#f59e0b"
                 stroke="#0f172a"
                 strokeWidth="1.5"
                 onMouseEnter={() => setHoveredPt({ ...p, idx, val: p.forecast, isForecast: true })}
                 onMouseLeave={() => setHoveredPt(null)}
-                style={{ cursor: 'pointer', transition: 'r 0.15s ease' }}
+                style={{ cursor: 'pointer' }}
               />
             );
           })}
@@ -597,12 +456,11 @@ function ForecastChart({ data }) {
 }
 
 // ============================================================================
-// MAIN VISUAL ANALYTICS PANEL COMPONENT
+// MAIN VISUAL ANALYTICS PANEL COMPONENT (EXECUTIVE OVERVIEW)
 // ============================================================================
 export default function VisualAnalyticsPanel({ visualDashboard, charts, forecast, selectedSheetId }) {
   const [activeCategory, setActiveCategory] = useState('All');
 
-  // If new visualDashboard is available, use the autonomous multi-chart gallery
   if (visualDashboard && visualDashboard.visualizations?.length > 0) {
     const allVis = visualDashboard.visualizations;
     const categories = visualDashboard.categories || ['All'];
@@ -617,18 +475,18 @@ export default function VisualAnalyticsPanel({ visualDashboard, charts, forecast
         <div className="section-title-row">
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
-              <h3>Autonomous AI Visual Intelligence Suite</h3>
-              <span className="badge-ai-count">{allVis.length} Projected Visualizations</span>
+              <h3>Industrial People Analytics & Strategic Diagnostic Suite</h3>
+              <span className="badge-ai-count">{allVis.length} Formula Models Active</span>
             </div>
             <p className="subtitle">
-              Multi-sheet relational projections, domain breakdowns, and Holt-Winters longitudinal forecasts synthesized across your uploaded workspace.
+              Verified industrial HR formulas: Bradford Factor Disruption, 9-Box Talent Matrix, Burnout Strain Ratios, and OLS Cross-Sheet Elasticity.
             </p>
           </div>
         </div>
 
-        {/* Category Pill Filters */}
+        {/* Category Filter Pills */}
         <div className="dashboard-filter-bar">
-          <span className="filter-label">Filter View:</span>
+          <span className="filter-label">Analytics Scope:</span>
           {categories.map((cat) => {
             const count = catCounts[cat] || (cat === 'All' ? allVis.length : 0);
             return (
@@ -654,15 +512,22 @@ export default function VisualAnalyticsPanel({ visualDashboard, charts, forecast
                 {/* Card Top Badges */}
                 <div className="card-top-badges">
                   <span className={`sheet-source-badge ${isCrossSheet ? 'badge-cross-accent' : ''}`}>
-                    {isCrossSheet ? '🔗 ' : '📄 '}
+                    {v.chart_type === 'talent_9box' && '🎯 '}
+                    {v.chart_type === 'bradford_factor' && '⚠️ '}
+                    {v.chart_type === 'burnout_strain' && '🔥 '}
+                    {v.chart_type === 'elasticity' && '📐 '}
+                    {v.chart_type === 'comparative_bar' && '🔗 '}
+                    {v.chart_type === 'forecast' && '📈 '}
                     {v.sheet_badge}
                   </span>
                   <span className="category-pill-badge">{v.category}</span>
                   <span className="type-pill-badge">
-                    {v.chart_type === 'comparative_bar' && '📊 Grouped Bar'}
-                    {v.chart_type === 'bar' && '📊 Bar Breakdown'}
-                    {v.chart_type === 'donut' && '🍩 Distribution'}
-                    {v.chart_type === 'forecast' && '📈 Holt Forecast'}
+                    {v.chart_type === 'talent_9box' && '9-Box Matrix'}
+                    {v.chart_type === 'bradford_factor' && 'Disruption Index'}
+                    {v.chart_type === 'burnout_strain' && 'Strain Gauge'}
+                    {v.chart_type === 'elasticity' && 'OLS Regression'}
+                    {v.chart_type === 'comparative_bar' && 'Grouped Comparative'}
+                    {v.chart_type === 'forecast' && 'Longitudinal Trajectory'}
                   </span>
                 </div>
 
@@ -674,14 +539,20 @@ export default function VisualAnalyticsPanel({ visualDashboard, charts, forecast
 
                 {/* Card Visual Body */}
                 <div className="card-visual-body">
+                  {v.chart_type === 'talent_9box' && (
+                    <Talent9BoxMatrix data={v.talent_9box_data} />
+                  )}
+                  {v.chart_type === 'bradford_factor' && (
+                    <BradfordFactorChart data={v.bradford_data} />
+                  )}
+                  {v.chart_type === 'burnout_strain' && (
+                    <BurnoutStrainChart data={v.burnout_data} />
+                  )}
+                  {v.chart_type === 'elasticity' && (
+                    <ElasticityChart data={v.elasticity_data} />
+                  )}
                   {v.chart_type === 'comparative_bar' && (
                     <ComparativeBarChart data={v.comparative_data} />
-                  )}
-                  {v.chart_type === 'bar' && (
-                    <SingleBarChart data={v.bar_data} />
-                  )}
-                  {v.chart_type === 'donut' && (
-                    <DonutChart data={v.donut_data} />
                   )}
                   {v.chart_type === 'forecast' && (
                     <ForecastChart data={v.forecast_data} />
@@ -693,7 +564,7 @@ export default function VisualAnalyticsPanel({ visualDashboard, charts, forecast
                   <div className="chart-ai-insight-banner">
                     <div className="insight-header">
                       <span className="insight-icon">💡</span>
-                      <span className="insight-title">AI Strategic Takeaway</span>
+                      <span className="insight-title">AI Strategic Diagnostic</span>
                     </div>
                     <div className="insight-content">
                       <MarkdownView content={v.ai_insight} />
@@ -720,6 +591,5 @@ export default function VisualAnalyticsPanel({ visualDashboard, charts, forecast
     );
   }
 
-  // Fallback: Legacy 3-slot layout if visualDashboard is empty
   return null;
 }

@@ -11,6 +11,7 @@ from fastapi.responses import FileResponse, Response
 from ..core import config
 from ..db.database import get_connection
 from ..services.sheet_catalog import read_sheets, prepare_sheets, insert_sheets, rebuild_relationships, prepare_existing_column_vectors
+from ..services.industrial_analytics import run_ingestion_industrial_pipeline
 
 router = APIRouter(prefix='/api/upload', tags=['upload'])
 _upload_lock = threading.Lock()
@@ -44,11 +45,13 @@ def upload_file(file: UploadFile = File(...)):
                     conn.execute('UPDATE sheets SET profile_json=? WHERE id=?', (json.dumps(profiles), sid))
                 insert_sheets(conn, dataset_id, prepared)
                 rebuild_relationships(conn)
+                industrial_res = run_ingestion_industrial_pipeline(conn, dataset_id)
                 linked = conn.execute("SELECT COUNT(*) FROM sheet_relationships WHERE status='linked' AND (left_sheet IN (SELECT id FROM sheets WHERE dataset_id=?) OR right_sheet IN (SELECT id FROM sheets WHERE dataset_id=?))", (dataset_id, dataset_id)).fetchone()[0]
             return {'status': 'success', 'dataset_id': dataset_id, 'filename': original,
                     'sheets': list(frames), 'total_rows': total, 'columns': first['columns'], 'sample_preview': first['records'][:5],
                     'indexed_chunks': total, 'vector_chunks': sum(len(s['vectors']) for s in prepared), 'linked_relationships': linked,
-                    'message': f'Indexed all {total} rows. Found {linked} exact key relationships. Overview and explorer now include these sheets.'}
+                    'industrial_analytics': industrial_res,
+                    'message': f'Indexed all {total} rows. Found {linked} exact key relationships and computed industrial analytics pipeline.'}
         except (ValueError, OSError, ImportError) as exc:
             path.unlink(missing_ok=True)
             raise HTTPException(400, str(exc)) from exc

@@ -26,9 +26,10 @@ class CalculationRequest(BaseModel):
 
 class ToolRequest(BaseModel):
     model_config = ConfigDict(extra='forbid')
-    name: Literal['calculate', 'presentation', 'arithmetic']
+    name: Literal['calculate', 'presentation', 'arithmetic', 'industrial_metric']
     calculation: CalculationRequest | None = None
     expression: str | None = Field(default=None, max_length=200)
+    industrial_metric: str | None = None
 
 
 def load_frame(request: CalculationRequest):
@@ -174,6 +175,14 @@ def infer_tool(query: str) -> ToolRequest | None:
         cols = {'attendance': 'attendance_rate', 'attendance rate': 'attendance_rate', 'overtime': 'overtime_hours', 'overtime hours': 'overtime_hours', 'rating': 'rating', 'punctuality': 'punctuality_rate'}
         ops = {'total': 'sum', 'average': 'mean', 'mean': 'mean', 'minimum': 'min', 'maximum': 'max', 'median': 'median'}
         return ToolRequest(name='calculate', calculation=CalculationRequest(operation=ops[op], column=cols[metric], group_by='department' if grouped else None))
+    if any(k in q for k in ('bradford', 'bradford factor', 'bradford score', 'absence disruption')):
+        return ToolRequest(name='industrial_metric', industrial_metric='bradford_factor')
+    if any(k in q for k in ('9 box', '9-box', 'nine box', 'talent matrix', 'potential matrix')):
+        return ToolRequest(name='industrial_metric', industrial_metric='talent_9box')
+    if any(k in q for k in ('burnout', 'strain index', 'workload strain', 'burnout zone', 'burnout index')):
+        return ToolRequest(name='industrial_metric', industrial_metric='burnout_strain')
+    if any(k in q for k in ('elasticity', 'tipping point', 'absence penalty', 'performance penalty')):
+        return ToolRequest(name='industrial_metric', industrial_metric='elasticity')
     if q in ('how many employees', 'how many employees are there', 'total headcount', 'headcount by department'):
         return ToolRequest(name='calculate', calculation=CalculationRequest(operation='count', group_by='department' if 'by department' in q else None))
     return None
@@ -189,6 +198,65 @@ def execute_tool(query: str, request: ToolRequest) -> dict:
                 raise ValueError('Select the source, operation and column in Calculate.')
             result = calculate(request.calculation)
             answer = format_calculation(result)
+        elif request.name == 'industrial_metric':
+            from .industrial_analytics import run_ingestion_industrial_pipeline
+            conn = get_connection()
+            try:
+                pipeline_res = run_ingestion_industrial_pipeline(conn)
+                m_key = request.industrial_metric or 'bradford_factor'
+                m_data = pipeline_res.get(m_key)
+                if not m_data or not m_data.get('available'):
+                    answer = f"**Industrial Analytics**: {m_data.get('message', 'No compatible dataset available for this calculation.')}"
+                else:
+                    result = m_data
+                    if m_key == 'bradford_factor':
+                        lines = [
+                            f"### Industrial Bradford Factor Disruption Index",
+                            f"**Formula**: `{m_data['formula']}`",
+                            f"- **Organizational Average Bradford Score**: **{m_data['organizational_avg_bradford']} pts**",
+                            f"- **Staff Exceeding Formal Review Threshold (>200 pts)**: **{m_data['high_disruption_count']} ({m_data['high_disruption_pct']}%)**",
+                            f"\n**Department Disruption Ranking**:"
+                        ]
+                        for d in m_data['departments']:
+                            lines.append(f"- **{d['department']}**: Avg Bradford = **{d['avg_bradford_score']} pts** | Days Lost = **{d['total_absent_days']}d** ({d['risk_pct']}% high disruption)")
+                        lines.append(f"\n{m_data['ai_insight']}")
+                        answer = '\n'.join(lines)
+                    elif m_key == 'talent_9box':
+                        lines = [
+                            f"### McKinsey / GE 9-Box Talent & Risk Matrix",
+                            f"- **Total Evaluated Personnel**: **{m_data['total_evaluated']} staff**",
+                            f"- **High Performers Total**: **{m_data['high_performers_count']} employees**",
+                            f"- **Critical At-Risk Stars (Flight Risk)**: **{m_data['retention_vulnerable_stars']} employees**",
+                            f"- **Underperformers (PIP Required)**: **{m_data['underperformers_count']} employees**",
+                            f"\n**Key Talent Quadrants**:"
+                        ]
+                        for c in m_data['cells']:
+                            if c['count'] > 0:
+                                lines.append(f"- **{c['title']}**: **{c['count']} staff ({c['pct']}%)** — {c['desc']}")
+                        lines.append(f"\n{m_data['ai_insight']}")
+                        answer = '\n'.join(lines)
+                    elif m_key == 'burnout_strain':
+                        lines = [
+                            f"### Workforce Burnout & Workload Strain Diagnostic",
+                            f"**Formula**: `{m_data['formula']}`",
+                            f"- **Peak Strain Department**: **{m_data['highest_strain_department']}** (**{m_data['highest_strain_pct']}% strain**)",
+                            f"\n**Department Workload Breakdown**:"
+                        ]
+                        for d in m_data['departments']:
+                            lines.append(f"- **{d['department']}**: Strain = **{d['strain_index_pct']}%** ({d['status']}) | Avg Overtime = **{d['avg_overtime_hours']} hrs**")
+                        lines.append(f"\n{m_data['ai_insight']}")
+                        answer = '\n'.join(lines)
+                    else:
+                        lines = [
+                            f"### Performance-Absenteeism Statistical Cross-Elasticity",
+                            f"- **Empirical Penalty Beta**: **{m_data['beta_coefficient']} pts** per absent day",
+                            f"- **Model Fit $R^2$**: **{m_data['r_squared']}** (Pearson $r = {m_data['pearson_correlation']}$)",
+                            f"- **Operational Tipping Point**: **{m_data['tipping_point_days']} absent days**",
+                            f"\n{m_data['ai_insight']}"
+                        ]
+                        answer = '\n'.join(lines)
+            finally:
+                conn.close()
         else:
             from .report_generator import generate_pptx_presentation, generate_calculation_presentation
             if request.calculation:
@@ -200,6 +268,7 @@ def execute_tool(query: str, request: ToolRequest) -> dict:
             answer = 'Your PowerPoint is ready. It contains calculated figures and source notes.'
     except ValueError as exc:
         answer = f'I could not complete that request: {exc}'
-    return {'query': query, 'answer': answer, 'model_used': 'Verified local tools',
+    return {'query': query, 'answer': answer, 'model_used': 'Verified industrial tools',
             'tool_used': request.name, 'calculation': result, 'artifacts': artifacts,
             'citations': [], 'exact_matches': [], 'suggested_questions': []}
+

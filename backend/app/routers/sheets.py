@@ -106,3 +106,17 @@ def download_sheet(sheet_id: int, format: str = Query('csv', pattern='^(csv|xlsx
     finally:
         conn.close()
 
+
+@router.get('/{sheet_id}/projections')
+def sheet_raw_projections(sheet_id: int):
+    conn = get_connection()
+    try:
+        from ..services.visual_intelligence import get_sheet_raw_projections
+        res = get_sheet_raw_projections(conn, sheet_id)
+        if not res.get('available'):
+            raise HTTPException(404, res.get('message', 'Projections not available'))
+        return res
+    finally:
+        conn.close()
+
+

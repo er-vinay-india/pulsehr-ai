@@ -146,3 +146,5 @@ async function readSheetApi(url) {
 export const getSheets = () => readSheetApi('/api/sheets');
 export const getSheetRows = (id, page, search) => readSheetApi(`/api/sheets/${id}/rows?${new URLSearchParams({page, search})}`);
 export const getJoinedRows = (id, page) => readSheetApi(`/api/sheets/relationships/${id}/rows?page=${page}`);
+export const getSheetProjections = (id) => readSheetApi(`/api/sheets/${id}/projections`);
+
