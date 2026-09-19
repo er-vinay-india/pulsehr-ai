@@ -1,4 +1,4 @@
-"""Executive AI Data Storytelling, Relational Insights, Visual Analytics, and Quality Audit Engine."""
+"""Universal Domain-Agnostic Executive AI Data Storytelling, Relational Insights, Visual Analytics, and Quality Audit Engine."""
 
 import json
 import math
@@ -9,222 +9,352 @@ import pandas as pd
 
 from ..core import config
 from ..db.database import get_connection
-from .time_series_forecast import build_time_series_forecast
+from .time_series_forecast import build_multi_measure_forecasts, infer_measure_unit, clean_float
 from .ai_evaluation import evaluate_ai_narrative
 
 
-def clean_float(val, default=0.0):
-    if val is None:
-        return default
-    try:
-        f = float(val)
-        if math.isnan(f) or math.isinf(f):
-            return default
-        return f
-    except (ValueError, TypeError):
-        return default
+def is_id_or_unwanted_column(col_name: str) -> bool:
+    """Detects if a column is an ID, index, code, or unnamed artifact."""
+    c = str(col_name).lower().replace(' ', '').replace('_', '')
+    if c in ('id', 'employeeid', 'empid', 'candidateid', 'applicantid', 'code', 'index'):
+        return True
+    if c.startswith('unnamed') or c.endswith('id') or c.endswith('code'):
+        return True
+    return False
 
 
-def find_column_by_terms(columns: list[str], terms: tuple[str, ...]) -> str | None:
-    """Finds first column name matching any of the search terms."""
-    for col in columns:
-        clean = col.lower().replace('_', '').replace(' ', '')
-        if any(t in clean for t in terms):
-            return col
-    return None
+def coerce_to_numeric(series: pd.Series) -> pd.Series:
+    """Intelligently parses strings like '79.7%', '4.7/5.0', '$120,000', '1,200' into valid floats."""
+    if pd.api.types.is_numeric_dtype(series):
+        return pd.to_numeric(series, errors='coerce')
+    
+    cleaned = (
+        series.astype(str)
+        .str.strip()
+        .str.replace('$', '', regex=False)
+        .str.replace('€', '', regex=False)
+        .str.replace('£', '', regex=False)
+        .str.replace(',', '', regex=False)
+        .str.replace('%', '', regex=False)
+    )
+    split_slash = cleaned.str.extract(r'^([\d.]+)\s*/\s*[\d.]+$')
+    cleaned = cleaned.where(split_slash[0].isna(), split_slash[0])
+    return pd.to_numeric(cleaned, errors='coerce')
+
+
+def detect_sheet_domain(columns: list[str]) -> tuple[str, str]:
+    """Detects primary business domain and badge description from column names."""
+    cols_clean = [str(c).lower().replace('_', '').replace(' ', '') for c in columns]
+    
+    recruitment_kw = ('candidate', 'applicant', 'stage', 'timetohire', 'requisition', 'recruiter', 'offer', 'interview', 'source')
+    attendance_kw = ('attendance', 'absent', 'absence', 'leave', 'sick', 'present', 'shift', 'hours', 'overtime')
+    performance_kw = ('performance', 'rating', 'score', 'eval', 'kpi', 'goal', 'review', 'competency', 'potential')
+    compensation_kw = ('salary', 'compensation', 'payroll', 'bonus', 'equity', 'wage', 'hourly', 'pay')
+    retention_kw = ('attrition', 'turnover', 'exit', 'tenure', 'resignation', 'retention', 'termination')
+    training_kw = ('training', 'course', 'learning', 'certification', 'skill', 'module')
+    
+    scores = {
+        'Recruitment & Hiring Pipeline': sum(any(k in c for k in recruitment_kw) for c in cols_clean),
+        'Attendance & Working Hours': sum(any(k in c for k in attendance_kw) for c in cols_clean),
+        'Performance & Talent Appraisal': sum(any(k in c for k in performance_kw) for c in cols_clean),
+        'Compensation & Payroll': sum(any(k in c for k in compensation_kw) for c in cols_clean),
+        'Workforce Retention & Attrition': sum(any(k in c for k in retention_kw) for c in cols_clean),
+        'Training & Skills Development': sum(any(k in c for k in training_kw) for c in cols_clean),
+    }
+    
+    best_domain = max(scores, key=scores.get)
+    if scores[best_domain] > 0:
+        return best_domain, f"Specialized {best_domain} Analytics"
+    return "Workforce Operations & Demographics", "General Tabular Analytics"
 
 
 def profile_sheet_data(records: list[dict], columns: list[str], sheet_name: str = 'Sheet') -> dict:
-    """Computes comprehensive deterministic ground-truth aggregates, thresholds, and chart data."""
+    """Computes comprehensive deterministic ground-truth aggregates, thresholds, and multi-metric charts for ANY sheet."""
     if not records:
-        return {'ground_truth': {}, 'charts': {}, 'thresholds': []}
+        return {
+            'ground_truth': {},
+            'charts': {'available_metrics': [], 'available_categories': [], 'bar': None, 'donut': None, 'bar_charts': {}, 'donut_charts': {}},
+            'thresholds': [],
+            'domain': 'General Tabular Analytics'
+        }
 
     df = pd.DataFrame(records)
     total_records = len(records)
     ground_truth = {'total_records': total_records}
     thresholds = []
-    charts = {'bar': None, 'donut': None}
+    
+    domain, domain_desc = detect_sheet_domain(columns)
+    ground_truth['business_domain'] = domain
 
-    # Identify semantic columns
-    col_absent = find_column_by_terms(columns, ('absent', 'leave', 'sick', 'daysoff', 'absence'))
-    col_perf = find_column_by_terms(columns, ('performancescore', 'score', 'rating', 'eval', 'score'))
-    col_dept = find_column_by_terms(columns, ('department', 'dept', 'division', 'unit', 'team'))
-    col_name = find_column_by_terms(columns, ('name', 'employeename', 'full_name', 'employee'))
-    col_risk = find_column_by_terms(columns, ('risk', 'attritionrisk', 'risklevel'))
+    # 1. Classify Column Types dynamically
+    numeric_cols = []
+    categorical_cols = []
+    
+    for c in columns:
+        if is_id_or_unwanted_column(c):
+            continue
+        s_num = coerce_to_numeric(df[c])
+        valid_num_count = int(s_num.notna().sum())
+        if valid_num_count >= max(2, int(total_records * 0.25)):
+            numeric_cols.append(c)
+            df[f'__clean_{c}'] = s_num
+        else:
+            n_unique = int(df[c].nunique())
+            if 1 < n_unique <= min(25, max(2, int(total_records * 0.8))):
+                categorical_cols.append(c)
 
-    # 1. Leave / Absence Analysis
-    if col_absent:
-        s_absent = pd.to_numeric(df[col_absent], errors='coerce').fillna(0)
-        total_on_leave = int((s_absent > 0).sum())
-        gt_3_days = int((s_absent > 3).sum())
-        gt_5_days = int((s_absent > 5).sum())
-        total_days = float(s_absent.sum())
-        mean_days = float(s_absent.mean()) if total_records > 0 else 0.0
-        max_days = float(s_absent.max()) if total_records > 0 else 0.0
+    # Pick primary categorical column for grouping (prefer Department, Team, Role, Stage, Status)
+    primary_cat = None
+    for term in ('department', 'dept', 'team', 'division', 'stage', 'status', 'role', 'risklevel', 'risk'):
+        for c in categorical_cols:
+            if term in str(c).lower().replace('_', '').replace(' ', ''):
+                primary_cat = c
+                break
+        if primary_cat:
+            break
+    if not primary_cat and categorical_cols:
+        primary_cat = categorical_cols[0]
 
-        ground_truth.update({
-            'total_on_leave': total_on_leave,
-            'more_than_3_days_leave': gt_3_days,
-            'more_than_5_days_leave': gt_5_days,
-            'total_absent_days': round(total_days, 1),
-            'avg_absent_days': round(mean_days, 1),
-            'max_absent_days': round(max_days, 1),
+    # Compute summary stats and Bar Charts for ALL numeric columns
+    bar_charts = {}
+    metric_summaries = []
+    
+    for num_col in numeric_cols:
+        clean_col = f'__clean_{num_col}' if f'__clean_{num_col}' in df.columns else num_col
+        s = df[clean_col].dropna() if clean_col in df.columns else coerce_to_numeric(df[num_col]).dropna()
+        if len(s) == 0:
+            continue
+        col_mean = clean_float(s.mean())
+        col_median = clean_float(s.median())
+        col_min = clean_float(s.min())
+        col_max = clean_float(s.max())
+        col_sum = clean_float(s.sum())
+        unit = infer_measure_unit(num_col)
+
+        gt_prefix = str(num_col).lower().replace(' ', '_').replace('(', '').replace(')', '').replace('-', '_')
+        ground_truth[f'avg_{gt_prefix}'] = round(col_mean, 2)
+        ground_truth[f'max_{gt_prefix}'] = round(col_max, 2)
+        ground_truth[f'min_{gt_prefix}'] = round(col_min, 2)
+        if unit in ('days', 'hrs', 'count', '$'):
+            ground_truth[f'total_{gt_prefix}'] = round(col_sum, 1)
+
+        metric_summaries.append({
+            'column': num_col,
+            'label': num_col,
+            'unit': unit,
+            'mean': round(col_mean, 2),
+            'median': round(col_median, 2),
+            'min': round(col_min, 2),
+            'max': round(col_max, 2),
+            'sum': round(col_sum, 1) if unit in ('days', 'hrs', 'count', '$') else None
         })
 
-        thresholds.append({
-            'label': 'Total on Leave',
-            'value': f"{total_on_leave} / {total_records}",
-            'sub': f"{round((total_on_leave / max(1, total_records)) * 100, 1)}% of workforce",
-            'tone': 'neutral'
-        })
-        thresholds.append({
-            'label': 'Took > 3 Days Leave',
-            'value': f"{gt_3_days} Employees",
-            'sub': f"{round((gt_3_days / max(1, total_records)) * 100, 1)}% critical absence",
-            'tone': 'warning' if gt_3_days > 0 else 'good'
-        })
-        thresholds.append({
-            'label': 'Cumulative Absent Days',
-            'value': f"{int(total_days)} Days",
-            'sub': f"Avg {round(mean_days, 1)} days per employee",
-            'tone': 'neutral'
-        })
+        # Bar chart grouped by primary_cat
+        if primary_cat:
+            is_additive = unit in ('days', 'hrs', 'count', '$') and 'rate' not in str(num_col).lower()
+            if is_additive:
+                grouped = df.groupby(primary_cat)[clean_col].apply(lambda x: coerce_to_numeric(x).sum()).reset_index()
+                chart_title = f"Total {num_col} by {primary_cat}"
+            else:
+                grouped = df.groupby(primary_cat)[clean_col].apply(lambda x: coerce_to_numeric(x).mean()).reset_index()
+                chart_title = f"Average {num_col} by {primary_cat}"
 
-        # Donut Chart: Leave Severity Distribution
-        bucket_0_1 = int((s_absent <= 1).sum())
-        bucket_2_3 = int(((s_absent >= 2) & (s_absent <= 3)).sum())
-        bucket_gt_3 = int((s_absent > 3).sum())
-        
-        charts['donut'] = {
-            'title': 'Leave Severity Distribution',
+            grouped = grouped.sort_values(by=clean_col, ascending=False)
+            bar_charts[num_col] = {
+                'title': chart_title,
+                'category_col': primary_cat,
+                'metric_col': num_col,
+                'unit': unit,
+                'bars': [{'label': str(row[primary_cat]), 'value': round(clean_float(row[clean_col]), 2)} for _, row in grouped.iterrows() if pd.notna(row[primary_cat])]
+            }
+
+    # Donut Charts for ALL categorical columns + binned numeric distributions
+    donut_charts = {}
+    for cat_col in categorical_cols:
+        vc = df[cat_col].value_counts().head(8)
+        tot = max(1, int(vc.sum()))
+        palette = ['#8ef0c8', '#818cf8', '#38bdf8', '#f3d19a', '#ffb4be', '#c084fc', '#f43f5e', '#a3e635']
+        donut_charts[cat_col] = {
+            'title': f'{cat_col} Distribution',
+            'category_col': cat_col,
+            'total': tot,
             'slices': [
-                {'label': '0–1 Days (Normal)', 'count': bucket_0_1, 'pct': round((bucket_0_1 / total_records) * 100, 1), 'color': '#8ef0c8'},
-                {'label': '2–3 Days (Moderate)', 'count': bucket_2_3, 'pct': round((bucket_2_3 / total_records) * 100, 1), 'color': '#f3d19a'},
-                {'label': '> 3 Days (Critical)', 'count': bucket_gt_3, 'pct': round((bucket_gt_3 / total_records) * 100, 1), 'color': '#ffb4be'}
+                {
+                    'label': str(lbl),
+                    'count': int(cnt),
+                    'pct': round((cnt / tot) * 100, 1),
+                    'color': palette[idx % len(palette)]
+                }
+                for idx, (lbl, cnt) in enumerate(vc.items())
             ]
         }
 
-        # Bar Chart: Absences by Department
-        if col_dept:
-            dept_grouped = df.groupby(col_dept)[col_absent].apply(lambda x: pd.to_numeric(x, errors='coerce').sum()).reset_index()
-            dept_grouped = dept_grouped.sort_values(by=col_absent, ascending=False)
-            charts['bar'] = {
-                'title': 'Total Absent Days by Department',
-                'category_col': col_dept,
-                'metric_col': col_absent,
-                'unit': 'days',
-                'bars': [{'label': str(row[col_dept]), 'value': round(clean_float(row[col_absent]), 1)} for _, row in dept_grouped.iterrows()]
-            }
-            top_dept = dept_grouped.iloc[0]
-            ground_truth['top_absence_department'] = str(top_dept[col_dept])
-            ground_truth['top_department_absent_days'] = clean_float(top_dept[col_absent])
-            thresholds.append({
-                'label': 'Highest Absence Dept',
-                'value': str(top_dept[col_dept]),
-                'sub': f"{int(clean_float(top_dept[col_absent]))} cumulative days",
-                'tone': 'critical'
-            })
-
-    # 2. Performance / Rating Analysis
-    elif col_perf:
-        s_perf = pd.to_numeric(df[col_perf], errors='coerce').dropna()
-        if len(s_perf) > 0:
-            avg_perf = float(s_perf.mean())
-            max_perf = float(s_perf.max())
-            min_perf = float(s_perf.min())
-            high_performers = int((s_perf >= 7.5).sum() if max_perf > 5 else (s_perf >= 4.0).sum())
-            at_risk = int((s_perf < 6.0).sum() if max_perf > 5 else (s_perf < 3.0).sum())
-
-            ground_truth.update({
-                'avg_performance': round(avg_perf, 2),
-                'high_performers_count': high_performers,
-                'at_risk_performers_count': at_risk
-            })
-
-            thresholds.append({
-                'label': 'Average Performance',
-                'value': f"{round(avg_perf, 2)}",
-                'sub': f"Range {round(min_perf, 1)} to {round(max_perf, 1)}",
-                'tone': 'good' if avg_perf >= 7.0 or avg_perf >= 3.5 else 'warning'
-            })
-            thresholds.append({
-                'label': 'High Performers',
-                'value': f"{high_performers} Employees",
-                'sub': f"{round((high_performers / total_records) * 100, 1)}% top tier",
-                'tone': 'good'
-            })
-            thresholds.append({
-                'label': 'Attrition / Risk Review',
-                'value': f"{at_risk} Employees",
-                'sub': f"{round((at_risk / total_records) * 100, 1)}% below threshold",
-                'tone': 'warning' if at_risk > 0 else 'good'
-            })
-
-            if col_dept:
-                dept_perf = df.groupby(col_dept)[col_perf].apply(lambda x: pd.to_numeric(x, errors='coerce').mean()).reset_index()
-                dept_perf = dept_perf.sort_values(by=col_perf, ascending=False)
-                charts['bar'] = {
-                    'title': 'Average Performance by Department',
-                    'category_col': col_dept,
-                    'metric_col': col_perf,
-                    'unit': 'score',
-                    'bars': [{'label': str(row[col_dept]), 'value': round(clean_float(row[col_perf]), 2)} for _, row in dept_perf.iterrows()]
-                }
-
-            if col_risk:
-                risk_counts = df[col_risk].value_counts().to_dict()
-                charts['donut'] = {
-                    'title': 'Workforce Risk Profile',
+    # Generate binned donut distribution for continuous ratings / scores if available
+    for num_col in numeric_cols:
+        s = coerce_to_numeric(df[num_col]).dropna()
+        c_clean = str(num_col).lower()
+        if ('rating' in c_clean or 'score' in c_clean) and len(s) > 3:
+            s_max = float(s.max())
+            if s_max <= 5.5:
+                # 5-star scale
+                b1 = int((s < 3.0).sum())
+                b2 = int(((s >= 3.0) & (s < 4.0)).sum())
+                b3 = int((s >= 4.0).sum())
+                bin_key = f"{num_col} Bands"
+                donut_charts[bin_key] = {
+                    'title': f'{num_col} Tier Breakdown',
+                    'category_col': bin_key,
+                    'total': len(s),
                     'slices': [
-                        {'label': 'Low Risk', 'count': int(risk_counts.get('Low', 0)), 'pct': round((risk_counts.get('Low', 0)/total_records)*100, 1), 'color': '#8ef0c8'},
-                        {'label': 'Moderate Risk', 'count': int(risk_counts.get('Moderate', 0)), 'pct': round((risk_counts.get('Moderate', 0)/total_records)*100, 1), 'color': '#f3d19a'},
-                        {'label': 'High Risk', 'count': int(risk_counts.get('High', 0)), 'pct': round((risk_counts.get('High', 0)/total_records)*100, 1), 'color': '#ffb4be'}
+                        {'label': 'Top Tier (≥ 4.0)', 'count': b3, 'pct': round((b3/len(s))*100, 1), 'color': '#8ef0c8'},
+                        {'label': 'Solid / Meets (3.0–3.9)', 'count': b2, 'pct': round((b2/len(s))*100, 1), 'color': '#38bdf8'},
+                        {'label': 'Needs Review (< 3.0)', 'count': b1, 'pct': round((b1/len(s))*100, 1), 'color': '#ffb4be'}
                     ]
                 }
-    else:
-        # Generic numeric columns fallback
-        num_cols = [c for c in columns if pd.to_numeric(df[c], errors='coerce').notna().sum() > len(df) * 0.5]
-        if num_cols:
-            first_num = num_cols[0]
-            s_num = pd.to_numeric(df[first_num], errors='coerce').dropna()
-            ground_truth[f'avg_{first_num}'] = round(clean_float(s_num.mean()), 2)
+            elif s_max <= 10.5:
+                # 10-point scale
+                b1 = int((s < 6.0).sum())
+                b2 = int(((s >= 6.0) & (s < 8.0)).sum())
+                b3 = int((s >= 8.0).sum())
+                bin_key = f"{num_col} Bands"
+                donut_charts[bin_key] = {
+                    'title': f'{num_col} Tier Breakdown',
+                    'category_col': bin_key,
+                    'total': len(s),
+                    'slices': [
+                        {'label': 'High Performers (≥ 8.0)', 'count': b3, 'pct': round((b3/len(s))*100, 1), 'color': '#8ef0c8'},
+                        {'label': 'Core Performers (6.0–7.9)', 'count': b2, 'pct': round((b2/len(s))*100, 1), 'color': '#38bdf8'},
+                        {'label': 'Under Review (< 6.0)', 'count': b1, 'pct': round((b1/len(s))*100, 1), 'color': '#ffb4be'}
+                    ]
+                }
+        elif 'attendance' in c_clean and len(s) > 3:
+            s_pct = s if s.max() > 1.5 else s * 100.0
+            low_att = int((s_pct < 85.0).sum())
+            mid_att = int(((s_pct >= 85.0) & (s_pct < 95.0)).sum())
+            high_att = int((s_pct >= 95.0).sum())
+            bin_key = "Attendance Rate Bands"
+            donut_charts[bin_key] = {
+                'title': 'Attendance Regularity Distribution',
+                'category_col': bin_key,
+                'total': len(s),
+                'slices': [
+                    {'label': 'Punctual (≥ 95%)', 'count': high_att, 'pct': round((high_att/len(s))*100, 1), 'color': '#8ef0c8'},
+                    {'label': 'Acceptable (85%–94%)', 'count': mid_att, 'pct': round((mid_att/len(s))*100, 1), 'color': '#f3d19a'},
+                    {'label': 'Irregular (< 85%)', 'count': low_att, 'pct': round((low_att/len(s))*100, 1), 'color': '#ffb4be'}
+                ]
+            }
+
+    # 3. Dynamic Critical Threshold Cards
+    # Build 3 to 5 contextual threshold cards based on what is actually in the sheet
+    if primary_cat and primary_cat in df.columns:
+        top_cat_name = str(df[primary_cat].value_counts().index[0])
+        top_cat_count = int(df[primary_cat].value_counts().iloc[0])
+        thresholds.append({
+            'label': f'Largest {primary_cat}',
+            'value': top_cat_name,
+            'sub': f"{top_cat_count} of {total_records} rows ({round((top_cat_count/total_records)*100, 1)}%)",
+            'tone': 'neutral'
+        })
+
+    for m in metric_summaries[:3]:
+        col = m['column']
+        u = m['unit']
+        mean_v = m['mean']
+        c_lower = str(col).lower()
+
+        if 'attendance' in c_lower:
             thresholds.append({
-                'label': f"Average {first_num}",
-                'value': f"{round(clean_float(s_num.mean()), 2)}",
-                'sub': f"Total rows: {total_records}",
+                'label': f'Avg {col}',
+                'value': f"{mean_v}{u}",
+                'sub': f"Spread {m['min']}{u} to {m['max']}{u}",
+                'tone': 'good' if mean_v >= 90 or mean_v >= 0.9 else 'warning'
+            })
+        elif 'rating' in c_lower or 'score' in c_lower or 'performance' in c_lower:
+            thresholds.append({
+                'label': f'Average {col}',
+                'value': f"{mean_v} {u}",
+                'sub': f"Peak: {m['max']} · Floor: {m['min']}",
+                'tone': 'good' if mean_v >= 3.5 or mean_v >= 7.0 else 'warning'
+            })
+        elif 'absent' in c_lower or 'leave' in c_lower:
+            s_abs = coerce_to_numeric(df[col]).fillna(0)
+            gt_3 = int((s_abs > 3).sum())
+            total_on_leave = int((s_abs > 0).sum())
+            ground_truth['total_on_leave'] = total_on_leave
+            ground_truth['more_than_3_days_leave'] = gt_3
+            thresholds.append({
+                'label': 'Total on Leave',
+                'value': f"{total_on_leave} / {total_records}",
+                'sub': f"{round((total_on_leave/total_records)*100, 1)}% of workforce",
                 'tone': 'neutral'
             })
-            if col_dept:
-                gen_dept = df.groupby(col_dept)[first_num].apply(lambda x: pd.to_numeric(x, errors='coerce').mean()).reset_index()
-                charts['bar'] = {
-                    'title': f'{first_num} by Department',
-                    'category_col': col_dept,
-                    'metric_col': first_num,
-                    'unit': 'avg',
-                    'bars': [{'label': str(row[col_dept]), 'value': round(clean_float(row[first_num]), 2)} for _, row in gen_dept.iterrows()]
-                }
+            thresholds.append({
+                'label': 'Took > 3 Days Leave',
+                'value': f"{gt_3} Employees",
+                'sub': f"{round((gt_3/total_records)*100, 1)}% critical absence",
+                'tone': 'warning' if gt_3 > 0 else 'good'
+            })
+        elif 'overtime' in c_lower or 'hours' in c_lower:
+            thresholds.append({
+                'label': f'Total {col}',
+                'value': f"{m['sum']} {u}",
+                'sub': f"Average {mean_v} {u} per record",
+                'tone': 'warning' if mean_v > 10 else 'neutral'
+            })
+        elif 'salary' in c_lower or 'compensation' in c_lower:
+            thresholds.append({
+                'label': f'Average {col}',
+                'value': f"${mean_v:,.0f}" if mean_v > 1000 else f"{mean_v} {u}",
+                'sub': f"Range: {m['min']} to {m['max']}",
+                'tone': 'neutral'
+            })
+        else:
+            thresholds.append({
+                'label': f'Average {col}',
+                'value': f"{mean_v} {u}",
+                'sub': f"Max: {m['max']} {u}",
+                'tone': 'neutral'
+            })
+
+    # Pick default primary bar and donut charts
+    primary_num_col = numeric_cols[0] if numeric_cols else None
+    primary_cat_col = list(donut_charts.keys())[0] if donut_charts else None
+
+    charts = {
+        'available_metrics': metric_summaries,
+        'available_categories': list(donut_charts.keys()),
+        'primary_metric': primary_num_col,
+        'primary_category': primary_cat_col,
+        'bar': bar_charts.get(primary_num_col) if primary_num_col else None,
+        'donut': donut_charts.get(primary_cat_col) if primary_cat_col else None,
+        'bar_charts': bar_charts,
+        'donut_charts': donut_charts
+    }
 
     return {
         'ground_truth': ground_truth,
         'thresholds': thresholds,
-        'charts': charts
+        'charts': charts,
+        'domain': domain,
+        'domain_desc': domain_desc
     }
 
 
-def generate_ai_narrative(ground_truth: dict, sheet_name: str, original_file: str, model: str | None = None) -> str:
-    """Invokes local Ollama model to generate an executive data story grounded strictly in computed facts."""
+def generate_ai_narrative(ground_truth: dict, sheet_name: str, original_file: str, domain: str = 'Workforce Operations', model: str | None = None) -> str:
+    """Invokes local Ollama model to generate an executive data story for ANY domain strictly grounded in computed facts."""
     target_model = model or config.OLLAMA_MODEL
 
     prompt = (
-        f"You are the Executive HR Data Analyst for PulseHR AI. "
-        f"Generate a crisp, data-driven narrative story for sheet '{sheet_name}' (file: '{original_file}').\n\n"
+        f"You are the Executive Chief People Officer & HR Data Strategist for PulseHR AI.\n"
+        f"Generate a crisp, high-level data story for sheet '{sheet_name}' (file: '{original_file}').\n"
+        f"Identified Domain: {domain}.\n\n"
         f"GROUND TRUTH VERIFIED METRICS (Do NOT hallucinate or alter these numbers):\n"
         f"{json.dumps(ground_truth, indent=2)}\n\n"
         f"REQUIREMENTS:\n"
-        f"1. Executive Headline: 1 sentence summarizing the core story of this dataset.\n"
-        f"2. Key Findings & Critical Thresholds: 3-4 bullet points highlighting exact numbers, percentages, and departments.\n"
-        f"3. Strategic HR Recommendations: 2 concrete, leadership-level interventions based strictly on these findings.\n"
-        f"Format in GitHub markdown with bold key figures. Be concise and professional."
+        f"1. Executive Headline: 1 bold sentence summarizing what this dataset reveals about company health.\n"
+        f"2. Key Findings & Critical Thresholds: 3-4 bullet points highlighting exact numbers, percentages, and department observations.\n"
+        f"3. Strategic HR Interventions: 2 concrete, leadership-level actions aligned with these findings.\n"
+        f"Format in GitHub markdown with bold key figures. Be concise, authoritative, and professional."
     )
 
     try:
@@ -236,76 +366,55 @@ def generate_ai_narrative(ground_truth: dict, sheet_name: str, original_file: st
                 'options': {'temperature': 0.15}
             })
             if resp.status_code == 200:
-                text = resp.json().get('response', '').strip()
-                if text:
-                    return text
+                result = resp.json().get('response', '').strip()
+                if result:
+                    return result
     except Exception:
         pass
 
-    # Deterministic fallback story ensuring 100% availability
-    tot = ground_truth.get('total_records', 0)
-    if 'total_on_leave' in ground_truth:
-        on_leave = ground_truth['total_on_leave']
-        gt_3 = ground_truth.get('more_than_3_days_leave', 0)
-        tot_days = ground_truth.get('total_absent_days', 0)
-        top_dept = ground_truth.get('top_absence_department', 'Operations')
-        top_days = ground_truth.get('top_department_absent_days', 0)
-        
-        return (
-            f"### Executive Summary: Workforce Absence Story\n"
-            f"Analysis of **{tot} employee records** indicates that **{on_leave} employees ({round((on_leave/max(1, tot))*100, 1)}%)** have recorded leaves, totaling **{int(tot_days)} absent days** across the organization.\n\n"
-            f"#### Key Findings & Critical Thresholds:\n"
-            f"- **Critical Leave Outliers**: **{gt_3} employees ({round((gt_3/max(1, tot))*100, 1)}%)** have taken **more than 3 days leave**, requiring immediate workload reallocation.\n"
-            f"- **Department Hotspot**: **{top_dept}** accounts for the highest absenteeism with **{int(top_days)} cumulative days**.\n"
-            f"- **Workforce Health Ratio**: Average absence stands at **{ground_truth.get('avg_absent_days', 0)} days per employee**.\n\n"
-            f"#### Strategic Recommendations:\n"
-            f"1. Conduct operational load reviews in **{top_dept}** to alleviate burnout and avoid chronic dependency on absent key personnel.\n"
-            f"2. Review return-to-work and wellness policies for the **{gt_3} high-absence staff** to maintain SLA commitments."
-        )
-    elif 'avg_performance' in ground_truth:
-        avg = ground_truth['avg_performance']
-        high = ground_truth.get('high_performers_count', 0)
-        risk = ground_truth.get('at_risk_performers_count', 0)
-        return (
-            f"### Executive Summary: Performance & Talent Health\n"
-            f"Workforce performance evaluation across **{tot} records** demonstrates an average rating of **{avg}**, with **{high} employees ({round((high/max(1, tot))*100, 1)}%)** classified as high performers.\n\n"
-            f"#### Key Findings & Critical Thresholds:\n"
-            f"- **High-Talent Density**: **{high} staff members** exceed standard performance benchmarks.\n"
-            f"- **Attrition & Engagement Risk**: **{risk} employees** score below target threshold, representing retention vulnerability.\n\n"
-            f"#### Strategic Recommendations:\n"
-            f"1. Implement retention incentives and targeted leadership progression for top-quartile performers.\n"
-            f"2. Establish proactive 1-on-1 coaching for at-risk personnel before quarterly review cycles."
-        )
+    # Deterministic domain-aware fallback narrative
+    facts_list = [f"- **{k.replace('_', ' ').title()}**: **{v}**" for k, v in list(ground_truth.items())[:5] if k not in ('total_records', 'business_domain')]
+    facts_str = "\n".join(facts_list) if facts_list else "- Metrics profiled across all recorded workforce entries."
 
     return (
-        f"### Executive Dataset Overview\n"
-        f"Successfully ingested and indexed **{tot} records** from `{original_file}`. "
-        f"All schema fields are preserved and vectorized for semantic querying and relational joins."
+        f"### Executive Overview: {sheet_name} ({domain})\n"
+        f"Leadership synthesis across **{ground_truth.get('total_records', 0)} recorded entries** in `{original_file}`.\n\n"
+        f"#### Key Findings & Critical Thresholds\n"
+        f"{facts_str}\n\n"
+        f"#### Strategic Recommendations\n"
+        f"- **Proactive Monitoring**: Track outliers in primary metrics to align department productivity with wellness standards.\n"
+        f"- **Actionable Reviews**: Schedule targeted check-ins with managers overseeing segments that deviate from median operational norms."
     )
 
 
 def compute_relational_story(conn, model: str | None = None) -> dict | None:
-    """Discovers and synthesizes cross-sheet relationships into an executive intelligence story."""
-    rel = conn.execute("SELECT * FROM sheet_relationships WHERE status='linked' LIMIT 1").fetchone()
+    """Discovers exact-key relationships between uploaded sheets and computes dynamic 2D correlation and quadrant segmentation."""
+    rel = conn.execute(
+        "SELECT r.*, l.name as left_name, l.columns_json as left_cols, "
+        "rg.name as right_name, rg.columns_json as right_cols "
+        "FROM sheet_relationships r "
+        "JOIN sheets l ON l.id = r.left_sheet "
+        "JOIN sheets rg ON rg.id = r.right_sheet "
+        "WHERE r.status='linked' ORDER BY r.matching_pairs DESC LIMIT 1"
+    ).fetchone()
+
     if not rel:
         return None
 
-    rel_dict = dict(rel)
-    left_sheet = conn.execute('SELECT * FROM sheets WHERE id=?', (rel['left_sheet'],)).fetchone()
-    right_sheet = conn.execute('SELECT * FROM sheets WHERE id=?', (rel['right_sheet'],)).fetchone()
+    left_sheet = conn.execute("SELECT s.*, d.original_name FROM sheets s JOIN dataset_uploads d ON d.id=s.dataset_id WHERE s.id=?", (rel['left_sheet'],)).fetchone()
+    right_sheet = conn.execute("SELECT s.*, d.original_name FROM sheets s JOIN dataset_uploads d ON d.id=s.dataset_id WHERE s.id=?", (rel['right_sheet'],)).fetchone()
     if not left_sheet or not right_sheet:
         return None
 
-    # Load joined rows
-    sql = '''
-        SELECT l.data_json AS left_data, r.data_json AS right_data
-        FROM sheet_cells a 
-        JOIN sheet_cells b ON a.value_key = b.value_key
-        JOIN sheet_rows l ON l.sheet_id = a.sheet_id AND l.row_index = a.row_index
-        JOIN sheet_rows r ON r.sheet_id = b.sheet_id AND r.row_index = b.row_index
-        WHERE a.sheet_id = ? AND a.column_name = ? AND b.sheet_id = ? AND b.column_name = ?
-    '''
-    joined_rows = conn.execute(sql, (rel['left_sheet'], rel['left_column'], rel['right_sheet'], rel['right_column'])).fetchall()
+    # Fetch joined rows
+    joined_rows = conn.execute("""
+        SELECT l.data_json as left_data, r.data_json as right_data
+        FROM sheet_rows l
+        JOIN sheet_rows r ON json_extract(l.data_json, ?) = json_extract(r.data_json, ?)
+        WHERE l.sheet_id = ? AND r.sheet_id = ?
+        LIMIT 500
+    """, (f"$.{rel['left_column']}", f"$.{rel['right_column']}", rel['left_sheet'], rel['right_sheet'])).fetchall()
+
     if not joined_rows:
         return None
 
@@ -317,66 +426,156 @@ def compute_relational_story(conn, model: str | None = None) -> dict | None:
     df = pd.DataFrame(records)
     total_joined = len(records)
 
-    # Search for numeric measures across the join
-    col_absent = find_column_by_terms(list(df.columns), ('absent', 'leave', 'sick'))
-    col_perf = find_column_by_terms(list(df.columns), ('score', 'performancescore', 'rating', 'attendance'))
-    col_name = find_column_by_terms(list(df.columns), ('name', 'employeename'))
-    col_dept = find_column_by_terms(list(df.columns), ('department', 'dept'))
+    left_cols = json.loads(left_sheet['columns_json'])
+    right_cols = json.loads(right_sheet['columns_json'])
 
-    quadrant_data = {'burnout_risk': [], 'attrition_risk': [], 'core_anchors': [], 'underperforming': []}
+    # Find candidate numeric measures on both sides
+    left_num_candidates = [
+        c for c in left_cols 
+        if c in df.columns and coerce_to_numeric(df[c]).notna().sum() >= max(2, int(total_joined * 0.3))
+        and not is_id_or_unwanted_column(c)
+    ]
+    right_num_candidates = [
+        c for c in right_cols 
+        if c in df.columns and coerce_to_numeric(df[c]).notna().sum() >= max(2, int(total_joined * 0.3))
+        and not is_id_or_unwanted_column(c)
+    ]
+
+    # Select best pair (col_x from left or right, col_y from the other)
+    col_x, col_y = None, None
+    best_corr = None
+
+    if left_num_candidates and right_num_candidates:
+        # Check all cross combinations to find the strongest correlation
+        for lx in left_num_candidates:
+            for ry in right_num_candidates:
+                if lx == ry:
+                    continue
+                sx = coerce_to_numeric(df[lx])
+                sy = coerce_to_numeric(df[ry])
+                valid = sx.notna() & sy.notna()
+                if valid.sum() > 2:
+                    val_c = sx[valid].corr(sy[valid])
+                    if pd.notna(val_c):
+                        if best_corr is None or abs(val_c) > abs(best_corr):
+                            best_corr = val_c
+                            col_x = lx
+                            col_y = ry
+        if not col_x:
+            col_x = left_num_candidates[0]
+            col_y = right_num_candidates[0]
+    else:
+        # Fallback to any two numeric columns in the joined DataFrame
+        all_numeric = [
+            c for c in df.columns 
+            if coerce_to_numeric(df[c]).notna().sum() >= max(2, int(total_joined * 0.3))
+            and not is_id_or_unwanted_column(c)
+        ]
+        if len(all_numeric) >= 2:
+            col_x, col_y = all_numeric[0], all_numeric[1]
+
+    # Name and Dept columns
+    col_name = None
+    for term in ('name', 'employeename', 'full_name', 'candidate', 'person'):
+        for c in df.columns:
+            if term in str(c).lower().replace('_', '').replace(' ', ''):
+                col_name = c
+                break
+        if col_name:
+            break
+
+    col_dept = None
+    for term in ('department', 'dept', 'team', 'division', 'role', 'unit'):
+        for c in df.columns:
+            if term in str(c).lower().replace('_', '').replace(' ', ''):
+                col_dept = c
+                break
+        if col_dept:
+            break
+
+    quadrant_data = {'q1': [], 'q2': [], 'q3': [], 'q4': []}
     correlation = None
+    unit_x = infer_measure_unit(col_x) if col_x else 'units'
+    unit_y = infer_measure_unit(col_y) if col_y else 'units'
 
-    if col_absent and col_perf:
-        s_abs = pd.to_numeric(df[col_absent], errors='coerce')
-        s_perf = pd.to_numeric(df[col_perf], errors='coerce')
-        valid = s_abs.notna() & s_perf.notna()
+    # Dynamic quadrant definitions based on metric semantics
+    # E.g. Attendance vs Performance, or Absence vs Performance, or Salary vs Rating
+    q_titles = {
+        'q1': {'title': f"High {col_x} · High {col_y}", 'badgeColor': '#10b981', 'icon': '⭐', 'desc': f"Above median in both {col_x} and {col_y}."},
+        'q2': {'title': f"Lower {col_x} · High {col_y}", 'badgeColor': '#818cf8', 'icon': '⚡', 'desc': f"Below median in {col_x}, but excels in {col_y}."},
+        'q3': {'title': f"High {col_x} · Lower {col_y}", 'badgeColor': '#f59e0b', 'icon': '🎯', 'desc': f"Above median in {col_x}, with development opportunities in {col_y}."},
+        'q4': {'title': f"Lower {col_x} · Lower {col_y}", 'badgeColor': '#ef4444', 'icon': '⚠️', 'desc': f"Below median in both {col_x} and {col_y}."}
+    }
+
+    # Contextual tailoring for common HR pairings
+    is_x_absent = any(k in str(col_x).lower() for k in ('absent', 'leave', 'sick'))
+    is_y_perf = any(k in str(col_y).lower() for k in ('rating', 'score', 'perf'))
+    is_x_att = any(k in str(col_x).lower() for k in ('attendance', 'present'))
+
+    if is_x_absent and is_y_perf:
+        q_titles['q1'] = {'title': 'Burnout Vulnerability', 'badgeColor': '#f97316', 'icon': '🔥', 'desc': f'High {col_y} paired with elevated {col_x}. Vulnerable to exhaustion.'}
+        q_titles['q2'] = {'title': 'Core Workforce Anchors', 'badgeColor': '#10b981', 'icon': '⚓', 'desc': f'High {col_y} with low {col_x}. Dependable high performers.'}
+        q_titles['q3'] = {'title': 'Attrition Risk', 'badgeColor': '#ef4444', 'icon': '⚠️', 'desc': f'High {col_x} paired with lower {col_y}. Disengagement signals.'}
+        q_titles['q4'] = {'title': 'Performance Alignment', 'badgeColor': '#64748b', 'icon': '🎯', 'desc': f'Low {col_x} with growth potential in {col_y}.'}
+    elif is_x_att and is_y_perf:
+        q_titles['q1'] = {'title': 'Core Workforce Anchors', 'badgeColor': '#10b981', 'icon': '⚓', 'desc': f'Superior {col_x} and dependable {col_y}. Operational pillars.'}
+        q_titles['q2'] = {'title': 'High-Efficiency Stars', 'badgeColor': '#818cf8', 'icon': '⚡', 'desc': f'Flexible {col_x} delivering high {col_y}.'}
+        q_titles['q3'] = {'title': 'Diligent Focus', 'badgeColor': '#f59e0b', 'icon': '🎯', 'desc': f'High {col_x} needing coaching in {col_y}.'}
+        q_titles['q4'] = {'title': 'Retention & Risk Review', 'badgeColor': '#ef4444', 'icon': '⚠️', 'desc': f'Lower {col_x} paired with sub-threshold {col_y}.'}
+
+    if col_x and col_y:
+        s_x = coerce_to_numeric(df[col_x])
+        s_y = coerce_to_numeric(df[col_y])
+        valid = s_x.notna() & s_y.notna()
 
         if valid.sum() > 2:
-            corr_val = float(s_abs[valid].corr(s_perf[valid]))
-            correlation = round(corr_val, 2) if not math.isnan(corr_val) else -0.42
-        correlation = clean_float(correlation, -0.42)
+            corr_val = float(s_x[valid].corr(s_y[valid]))
+            correlation = round(corr_val, 2) if not math.isnan(corr_val) else None
 
-        # 4-Quadrant Talent Classification
-        median_abs = clean_float(s_abs.median(), 2.0)
-        median_perf = clean_float(s_perf.median(), 7.0)
+        med_x = clean_float(s_x.median(), 0.0)
+        med_y = clean_float(s_y.median(), 0.0)
 
         for _, row in df.iterrows():
-            raw_abs = pd.to_numeric(row.get(col_absent), errors='coerce')
-            raw_perf = pd.to_numeric(row.get(col_perf), errors='coerce')
-            abs_val = clean_float(raw_abs, 0.0)
-            perf_val = clean_float(raw_perf, 0.0)
-            emp_name = str(row.get(col_name) or row.get(rel['left_column']) or 'Employee')
+            raw_x = coerce_to_numeric(pd.Series([row.get(col_x)])).iloc[0]
+            raw_y = coerce_to_numeric(pd.Series([row.get(col_y)])).iloc[0]
+            val_x = clean_float(raw_x, 0.0)
+            val_y = clean_float(raw_y, 0.0)
+            emp_name = str(row.get(col_name) or row.get(rel['left_column']) or 'Entity')
             emp_dept = str(row.get(col_dept) or 'General')
 
-            item = {'name': emp_name, 'dept': emp_dept, 'absent': round(abs_val, 1), 'perf': round(perf_val, 1)}
+            item = {'name': emp_name, 'dept': emp_dept, 'val_x': round(val_x, 2), 'val_y': round(val_y, 2)}
 
-            if perf_val >= median_perf and abs_val > median_abs:
-                quadrant_data['burnout_risk'].append(item)
-            elif perf_val < median_perf and abs_val > median_abs:
-                quadrant_data['attrition_risk'].append(item)
-            elif perf_val >= median_perf and abs_val <= median_abs:
-                quadrant_data['core_anchors'].append(item)
+            if val_x >= med_x and val_y >= med_y:
+                quadrant_data['q1'].append(item)
+            elif val_x < med_x and val_y >= med_y:
+                quadrant_data['q2'].append(item)
+            elif val_x >= med_x and val_y < med_y:
+                quadrant_data['q3'].append(item)
             else:
-                quadrant_data['underperforming'].append(item)
+                quadrant_data['q4'].append(item)
 
     gt_relational = {
         'joined_entities': total_joined,
         'relationship': f"{left_sheet['name']} [{rel['left_column']}] ↔ {right_sheet['name']} [{rel['right_column']}]",
+        'metric_x': col_x,
+        'metric_y': col_y,
         'correlation': correlation,
-        'burnout_count': len(quadrant_data['burnout_risk']),
-        'attrition_count': len(quadrant_data['attrition_risk']),
-        'core_anchors_count': len(quadrant_data['core_anchors']),
-        'underperforming_count': len(quadrant_data['underperforming']),
+        'q1_count': len(quadrant_data['q1']),
+        'q2_count': len(quadrant_data['q2']),
+        'q3_count': len(quadrant_data['q3']),
+        'q4_count': len(quadrant_data['q4']),
     }
 
     # Prompt AI for relational narrative
     target_model = model or config.OLLAMA_MODEL
     prompt = (
         f"You are the Chief HR Analytics Officer. Write a concise relational synthesis for joined sheets:\n"
-        f"Relationship: {gt_relational['relationship']} across {total_joined} matched employees.\n"
-        f"METRICS:\n{json.dumps(gt_relational, indent=2)}\n\n"
-        f"Synthesize the interaction between leave and performance. Categorize talent into Burnout Risk ({gt_relational['burnout_count']}), "
-        f"Attrition Risk ({gt_relational['attrition_count']}), and Core Anchors ({gt_relational['core_anchors_count']}). Format in markdown."
+        f"Relationship: {gt_relational['relationship']} across {total_joined} matched rows.\n"
+        f"Analyzed Measures: X = '{col_x}' ({unit_x}) vs Y = '{col_y}' ({unit_y}) with Pearson correlation r = {correlation}.\n"
+        f"Quadrant Breakdown: {q_titles['q1']['title']} ({gt_relational['q1_count']}), "
+        f"{q_titles['q2']['title']} ({gt_relational['q2_count']}), {q_titles['q3']['title']} ({gt_relational['q3_count']}), "
+        f"{q_titles['q4']['title']} ({gt_relational['q4_count']}).\n"
+        f"Write an executive paragraph interpreting this relationship for overall organizational health. Format in markdown."
     )
 
     narrative = ''
@@ -391,14 +590,15 @@ def compute_relational_story(conn, model: str | None = None) -> dict | None:
         pass
 
     if not narrative:
-        corr_desc = f"negative correlation of {correlation}" if correlation and correlation < 0 else "cross-table alignment"
+        corr_phrase = f"correlation coefficient of {correlation}" if correlation is not None else "distributional relationship"
         narrative = (
-            f"### Cross-Sheet Relational Story\n"
-            f"By joining **{left_sheet['name']}** with **{right_sheet['name']}** across **{total_joined} matched employees**, "
-            f"we observe a **{corr_desc}** between absence days and performance.\n\n"
-            f"- **Burnout Vulnerability**: **{gt_relational['burnout_count']} high performers** exhibit elevated absence days, signaling overwork.\n"
-            f"- **Attrition & Engagement Risk**: **{gt_relational['attrition_count']} employees** pair below-average performance with high absenteeism.\n"
-            f"- **Core Workforce Anchors**: **{gt_relational['core_anchors_count']} employees** maintain superior ratings alongside dependable attendance."
+            f"### Cross-Sheet Relational Discovery\n"
+            f"By joining **{left_sheet['name']}** with **{right_sheet['name']}** across **{total_joined} matched entities**, "
+            f"we observe a **{corr_phrase}** between **{col_x}** and **{col_y}**.\n\n"
+            f"- **{q_titles['q1']['title']}**: **{gt_relational['q1_count']} entities** place in the upper tier of both measures.\n"
+            f"- **{q_titles['q2']['title']}**: **{gt_relational['q2_count']} entities** exhibit elevated {col_y} alongside lower {col_x}.\n"
+            f"- **{q_titles['q3']['title']}**: **{gt_relational['q3_count']} entities** show elevated {col_x} paired with lower {col_y}.\n"
+            f"- **{q_titles['q4']['title']}**: **{gt_relational['q4_count']} entities** require active review in both dimensions."
         )
 
     eval_res = evaluate_ai_narrative(narrative, gt_relational, total_joined)
@@ -408,7 +608,12 @@ def compute_relational_story(conn, model: str | None = None) -> dict | None:
         'left_sheet_name': left_sheet['name'],
         'right_sheet_name': right_sheet['name'],
         'matching_pairs': total_joined,
+        'metric_x': col_x,
+        'metric_y': col_y,
+        'unit_x': unit_x,
+        'unit_y': unit_y,
         'correlation': correlation,
+        'quadrant_configs': q_titles,
         'quadrants': quadrant_data,
         'narrative': narrative,
         'evaluation': eval_res,
@@ -417,7 +622,7 @@ def compute_relational_story(conn, model: str | None = None) -> dict | None:
 
 
 def get_or_generate_executive_story(sheet_id: int | None = None, force_refresh: bool = False, model: str | None = None) -> dict:
-    """Retrieves cached executive story, charts, and forecasts or generates fresh AI analysis."""
+    """Retrieves cached executive story, multi-metric charts, and multi-measure forecasts or generates fresh AI analysis."""
     conn = get_connection()
     try:
         # Check cache if not forcing refresh
@@ -444,40 +649,34 @@ def get_or_generate_executive_story(sheet_id: int | None = None, force_refresh: 
                     'updated_at': cached['updated_at']
                 }
 
-        # Select primary sheet to analyze
+        # Select target sheet
         if sheet_id:
             sheet = conn.execute('SELECT s.*, d.original_name FROM sheets s JOIN dataset_uploads d ON d.id=s.dataset_id WHERE s.id=?', (sheet_id,)).fetchone()
         else:
-            # Pick the most recent rich sheet (or leave/absence sheet if present)
+            # Pick the most information-dense uploaded sheet
             sheets = conn.execute('SELECT s.*, d.original_name FROM sheets s JOIN dataset_uploads d ON d.id=s.dataset_id ORDER BY s.id DESC').fetchall()
             if not sheets:
                 return {'empty': True, 'message': 'No uploaded sheets available to analyze.'}
-                
-            # Prioritize sheets with leave/absence or performance in columns
-            chosen = sheets[0]
-            for s in sheets:
-                cols = str(s['columns_json']).lower()
-                if 'absent' in cols or 'leave' in cols or 'score' in cols:
-                    chosen = s
-                    break
-            sheet = chosen
+            sheet = sheets[0]
 
         sheet_dict = dict(sheet)
         columns = json.loads(sheet_dict['columns_json'])
         rows = conn.execute('SELECT data_json FROM sheet_rows WHERE sheet_id=? ORDER BY row_index', (sheet_dict['id'],)).fetchall()
         records = [json.loads(r['data_json']) for r in rows]
 
-        # 1. Profile ground truth, thresholds and visual charts
+        # 1. Profile ground truth, thresholds and multi-metric charts
         profile_res = profile_sheet_data(records, columns, sheet_dict['name'])
         ground_truth = profile_res['ground_truth']
         thresholds = profile_res['thresholds']
         charts = profile_res['charts']
+        domain = profile_res['domain']
+        domain_desc = profile_res['domain_desc']
 
-        # 2. Time-series forecast
-        forecast_res = build_time_series_forecast(records, sheet_dict['name'])
+        # 2. Multi-measure time-series forecasts
+        forecast_res = build_multi_measure_forecasts(records, sheet_dict['name'])
 
         # 3. AI Narrative generation
-        ai_narrative_text = generate_ai_narrative(ground_truth, sheet_dict['name'], sheet_dict['original_name'], model=model)
+        ai_narrative_text = generate_ai_narrative(ground_truth, sheet_dict['name'], sheet_dict['original_name'], domain=domain, model=model)
 
         # 4. AI Quality Evaluation
         eval_res = evaluate_ai_narrative(ai_narrative_text, ground_truth, len(records))
@@ -487,6 +686,8 @@ def get_or_generate_executive_story(sheet_id: int | None = None, force_refresh: 
             'thresholds': thresholds,
             'sheet_name': sheet_dict['name'],
             'original_file': sheet_dict['original_name'],
+            'domain': domain,
+            'domain_desc': domain_desc,
             'row_count': len(records),
             'col_count': len(columns)
         }

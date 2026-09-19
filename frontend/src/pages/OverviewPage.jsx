@@ -8,12 +8,14 @@ import AiQualityAuditModal from '../components/AiQualityAuditModal';
 export default function OverviewPage({ onNavigateTab }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
+  const [selectedSheetId, setSelectedSheetId] = useState(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isLoadingSheet, setIsLoadingSheet] = useState(false);
   const [showAuditModal, setShowAuditModal] = useState(false);
 
-  const fetchOverview = async () => {
+  const fetchOverview = async (sheetId = null) => {
     try {
-      const res = await getAnalyticsOverview();
+      const res = await getAnalyticsOverview(sheetId);
       setData(res);
       setError('');
     } catch (e) {
@@ -22,13 +24,24 @@ export default function OverviewPage({ onNavigateTab }) {
   };
 
   useEffect(() => {
-    fetchOverview();
+    fetchOverview(null);
   }, []);
+
+  const handleSelectSheet = async (sheetId) => {
+    setSelectedSheetId(sheetId);
+    setIsLoadingSheet(true);
+    try {
+      await fetchOverview(sheetId);
+    } finally {
+      setIsLoadingSheet(false);
+    }
+  };
 
   const handleRefreshStory = async () => {
     setIsRefreshing(true);
     try {
-      const refreshed = await refreshOverviewStory(data?.story_meta?.sheet_id);
+      const targetSheetId = selectedSheetId !== null ? selectedSheetId : data?.story_meta?.sheet_id;
+      const refreshed = await refreshOverviewStory(targetSheetId);
       setData(prev => ({
         ...prev,
         executive_story: refreshed.executive_story,
@@ -50,18 +63,46 @@ export default function OverviewPage({ onNavigateTab }) {
 
   const fmt = n => n == null ? 'Not available' : Number(n).toLocaleString(undefined, { maximumFractionDigits: 3 });
 
+  const displayedSheets = selectedSheetId !== null
+    ? data.sheets.filter(s => s.id === selectedSheetId)
+    : data.sheets;
+
   return (
     <div className="overview-page">
       {/* Top Banner */}
       <div className="executive-banner">
         <div className="banner-content">
           <h2>Executive Overview</h2>
-          <p>Live AI-synthesized intelligence and time-series forecasting across your uploaded sheets.</p>
+          <p>Live AI-synthesized intelligence and multi-measure forecasting across your uploaded workforce sheets.</p>
         </div>
         <button className="btn-primary" onClick={() => onNavigateTab('copilot')}>
           Ask AI Copilot
         </button>
       </div>
+
+      {/* Sheet Selector Tabs */}
+      {data.sheets_list && data.sheets_list.length > 0 && (
+        <div className="sheet-selector-bar">
+          <span className="sheet-tab-label">Analytics Scope:</span>
+          <button
+            className={`sheet-tab-btn ${selectedSheetId === null ? 'active' : ''}`}
+            onClick={() => handleSelectSheet(null)}
+          >
+            <span>Cross-Sheet Global View</span>
+            <span className="tab-domain-tag">Consolidated</span>
+          </button>
+          {data.sheets_list.map(s => (
+            <button
+              key={s.id}
+              className={`sheet-tab-btn ${selectedSheetId === s.id ? 'active' : ''}`}
+              onClick={() => handleSelectSheet(s.id)}
+            >
+              <span>{s.original_name || s.name}</span>
+              <span className="tab-domain-tag">{s.domain}</span>
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* KPI Grid */}
       <div className="kpi-grid">
@@ -87,12 +128,12 @@ export default function OverviewPage({ onNavigateTab }) {
           evaluation={data.evaluation}
           meta={data.story_meta}
           onRefresh={handleRefreshStory}
-          isRefreshing={isRefreshing}
+          isRefreshing={isRefreshing || isLoadingSheet}
           onOpenAudit={() => setShowAuditModal(true)}
         />
       )}
 
-      {/* 2. Visual Analytics (Bar Chart, Donut Chart, Time-Series Forecast) */}
+      {/* 2. Visual Analytics (Multi-Metric Bar Chart, Donut Profile, Time-Series Forecast) */}
       {(data.charts || data.forecast) && (
         <VisualAnalyticsPanel
           charts={data.charts}
@@ -119,61 +160,78 @@ export default function OverviewPage({ onNavigateTab }) {
       )}
 
       {/* Per-Sheet Column Profiles */}
-      {[...data.sheets].reverse().map(sheet => (
-        <div className="card-panel" key={sheet.id} style={{ marginTop: 20 }}>
-          <div className="panel-header">
-            <div>
-              <h3>{sheet.original_name} / {sheet.name}</h3>
-              <p className="panel-sub">{sheet.row_count} rows · {sheet.columns.length} columns</p>
-            </div>
-            <button className="btn-secondary" onClick={() => onNavigateTab('explorer')}>
-              Explore sheets
+      <div style={{ marginTop: 20 }}>
+        {selectedSheetId !== null && (
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+            <span style={{ fontSize: '0.85rem', color: 'var(--fg-secondary)' }}>
+              Showing profile for focused sheet ({displayedSheets[0]?.original_name || 'Selected Sheet'}).
+            </span>
+            <button
+              className="btn-secondary"
+              style={{ fontSize: '0.75rem', padding: '0.2rem 0.6rem' }}
+              onClick={() => handleSelectSheet(null)}
+            >
+              Show all sheets
             </button>
           </div>
+        )}
 
-          <div className="kpi-grid">
-            {sheet.profiles.filter(p => p.numeric).slice(0, 4).map(p => (
-              <div className="kpi-card" key={p.column}>
-                <div className="kpi-label">Mean {p.column}{p.unit ? ` (${p.unit})` : ''}</div>
-                <div className="kpi-value">{fmt(p.numeric.mean)}</div>
-                <small>{p.nonempty} recorded values</small>
+        {[...displayedSheets].reverse().map(sheet => (
+          <div className="card-panel" key={sheet.id} style={{ marginBottom: 20 }}>
+            <div className="panel-header">
+              <div>
+                <h3>{sheet.original_name} / {sheet.name}</h3>
+                <p className="panel-sub">{sheet.row_count} rows · {sheet.columns.length} columns</p>
               </div>
-            ))}
-          </div>
-
-          <details>
-            <summary>All {sheet.columns.length} column profiles</summary>
-            <div className="table-container">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Column</th>
-                    <th>Present</th>
-                    <th>Missing</th>
-                    <th>Distinct values</th>
-                    <th>Mean</th>
-                    <th>Minimum</th>
-                    <th>Maximum</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sheet.profiles.map(p => (
-                    <tr key={p.column}>
-                      <td>{p.column}</td>
-                      <td>{p.nonempty}</td>
-                      <td>{p.missing}</td>
-                      <td>{p.distinct}</td>
-                      <td>{p.numeric ? fmt(p.numeric.mean) : '—'}</td>
-                      <td>{p.numeric ? fmt(p.numeric.min) : '—'}</td>
-                      <td>{p.numeric ? fmt(p.numeric.max) : '—'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <button className="btn-secondary" onClick={() => onNavigateTab('explorer')}>
+                Explore sheet data
+              </button>
             </div>
-          </details>
-        </div>
-      ))}
+
+            <div className="kpi-grid">
+              {sheet.profiles.filter(p => p.numeric).slice(0, 4).map(p => (
+                <div className="kpi-card" key={p.column}>
+                  <div className="kpi-label">Mean {p.column}{p.unit ? ` (${p.unit})` : ''}</div>
+                  <div className="kpi-value">{fmt(p.numeric.mean)}</div>
+                  <small>{p.nonempty} recorded values</small>
+                </div>
+              ))}
+            </div>
+
+            <details>
+              <summary>All {sheet.columns.length} column profiles</summary>
+              <div className="table-container">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Column</th>
+                      <th>Present</th>
+                      <th>Missing</th>
+                      <th>Distinct values</th>
+                      <th>Mean</th>
+                      <th>Minimum</th>
+                      <th>Maximum</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sheet.profiles.map(p => (
+                      <tr key={p.column}>
+                        <td>{p.column}</td>
+                        <td>{p.nonempty}</td>
+                        <td>{p.missing}</td>
+                        <td>{p.distinct}</td>
+                        <td>{p.numeric ? fmt(p.numeric.mean) : '—'}</td>
+                        <td>{p.numeric ? fmt(p.numeric.min) : '—'}</td>
+                        <td>{p.numeric ? fmt(p.numeric.max) : '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </details>
+          </div>
+        ))}
+      </div>
 
       {/* Connected Information Summary */}
       <div className="card-panel" style={{ marginTop: 20 }}>

@@ -132,3 +132,70 @@ def test_analytics_overview_api_integration():
     assert 'forecast' in data
     assert 'relational_story' in data
     assert 'story_meta' in data
+    assert 'sheets_list' in data
+    assert isinstance(data['sheets_list'], list)
+
+
+def test_coerce_to_numeric_various_formats():
+    from app.services.executive_story import coerce_to_numeric
+    import pandas as pd
+    s = pd.Series(['79.7%', '85.2%', '4.8/5.0', '$120,000', '1,500.5', 'NA', None])
+    res = coerce_to_numeric(s)
+    assert res.iloc[0] == 79.7
+    assert res.iloc[1] == 85.2
+    assert res.iloc[2] == 4.8
+    assert res.iloc[3] == 120000.0
+    assert res.iloc[4] == 1500.5
+    assert pd.isna(res.iloc[5])
+    assert pd.isna(res.iloc[6])
+
+
+def test_profile_performance_and_attendance_domain():
+    records = [
+        {'Employee ID': 'EMP001', 'Department': 'Sales', 'Attendance Rate': '92.5%', 'Performance Score': 88.0, 'Rating': '4.5/5.0'},
+        {'Employee ID': 'EMP002', 'Department': 'Sales', 'Attendance Rate': '81.0%', 'Performance Score': 72.0, 'Rating': '3.2/5.0'},
+        {'Employee ID': 'EMP003', 'Department': 'Tech', 'Attendance Rate': '97.0%', 'Performance Score': 94.0, 'Rating': '4.9/5.0'},
+        {'Employee ID': 'EMP004', 'Department': 'Tech', 'Attendance Rate': '76.0%', 'Performance Score': 65.0, 'Rating': '2.8/5.0'},
+    ]
+    cols = ['Employee ID', 'Department', 'Attendance Rate', 'Performance Score', 'Rating']
+    profile = profile_sheet_data(records, cols, 'EmployeePerformance')
+
+    charts = profile['charts']
+    assert len(charts['available_metrics']) >= 3
+    metric_names = [m['column'] for m in charts['available_metrics']]
+    assert 'Attendance Rate' in metric_names
+    assert 'Performance Score' in metric_names
+    assert 'Rating' in metric_names
+
+    # Check Bar Charts generated for each numeric metric
+    assert 'Attendance Rate' in charts['bar_charts']
+    assert 'Performance Score' in charts['bar_charts']
+    assert 'Rating' in charts['bar_charts']
+
+    # Check Donut Charts generated for categories and rating bands
+    assert 'Department' in charts['donut_charts']
+    assert any('Bands' in k for k in charts['donut_charts'])
+
+    # Check thresholds are tailored to actual columns (not hardcoded absence only)
+    thresh_labels = [t['label'] for t in profile['thresholds']]
+    assert any('Attendance' in l or 'Performance' in l or 'Rating' in l for l in thresh_labels)
+
+
+def test_build_multi_measure_forecasts():
+    from app.services.time_series_forecast import build_multi_measure_forecasts
+    records = [
+        {'period': 'P1', 'Attendance Rate': '95.0%', 'Performance Score': 85.0},
+        {'period': 'P2', 'Attendance Rate': '93.0%', 'Performance Score': 86.0},
+        {'period': 'P3', 'Attendance Rate': '91.0%', 'Performance Score': 84.0},
+        {'period': 'P4', 'Attendance Rate': '94.0%', 'Performance Score': 88.0},
+        {'period': 'P5', 'Attendance Rate': '96.0%', 'Performance Score': 90.0},
+    ]
+    res = build_multi_measure_forecasts(records, 'PerformanceSheet')
+    assert res is not None
+    assert 'available_metrics' in res
+    assert 'Attendance Rate' in res['available_metrics']
+    assert 'Performance Score' in res['available_metrics']
+    assert 'forecasts' in res
+    assert 'Attendance Rate' in res['forecasts']
+    assert 'Performance Score' in res['forecasts']
+

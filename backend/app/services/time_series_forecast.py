@@ -38,38 +38,70 @@ def detect_date_column(df: pd.DataFrame) -> str | None:
     return None
 
 
-def select_forecast_measure(df: pd.DataFrame) -> tuple[str | None, str]:
-    """Selects the most meaningful numeric metric for time-series forecasting."""
-    priority_terms = [
-        ('absent', 'days'),
-        ('leave', 'days'),
-        ('sick', 'days'),
-        ('attendance', '%'),
-        ('hours', 'hrs'),
-        ('overtime', 'hrs'),
-        ('score', 'pts'),
-        ('rating', 'out of 5'),
-        ('headcount', 'count'),
-        ('salary', 'currency'),
-    ]
+def infer_measure_unit(col_name: str) -> str:
+    """Infers appropriate unit for any numeric column across HR domains."""
+    c_lower = str(col_name).lower()
+    if any(k in c_lower for k in ('rate', '%', 'pct', 'ratio', 'percentage')):
+        return '%'
+    if any(k in c_lower for k in ('score', 'rating', 'eval', 'points')):
+        return 'pts'
+    if any(k in c_lower for k in ('hour', 'hrs', 'overtime')):
+        return 'hrs'
+    if any(k in c_lower for k in ('day', 'days')):
+        return 'days'
+    if any(k in c_lower for k in ('salary', 'compensation', 'pay', 'bonus', 'wage', 'cost')):
+        return '$'
+    if any(k in c_lower for k in ('count', 'headcount', 'volume', 'hires', 'candidates', 'applications')):
+        return 'count'
+    return 'units'
+
+
+def coerce_to_numeric(series: pd.Series) -> pd.Series:
+    """Intelligently parses strings like '79.7%', '4.7/5.0', '$120,000', '1,200' into valid floats."""
+    if pd.api.types.is_numeric_dtype(series):
+        return pd.to_numeric(series, errors='coerce')
     
-    numeric_cols = [c for c in df.columns if pd.to_numeric(df[c], errors='coerce').notna().sum() >= max(3, int(len(df) * 0.5))]
+    cleaned = (
+        series.astype(str)
+        .str.strip()
+        .str.replace('$', '', regex=False)
+        .str.replace('€', '', regex=False)
+        .str.replace('£', '', regex=False)
+        .str.replace(',', '', regex=False)
+        .str.replace('%', '', regex=False)
+    )
+    split_slash = cleaned.str.extract(r'^([\d.]+)\s*/\s*[\d.]+$')
+    cleaned = cleaned.where(split_slash[0].isna(), split_slash[0])
+    return pd.to_numeric(cleaned, errors='coerce')
+
+
+def select_forecast_measure(df: pd.DataFrame) -> tuple[str | None, str]:
+    """Selects the primary numeric metric for time-series forecasting across any domain."""
+    numeric_cols = [c for c in df.columns if coerce_to_numeric(df[c]).notna().sum() >= max(3, int(len(df) * 0.3))]
     if not numeric_cols:
         return None, ''
         
-    for term, unit in priority_terms:
-        for c in numeric_cols:
+    # Exclude IDs, codes, unnameds
+    clean_numeric = [
+        c for c in numeric_cols
+        if not (str(c).lower().endswith('id') or str(c).lower().endswith('code') or str(c).lower().startswith('unnamed') or str(c).lower() == 'id')
+    ]
+    candidates = clean_numeric if clean_numeric else numeric_cols
+    
+    # Priority keywords across any domain (performance, attendance, recruitment, compensation, absence)
+    priority_terms = [
+        'attendance', 'performancescore', 'performance', 'rating', 'score',
+        'timetohire', 'time_to_hire', 'salary', 'overtime', 'hours',
+        'absent', 'leave', 'sick', 'experience', 'tenure', 'headcount'
+    ]
+    for term in priority_terms:
+        for c in candidates:
             c_clean = str(c).lower().replace('_', '').replace(' ', '')
             if term in c_clean:
-                return c, unit
+                return c, infer_measure_unit(c)
                 
-    # Fallback to first numeric column that is not an identifier
-    for c in numeric_cols:
-        c_clean = str(c).lower()
-        if not (c_clean.endswith('id') or c_clean.endswith('code') or c_clean == 'id'):
-            return c, 'units'
-            
-    return numeric_cols[0], 'units'
+    chosen = candidates[0]
+    return chosen, infer_measure_unit(chosen)
 
 
 def clean_float(val, default=0.0):
@@ -197,13 +229,17 @@ def holt_damped_forecast(series: list[float], steps: int = 7, alpha: float = 0.3
     }
 
 
-def build_time_series_forecast(records: list[dict], sheet_name: str = 'Sheet') -> dict | None:
-    """Builds a complete time series forecasting analysis from source records."""
+def build_time_series_forecast(records: list[dict], sheet_name: str = 'Sheet', target_col: str | None = None) -> dict | None:
+    """Builds a complete time series forecasting analysis for any specified or discovered numeric measure."""
     if not records or len(records) < 3:
         return None
         
     df = pd.DataFrame(records)
-    target_col, unit = select_forecast_measure(df)
+    if target_col and target_col in df.columns:
+        unit = infer_measure_unit(target_col)
+    else:
+        target_col, unit = select_forecast_measure(df)
+        
     if not target_col:
         return None
         
@@ -213,7 +249,7 @@ def build_time_series_forecast(records: list[dict], sheet_name: str = 'Sheet') -
     if date_col:
         df['__date'] = pd.to_datetime(df[date_col], errors='coerce', format='mixed')
         df = df.dropna(subset=['__date'])
-        df['__numeric'] = pd.to_numeric(df[target_col], errors='coerce')
+        df['__numeric'] = coerce_to_numeric(df[target_col])
         df = df.dropna(subset=['__numeric'])
         df = df.sort_values('__date')
         
@@ -223,7 +259,7 @@ def build_time_series_forecast(records: list[dict], sheet_name: str = 'Sheet') -
         values = [float(v) for v in grouped['__numeric']]
     else:
         # Sequential index timeline
-        df['__numeric'] = pd.to_numeric(df[target_col], errors='coerce')
+        df['__numeric'] = coerce_to_numeric(df[target_col])
         valid_df = df.dropna(subset=['__numeric'])
         values = [float(v) for v in valid_df['__numeric']]
         periods = [f"Period {i + 1}" for i in range(len(values))]
@@ -263,7 +299,7 @@ def build_time_series_forecast(records: list[dict], sheet_name: str = 'Sheet') -
             'actual': round(v, 2)
         })
         
-    # Assemble forecast points (prevent negative values for strictly positive metrics like absences)
+    # Assemble forecast points (prevent negative values for strictly positive metrics)
     is_non_negative = all(v >= 0 for v in values_slice)
     forecast_points = []
     for f, label in zip(model_res['forecasts'], future_labels):
@@ -299,4 +335,39 @@ def build_time_series_forecast(records: list[dict], sheet_name: str = 'Sheet') -
         'forecast': forecast_points,
         'metrics': metrics,
         'narrative': narrative
+    }
+
+
+def build_multi_measure_forecasts(records: list[dict], sheet_name: str = 'Sheet') -> dict | None:
+    """Builds time-series forecasts across all eligible numeric columns in the sheet."""
+    if not records or len(records) < 3:
+        return None
+        
+    df = pd.DataFrame(records)
+    numeric_cols = [
+        c for c in df.columns 
+        if coerce_to_numeric(df[c]).notna().sum() >= max(3, int(len(df) * 0.3))
+        and not (str(c).lower().endswith('id') or str(c).lower().endswith('code') or str(c).lower().startswith('unnamed') or str(c).lower() == 'id')
+    ]
+    if not numeric_cols:
+        return None
+        
+    primary_col, _ = select_forecast_measure(df)
+    forecasts_by_col = {}
+    for col in numeric_cols:
+        fc = build_time_series_forecast(records, sheet_name=sheet_name, target_col=col)
+        if fc:
+            forecasts_by_col[col] = fc
+            
+    if not forecasts_by_col:
+        return None
+        
+    chosen_primary = primary_col if primary_col in forecasts_by_col else list(forecasts_by_col.keys())[0]
+    primary_data = forecasts_by_col[chosen_primary]
+    
+    return {
+        **primary_data,
+        'primary_metric': chosen_primary,
+        'available_metrics': list(forecasts_by_col.keys()),
+        'forecasts': forecasts_by_col
     }

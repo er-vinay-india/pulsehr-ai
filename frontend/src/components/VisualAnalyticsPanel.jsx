@@ -5,10 +5,58 @@ export default function VisualAnalyticsPanel({ charts, forecast }) {
   const [hoveredSlice, setHoveredSlice] = useState(null);
   const [hoveredForecast, setHoveredForecast] = useState(null);
 
-  const barData = charts?.bar?.bars || [];
-  const donutSlices = charts?.donut?.slices || [];
-  const forecastPoints = forecast?.forecast || [];
-  const historicalPoints = forecast?.historical || [];
+  const [selectedMetric, setSelectedMetric] = useState(null);
+  const [selectedCategory, setSelectedCategory] = useState(null);
+  const [selectedForecastMetric, setSelectedForecastMetric] = useState(null);
+
+  // 1. Resolve Active Bar Chart
+  const availableMetrics = (
+    charts?.available_metrics?.map(m => m.column) || 
+    Object.keys(charts?.bar_charts || {})
+  ).filter(Boolean);
+
+  const activeMetric = (selectedMetric && charts?.bar_charts?.[selectedMetric]) 
+    ? selectedMetric 
+    : (charts?.primary_metric && charts?.bar_charts?.[charts.primary_metric] 
+        ? charts.primary_metric 
+        : availableMetrics[0]);
+
+  const activeBarChart = charts?.bar_charts?.[activeMetric] || charts?.bar;
+  const barData = activeBarChart?.bars || [];
+
+  // 2. Resolve Active Donut Chart
+  const availableCategories = (
+    charts?.available_categories || 
+    Object.keys(charts?.donut_charts || {})
+  ).filter(Boolean);
+
+  const activeCategory = (selectedCategory && charts?.donut_charts?.[selectedCategory])
+    ? selectedCategory
+    : (charts?.primary_category && charts?.donut_charts?.[charts.primary_category]
+        ? charts.primary_category
+        : availableCategories[0]);
+
+  const activeDonutChart = charts?.donut_charts?.[activeCategory] || charts?.donut;
+  const donutSlices = activeDonutChart?.slices || [];
+
+  // 3. Resolve Active Forecast
+  const availableForecastMetrics = (
+    forecast?.available_metrics || 
+    (forecast?.forecasts ? Object.keys(forecast.forecasts) : [])
+  ).filter(Boolean);
+
+  const activeForecastMetric = (selectedForecastMetric && forecast?.forecasts?.[selectedForecastMetric])
+    ? selectedForecastMetric
+    : (forecast?.primary_metric && forecast?.forecasts?.[forecast.primary_metric]
+        ? forecast.primary_metric
+        : availableForecastMetrics[0]);
+
+  const activeForecastData = (forecast?.forecasts && activeForecastMetric && forecast.forecasts[activeForecastMetric])
+    ? forecast.forecasts[activeForecastMetric]
+    : forecast;
+
+  const forecastPoints = activeForecastData?.forecast || [];
+  const historicalPoints = activeForecastData?.historical || [];
 
   // ==========================
   // 1. SVG Bar Chart Geometry
@@ -133,7 +181,7 @@ export default function VisualAnalyticsPanel({ charts, forecast }) {
         <div>
           <h3>Visual Analytics & Time-Series Intelligence</h3>
           <p className="subtitle">
-            Dynamic distributions and Holt-Winters trend forecasting with out-of-sample prediction intervals.
+            Universal multi-metric distributions and Holt-Winters trend forecasting with out-of-sample prediction intervals.
           </p>
         </div>
       </div>
@@ -142,12 +190,31 @@ export default function VisualAnalyticsPanel({ charts, forecast }) {
         {/* Bar Chart */}
         <div className="chart-box">
           <div className="chart-header">
-            <h4>{charts?.bar?.title || 'Metric by Department'}</h4>
-            <span className="badge-sub">{charts?.bar?.unit || 'count'}</span>
+            <h4>{activeBarChart?.title || `${activeMetric || 'Metric'} Breakdown`}</h4>
+            <span className="badge-sub">{activeBarChart?.unit || 'value'}</span>
           </div>
 
+          {/* Metric Selector Pills */}
+          {availableMetrics.length > 1 && (
+            <div className="metric-pills-row">
+              <span className="pills-label">Metric:</span>
+              {availableMetrics.map(col => (
+                <button
+                  key={col}
+                  className={`metric-pill ${activeMetric === col ? 'active' : ''}`}
+                  onClick={() => {
+                    setSelectedMetric(col);
+                    setHoveredBar(null);
+                  }}
+                >
+                  {col}
+                </button>
+              ))}
+            </div>
+          )}
+
           {barData.length === 0 ? (
-            <div className="chart-empty">No categorical breakdown available for this sheet.</div>
+            <div className="chart-empty">No categorical breakdown available for this metric.</div>
           ) : (
             <div className="chart-svg-wrap">
               <svg viewBox={`0 0 ${barSvgWidth} ${barSvgHeight}`} className="responsive-svg">
@@ -235,9 +302,28 @@ export default function VisualAnalyticsPanel({ charts, forecast }) {
         {/* Donut Chart */}
         <div className="chart-box">
           <div className="chart-header">
-            <h4>{charts?.donut?.title || 'Distribution Profile'}</h4>
+            <h4>{activeDonutChart?.title || `${activeCategory || 'Category'} Profile`}</h4>
             <span className="badge-sub">{totalDonutCount} total records</span>
           </div>
+
+          {/* Category Selector Pills */}
+          {availableCategories.length > 1 && (
+            <div className="metric-pills-row">
+              <span className="pills-label">Segment:</span>
+              {availableCategories.map(cat => (
+                <button
+                  key={cat}
+                  className={`metric-pill ${activeCategory === cat ? 'active' : ''}`}
+                  onClick={() => {
+                    setSelectedCategory(cat);
+                    setHoveredSlice(null);
+                  }}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
+          )}
 
           {donutSlices.length === 0 ? (
             <div className="chart-empty">No distribution segments available.</div>
@@ -303,32 +389,52 @@ export default function VisualAnalyticsPanel({ charts, forecast }) {
       </div>
 
       {/* Time-Series Forecasting Chart */}
-      {forecast && (
+      {activeForecastData && (
         <div className="chart-box forecast-card" style={{ marginTop: '20px' }}>
           <div className="forecast-header">
             <div>
               <div className="forecast-title-row">
-                <h4>AI Time-Series Forecasting: {forecast.target_column}</h4>
-                <span className={`trend-badge ${forecast.metrics?.trend_direction?.toLowerCase().replace(/[^a-z]/g, '-')}`}>
-                  {forecast.metrics?.trend_direction || 'Damped Trend'}
+                <h4>AI Time-Series Forecasting: {activeForecastData.target_column || activeForecastMetric}</h4>
+                <span className={`trend-badge ${activeForecastData.metrics?.trend_direction?.toLowerCase().replace(/[^a-z]/g, '-')}`}>
+                  {activeForecastData.metrics?.trend_direction || 'Damped Trend'}
                 </span>
               </div>
-              <p className="forecast-narrative">{forecast.narrative}</p>
+
+              {/* Measure Selector Pills */}
+              {availableForecastMetrics.length > 1 && (
+                <div className="metric-pills-row" style={{ marginTop: '0.4rem', marginBottom: '0.5rem' }}>
+                  <span className="pills-label">Measure:</span>
+                  {availableForecastMetrics.map(col => (
+                    <button
+                      key={col}
+                      className={`metric-pill ${activeForecastMetric === col ? 'active' : ''}`}
+                      onClick={() => {
+                        setSelectedForecastMetric(col);
+                        setHoveredForecast(null);
+                      }}
+                    >
+                      {col}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              <p className="forecast-narrative">{activeForecastData.narrative}</p>
             </div>
 
             <div className="forecast-metrics-pill-row">
               <div className="forecast-pill">
-                <span className="pill-title">Fit $R^2$</span>
-                <span className="pill-value">{forecast.metrics?.r_squared}</span>
+                <span className="pill-title">Fit R²</span>
+                <span className="pill-value">{activeForecastData.metrics?.r_squared}</span>
               </div>
               <div className="forecast-pill">
                 <span className="pill-title">MAPE Error</span>
-                <span className="pill-value">{forecast.metrics?.mape_pct}%</span>
+                <span className="pill-value">{activeForecastData.metrics?.mape_pct}%</span>
               </div>
               <div className="forecast-pill">
                 <span className="pill-title">Projected Shift</span>
-                <span className="pill-value" style={{ color: forecast.metrics?.projected_change_pct >= 0 ? '#10b981' : '#f59e0b' }}>
-                  {forecast.metrics?.projected_change_pct >= 0 ? `+${forecast.metrics?.projected_change_pct}%` : `${forecast.metrics?.projected_change_pct}%`}
+                <span className="pill-value" style={{ color: activeForecastData.metrics?.projected_change_pct >= 0 ? '#10b981' : '#f59e0b' }}>
+                  {activeForecastData.metrics?.projected_change_pct >= 0 ? `+${activeForecastData.metrics?.projected_change_pct}%` : `${activeForecastData.metrics?.projected_change_pct}%`}
                 </span>
               </div>
             </div>

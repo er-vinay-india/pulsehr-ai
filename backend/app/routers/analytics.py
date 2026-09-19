@@ -1,7 +1,8 @@
+import json
 from fastapi import APIRouter, Query
 from ..db.database import get_connection
 from ..services.sheet_catalog import overview
-from ..services.executive_story import get_or_generate_executive_story, compute_relational_story
+from ..services.executive_story import get_or_generate_executive_story, compute_relational_story, detect_sheet_domain
 
 router = APIRouter(prefix='/api/analytics', tags=['analytics'])
 
@@ -12,8 +13,28 @@ def get_analytics_overview(sheet_id: int | None = Query(None)):
     data = overview()
     conn = get_connection()
     try:
+        # Populate sheet selector list
+        sheets_rows = conn.execute(
+            'SELECT s.id, s.name, s.row_count, s.columns_json, d.original_name '
+            'FROM sheets s JOIN dataset_uploads d ON d.id=s.dataset_id ORDER BY s.id ASC'
+        ).fetchall()
+        sheets_list = []
+        for r in sheets_rows:
+            cols = json.loads(r['columns_json']) if r['columns_json'] else []
+            domain, _ = detect_sheet_domain(cols)
+            sheets_list.append({
+                'id': r['id'],
+                'name': r['name'],
+                'original_name': r['original_name'],
+                'row_count': r['row_count'],
+                'col_count': len(cols),
+                'domain': domain
+            })
+        data['sheets_list'] = sheets_list
+
         story_res = get_or_generate_executive_story(sheet_id=clean_sheet_id, force_refresh=False)
         relational_res = compute_relational_story(conn)
+
         data['executive_story'] = story_res.get('narrative')
         data['evaluation'] = story_res.get('evaluation')
         data['charts'] = story_res.get('charts')

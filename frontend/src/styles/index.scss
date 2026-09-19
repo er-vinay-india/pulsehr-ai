@@ -2794,3 +2794,116 @@
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }
 }
+
+/* ==========================================================================
+   Multi-Metric & Sheet Selector Controls
+   ========================================================================== */
+.sheet-selector-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  overflow-x: auto;
+  padding: 0.5rem 0 1rem 0;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 1.25rem;
+
+  .sheet-tab-label {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--fg-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-right: 0.25rem;
+    white-space: nowrap;
+  }
+
+  .sheet-tab-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.45rem 0.85rem;
+    border-radius: var(--radius-sm);
+    background: var(--surface-card);
+    border: 1px solid var(--border);
+    color: var(--fg-secondary);
+    font-size: 0.825rem;
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.15s ease;
+
+    &:hover {
+      background: var(--surface-hover);
+      color: var(--fg-primary);
+      border-color: var(--fg-muted);
+    }
+
+    &.active {
+      background: var(--surface-inset);
+      border-color: var(--primary);
+      color: var(--fg-primary);
+      font-weight: 600;
+      box-shadow: 0 0 0 1px var(--primary);
+
+      .tab-domain-tag {
+        background: rgba(56, 189, 248, 0.2);
+        color: var(--primary);
+        border-color: rgba(56, 189, 248, 0.4);
+      }
+    }
+
+    .tab-domain-tag {
+      font-size: 0.65rem;
+      padding: 0.1rem 0.4rem;
+      border-radius: 4px;
+      background: var(--surface-inset);
+      border: 1px solid var(--border);
+      color: var(--fg-muted);
+      font-weight: 600;
+    }
+  }
+}
+
+.metric-pills-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.75rem;
+
+  .pills-label {
+    font-size: 0.725rem;
+    font-weight: 600;
+    color: var(--fg-muted);
+    margin-right: 0.25rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .metric-pill {
+    background: var(--surface-inset);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 0.25rem 0.65rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--fg-secondary);
+    cursor: pointer;
+    transition: all 0.15s ease;
+
+    &:hover {
+      background: var(--surface-hover);
+      color: var(--fg-primary);
+      border-color: var(--fg-muted);
+    }
+
+    &.active {
+      background: var(--primary);
+      color: #fff;
+      border-color: var(--primary);
+      font-weight: 600;
+      box-shadow: 0 1px 4px rgba(56, 189, 248, 0.25);
+    }
+  }
+}
+
