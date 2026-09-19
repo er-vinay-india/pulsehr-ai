@@ -3842,4 +3842,79 @@
   }
 }
 
+/* ==========================================================================
+   Executive Overview Chunked Skeleton Loaders
+   ========================================================================== */
+.skeleton-card {
+  position: relative;
+  overflow: hidden;
+  border-color: var(--border-subtle);
+
+  .skeleton-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.85rem;
+  }
+
+  .skeleton-status-banner {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.55rem;
+    font-size: 0.775rem;
+    font-weight: 600;
+    color: var(--brand-400);
+    background: rgba(255, 138, 98, 0.08);
+    border: 1px solid rgba(255, 138, 98, 0.22);
+    padding: 0.4rem 0.85rem;
+    border-radius: var(--radius-full);
+    margin-bottom: 1rem;
+    width: fit-content;
+
+    .spinner-dot {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border: 2px solid var(--brand-400);
+      border-top-color: transparent;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      flex-shrink: 0;
+    }
+  }
+
+  .skeleton-body-lines {
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+    margin-bottom: 1.25rem;
+
+    .line-h {
+      border-radius: 4px;
+    }
+  }
+
+  .skeleton-footer-row {
+    display: flex;
+    gap: 0.65rem;
+    align-items: center;
+    border-top: 1px solid var(--border-subtle);
+    padding-top: 0.85rem;
+  }
+
+  .skeleton-subcard {
+    background: var(--surface-inset);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 1rem;
+  }
+}
+
+.shimmer-box {
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0.08) 50%, rgba(255, 255, 255, 0.03) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.8s infinite ease-in-out;
+}
+
+
 

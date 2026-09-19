@@ -7,6 +7,38 @@ export async function getAnalyticsOverview(sheetId = null) {
   return res.json();
 }
 
+export async function getOverviewBase() {
+  const res = await fetch(`${API_BASE}/analytics/overview/base`);
+  if (!res.ok) throw new Error("Failed to fetch base overview metrics");
+  return res.json();
+}
+
+export async function getOverviewVisuals(sheetId = null) {
+  const url = sheetId ? `${API_BASE}/analytics/overview/visuals?sheet_id=${sheetId}` : `${API_BASE}/analytics/overview/visuals`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error("Failed to fetch visual intelligence");
+  return res.json();
+}
+
+export async function getOverviewStory(sheetId = null, forceRefresh = false, model = null) {
+  const params = new URLSearchParams();
+  if (sheetId) params.set("sheet_id", sheetId);
+  if (forceRefresh) params.set("force_refresh", "true");
+  if (model) params.set("model", model);
+  const qs = params.toString() ? `?${params.toString()}` : "";
+  const res = await fetch(`${API_BASE}/analytics/overview/story${qs}`);
+  if (!res.ok) throw new Error("Failed to fetch executive story");
+  return res.json();
+}
+
+export async function getOverviewRelational(model = null) {
+  const qs = model ? `?model=${encodeURIComponent(model)}` : "";
+  const res = await fetch(`${API_BASE}/analytics/overview/relational${qs}`);
+  if (!res.ok) throw new Error("Failed to fetch relational insights");
+  return res.json();
+}
+
+
 export async function refreshOverviewStory(sheetId = null, model = null) {
   const params = new URLSearchParams();
   if (sheetId) params.set("sheet_id", sheetId);
