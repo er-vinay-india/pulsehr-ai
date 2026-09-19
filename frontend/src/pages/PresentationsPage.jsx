@@ -17,36 +17,9 @@ export default function PresentationsPage() {
   };
 
   const slides = [
-    {
-      num: 1,
-      title: "Title & Executive Cover",
-      desc: "Workforce Attendance & Performance Review · Widescreen 16:9 executive dark theme layout with dataset provenance.",
-      badge: "Cover Slide"
-    },
-    {
-      num: 2,
-      title: "Executive Workforce Health & KPIs",
-      desc: "4 High-impact stat cards: Total Headcount (100), Attendance (92.4%), Performance (3.8/5.0), Overtime (8.4h) + AI summary.",
-      badge: "Dashboard"
-    },
-    {
-      num: 3,
-      title: "Department Benchmarking Matrix",
-      desc: "Comprehensive structured comparison table across Engineering, Product, Sales, Marketing, HR, Finance, Operations.",
-      badge: "Analysis"
-    },
-    {
-      num: 4,
-      title: "Talent Risk & Burnout Anomaly Alerts",
-      desc: "3 Targeted risk pillars highlighting high-overtime contributors, attendance disconnects, and PIP recommendations.",
-      badge: "Risk Alerts"
-    },
-    {
-      num: 5,
-      title: "Strategic HR Retention Roadmap",
-      desc: "4 Actionable pillars: Workload Rebalancing, Remote Harmonization, Retention Grants, and Coaching Programs.",
-      badge: "Action Plan"
-    }
+    { num: 1, title: "Uploaded data overview", desc: "Dataset, sheet and row counts based on active uploads.", badge: "Overview" },
+    { num: 2, title: "Sheet metrics", desc: "Editable tables show numeric means and missing values for each uploaded sheet.", badge: "Comparison" },
+    { num: 3, title: "Source notes", desc: "Source, population and calculation definitions explain what the figures represent.", badge: "Source notes" }
   ];
 
   return (
@@ -60,7 +33,7 @@ export default function PresentationsPage() {
           </div>
           <h2>Executive Presentation & Report Generator</h2>
           <p>
-            Export dynamic PowerPoint presentations (.pptx) formatted with executive color palettes, high-contrast typography, and data-grounded AI recommendations.
+            Export dynamic PowerPoint presentations (.pptx) formatted with executive color palettes, high-contrast typography, and calculated values and source notes. Create custom calculations and export them from the Copilot page.
           </p>
         </div>
         <div className="hero-cta-group">
@@ -90,7 +63,7 @@ export default function PresentationsPage() {
           <Layers size={20} color="var(--brand-400)" />
           <div>
             <h3>Generated Slide Deck Architecture</h3>
-            <p className="subtitle">5 Widescreen 16:9 Slides compiled autonomously using python-pptx</p>
+            <p className="subtitle">Widescreen slides generated from the current uploaded sheets</p>
           </div>
         </div>
 
@@ -99,7 +72,7 @@ export default function PresentationsPage() {
             <div key={s.num} className="slide-preview-card">
               <div className="slide-top">
                 <span className="slide-badge">{s.badge}</span>
-                <span className="slide-num">Slide 0{s.num}</span>
+                <span className="slide-num">Section {s.num}</span>
               </div>
               <div className="slide-mockup">
                 <div className="mockup-header-bar" />

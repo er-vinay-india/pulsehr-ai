@@ -51,7 +51,7 @@ export default function Header({ activeTab, onSelectTab }) {
           <button
             type="button"
             className="btn-primary"
-            onClick={triggerPresentationGeneration}
+            onClick={() => triggerPresentationGeneration().catch(err => window.alert(err.message))}
             title="Export PowerPoint (.pptx) Presentation"
           >
             <Download size={15} />

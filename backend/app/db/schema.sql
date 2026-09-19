@@ -78,3 +78,43 @@ CREATE TABLE IF NOT EXISTS hr_alerts (
 );
 
 CREATE INDEX IF NOT EXISTS idx_alerts_severity ON hr_alerts(severity);
+
+-- Source-preserving upload catalogue. Derived relationships never overwrite rows.
+CREATE TABLE IF NOT EXISTS app_metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS sheets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    dataset_id INTEGER NOT NULL REFERENCES dataset_uploads(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    columns_json TEXT NOT NULL,
+    profile_json TEXT NOT NULL,
+    row_count INTEGER NOT NULL,
+    UNIQUE(dataset_id, name)
+);
+CREATE TABLE IF NOT EXISTS sheet_rows (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    sheet_id INTEGER NOT NULL REFERENCES sheets(id) ON DELETE CASCADE,
+    row_index INTEGER NOT NULL,
+    data_json TEXT NOT NULL,
+    UNIQUE(sheet_id, row_index)
+);
+CREATE TABLE IF NOT EXISTS sheet_cells (
+    sheet_id INTEGER NOT NULL REFERENCES sheets(id) ON DELETE CASCADE,
+    row_index INTEGER NOT NULL,
+    column_name TEXT NOT NULL,
+    value_key TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_sheet_cells_lookup ON sheet_cells(sheet_id, column_name, value_key, row_index);
+CREATE TABLE IF NOT EXISTS sheet_relationships (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    left_sheet INTEGER NOT NULL REFERENCES sheets(id) ON DELETE CASCADE,
+    right_sheet INTEGER NOT NULL REFERENCES sheets(id) ON DELETE CASCADE,
+    left_column TEXT NOT NULL,
+    right_column TEXT NOT NULL,
+    method TEXT NOT NULL,
+    status TEXT NOT NULL,
+    cardinality TEXT NOT NULL,
+    matching_keys INTEGER NOT NULL,
+    matching_pairs INTEGER NOT NULL,
+    similarity REAL,
+    reason TEXT NOT NULL
+);

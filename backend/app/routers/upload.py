@@ -1,239 +1,95 @@
 import json
-import math
-import shutil
 from pathlib import Path
+from uuid import uuid4
+
 from fastapi import APIRouter, UploadFile, File, HTTPException
-import pandas as pd
 
 from ..core import config
 from ..db.database import get_connection
-from ..services.rag_service import index_uploaded_dataset
-from ..services.sheet_merger import merge_uploaded_sheet_into_database
-from ..services.kaggle_loader import load_and_seed_kaggle_dataset
+from ..services.sheet_catalog import read_sheets, prepare_sheets, insert_sheets, rebuild_relationships, prepare_existing_column_vectors
 
-router = APIRouter(prefix="/api/upload", tags=["upload"])
+router = APIRouter(prefix='/api/upload', tags=['upload'])
 
 
-def clean_dataframe(df: pd.DataFrame) -> pd.DataFrame:
-    """Cleans trailing empty columns, normalizes headers, and handles nulls safely."""
-    df = df.dropna(axis=1, how="all")
-    unnamed_empty = [c for c in df.columns if str(c).startswith("Unnamed") and df[c].isna().all()]
-    if unnamed_empty:
-        df = df.drop(columns=unnamed_empty)
-    df.columns = [str(c).strip() for c in df.columns]
-    return df
-
-
-def sanitize_for_json(records: list[dict]) -> list[dict]:
-    """Ensures no float('nan'), np.nan, or inf exists before json serialization."""
-    sanitized = []
-    for r in records:
-        clean_row = {}
-        for k, v in r.items():
-            if v is None or (isinstance(v, float) and (math.isnan(v) or math.isinf(v))):
-                clean_row[k] = ""
-            elif pd.isna(v):
-                clean_row[k] = ""
-            else:
-                clean_row[k] = v
-        sanitized.append(clean_row)
-    return sanitized
-
-
-@router.post("/file")
-async def upload_file(file: UploadFile = File(...)):
-    filename = file.filename or "uploaded_data.csv"
-    ext = Path(filename).suffix.lower()
-
-    if ext not in [".csv", ".xlsx", ".xls"]:
-        raise HTTPException(
-            status_code=400,
-            detail="Unsupported file format. Please upload an Excel (.xlsx, .xls) or CSV (.csv) file."
-        )
-
-    # Save file to uploads dir
-    dest_path = config.UPLOADS_DIR / filename
-    with open(dest_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-
+@router.post('/file')
+def upload_file(file: UploadFile = File(...)):
+    original = Path((file.filename or 'uploaded.csv').replace('\\', '/')).name
+    suffix = Path(original).suffix.lower()
+    if suffix not in ('.csv', '.xlsx', '.xls'):
+        raise HTTPException(400, 'Upload a CSV or Excel file.')
+    path = config.UPLOADS_DIR / f'{uuid4().hex}{suffix}'
+    conn = None
     try:
-        sheets_data = {}
-        if ext in [".xlsx", ".xls"]:
-            xls = pd.ExcelFile(dest_path)
-            for s in xls.sheet_names:
-                df = pd.read_excel(xls, sheet_name=s)
-                sheets_data[s] = clean_dataframe(df)
-        else:
-            df = None
-            for enc in ["utf-8", "utf-8-sig", "latin1", "cp1252"]:
-                try:
-                    df = pd.read_csv(dest_path, encoding=enc)
-                    break
-                except UnicodeDecodeError:
-                    continue
-            
-            if df is None:
-                raise ValueError("Could not decode CSV with supported encodings (UTF-8, Latin-1, CP1252).")
-
-            sheets_data["Sheet1"] = clean_dataframe(df)
-
-        first_sheet_name = list(sheets_data.keys())[0]
-        primary_df = sheets_data[first_sheet_name]
-        total_rows = sum(len(df) for df in sheets_data.values())
-        columns = [str(c) for c in primary_df.columns]
-
-        # Clean head for preview
-        raw_preview = primary_df.head(5).to_dict(orient="records")
-        preview_records = sanitize_for_json(raw_preview)
-
-        # Record dataset entry (cleaning up previous uploads of the same file to prevent duplicate chunks)
+        content = file.file.read(20 * 1024 * 1024 + 1)
+        if len(content) > 20 * 1024 * 1024:
+            raise ValueError('Maximum upload size is 20 MB.')
+        path.write_bytes(content)
+        frames = read_sheets(path)
+        prepared = prepare_sheets(frames, original)
+        total = sum(len(s['records']) for s in prepared)
+        first = prepared[0]
+        column_updates = prepare_existing_column_vectors()
         conn = get_connection()
-        dataset_id = None
-        try:
-            prev_rows = conn.execute("SELECT id FROM dataset_uploads WHERE filename = ?", (filename,)).fetchall()
-            for prev in prev_rows:
-                old_id = prev["id"]
-                conn.execute("DELETE FROM tabular_vectors WHERE id IN (SELECT id FROM tabular_chunks WHERE dataset_id = ?)", (old_id,))
-                conn.execute("DELETE FROM tabular_chunks WHERE dataset_id = ?", (old_id,))
-                conn.execute("DELETE FROM hr_alerts WHERE title LIKE ?", (f"%{filename}%",))
-                conn.execute("DELETE FROM dataset_uploads WHERE id = ?", (old_id,))
-
-            cursor = conn.execute("""
-                INSERT INTO dataset_uploads (
-                    filename, original_name, file_type, sheet_count, row_count, col_count,
-                    columns_json, sample_preview_json, summary_insights
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                dest_path.name,
-                filename,
-                ext.replace(".", ""),
-                len(sheets_data),
-                total_rows,
-                len(columns),
-                json.dumps(columns),
-                json.dumps(preview_records),
-                f"Ingested {len(sheets_data)} sheet(s) with {total_rows} total rows and {len(columns)} columns."
-            ))
-            dataset_id = cursor.lastrowid
-            conn.commit()
-        finally:
+        with conn:
+            dataset_id = conn.execute('''INSERT INTO dataset_uploads(filename,original_name,file_type,sheet_count,row_count,col_count,columns_json,sample_preview_json,summary_insights)
+                VALUES (?,?,?,?,?,?,?,?,?)''', (path.name, original, suffix[1:], len(prepared), total, len(first['columns']), json.dumps(first['columns']), json.dumps(first['records'][:5]),
+                f'{len(prepared)} sheets and {total} rows. All original values retained.')).lastrowid
+            for sid, profiles in column_updates:
+                conn.execute('UPDATE sheets SET profile_json=? WHERE id=?', (json.dumps(profiles), sid))
+            insert_sheets(conn, dataset_id, prepared)
+            rebuild_relationships(conn)
+            linked = conn.execute("SELECT COUNT(*) FROM sheet_relationships WHERE status='linked' AND (left_sheet IN (SELECT id FROM sheets WHERE dataset_id=?) OR right_sheet IN (SELECT id FROM sheets WHERE dataset_id=?))", (dataset_id, dataset_id)).fetchone()[0]
+        return {'status': 'success', 'dataset_id': dataset_id, 'filename': original,
+                'sheets': list(frames), 'total_rows': total, 'columns': first['columns'], 'sample_preview': first['records'][:5],
+                'indexed_chunks': total, 'vector_chunks': sum(len(s['vectors']) for s in prepared), 'linked_relationships': linked,
+                'message': f'Indexed all {total} rows. Found {linked} exact key relationships. Overview and explorer now include these sheets.'}
+    except (ValueError, OSError, ImportError) as exc:
+        path.unlink(missing_ok=True)
+        raise HTTPException(400, str(exc)) from exc
+    except Exception:
+        path.unlink(missing_ok=True)
+        raise
+    finally:
+        if conn:
             conn.close()
 
-        # Merge sheet into database (update employees, recalculate metrics, trigger alerts)
-        merge_result = merge_uploaded_sheet_into_database(dataset_id, primary_df, filename)
 
-        # Index vectors into SQLite
-        indexed_chunks = index_uploaded_dataset(dataset_id, dest_path)
-
-        # Update summary insights with merge details
-        conn = get_connection()
-        try:
-            summary_text = (
-                f"Ingested {total_rows} rows from {filename}. "
-                f"Merged and updated {merge_result['updated_employees']} live employee records, "
-                f"inserted {merge_result['inserted_employees']} new members, "
-                f"and generated {merge_result['new_alerts_count']} fresh HR risk alerts."
-            )
-            conn.execute("UPDATE dataset_uploads SET summary_insights = ? WHERE id = ?", (summary_text, dataset_id))
-            conn.commit()
-        finally:
-            conn.close()
-
-        return {
-            "status": "success",
-            "dataset_id": dataset_id,
-            "filename": filename,
-            "sheets": list(sheets_data.keys()),
-            "total_rows": total_rows,
-            "columns": columns,
-            "sample_preview": preview_records,
-            "indexed_chunks": indexed_chunks,
-            "merge_result": merge_result,
-            "message": (
-                f"Successfully parsed and vectorized {indexed_chunks} rows. "
-                f"Updated {merge_result['updated_employees']} employee profiles and generated {merge_result['new_alerts_count']} new alerts."
-            )
-        }
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Failed to parse file: {str(e)}")
-
-
-@router.get("/datasets")
+@router.get('/datasets')
 def list_datasets():
     conn = get_connection()
     try:
-        rows = conn.execute("""
-            SELECT id, filename, original_name, file_type, sheet_count, row_count, col_count,
-                   columns_json, summary_insights, uploaded_at
-            FROM dataset_uploads
-            ORDER BY id DESC
-        """).fetchall()
-
-        results = []
-        for r in rows:
-            cols = []
-            if r["columns_json"]:
-                try:
-                    cols = json.loads(r["columns_json"])
-                except Exception:
-                    pass
-            results.append({
-                "id": r["id"],
-                "filename": r["filename"],
-                "original_name": r["original_name"],
-                "file_type": r["file_type"],
-                "sheet_count": r["sheet_count"],
-                "row_count": r["row_count"],
-                "col_count": r["col_count"],
-                "columns": cols,
-                "summary_insights": r["summary_insights"],
-                "uploaded_at": r["uploaded_at"]
-            })
-        return {"datasets": results}
+        datasets = []
+        for row in conn.execute('SELECT * FROM dataset_uploads ORDER BY id DESC'):
+            item = dict(row)
+            item['columns'] = json.loads(item.pop('columns_json') or '[]')
+            item.pop('sample_preview_json', None)
+            item['sheets'] = [dict(s) for s in conn.execute('SELECT id,name,row_count FROM sheets WHERE dataset_id=?', (row['id'],))]
+            datasets.append(item)
+        return {'datasets': datasets}
     finally:
         conn.close()
 
 
-@router.post("/reseed-kaggle")
+@router.post('/reseed-kaggle')
 def reseed_kaggle():
-    res = load_and_seed_kaggle_dataset(force=True)
-    return {"message": "Kaggle attendance & ratings dataset re-seeded successfully", "details": res}
+    raise HTTPException(410, 'Automatic demo seeding has been removed. Upload any CSV or Excel file through the upload control.')
 
 
-@router.delete("/datasets/{dataset_id}")
+@router.delete('/datasets/{dataset_id}')
 def delete_dataset(dataset_id: int):
     conn = get_connection()
     try:
-        row = conn.execute("SELECT filename FROM dataset_uploads WHERE id = ?", (dataset_id,)).fetchone()
-        if not row:
-            raise HTTPException(status_code=404, detail="Dataset not found")
-        
-        filename = row["filename"]
-        
-        # Get chunks
-        chunk_ids = [r[0] for r in conn.execute("SELECT id FROM tabular_chunks WHERE dataset_id = ?", (dataset_id,)).fetchall()]
-        if chunk_ids:
-            chunk_ph = ",".join(["?"] * len(chunk_ids))
-            conn.execute(f"DELETE FROM tabular_vectors WHERE id IN ({chunk_ph})", chunk_ids)
-            conn.execute(f"DELETE FROM tabular_chunks WHERE id IN ({chunk_ph})", chunk_ids)
-
-        # Delete alerts referencing this file
-        conn.execute("DELETE FROM hr_alerts WHERE title LIKE ?", (f"%{filename}%",))
-
-        # Delete dataset upload entry
-        conn.execute("DELETE FROM dataset_uploads WHERE id = ?", (dataset_id,))
-        conn.commit()
-
-        # Delete file if exists on disk
-        target_file = config.UPLOADS_DIR / filename
-        if target_file.exists():
-            try:
-                target_file.unlink()
-            except Exception:
-                pass
-
-        return {"message": f"Successfully deleted dataset '{filename}' and associated vector chunks."}
+        row = conn.execute('SELECT filename FROM dataset_uploads WHERE id=?', (dataset_id,)).fetchone()
+        if row is None:
+            raise HTTPException(404, 'Dataset not found')
+        with conn:
+            conn.execute('DELETE FROM tabular_vectors WHERE id IN (SELECT id FROM tabular_chunks WHERE dataset_id=?)', (dataset_id,))
+            conn.execute('DELETE FROM dataset_uploads WHERE id=?', (dataset_id,))
+            rebuild_relationships(conn)
+        path = (config.UPLOADS_DIR / row['filename']).resolve()
+        # Never delete external Kaggle caches or paths outside uploads.
+        if path.is_relative_to(config.UPLOADS_DIR.resolve()):
+            path.unlink(missing_ok=True)
+        return {'message': 'Deleted dataset, sheets, rows, search entries and relationships.'}
     finally:
         conn.close()

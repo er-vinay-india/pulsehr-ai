@@ -1,12 +1,11 @@
 import React, { useEffect, useState } from "react";
 import { UploadCloud, FileSpreadsheet, CheckCircle2, RefreshCw, Database, Layers, ArrowUpRight, Link2, Trash2 } from "lucide-react";
-import { uploadDatasetFile, listDatasets, reseedKaggle, deleteDataset } from "../api/client";
+import { uploadDatasetFile, listDatasets, deleteDataset } from "../api/client";
 
 export default function IngestionPage() {
   const [datasets, setDatasets] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [uploadResult, setUploadResult] = useState(null);
-  const [reseedLoading, setReseedLoading] = useState(false);
   const [error, setError] = useState(null);
 
   const loadData = () => {
@@ -39,22 +38,8 @@ export default function IngestionPage() {
     }
   };
 
-  const handleReseed = async () => {
-    if (!window.confirm("Re-sync Kaggle attendance & ratings dataset? This will refresh all 100 employee records and alerts.")) return;
-    setReseedLoading(true);
-    try {
-      await reseedKaggle();
-      alert("Kaggle dataset re-seeded successfully!");
-      loadData();
-    } catch (err) {
-      alert("Failed to re-seed: " + err.message);
-    } finally {
-      setReseedLoading(false);
-    }
-  };
-
   const handleDelete = async (datasetId, filename) => {
-    if (!window.confirm(`Delete '${filename}' and remove its vector chunks from the database?`)) return;
+    if (!window.confirm(`Delete '${filename}' and remove its rows, metrics, search entries and relationships?`)) return;
     try {
       await deleteDataset(datasetId);
       loadData();
@@ -74,20 +59,10 @@ export default function IngestionPage() {
           </div>
           <h2>Excel & CSV Tabular Ingestion Studio</h2>
           <p>
-            Upload any workforce spreadsheet or roster. PulseHR AI automatically extracts sheets, sanitizes missing cells, infers column schemas, links employee records, and vectorizes into SQLite with zero manual coding.
+            Upload any workforce spreadsheet or roster. PulseHR AI automatically extracts sheets, sanitizes missing cells, infers column schemas, preserves every row, discovers shared keys across files, and updates your overview.
           </p>
         </div>
-        <div className="hero-cta-group">
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={handleReseed}
-            disabled={reseedLoading}
-          >
-            <RefreshCw size={15} className={reseedLoading ? "spin" : ""} />
-            <span>{reseedLoading ? "Re-syncing..." : "Re-sync Kaggle Demo"}</span>
-          </button>
-        </div>
+
       </div>
 
       {/* Upload Drop Zone */}
@@ -105,7 +80,7 @@ export default function IngestionPage() {
           </div>
           <h3>{uploading ? "Parsing, Sanitizing & Vectorizing Spreadsheet..." : "Drop Excel or CSV File Here"}</h3>
           <p className="dropzone-hint">
-            Supports .xlsx, .xls, and .csv formats · Auto-cleans empty columns and embeds rows for AI inference
+            Supports .xlsx, .xls, and .csv formats · All sheets and rows retained · 20 MB, 20,000 rows, 200 columns per file
           </p>
           <div className="btn-primary" style={{ marginTop: "1rem" }}>
             <UploadCloud size={16} />
@@ -120,13 +95,13 @@ export default function IngestionPage() {
           <div style={{ display: "flex", gap: "0.85rem", alignItems: "flex-start" }}>
             <CheckCircle2 size={24} color="var(--emerald-tier)" style={{ flexShrink: 0, marginTop: "2px" }} />
             <div>
-              <strong style={{ fontSize: "1.05rem" }}>Upload & Vectorization Complete!</strong>
+              <strong style={{ fontSize: "1.05rem" }}>Upload & Analysis Complete!</strong>
               <p style={{ marginTop: "4px" }}>{uploadResult.message}</p>
               <div className="upload-meta-pills" style={{ marginTop: "8px" }}>
                 <span><strong>File:</strong> {uploadResult.filename}</span>
                 <span><strong>Sheets:</strong> {uploadResult.sheets.join(", ")}</span>
                 <span><strong>Total Rows:</strong> {uploadResult.total_rows}</span>
-                <span><strong>Vector Chunks:</strong> {uploadResult.indexed_chunks}</span>
+                <span><strong>Searchable rows:</strong> {uploadResult.indexed_chunks}</span>
                 {uploadResult.linked_employees > 0 && (
                   <span style={{ color: "var(--accent-500)", borderColor: "rgba(126,231,217,0.3)" }}>
                     <Link2 size={13} style={{ display: "inline", verticalAlign: "middle", marginRight: "4px" }} />
@@ -210,10 +185,10 @@ export default function IngestionPage() {
                 </div>
               </div>
 
-              {ds.filename !== "attendance_2023_2024.csv" && (
+              {(
                 <button
                   type="button"
-                  onClick={() => handleDelete(ds.id, ds.filename)}
+                  onClick={() => handleDelete(ds.id, ds.original_name)}
                   style={{
                     color: "var(--fg-secondary)",
                     background: "rgba(255, 180, 190, 0.08)",
@@ -223,7 +198,7 @@ export default function IngestionPage() {
                     cursor: "pointer",
                     transition: "all 0.15s ease"
                   }}
-                  title={`Delete ${ds.filename}`}
+                  title={`Delete ${ds.original_name}`}
                 >
                   <Trash2 size={16} color="var(--rose-tier)" />
                 </button>

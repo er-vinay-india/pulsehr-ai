@@ -1,16 +1,18 @@
-from fastapi import APIRouter
-from pydantic import BaseModel
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, Field
+from ..services.copilot_tools import ToolRequest, CalculationRequest, load_frame
 from ..services.ai_copilot import query_copilot, get_available_models
 
 router = APIRouter(prefix="/api/copilot", tags=["copilot"])
 
 class CopilotQueryRequest(BaseModel):
-    query: str
+    query: str = Field(min_length=1, max_length=4000)
     model: str | None = None
+    tool: ToolRequest | None = None
 
 @router.post("/query")
 def ask_copilot(req: CopilotQueryRequest):
-    return query_copilot(req.query, req.model)
+    return query_copilot(req.query, req.model, req.tool)
 
 @router.get("/models")
 def list_models():
@@ -20,11 +22,18 @@ def list_models():
 def get_query_suggestions():
     return {
         "suggestions": [
-            "How many absent days were recorded in employee_absent_data.csv?",
-            "Who has severe overtime in the latest performance sheet?",
-            "Which employees have performance notes or attendance disconnects?",
-            "Compare attendance rates across Engineering, Product, and Sales",
-            "Who are the top candidates for recognition bonuses?",
-            "Summarize workforce punctuality trends and key recommendations"
+            "Summarize the uploaded sheets and their available metrics",
+            "Which sheets have related records?",
+            "Create a presentation",
+            "Calculate (12 + 8) / 4"
         ]
     }
+
+
+@router.get("/calculation-columns")
+def calculation_columns(dataset_id: int | None = None, sheet: str | None = None, relationship_id: int | None = None):
+    try:
+        frame, source = load_frame(CalculationRequest(dataset_id=dataset_id, sheet=sheet, relationship_id=relationship_id))
+        return {"columns": list(frame.columns), "source": source, "rows": len(frame)}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc

@@ -4,19 +4,15 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .core import config
 from .db.database import init_db, get_connection
-from .services.kaggle_loader import load_and_seed_kaggle_dataset
-from .services.rag_service import index_all_employees
-from .routers import analytics, employees, upload, copilot, reports
+from .services.sheet_catalog import migrate_existing
+from .routers import analytics, employees, upload, copilot, reports, sheets
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup sequence
     print("[PulseHR AI] Initializing database and vector tables...")
     init_db()
-    print("[PulseHR AI] Loading Kaggle employee attendance & ratings dataset...")
-    load_and_seed_kaggle_dataset()
-    print("[PulseHR AI] Indexing employee profiles into SQLite vector DB...")
-    index_all_employees()
+    migrate_existing()
     print("[PulseHR AI] Startup completed. System ready on port", config.PORT)
     yield
     print("[PulseHR AI] Shutting down...")
@@ -41,6 +37,7 @@ app.include_router(employees.router)
 app.include_router(upload.router)
 app.include_router(copilot.router)
 app.include_router(reports.router)
+app.include_router(sheets.router)
 
 @app.get("/api/health")
 def health_check():
@@ -55,6 +52,7 @@ def health_check():
             "version": "1.0.0",
             "database": {
                 "employees": emp_count,
+                "sheets": conn.execute("SELECT COUNT(*) FROM sheets").fetchone()[0],
                 "hr_alerts": alert_count,
                 "vector_chunks": chunk_count,
                 "db_path": str(config.DB_PATH)

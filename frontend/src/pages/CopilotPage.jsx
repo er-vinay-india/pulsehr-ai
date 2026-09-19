@@ -6,11 +6,13 @@ import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import { askCopilot, getCopilotSuggestions, getAvailableModels } from "../api/client";
 
+import CopilotTools from "../components/CopilotTools";
+
 export default function CopilotPage({ onSelectEmployee }) {
   const [messages, setMessages] = useState([
     {
       role: "assistant",
-      content: "Hello! I am **PulseHR AI**, your workforce analytics & tabular intelligence assistant.\n\nI am actively grounded in both your **Kaggle Baseline Attendance Logs** and all **User-Uploaded Spreadsheets**.\n\nYou can use the **AI Model Dropdown** above to select your preferred open-source model (e.g. Meta Llama 3.1 or Qwen 2.5) for fact-checked, zero-hallucination analysis!",
+      content: "Hello! I am **PulseHR AI**, your workforce analytics & tabular intelligence assistant.\n\nI am actively grounded in both your **uploaded sheets** and their **exact-key relationships**.\n\nYou can use the **AI Model Dropdown** above to select your preferred open-source model (e.g. Meta Llama 3.1 or Qwen 2.5) for analysis grounded in your records. Use **Calculate from data** for verified arithmetic and **Create sheet report** for a downloadable report.",
       citations: [],
       model_used: "System"
     }
@@ -44,7 +46,7 @@ export default function CopilotPage({ onSelectEmployee }) {
     localStorage.setItem("pulsehr_selected_model", modelId);
   };
 
-  const handleSend = async (queryText) => {
+  const handleSend = async (queryText, tool = null) => {
     const text = (queryText || input).trim();
     if (!text || loading) return;
 
@@ -54,11 +56,12 @@ export default function CopilotPage({ onSelectEmployee }) {
     setLoading(true);
 
     try {
-      const res = await askCopilot(text, selectedModel);
+      const res = await askCopilot(text, selectedModel, tool);
       const botMsg = {
         role: "assistant",
         content: res.answer,
         citations: res.citations || [],
+        artifacts: res.artifacts || [],
         model_used: res.model_used || selectedModel
       };
       setMessages(prev => [...prev, botMsg]);
@@ -143,7 +146,7 @@ export default function CopilotPage({ onSelectEmployee }) {
           marginTop: "0.75rem"
         }}>
           <FileSpreadsheet size={13} />
-          <span>Factual Grounding: 100 Employees + User-Uploaded Spreadsheets</span>
+          <span>Source grounding: uploaded sheets and related records</span>
         </div>
       </div>
 
@@ -167,6 +170,8 @@ export default function CopilotPage({ onSelectEmployee }) {
         </div>
       </div>
 
+      <CopilotTools loading={loading} onRun={handleSend} />
+
       {/* Messages Thread */}
       <div className="chat-thread">
         {messages.map((m, idx) => (
@@ -184,6 +189,10 @@ export default function CopilotPage({ onSelectEmployee }) {
                     {m.content}
                   </ReactMarkdown>
                 </div>
+                {m.citations?.length > 0 && <details style={{ marginTop: 12 }}><summary>Source records ({m.citations.length})</summary>{m.citations.map(c => <div key={c.chunk_id} style={{ margin: '8px 0' }}><strong>{c.source_file} / {c.sheet_name}</strong>{c.type === 'exact_join' && <span> · Connected by exact key</span>}<p>{c.text}</p></div>)}</details>}
+                {m.artifacts?.map(artifact => (
+                  <a key={artifact.url} href={artifact.url} download className="chip-btn" style={{ display: 'inline-block', marginTop: 12 }}>Download PowerPoint</a>
+                ))}
                 {m.model_used && m.role === "assistant" && (
                   <div style={{
                     display: "flex",
@@ -196,7 +205,7 @@ export default function CopilotPage({ onSelectEmployee }) {
                     paddingTop: "0.4rem"
                   }}>
                     <Cpu size={11} color="var(--brand-400)" />
-                    <span>Inference via: <strong>{m.model_used}</strong></span>
+                    <span>Answered by: <strong>{m.model_used}</strong></span>
                   </div>
                 )}
               </div>
@@ -209,7 +218,7 @@ export default function CopilotPage({ onSelectEmployee }) {
             <div className="avatar-icon"><Bot size={18} /></div>
             <div className="message-content">
               <div className="message-bubble loading-bubble">
-                <span className="dot-pulse" /> {selectedModel} is verifying exact tabular figures...
+                <span className="dot-pulse" /> Preparing your answer…
               </div>
             </div>
           </div>

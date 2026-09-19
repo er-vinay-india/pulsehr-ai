@@ -27,11 +27,11 @@ export async function getEmployeeDetail(id) {
   return res.json();
 }
 
-export async function askCopilot(query, model = null) {
+export async function askCopilot(query, model = null, tool = null) {
   const res = await fetch(`${API_BASE}/copilot/query`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ query, model })
+    body: JSON.stringify({ query, model, tool })
   });
   if (!res.ok) throw new Error("Failed to query AI copilot");
   return res.json();
@@ -63,19 +63,13 @@ export async function listDatasets() {
   return res.json();
 }
 
-export async function reseedKaggle() {
-  const res = await fetch(`${API_BASE}/upload/reseed-kaggle`, { method: "POST" });
-  if (!res.ok) throw new Error("Failed to re-seed Kaggle dataset");
-  return res.json();
-}
-
 export function getPresentationDownloadUrl() {
   return `${API_BASE}/reports/presentation/latest`;
 }
 
 export async function triggerPresentationGeneration() {
   const res = await fetch(`${API_BASE}/reports/presentation`, { method: "POST" });
-  if (!res.ok) throw new Error("Failed to generate presentation deck");
+  if (!res.ok) { const error = await res.json().catch(() => ({})); throw new Error(error.detail || "Failed to generate presentation deck"); }
   const blob = await res.blob();
   const url = window.URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -109,3 +103,25 @@ export async function getAvailableModels() {
   if (!res.ok) return { models: [] };
   return res.json();
 }
+
+
+export async function getCalculationColumns(dataset, sheet, relationship) {
+  const params = new URLSearchParams();
+  if (dataset) params.set('dataset_id', dataset);
+  if (relationship) params.set('relationship_id', relationship);
+  if (sheet) params.set('sheet', sheet);
+  const res = await fetch(`${API_BASE}/copilot/calculation-columns?${params}`);
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || 'Cannot read source columns');
+  return data;
+}
+
+async function readSheetApi(url) {
+  const res = await fetch(url);
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || 'Unable to load sheets');
+  return data;
+}
+export const getSheets = () => readSheetApi('/api/sheets');
+export const getSheetRows = (id, page, search) => readSheetApi(`/api/sheets/${id}/rows?${new URLSearchParams({page, search})}`);
+export const getJoinedRows = (id, page) => readSheetApi(`/api/sheets/relationships/${id}/rows?page=${page}`);
