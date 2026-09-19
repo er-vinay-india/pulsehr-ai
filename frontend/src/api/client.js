@@ -1,8 +1,21 @@
 const API_BASE = "/api";
 
-export async function getAnalyticsOverview() {
-  const res = await fetch(`${API_BASE}/analytics/overview`);
+export async function getAnalyticsOverview(sheetId = null) {
+  const url = sheetId ? `${API_BASE}/analytics/overview?sheet_id=${sheetId}` : `${API_BASE}/analytics/overview`;
+  const res = await fetch(url);
   if (!res.ok) throw new Error("Failed to fetch analytics overview");
+  return res.json();
+}
+
+export async function refreshOverviewStory(sheetId = null, model = null) {
+  const params = new URLSearchParams();
+  if (sheetId) params.set("sheet_id", sheetId);
+  if (model) params.set("model", model);
+  const qs = params.toString() ? `?${params.toString()}` : "";
+  const res = await fetch(`${API_BASE}/analytics/overview/refresh-story${qs}`, {
+    method: "POST"
+  });
+  if (!res.ok) throw new Error("Failed to refresh executive story");
   return res.json();
 }
 

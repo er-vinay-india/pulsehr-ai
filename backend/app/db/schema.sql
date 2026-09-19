@@ -118,3 +118,17 @@ CREATE TABLE IF NOT EXISTS sheet_relationships (
     similarity REAL,
     reason TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS executive_narratives (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    target_type TEXT NOT NULL, -- 'global', 'sheet', 'relationship'
+    target_id INTEGER,
+    narrative_json TEXT NOT NULL,
+    evaluation_json TEXT NOT NULL,
+    charts_json TEXT NOT NULL,
+    forecast_json TEXT NOT NULL,
+    model TEXT NOT NULL,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_narratives_target ON executive_narratives(target_type, target_id);
+
