@@ -53,6 +53,14 @@ export default function OverviewPage({ onNavigateTab }) {
       const res = await getOverviewBase();
       setBaseData(res);
       setBaseError('');
+      if (!res.sheets || res.sheets.length === 0) {
+        setLoadingStory(false);
+        setLoadingVisuals(false);
+        setLoadingRelational(false);
+        setStoryData(null);
+        setVisualsData(null);
+        setRelationalData(null);
+      }
     } catch (e) {
       setBaseError(e.message);
     } finally {
@@ -65,7 +73,12 @@ export default function OverviewPage({ onNavigateTab }) {
       setLoadingVisuals(true);
       setVisualsError('');
       const res = await getOverviewVisuals(sheetId);
-      setVisualsData(res.visual_dashboard);
+      const vd = res.visual_dashboard;
+      if (vd && vd.total_visualizations > 0) {
+        setVisualsData(vd);
+      } else {
+        setVisualsData(null);
+      }
     } catch (e) {
       setVisualsError(e.message);
     } finally {
@@ -78,7 +91,11 @@ export default function OverviewPage({ onNavigateTab }) {
       setLoadingStory(true);
       setStoryError('');
       const res = await getOverviewStory(sheetId);
-      setStoryData(res);
+      if (res.empty || !res.executive_story) {
+        setStoryData(null);
+      } else {
+        setStoryData(res);
+      }
     } catch (e) {
       setStoryError(e.message);
     } finally {
@@ -91,7 +108,11 @@ export default function OverviewPage({ onNavigateTab }) {
       setLoadingRelational(true);
       setRelationalError('');
       const res = await getOverviewRelational();
-      setRelationalData(res.relational_story);
+      if (res.relational_story) {
+        setRelationalData(res.relational_story);
+      } else {
+        setRelationalData(null);
+      }
     } catch (e) {
       setRelationalError(e.message);
     } finally {
@@ -142,6 +163,7 @@ export default function OverviewPage({ onNavigateTab }) {
   const fmt = (n) =>
     n == null ? 'Not available' : Number(n).toLocaleString(undefined, { maximumFractionDigits: 3 });
 
+  const hasSheets = Boolean(baseData?.sheets && baseData.sheets.length > 0);
   const displayedSheets =
     selectedSheetId !== null && baseData?.sheets
       ? baseData.sheets.filter((s) => s.id === selectedSheetId)
@@ -162,7 +184,21 @@ export default function OverviewPage({ onNavigateTab }) {
 
       {baseError && <p role="alert" className="error-banner">{baseError}</p>}
 
-      {/* 2. Sheet Scope Selector Bar (Renders as soon as Base arrives in ~15ms) */}
+      {/* 2. Empty Workspace Banner when all data is deleted */}
+      {!loadingBase && baseData && !hasSheets && (
+        <div className="card-panel empty-workspace-panel" style={{ marginTop: '1.5rem', textAlign: 'center', padding: '3.5rem 1.5rem' }}>
+          <div style={{ fontSize: '2.5rem', marginBottom: '1rem' }}>🗂️</div>
+          <h3 style={{ fontSize: '1.35rem', marginBottom: '0.5rem', color: 'var(--fg-primary)' }}>Workspace is Empty</h3>
+          <p style={{ color: 'var(--fg-secondary)', maxWidth: 520, margin: '0 auto 1.5rem auto', lineHeight: 1.5 }}>
+            All previous sheets, records, and cached AI stories have been completely cleaned up. Upload a CSV or Excel workbook in the Ingestion Studio to automatically generate industrial analytics, 9-Box matrices, and workforce forecasts.
+          </p>
+          <button className="btn-primary" onClick={() => onNavigateTab('ingestion')}>
+            Upload a Spreadsheet
+          </button>
+        </div>
+      )}
+
+      {/* 3. Sheet Scope Selector Bar (Renders when sheets exist) */}
       {loadingBase ? (
         <div className="sheet-selector-bar" style={{ opacity: 0.7 }}>
           <span className="sheet-tab-label">Analytics Scope:</span>
@@ -170,7 +206,7 @@ export default function OverviewPage({ onNavigateTab }) {
           <div className="shimmer-box" style={{ width: 180, height: 30, borderRadius: 20 }} />
         </div>
       ) : (
-        baseData?.sheets_list && baseData.sheets_list.length > 0 && (
+        hasSheets && baseData.sheets_list && baseData.sheets_list.length > 0 && (
           <div className="sheet-selector-bar">
             <span className="sheet-tab-label">Analytics Scope:</span>
             <button
@@ -194,7 +230,7 @@ export default function OverviewPage({ onNavigateTab }) {
         )
       )}
 
-      {/* 3. Base KPI Grid (Renders immediately with Base data) */}
+      {/* 4. Base KPI Grid (Renders when sheets exist) */}
       {loadingBase ? (
         <div className="kpi-grid">
           {[1, 2, 3, 4].map((i) => (
@@ -205,7 +241,7 @@ export default function OverviewPage({ onNavigateTab }) {
           ))}
         </div>
       ) : (
-        baseData && (
+        hasSheets && (
           <>
             <div className="kpi-grid">
               {[
@@ -225,67 +261,68 @@ export default function OverviewPage({ onNavigateTab }) {
         )
       )}
 
-      {/* 4. CHUNK 2: AI Executive Story & Quality Audit Card */}
-      {loadingStory ? (
-        <StorySkeletonLoader isScoped={selectedSheetId !== null} />
-      ) : storyError ? (
-        <div className="card-panel error-notice" style={{ marginTop: '1.25rem' }}>
-          <p>Could not load executive story: {storyError}</p>
-          <button className="btn-secondary" onClick={() => fetchStory(selectedSheetId)}>Retry Story</button>
-        </div>
-      ) : storyData?.executive_story ? (
-        <ExecutiveStoryCard
-          story={storyData.executive_story}
-          evaluation={storyData.evaluation}
-          meta={storyData.story_meta}
-          onRefresh={handleRefreshStory}
-          isRefreshing={isRefreshingStory}
-          onOpenAudit={() => setShowAuditModal(true)}
-        />
-      ) : null}
-
-      {/* 5. CHUNK 3: Visual Analytics & Industrial Models Dashboard */}
-      {loadingVisuals ? (
-        <VisualsSkeletonLoader isScoped={selectedSheetId !== null} />
-      ) : visualsError ? (
-        <div className="card-panel error-notice" style={{ marginTop: '1.25rem' }}>
-          <p>Could not load visual dashboard: {visualsError}</p>
-          <button className="btn-secondary" onClick={() => fetchVisuals(selectedSheetId)}>Retry Visuals</button>
-        </div>
-      ) : visualsData ? (
-        <VisualAnalyticsPanel
-          visualDashboard={visualsData}
-          charts={storyData?.charts}
-          forecast={storyData?.forecast}
-          selectedSheetId={selectedSheetId}
-        />
-      ) : null}
-
-      {/* 6. CHUNK 4: Cross-Sheet Relational Story & Talent Quadrants */}
-      {loadingRelational ? (
-        <RelationalSkeletonLoader />
-      ) : relationalError ? (
-        <div className="card-panel error-notice" style={{ marginTop: '1.25rem' }}>
-          <p>Could not load relational insights: {relationalError}</p>
-          <button className="btn-secondary" onClick={fetchRelational}>Retry Relational Analysis</button>
-        </div>
-      ) : relationalData ? (
-        <RelationalInsightCard relationalData={relationalData} />
-      ) : null}
-
-      {/* 7. Upload Prompt when no sheets are in catalog */}
-      {!loadingBase && baseData && !baseData.sheets?.length && (
-        <div className="card-panel" style={{ marginTop: '20px' }}>
-          <h3>Start with your data</h3>
-          <p>Upload a CSV or Excel workbook to populate this overview.</p>
-          <button className="btn-primary" onClick={() => onNavigateTab('ingestion')}>
-            Upload a sheet
-          </button>
-        </div>
+      {/* 5. CHUNK 2: AI Executive Story & Quality Audit Card (Only if sheets exist) */}
+      {hasSheets && (
+        <>
+          {loadingStory ? (
+            <StorySkeletonLoader isScoped={selectedSheetId !== null} />
+          ) : storyError ? (
+            <div className="card-panel error-notice" style={{ marginTop: '1.25rem' }}>
+              <p>Could not load executive story: {storyError}</p>
+              <button className="btn-secondary" onClick={() => fetchStory(selectedSheetId)}>Retry Story</button>
+            </div>
+          ) : storyData?.executive_story ? (
+            <ExecutiveStoryCard
+              story={storyData.executive_story}
+              evaluation={storyData.evaluation}
+              meta={storyData.story_meta}
+              onRefresh={handleRefreshStory}
+              isRefreshing={isRefreshingStory}
+              onOpenAudit={() => setShowAuditModal(true)}
+            />
+          ) : null}
+        </>
       )}
 
-      {/* 8. Per-Sheet Column Profiles (From Base Data) */}
-      {!loadingBase && displayedSheets.length > 0 && (
+      {/* 6. CHUNK 3: Visual Analytics & Industrial Models Dashboard (Only if sheets exist) */}
+      {hasSheets && (
+        <>
+          {loadingVisuals ? (
+            <VisualsSkeletonLoader isScoped={selectedSheetId !== null} />
+          ) : visualsError ? (
+            <div className="card-panel error-notice" style={{ marginTop: '1.25rem' }}>
+              <p>Could not load visual dashboard: {visualsError}</p>
+              <button className="btn-secondary" onClick={() => fetchVisuals(selectedSheetId)}>Retry Visuals</button>
+            </div>
+          ) : visualsData ? (
+            <VisualAnalyticsPanel
+              visualDashboard={visualsData}
+              charts={storyData?.charts}
+              forecast={storyData?.forecast}
+              selectedSheetId={selectedSheetId}
+            />
+          ) : null}
+        </>
+      )}
+
+      {/* 7. CHUNK 4: Cross-Sheet Relational Story & Talent Quadrants (Only if sheets exist) */}
+      {hasSheets && (
+        <>
+          {loadingRelational ? (
+            <RelationalSkeletonLoader />
+          ) : relationalError ? (
+            <div className="card-panel error-notice" style={{ marginTop: '1.25rem' }}>
+              <p>Could not load relational insights: {relationalError}</p>
+              <button className="btn-secondary" onClick={fetchRelational}>Retry Relational Analysis</button>
+            </div>
+          ) : relationalData ? (
+            <RelationalInsightCard relationalData={relationalData} />
+          ) : null}
+        </>
+      )}
+
+      {/* 8. Per-Sheet Column Profiles (Only if sheets exist) */}
+      {!loadingBase && hasSheets && displayedSheets.length > 0 && (
         <div style={{ marginTop: 20 }}>
           {selectedSheetId !== null && (
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
@@ -360,8 +397,8 @@ export default function OverviewPage({ onNavigateTab }) {
         </div>
       )}
 
-      {/* 9. Connected Information Summary (From Base Data) */}
-      {!loadingBase && baseData?.relationships && (
+      {/* 9. Connected Information Summary (Only if sheets exist) */}
+      {!loadingBase && hasSheets && baseData?.relationships && (
         <div className="card-panel" style={{ marginTop: 20 }}>
           <h3>Connected information</h3>
           {!baseData.relationships.length && (

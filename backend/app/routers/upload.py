@@ -151,13 +151,46 @@ def delete_dataset(dataset_id: int):
         if row is None:
             raise HTTPException(404, 'Dataset not found')
         with conn:
+            # 1. Clean up sheet-level cached executive narratives for sheets in this dataset
+            conn.execute('DELETE FROM executive_narratives WHERE target_type=\'sheet\' AND target_id IN (SELECT id FROM sheets WHERE dataset_id=?)', (dataset_id,))
+            # 2. Invalidate global and relationship narratives since workspace composition has changed
+            conn.execute('DELETE FROM executive_narratives WHERE target_type IN (\'global\', \'relationship\')')
+            # 3. Clean up tabular vectors
             conn.execute('DELETE FROM tabular_vectors WHERE id IN (SELECT id FROM tabular_chunks WHERE dataset_id=?)', (dataset_id,))
+            # 4. Delete dataset (cascades to sheets, sheet_rows, sheet_cells, tabular_chunks, sheet_relationships)
             conn.execute('DELETE FROM dataset_uploads WHERE id=?', (dataset_id,))
             rebuild_relationships(conn)
+            # 5. If no datasets remain in workspace, complete purge of all narratives and alerts
+            remaining = conn.execute('SELECT COUNT(*) FROM dataset_uploads').fetchone()[0]
+            if remaining == 0:
+                conn.execute('DELETE FROM executive_narratives')
+                conn.execute('DELETE FROM hr_alerts')
         path = (config.UPLOADS_DIR / row['filename']).resolve()
         # Never delete external Kaggle caches or paths outside uploads.
         if path.is_relative_to(config.UPLOADS_DIR.resolve()):
             path.unlink(missing_ok=True)
-        return {'message': 'Deleted dataset, sheets, rows, search entries and relationships.'}
+        return {'message': 'Deleted dataset, sheets, rows, search entries, cached narratives and relationships.'}
     finally:
         conn.close()
+
+
+@router.delete('/datasets')
+def delete_all_datasets():
+    """Bulk deletion: completely purges all datasets, sheets, narratives, relationships, and uploads."""
+    conn = get_connection()
+    try:
+        rows = conn.execute('SELECT filename FROM dataset_uploads').fetchall()
+        with conn:
+            conn.execute('DELETE FROM executive_narratives')
+            conn.execute('DELETE FROM hr_alerts')
+            conn.execute('DELETE FROM tabular_vectors')
+            conn.execute('DELETE FROM dataset_uploads')
+            rebuild_relationships(conn)
+        for row in rows:
+            path = (config.UPLOADS_DIR / row['filename']).resolve()
+            if path.is_relative_to(config.UPLOADS_DIR.resolve()):
+                path.unlink(missing_ok=True)
+        return {'message': 'All datasets, sheets, rows, search entries, cached narratives and relationships completely cleared.'}
+    finally:
+        conn.close()
+

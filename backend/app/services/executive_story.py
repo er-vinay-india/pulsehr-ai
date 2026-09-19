@@ -641,6 +641,48 @@ def get_or_generate_executive_story(sheet_id: int | None = None, force_refresh: 
     """Retrieves cached executive story, multi-metric charts, and multi-measure forecasts or generates fresh AI analysis."""
     conn = get_connection()
     try:
+        # First check: If no sheets exist at all, purge any stale cache and return empty immediately
+        total_sheets = conn.execute('SELECT COUNT(*) FROM sheets').fetchone()[0]
+        if total_sheets == 0:
+            with conn:
+                conn.execute('DELETE FROM executive_narratives')
+            return {
+                'empty': True,
+                'sheet_id': None,
+                'narrative': None,
+                'evaluation': None,
+                'charts': None,
+                'forecast': None,
+                'model_used': None,
+                'cached': False,
+                'message': 'No uploaded sheets available to analyze.'
+            }
+
+        # Select and validate target sheet
+        if sheet_id:
+            sheet = conn.execute('SELECT s.*, d.original_name, d.filename FROM sheets s JOIN dataset_uploads d ON d.id=s.dataset_id WHERE s.id=?', (sheet_id,)).fetchone()
+            if not sheet:
+                # Clean up any orphan narrative for this non-existent sheet
+                with conn:
+                    conn.execute('DELETE FROM executive_narratives WHERE target_type=? AND target_id=?', ('sheet', sheet_id))
+                return {
+                    'empty': True,
+                    'sheet_id': sheet_id,
+                    'narrative': None,
+                    'evaluation': None,
+                    'charts': None,
+                    'forecast': None,
+                    'model_used': None,
+                    'cached': False,
+                    'message': f'Sheet {sheet_id} not found.'
+                }
+        else:
+            # Pick the most information-dense uploaded sheet
+            sheets = conn.execute('SELECT s.*, d.original_name, d.filename FROM sheets s JOIN dataset_uploads d ON d.id=s.dataset_id ORDER BY s.id DESC').fetchall()
+            if not sheets:
+                return {'empty': True, 'narrative': None, 'evaluation': None, 'charts': None, 'forecast': None, 'message': 'No uploaded sheets available to analyze.'}
+            sheet = sheets[0]
+
         # Check cache if not forcing refresh
         if not force_refresh:
             if sheet_id:
@@ -653,30 +695,35 @@ def get_or_generate_executive_story(sheet_id: int | None = None, force_refresh: 
                     'SELECT * FROM executive_narratives WHERE target_type=? AND target_id IS NULL ORDER BY id DESC LIMIT 1',
                     ('global',)
                 ).fetchone()
+
             if cached:
                 cached_narrative = json.loads(cached['narrative_json'])
-                if isinstance(cached_narrative, dict) and 'text' in cached_narrative:
-                    cached_narrative['text'] = clean_ai_markdown(cached_narrative['text'])
-                return {
-                    'sheet_id': sheet_id,
-                    'narrative': cached_narrative,
-                    'evaluation': json.loads(cached['evaluation_json']),
-                    'charts': json.loads(cached['charts_json']),
-                    'forecast': json.loads(cached['forecast_json']),
-                    'model_used': cached['model'],
-                    'cached': True,
-                    'updated_at': cached['updated_at']
-                }
+                # Verify that the sheet or file in cached narrative actually still exists in current dataset_uploads
+                cached_file = cached_narrative.get('original_file') if isinstance(cached_narrative, dict) else None
+                file_valid = True
+                if cached_file:
+                    file_valid = bool(conn.execute(
+                        'SELECT 1 FROM dataset_uploads WHERE original_name=? OR filename=?',
+                        (cached_file, cached_file)
+                    ).fetchone())
 
-        # Select target sheet
-        if sheet_id:
-            sheet = conn.execute('SELECT s.*, d.original_name FROM sheets s JOIN dataset_uploads d ON d.id=s.dataset_id WHERE s.id=?', (sheet_id,)).fetchone()
-        else:
-            # Pick the most information-dense uploaded sheet
-            sheets = conn.execute('SELECT s.*, d.original_name FROM sheets s JOIN dataset_uploads d ON d.id=s.dataset_id ORDER BY s.id DESC').fetchall()
-            if not sheets:
-                return {'empty': True, 'message': 'No uploaded sheets available to analyze.'}
-            sheet = sheets[0]
+                if file_valid:
+                    if isinstance(cached_narrative, dict) and 'text' in cached_narrative:
+                        cached_narrative['text'] = clean_ai_markdown(cached_narrative['text'])
+                    return {
+                        'sheet_id': sheet['id'],
+                        'narrative': cached_narrative,
+                        'evaluation': json.loads(cached['evaluation_json']),
+                        'charts': json.loads(cached['charts_json']),
+                        'forecast': json.loads(cached['forecast_json']),
+                        'model_used': cached['model'],
+                        'cached': True,
+                        'updated_at': cached['updated_at']
+                    }
+                else:
+                    # Purge stale cache referencing a deleted dataset
+                    with conn:
+                        conn.execute('DELETE FROM executive_narratives WHERE id=?', (cached['id'],))
 
         sheet_dict = dict(sheet)
         columns = json.loads(sheet_dict['columns_json'])
