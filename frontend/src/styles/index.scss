@@ -2192,6 +2192,333 @@
 .visual-analytics-panel {
   margin-top: 1.5rem;
 
+  .badge-ai-count {
+    background: linear-gradient(135deg, rgba(56, 189, 248, 0.2), rgba(99, 102, 241, 0.25));
+    color: #38bdf8;
+    border: 1px solid rgba(56, 189, 248, 0.4);
+    font-size: 0.725rem;
+    font-weight: 700;
+    padding: 0.22rem 0.65rem;
+    border-radius: 999px;
+  }
+
+  /* Category Filter Pills */
+  .dashboard-filter-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 1rem 0 1.25rem 0;
+    flex-wrap: wrap;
+
+    .filter-label {
+      font-size: 0.775rem;
+      font-weight: 700;
+      color: var(--fg-secondary);
+      text-transform: uppercase;
+      margin-right: 0.25rem;
+      letter-spacing: 0.03em;
+    }
+
+    .dashboard-filter-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      background: var(--surface-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-full);
+      padding: 0.35rem 0.85rem;
+      font-size: 0.8rem;
+      color: var(--fg-secondary);
+      cursor: pointer;
+      transition: all 0.15s ease;
+
+      &:hover {
+        background: var(--surface-card-hover);
+        color: var(--fg-primary);
+        border-color: var(--border-strong);
+      }
+
+      &.active {
+        background: rgba(56, 189, 248, 0.15);
+        color: #38bdf8;
+        border-color: rgba(56, 189, 248, 0.5);
+        font-weight: 600;
+      }
+
+      .pill-count-chip {
+        background: var(--surface-inset);
+        border-radius: 999px;
+        font-size: 0.7rem;
+        padding: 0.1rem 0.45rem;
+        font-weight: 700;
+        color: inherit;
+      }
+    }
+  }
+
+  /* Multi-Chart Gallery Responsive Grid */
+  .visual-dashboard-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(460px, 1fr));
+    gap: 1.25rem;
+
+    @media (max-width: 980px) {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  /* Individual Visualization Card */
+  .visual-card {
+    background: var(--surface-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+
+    &:hover {
+      border-color: rgba(56, 189, 248, 0.35);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+    }
+
+    &.card-cross-sheet {
+      border-color: rgba(129, 140, 248, 0.35);
+      background: linear-gradient(180deg, rgba(99, 102, 241, 0.05) 0%, var(--surface-card) 100%);
+    }
+
+    .card-top-badges {
+      display: flex;
+      align-items: center;
+      gap: 0.45rem;
+      flex-wrap: wrap;
+      margin-bottom: 0.65rem;
+
+      .sheet-source-badge {
+        font-size: 0.7rem;
+        font-weight: 600;
+        color: var(--fg-secondary);
+        background: var(--surface-inset);
+        padding: 0.2rem 0.55rem;
+        border-radius: 4px;
+        border: 1px solid var(--border);
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+
+        &.badge-cross-accent {
+          background: rgba(129, 140, 248, 0.12);
+          color: #818cf8;
+          border-color: rgba(129, 140, 248, 0.35);
+        }
+      }
+
+      .category-pill-badge {
+        font-size: 0.685rem;
+        font-weight: 700;
+        color: #38bdf8;
+        background: rgba(56, 189, 248, 0.1);
+        padding: 0.18rem 0.5rem;
+        border-radius: 4px;
+      }
+
+      .type-pill-badge {
+        font-size: 0.685rem;
+        font-weight: 600;
+        color: var(--fg-muted);
+        margin-left: auto;
+      }
+    }
+
+    .card-title-group {
+      margin-bottom: 0.85rem;
+
+      h4 {
+        margin: 0 0 0.25rem 0;
+        font-size: 1.025rem;
+        font-weight: 700;
+        color: var(--fg-primary);
+        line-height: 1.35;
+      }
+
+      .card-sub {
+        margin: 0;
+        font-size: 0.775rem;
+        color: var(--fg-muted);
+        line-height: 1.4;
+      }
+    }
+
+    .card-visual-body {
+      flex: 1;
+      margin-bottom: 0.85rem;
+    }
+
+    /* AI Strategic Insight Callout Banner */
+    .chart-ai-insight-banner {
+      background: rgba(0, 0, 0, 0.35);
+      border: 1px solid rgba(56, 189, 248, 0.22);
+      border-left: 3px solid #38bdf8;
+      border-radius: var(--radius-xs);
+      padding: 0.75rem 0.95rem;
+      margin-top: auto;
+
+      .insight-header {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        font-size: 0.725rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        color: #38bdf8;
+        letter-spacing: 0.04em;
+        margin-bottom: 0.35rem;
+      }
+
+      .insight-content {
+        font-size: 0.825rem;
+        line-height: 1.55;
+        color: var(--fg-secondary);
+
+        p {
+          margin: 0;
+        }
+
+        strong, b, .md-bold {
+          color: #ffffff !important;
+          font-weight: 700 !important;
+        }
+      }
+    }
+
+    /* Stats Pills Row */
+    .card-stats-row {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      margin-top: 0.75rem;
+      padding-top: 0.65rem;
+      border-top: 1px solid var(--border-subtle);
+
+      .stat-pill-chip {
+        background: var(--surface-inset);
+        border: 1px solid var(--border-subtle);
+        border-radius: 4px;
+        padding: 0.2rem 0.55rem;
+        font-size: 0.725rem;
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+
+        .stat-pill-label {
+          color: var(--fg-muted);
+        }
+
+        .stat-pill-value {
+          color: var(--fg-primary);
+          font-weight: 600;
+        }
+      }
+    }
+  }
+
+  /* Comparative Bar Chart & Legend */
+  .comparative-chart-wrap {
+    .chart-legend-row {
+      display: flex;
+      gap: 0.85rem;
+      margin-bottom: 0.5rem;
+
+      .legend-chip {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        font-size: 0.75rem;
+        color: var(--fg-secondary);
+
+        .chip-dot {
+          width: 9px;
+          height: 9px;
+          border-radius: 2px;
+          flex-shrink: 0;
+        }
+
+        .chip-label {
+          font-weight: 600;
+        }
+      }
+    }
+  }
+
+  /* Forecast Chart Trajectory Badge Row */
+  .forecast-chart-wrap {
+    .forecast-badge-row {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      margin-bottom: 0.5rem;
+      flex-wrap: wrap;
+
+      .trend-badge {
+        font-size: 0.725rem;
+        font-weight: 700;
+        padding: 0.2rem 0.6rem;
+        border-radius: 999px;
+        background: rgba(129, 140, 248, 0.15);
+        color: #818cf8;
+        border: 1px solid rgba(129, 140, 248, 0.35);
+
+        &.accelerating-upward, &.moderate-increase {
+          background: rgba(16, 185, 129, 0.15);
+          color: #10b981;
+          border-color: rgba(16, 185, 129, 0.35);
+        }
+        &.sharp-decline, &.moderate-decline {
+          background: rgba(239, 68, 68, 0.15);
+          color: #ef4444;
+          border-color: rgba(239, 68, 68, 0.35);
+        }
+      }
+
+      .forecast-chip {
+        font-size: 0.725rem;
+        color: var(--fg-secondary);
+        background: var(--surface-inset);
+        padding: 0.2rem 0.55rem;
+        border-radius: 4px;
+        border: 1px solid var(--border-subtle);
+
+        strong {
+          color: var(--fg-primary);
+        }
+      }
+    }
+  }
+
+  /* Hover Tooltip Strip */
+  .hover-tooltip-strip {
+    margin-top: 0.4rem;
+    font-size: 0.775rem;
+    color: var(--fg-secondary);
+    background: var(--surface-inset);
+    padding: 0.35rem 0.65rem;
+    border-radius: 4px;
+    border: 1px solid var(--border-subtle);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+
+    .tooltip-dept {
+      color: var(--fg-primary);
+    }
+    .tooltip-sep {
+      color: var(--fg-muted);
+    }
+    strong {
+      color: #ffffff !important;
+    }
+  }
+
   .charts-dual-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));

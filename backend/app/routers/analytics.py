@@ -3,6 +3,7 @@ from fastapi import APIRouter, Query
 from ..db.database import get_connection
 from ..services.sheet_catalog import overview
 from ..services.executive_story import get_or_generate_executive_story, compute_relational_story, detect_sheet_domain
+from ..services.visual_intelligence import build_workspace_visual_dashboard
 
 router = APIRouter(prefix='/api/analytics', tags=['analytics'])
 
@@ -34,11 +35,13 @@ def get_analytics_overview(sheet_id: int | None = Query(None)):
 
         story_res = get_or_generate_executive_story(sheet_id=clean_sheet_id, force_refresh=False)
         relational_res = compute_relational_story(conn)
+        visual_dashboard_res = build_workspace_visual_dashboard(conn, sheet_id=clean_sheet_id)
 
         data['executive_story'] = story_res.get('narrative')
         data['evaluation'] = story_res.get('evaluation')
         data['charts'] = story_res.get('charts')
         data['forecast'] = story_res.get('forecast')
+        data['visual_dashboard'] = visual_dashboard_res
         data['relational_story'] = relational_res
         data['story_meta'] = {
             'model': story_res.get('model_used'),
@@ -58,12 +61,14 @@ def refresh_analytics_story(sheet_id: int | None = Query(None), model: str | Non
     try:
         story_res = get_or_generate_executive_story(sheet_id=clean_sheet_id, force_refresh=True, model=clean_model)
         relational_res = compute_relational_story(conn, model=clean_model)
+        visual_dashboard_res = build_workspace_visual_dashboard(conn, sheet_id=clean_sheet_id, model=clean_model)
         return {
             'status': 'success',
             'executive_story': story_res.get('narrative'),
             'evaluation': story_res.get('evaluation'),
             'charts': story_res.get('charts'),
             'forecast': story_res.get('forecast'),
+            'visual_dashboard': visual_dashboard_res,
             'relational_story': relational_res,
             'story_meta': {
                 'model': story_res.get('model_used'),
@@ -73,4 +78,5 @@ def refresh_analytics_story(sheet_id: int | None = Query(None), model: str | Non
         }
     finally:
         conn.close()
+
 

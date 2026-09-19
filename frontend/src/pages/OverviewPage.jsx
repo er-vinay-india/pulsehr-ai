@@ -48,6 +48,7 @@ export default function OverviewPage({ onNavigateTab }) {
         evaluation: refreshed.evaluation,
         charts: refreshed.charts,
         forecast: refreshed.forecast,
+        visual_dashboard: refreshed.visual_dashboard,
         relational_story: refreshed.relational_story,
         story_meta: refreshed.story_meta
       }));
@@ -133,11 +134,13 @@ export default function OverviewPage({ onNavigateTab }) {
         />
       )}
 
-      {/* 2. Visual Analytics (Multi-Metric Bar Chart, Donut Profile, Time-Series Forecast) */}
-      {(data.charts || data.forecast) && (
+      {/* 2. Visual Analytics (Autonomous AI Multi-Sheet Visual Intelligence Dashboard) */}
+      {(data.visual_dashboard || data.charts || data.forecast) && (
         <VisualAnalyticsPanel
+          visualDashboard={data.visual_dashboard}
           charts={data.charts}
           forecast={data.forecast}
+          selectedSheetId={selectedSheetId}
         />
       )}
 

@@ -1,600 +1,725 @@
 import React, { useState } from 'react';
 import MarkdownView from './MarkdownView';
 
-export default function VisualAnalyticsPanel({ charts, forecast }) {
-  const [hoveredBar, setHoveredBar] = useState(null);
-  const [hoveredSlice, setHoveredSlice] = useState(null);
-  const [hoveredForecast, setHoveredForecast] = useState(null);
-
-  const [selectedMetric, setSelectedMetric] = useState(null);
-  const [selectedCategory, setSelectedCategory] = useState(null);
-  const [selectedForecastMetric, setSelectedForecastMetric] = useState(null);
-
-  // 1. Resolve Active Bar Chart
-  const availableMetrics = (
-    charts?.available_metrics?.map(m => m.column) || 
-    Object.keys(charts?.bar_charts || {})
-  ).filter(Boolean);
-
-  const activeMetric = (selectedMetric && charts?.bar_charts?.[selectedMetric]) 
-    ? selectedMetric 
-    : (charts?.primary_metric && charts?.bar_charts?.[charts.primary_metric] 
-        ? charts.primary_metric 
-        : availableMetrics[0]);
-
-  const activeBarChart = charts?.bar_charts?.[activeMetric] || charts?.bar;
-  const barData = activeBarChart?.bars || [];
-
-  // 2. Resolve Active Donut Chart
-  const availableCategories = (
-    charts?.available_categories || 
-    Object.keys(charts?.donut_charts || {})
-  ).filter(Boolean);
-
-  const activeCategory = (selectedCategory && charts?.donut_charts?.[selectedCategory])
-    ? selectedCategory
-    : (charts?.primary_category && charts?.donut_charts?.[charts.primary_category]
-        ? charts.primary_category
-        : availableCategories[0]);
-
-  const activeDonutChart = charts?.donut_charts?.[activeCategory] || charts?.donut;
-  const donutSlices = activeDonutChart?.slices || [];
-
-  // 3. Resolve Active Forecast
-  const availableForecastMetrics = (
-    forecast?.available_metrics || 
-    (forecast?.forecasts ? Object.keys(forecast.forecasts) : [])
-  ).filter(Boolean);
-
-  const activeForecastMetric = (selectedForecastMetric && forecast?.forecasts?.[selectedForecastMetric])
-    ? selectedForecastMetric
-    : (forecast?.primary_metric && forecast?.forecasts?.[forecast.primary_metric]
-        ? forecast.primary_metric
-        : availableForecastMetrics[0]);
-
-  const activeForecastData = (forecast?.forecasts && activeForecastMetric && forecast.forecasts[activeForecastMetric])
-    ? forecast.forecasts[activeForecastMetric]
-    : forecast;
-
-  const forecastPoints = activeForecastData?.forecast || [];
-  const historicalPoints = activeForecastData?.historical || [];
-
-  // ==========================
-  // 1. SVG Bar Chart Geometry
-  // ==========================
-  const maxBarVal = Math.max(...barData.map(b => b.value), 1);
-  const barSvgWidth = 540;
-  const barSvgHeight = 220;
-  const barMargin = { top: 25, right: 20, bottom: 45, left: 55 };
-  const innerWidth = barSvgWidth - barMargin.left - barMargin.right;
-  const innerHeight = barSvgHeight - barMargin.top - barMargin.bottom;
-
-  const barCount = Math.max(barData.length, 1);
-  const barSlotWidth = innerWidth / barCount;
-  const barWidth = Math.min(36, barSlotWidth * 0.65);
-
-  // ============================
-  // 2. SVG Donut Chart Geometry
-  // ============================
-  const donutSize = 220;
-  const donutRadius = 90;
-  const donutInnerRadius = 55;
-  const donutCenter = donutSize / 2;
-  const totalDonutCount = donutSlices.reduce((acc, s) => acc + (s.count || 0), 0);
-
-  // Compute SVG arc path slices
-  let cumulativeAngle = -Math.PI / 2;
-  const renderedArcs = donutSlices.map((slice) => {
-    const sliceAngle = totalDonutCount > 0 ? (slice.count / totalDonutCount) * (2 * Math.PI) : 0;
-    const startAngle = cumulativeAngle;
-    const endAngle = cumulativeAngle + sliceAngle;
-    cumulativeAngle += sliceAngle;
-
-    const x1 = donutCenter + donutRadius * Math.cos(startAngle);
-    const y1 = donutCenter + donutRadius * Math.sin(startAngle);
-    const x2 = donutCenter + donutRadius * Math.cos(endAngle);
-    const y2 = donutCenter + donutRadius * Math.sin(endAngle);
-
-    const ix1 = donutCenter + donutInnerRadius * Math.cos(endAngle);
-    const iy1 = donutCenter + donutInnerRadius * Math.sin(endAngle);
-    const ix2 = donutCenter + donutInnerRadius * Math.cos(startAngle);
-    const iy2 = donutCenter + donutInnerRadius * Math.sin(startAngle);
-
-    const largeArcFlag = sliceAngle > Math.PI ? 1 : 0;
-
-    const pathData = totalDonutCount > 0 && slice.count > 0 ? `
-      M ${x1} ${y1}
-      A ${donutRadius} ${donutRadius} 0 ${largeArcFlag} 1 ${x2} ${y2}
-      L ${ix1} ${iy1}
-      A ${donutInnerRadius} ${donutInnerRadius} 0 ${largeArcFlag} 0 ${ix2} ${iy2}
-      Z
-    ` : '';
-
-    return { ...slice, pathData, sliceAngle };
-  });
-
-  // ======================================
-  // 3. SVG Time-Series Forecasting Geometry
-  // ======================================
-  const tsSvgWidth = 680;
-  const tsSvgHeight = 240;
-  const tsMargin = { top: 25, right: 30, bottom: 40, left: 55 };
-  const tsInnerW = tsSvgWidth - tsMargin.left - tsMargin.right;
-  const tsInnerH = tsSvgHeight - tsMargin.top - tsMargin.bottom;
-
-  // Combine historical and forecast for scale
-  const allPoints = [
-    ...historicalPoints.map((p, i) => ({ ...p, isForecast: false, idx: i, val: p.actual })),
-    ...forecastPoints.map((p, i) => ({ ...p, isForecast: true, idx: historicalPoints.length + i, val: p.forecast }))
+// ============================================================================
+// 1. Grouped Comparative Bar Chart (Cross-Sheet Intelligence)
+// ============================================================================
+function ComparativeBarChart({ data }) {
+  const [hoveredIdx, setHoveredIdx] = useState(null);
+  const items = data?.items || [];
+  const series = data?.series || [
+    { name: 'Metric 1', unit: '', color: '#10b981' },
+    { name: 'Metric 2', unit: '', color: '#f43f5e' }
   ];
 
-  const minVal = Math.max(0, Math.min(...allPoints.map(p => Math.min(p.val, p.lower_95 != null ? p.lower_95 : p.val)), 0));
-  const maxVal = Math.max(...allPoints.map(p => Math.max(p.val, p.upper_95 != null ? p.upper_95 : p.val)), 10) * 1.1;
-
-  const getTsX = (index) => {
-    if (allPoints.length <= 1) return tsMargin.left + tsInnerW / 2;
-    return tsMargin.left + (index / (allPoints.length - 1)) * tsInnerW;
-  };
-
-  const getTsY = (val) => {
-    return tsMargin.top + tsInnerH - ((val - minVal) / (maxVal - minVal || 1)) * tsInnerH;
-  };
-
-  // Build SVG path strings
-  let histPath = '';
-  historicalPoints.forEach((p, i) => {
-    const x = getTsX(i);
-    const y = getTsY(p.actual);
-    histPath += i === 0 ? `M ${x} ${y}` : ` L ${x} ${y}`;
-  });
-
-  let forecastPath = '';
-  if (historicalPoints.length > 0 && forecastPoints.length > 0) {
-    const lastHist = historicalPoints[historicalPoints.length - 1];
-    forecastPath = `M ${getTsX(historicalPoints.length - 1)} ${getTsY(lastHist.actual)}`;
-    forecastPoints.forEach((p, i) => {
-      const x = getTsX(historicalPoints.length + i);
-      const y = getTsY(p.forecast);
-      forecastPath += ` L ${x} ${y}`;
-    });
+  if (!items.length) {
+    return <div className="chart-empty">No comparative data points available.</div>;
   }
 
-  // Build 95% Confidence Interval polygon
-  let ciPolygon = '';
-  if (historicalPoints.length > 0 && forecastPoints.length > 0) {
-    const lastHist = historicalPoints[historicalPoints.length - 1];
-    const topPoints = [`${getTsX(historicalPoints.length - 1)},${getTsY(lastHist.actual)}`];
-    const bottomPoints = [`${getTsX(historicalPoints.length - 1)},${getTsY(lastHist.actual)}`];
+  const s1 = series[0] || { name: 'Metric 1', unit: '', color: '#10b981' };
+  const s2 = series[1] || { name: 'Metric 2', unit: '', color: '#f43f5e' };
 
-    forecastPoints.forEach((p, i) => {
-      const x = getTsX(historicalPoints.length + i);
-      topPoints.push(`${x},${getTsY(p.upper_95)}`);
-      bottomPoints.push(`${x},${getTsY(p.lower_95)}`);
-    });
+  const maxVal1 = Math.max(...items.map(d => d.val1 || 0), 1);
+  const maxVal2 = Math.max(...items.map(d => d.val2 || 0), 1);
 
-    bottomPoints.reverse();
-    ciPolygon = topPoints.concat(bottomPoints).join(' ');
-  }
+  const svgW = 560;
+  const svgH = 220;
+  const margin = { top: 25, right: 20, bottom: 42, left: 45 };
+  const innerW = svgW - margin.left - margin.right;
+  const innerH = svgH - margin.top - margin.bottom;
+
+  const slotW = innerW / Math.max(items.length, 1);
+  const barW = Math.min(22, slotW * 0.38);
 
   return (
-    <div className="visual-analytics-panel">
-      <div className="section-title-row">
-        <div>
-          <h3>Visual Analytics & Time-Series Intelligence</h3>
-          <p className="subtitle">
-            Universal multi-metric distributions and Holt-Winters trend forecasting with out-of-sample prediction intervals.
-          </p>
+    <div className="comparative-chart-wrap">
+      <div className="chart-legend-row">
+        <div className="legend-chip">
+          <span className="chip-dot" style={{ backgroundColor: s1.color }} />
+          <span className="chip-label">{s1.name} {s1.unit ? `(${s1.unit})` : ''}</span>
+        </div>
+        <div className="legend-chip">
+          <span className="chip-dot" style={{ backgroundColor: s2.color }} />
+          <span className="chip-label">{s2.name} {s2.unit ? `(${s2.unit})` : ''}</span>
         </div>
       </div>
 
-      <div className="charts-dual-grid">
-        {/* Bar Chart */}
-        <div className="chart-box">
-          <div className="chart-header">
-            <h4>{activeBarChart?.title || `${activeMetric || 'Metric'} Breakdown`}</h4>
-            <span className="badge-sub">{activeBarChart?.unit || 'value'}</span>
-          </div>
+      <div className="chart-svg-wrap">
+        <svg viewBox={`0 0 ${svgW} ${svgH}`} className="responsive-svg">
+          {/* Horizontal gridlines */}
+          {[0, 0.25, 0.5, 0.75, 1].map((ratio) => {
+            const y = margin.top + innerH * (1 - ratio);
+            return (
+              <line
+                key={ratio}
+                x1={margin.left}
+                y1={y}
+                x2={svgW - margin.right}
+                y2={y}
+                stroke="var(--border-color, #334155)"
+                strokeDasharray="3 3"
+                opacity={0.3}
+              />
+            );
+          })}
 
-          {/* Metric Selector Pills */}
-          {availableMetrics.length > 1 && (
-            <div className="metric-pills-row">
-              <span className="pills-label">Metric:</span>
-              {availableMetrics.map(col => (
-                <button
-                  key={col}
-                  className={`metric-pill ${activeMetric === col ? 'active' : ''}`}
-                  onClick={() => {
-                    setSelectedMetric(col);
-                    setHoveredBar(null);
-                  }}
-                >
-                  {col}
-                </button>
-              ))}
-            </div>
-          )}
+          {/* Grouped Bars */}
+          {items.map((d, i) => {
+            const centerX = margin.left + i * slotW + slotW / 2;
+            const x1 = centerX - barW - 2;
+            const x2 = centerX + 2;
 
-          {barData.length === 0 ? (
-            <div className="chart-empty">No categorical breakdown available for this metric.</div>
-          ) : (
-            <div className="chart-svg-wrap">
-              <svg viewBox={`0 0 ${barSvgWidth} ${barSvgHeight}`} className="responsive-svg">
-                {/* Grid horizontal lines */}
-                {[0, 0.25, 0.5, 0.75, 1].map((ratio) => {
-                  const y = barMargin.top + innerHeight * (1 - ratio);
-                  const val = Math.round(maxBarVal * ratio);
-                  return (
-                    <g key={ratio}>
-                      <line
-                        x1={barMargin.left}
-                        y1={y}
-                        x2={barSvgWidth - barMargin.right}
-                        y2={y}
-                        stroke="var(--border-color, #334155)"
-                        strokeDasharray="3 3"
-                        opacity={0.4}
-                      />
-                      <text
-                        x={barMargin.left - 8}
-                        y={y + 4}
-                        textAnchor="end"
-                        fontSize="10"
-                        fill="var(--text-muted, #94a3b8)"
-                      >
-                        {val}
-                      </text>
-                    </g>
-                  );
-                })}
+            const h1 = Math.max(3, (d.val1 / maxVal1) * innerH);
+            const h2 = Math.max(3, (d.val2 / maxVal2) * innerH);
 
-                {/* Bars */}
-                {barData.map((bar, idx) => {
-                  const barH = (bar.value / maxBarVal) * innerHeight;
-                  const x = barMargin.left + idx * barSlotWidth + (barSlotWidth - barWidth) / 2;
-                  const y = barMargin.top + innerHeight - barH;
-                  const isHovered = hoveredBar === idx;
+            const y1 = margin.top + innerH - h1;
+            const y2 = margin.top + innerH - h2;
 
-                  return (
-                    <g
-                      key={idx}
-                      onMouseEnter={() => setHoveredBar(idx)}
-                      onMouseLeave={() => setHoveredBar(null)}
-                      style={{ cursor: 'pointer' }}
-                    >
-                      <rect
-                        x={x}
-                        y={y}
-                        width={barWidth}
-                        height={Math.max(barH, 2)}
-                        rx="4"
-                        fill={isHovered ? 'var(--primary-color, #38bdf8)' : 'var(--bar-color, #0ea5e9)'}
-                        opacity={isHovered ? 1 : 0.85}
-                        style={{ transition: 'all 0.2s ease' }}
-                      />
-                      {/* Bar Value Tooltip on top */}
-                      <text
-                        x={x + barWidth / 2}
-                        y={y - 6}
-                        textAnchor="middle"
-                        fontSize="11"
-                        fontWeight="600"
-                        fill={isHovered ? 'var(--text-bright, #fff)' : 'var(--text-muted, #94a3b8)'}
-                      >
-                        {bar.value}
-                      </text>
-                      {/* X-axis label */}
-                      <text
-                        x={x + barWidth / 2}
-                        y={barSvgHeight - 12}
-                        textAnchor="middle"
-                        fontSize="10"
-                        fill="var(--text-muted, #94a3b8)"
-                      >
-                        {bar.label.length > 8 ? `${bar.label.slice(0, 7)}…` : bar.label}
-                      </text>
-                    </g>
-                  );
-                })}
-              </svg>
-            </div>
-          )}
-        </div>
+            const isHovered = hoveredIdx === i;
 
-        {/* Donut Chart */}
-        <div className="chart-box">
-          <div className="chart-header">
-            <h4>{activeDonutChart?.title || `${activeCategory || 'Category'} Profile`}</h4>
-            <span className="badge-sub">{totalDonutCount} total records</span>
-          </div>
-
-          {/* Category Selector Pills */}
-          {availableCategories.length > 1 && (
-            <div className="metric-pills-row">
-              <span className="pills-label">Segment:</span>
-              {availableCategories.map(cat => (
-                <button
-                  key={cat}
-                  className={`metric-pill ${activeCategory === cat ? 'active' : ''}`}
-                  onClick={() => {
-                    setSelectedCategory(cat);
-                    setHoveredSlice(null);
-                  }}
-                >
-                  {cat}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {donutSlices.length === 0 ? (
-            <div className="chart-empty">No distribution segments available.</div>
-          ) : (
-            <div className="donut-layout">
-              <div className="donut-svg-wrap">
-                <svg viewBox={`0 0 ${donutSize} ${donutSize}`} className="donut-svg">
-                  {renderedArcs.map((arc, idx) => (
-                    <path
-                      key={idx}
-                      d={arc.pathData}
-                      fill={arc.color || `hsl(${idx * 75 + 180}, 70%, 55%)`}
-                      stroke="var(--bg-card, #0f172a)"
-                      strokeWidth="2.5"
-                      opacity={hoveredSlice === idx ? 1 : 0.9}
-                      transform={hoveredSlice === idx ? 'scale(1.03) translate(-3, -3)' : ''}
-                      onMouseEnter={() => setHoveredSlice(idx)}
-                      onMouseLeave={() => setHoveredSlice(null)}
-                      style={{ cursor: 'pointer', transition: 'transform 0.15s ease' }}
-                    />
-                  ))}
-                  {/* Donut Center Count */}
-                  <text
-                    x={donutCenter}
-                    y={donutCenter - 4}
-                    textAnchor="middle"
-                    fontSize="20"
-                    fontWeight="700"
-                    fill="var(--text-bright, #fff)"
-                  >
-                    {hoveredSlice != null ? donutSlices[hoveredSlice]?.count : totalDonutCount}
-                  </text>
-                  <text
-                    x={donutCenter}
-                    y={donutCenter + 16}
-                    textAnchor="middle"
-                    fontSize="11"
-                    fill="var(--text-muted, #94a3b8)"
-                  >
-                    {hoveredSlice != null ? donutSlices[hoveredSlice]?.label : 'Total Analyzed'}
-                  </text>
-                </svg>
-              </div>
-
-              <div className="donut-legend">
-                {donutSlices.map((slice, idx) => (
-                  <div
-                    key={idx}
-                    className={`legend-item ${hoveredSlice === idx ? 'active' : ''}`}
-                    onMouseEnter={() => setHoveredSlice(idx)}
-                    onMouseLeave={() => setHoveredSlice(null)}
-                  >
-                    <span className="legend-dot" style={{ backgroundColor: slice.color }} />
-                    <span className="legend-label">{slice.label}</span>
-                    <span className="legend-count">{slice.count}</span>
-                    <span className="legend-pct">({slice.pct}%)</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Time-Series Forecasting Chart */}
-      {activeForecastData && (
-        <div className="chart-box forecast-card" style={{ marginTop: '20px' }}>
-          <div className="forecast-header">
-            <div>
-              <div className="forecast-title-row">
-                <h4>AI Time-Series Forecasting: {activeForecastData.target_column || activeForecastMetric}</h4>
-                <span className={`trend-badge ${activeForecastData.metrics?.trend_direction?.toLowerCase().replace(/[^a-z]/g, '-')}`}>
-                  {activeForecastData.metrics?.trend_direction || 'Damped Trend'}
-                </span>
-              </div>
-
-              {/* Measure Selector Pills */}
-              {availableForecastMetrics.length > 1 && (
-                <div className="metric-pills-row" style={{ marginTop: '0.4rem', marginBottom: '0.5rem' }}>
-                  <span className="pills-label">Measure:</span>
-                  {availableForecastMetrics.map(col => (
-                    <button
-                      key={col}
-                      className={`metric-pill ${activeForecastMetric === col ? 'active' : ''}`}
-                      onClick={() => {
-                        setSelectedForecastMetric(col);
-                        setHoveredForecast(null);
-                      }}
-                    >
-                      {col}
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              <div className="forecast-narrative">
-                <MarkdownView content={activeForecastData.narrative} />
-              </div>
-            </div>
-
-            <div className="forecast-metrics-pill-row">
-              <div className="forecast-pill">
-                <span className="pill-title">Fit R²</span>
-                <span className="pill-value">{activeForecastData.metrics?.r_squared}</span>
-              </div>
-              <div className="forecast-pill">
-                <span className="pill-title">MAPE Error</span>
-                <span className="pill-value">{activeForecastData.metrics?.mape_pct}%</span>
-              </div>
-              <div className="forecast-pill">
-                <span className="pill-title">Projected Shift</span>
-                <span className="pill-value" style={{ color: activeForecastData.metrics?.projected_change_pct >= 0 ? '#10b981' : '#f59e0b' }}>
-                  {activeForecastData.metrics?.projected_change_pct >= 0 ? `+${activeForecastData.metrics?.projected_change_pct}%` : `${activeForecastData.metrics?.projected_change_pct}%`}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <div className="chart-svg-wrap">
-            <svg viewBox={`0 0 ${tsSvgWidth} ${tsSvgHeight}`} className="responsive-svg">
-              <defs>
-                <linearGradient id="forecastConeGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#818cf8" stopOpacity="0.28" />
-                  <stop offset="100%" stopColor="#818cf8" stopOpacity="0.05" />
-                </linearGradient>
-              </defs>
-
-              {/* Horizontal Grid lines */}
-              {[0, 0.33, 0.66, 1].map((ratio) => {
-                const y = tsMargin.top + tsInnerH * (1 - ratio);
-                const val = (minVal + (maxVal - minVal) * ratio).toFixed(1);
-                return (
-                  <g key={ratio}>
-                    <line
-                      x1={tsMargin.left}
-                      y1={y}
-                      x2={tsSvgWidth - tsMargin.right}
-                      y2={y}
-                      stroke="var(--border-color, #334155)"
-                      strokeDasharray="4 4"
-                      opacity={0.35}
-                    />
-                    <text
-                      x={tsMargin.left - 8}
-                      y={y + 4}
-                      textAnchor="end"
-                      fontSize="10"
-                      fill="var(--text-muted, #94a3b8)"
-                    >
-                      {val}
-                    </text>
-                  </g>
-                );
-              })}
-
-              {/* Confidence Interval Shaded Cone */}
-              {ciPolygon && (
-                <polygon points={ciPolygon} fill="url(#forecastConeGrad)" />
-              )}
-
-              {/* Historical Trend Line (Solid Cyan) */}
-              {histPath && (
-                <path
-                  d={histPath}
-                  fill="none"
-                  stroke="#38bdf8"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                />
-              )}
-
-              {/* Forecast Line (Dashed Purple) */}
-              {forecastPath && (
-                <path
-                  d={forecastPath}
-                  fill="none"
-                  stroke="#a855f7"
-                  strokeWidth="2.5"
-                  strokeDasharray="6 4"
-                  strokeLinecap="round"
-                />
-              )}
-
-              {/* Historical Markers */}
-              {historicalPoints.map((p, idx) => {
-                const x = getTsX(idx);
-                const y = getTsY(p.actual);
-                const isHovered = hoveredForecast?.idx === idx;
-                return (
-                  <g
-                    key={`hist-${idx}`}
-                    onMouseEnter={() => setHoveredForecast({ ...p, idx, isForecast: false, x, y })}
-                    onMouseLeave={() => setHoveredForecast(null)}
-                    style={{ cursor: 'pointer' }}
-                  >
-                    <circle
-                      cx={x}
-                      cy={y}
-                      r={isHovered ? 6 : 3.5}
-                      fill="#38bdf8"
-                      stroke="var(--bg-card, #0f172a)"
-                      strokeWidth="2"
-                    />
-                  </g>
-                );
-              })}
-
-              {/* Forecast Markers */}
-              {forecastPoints.map((p, idx) => {
-                const overallIdx = historicalPoints.length + idx;
-                const x = getTsX(overallIdx);
-                const y = getTsY(p.forecast);
-                const isHovered = hoveredForecast?.idx === overallIdx;
-                return (
-                  <g
-                    key={`fc-${idx}`}
-                    onMouseEnter={() => setHoveredForecast({ ...p, idx: overallIdx, isForecast: true, x, y })}
-                    onMouseLeave={() => setHoveredForecast(null)}
-                    style={{ cursor: 'pointer' }}
-                  >
-                    <circle
-                      cx={x}
-                      cy={y}
-                      r={isHovered ? 6 : 4}
-                      fill="#a855f7"
-                      stroke="#fff"
-                      strokeWidth="2"
-                    />
-                  </g>
-                );
-              })}
-
-              {/* Legend Bottom */}
-              <g transform={`translate(${tsMargin.left}, ${tsSvgHeight - 12})`}>
-                <line x1="0" y1="0" x2="20" y2="0" stroke="#38bdf8" strokeWidth="2.5" />
-                <text x="25" y="4" fontSize="10" fill="var(--text-muted, #94a3b8)">Historical Observations</text>
-
-                <line x1="160" y1="0" x2="180" y2="0" stroke="#a855f7" strokeWidth="2.5" strokeDasharray="5 3" />
-                <text x="185" y="4" fontSize="10" fill="var(--text-muted, #94a3b8)">Holt's Damped Forecast</text>
-
-                <rect x="335" y="-6" width="16" height="12" fill="#818cf8" opacity="0.3" rx="2" />
-                <text x="358" y="4" fontSize="10" fill="var(--text-muted, #94a3b8)">95% Confidence Interval Cone</text>
-              </g>
-
-              {/* Active Tooltip */}
-              {hoveredForecast && (
-                <g transform={`translate(${Math.min(hoveredForecast.x + 10, tsSvgWidth - 140)}, ${Math.max(hoveredForecast.y - 45, 10)})`}>
+            return (
+              <g
+                key={i}
+                onMouseEnter={() => setHoveredIdx(i)}
+                onMouseLeave={() => setHoveredIdx(null)}
+                style={{ cursor: 'pointer' }}
+              >
+                {/* Highlight band */}
+                {isHovered && (
                   <rect
-                    width="130"
-                    height="42"
-                    rx="6"
-                    fill="var(--bg-popup, #1e293b)"
-                    stroke="var(--border-color, #475569)"
-                    strokeWidth="1"
-                    filter="drop-shadow(0 4px 6px rgba(0,0,0,0.3))"
+                    x={margin.left + i * slotW + 2}
+                    y={margin.top}
+                    width={slotW - 4}
+                    height={innerH}
+                    fill="var(--primary-color, #38bdf8)"
+                    opacity={0.08}
+                    rx="4"
                   />
-                  <text x="8" y="16" fontSize="10" fill="#94a3b8">
-                    {hoveredForecast.period}
-                  </text>
-                  <text x="8" y="32" fontSize="12" fontWeight="700" fill="#fff">
-                    {hoveredForecast.isForecast
-                      ? `Projected: ${hoveredForecast.forecast}`
-                      : `Actual: ${hoveredForecast.actual}`}
-                  </text>
-                </g>
-              )}
-            </svg>
-          </div>
+                )}
+
+                {/* Bar 1 */}
+                <rect
+                  x={x1}
+                  y={y1}
+                  width={barW}
+                  height={h1}
+                  rx="3"
+                  fill={s1.color}
+                  opacity={isHovered ? 1 : 0.85}
+                  style={{ transition: 'all 0.2s ease' }}
+                />
+                <text
+                  x={x1 + barW / 2}
+                  y={y1 - 4}
+                  textAnchor="middle"
+                  fontSize="9"
+                  fontWeight="600"
+                  fill={s1.color}
+                >
+                  {d.val1}
+                </text>
+
+                {/* Bar 2 */}
+                <rect
+                  x={x2}
+                  y={y2}
+                  width={barW}
+                  height={h2}
+                  rx="3"
+                  fill={s2.color}
+                  opacity={isHovered ? 1 : 0.85}
+                  style={{ transition: 'all 0.2s ease' }}
+                />
+                <text
+                  x={x2 + barW / 2}
+                  y={y2 - 4}
+                  textAnchor="middle"
+                  fontSize="9"
+                  fontWeight="600"
+                  fill={s2.color}
+                >
+                  {d.val2}
+                </text>
+
+                {/* X Axis Label */}
+                <text
+                  x={centerX}
+                  y={svgH - 12}
+                  textAnchor="middle"
+                  fontSize="10"
+                  fontWeight={isHovered ? '600' : '400'}
+                  fill={isHovered ? 'var(--text-bright, #fff)' : 'var(--text-muted, #94a3b8)'}
+                >
+                  {d.label.length > 10 ? `${d.label.slice(0, 9)}…` : d.label}
+                </text>
+              </g>
+            );
+          })}
+        </svg>
+      </div>
+
+      {/* Floating Hover Details */}
+      {hoveredIdx != null && items[hoveredIdx] && (
+        <div className="hover-tooltip-strip">
+          <span className="tooltip-dept"><strong>{items[hoveredIdx].label}</strong>:</span>
+          <span style={{ color: s1.color }}>{s1.name}: <strong>{items[hoveredIdx].val1} {s1.unit}</strong></span>
+          <span className="tooltip-sep">·</span>
+          <span style={{ color: s2.color }}>{s2.name}: <strong>{items[hoveredIdx].val2} {s2.unit}</strong></span>
         </div>
       )}
     </div>
   );
+}
+
+// ============================================================================
+// 2. Single Metric Bar Chart
+// ============================================================================
+function SingleBarChart({ data }) {
+  const [hoveredIdx, setHoveredIdx] = useState(null);
+  const bars = data?.bars || [];
+  const unit = data?.unit || '';
+
+  if (!bars.length) {
+    return <div className="chart-empty">No distribution data available.</div>;
+  }
+
+  const maxVal = Math.max(...bars.map(b => b.value || 0), 1);
+  const svgW = 540;
+  const svgH = 200;
+  const margin = { top: 22, right: 20, bottom: 40, left: 45 };
+  const innerW = svgW - margin.left - margin.right;
+  const innerH = svgH - margin.top - margin.bottom;
+
+  const slotW = innerW / Math.max(bars.length, 1);
+  const barW = Math.min(32, slotW * 0.55);
+
+  return (
+    <div className="single-bar-wrap">
+      <div className="chart-svg-wrap">
+        <svg viewBox={`0 0 ${svgW} ${svgH}`} className="responsive-svg">
+          {[0, 0.25, 0.5, 0.75, 1].map((ratio) => {
+            const y = margin.top + innerH * (1 - ratio);
+            const val = Math.round(maxVal * ratio);
+            return (
+              <g key={ratio}>
+                <line
+                  x1={margin.left}
+                  y1={y}
+                  x2={svgW - margin.right}
+                  y2={y}
+                  stroke="var(--border-color, #334155)"
+                  strokeDasharray="3 3"
+                  opacity={0.3}
+                />
+                <text
+                  x={margin.left - 6}
+                  y={y + 3}
+                  textAnchor="end"
+                  fontSize="9"
+                  fill="var(--text-muted, #94a3b8)"
+                >
+                  {val}
+                </text>
+              </g>
+            );
+          })}
+
+          {bars.map((b, idx) => {
+            const h = Math.max(3, (b.value / maxVal) * innerH);
+            const x = margin.left + idx * slotW + (slotW - barW) / 2;
+            const y = margin.top + innerH - h;
+            const isHovered = hoveredIdx === idx;
+
+            return (
+              <g
+                key={idx}
+                onMouseEnter={() => setHoveredIdx(idx)}
+                onMouseLeave={() => setHoveredIdx(null)}
+                style={{ cursor: 'pointer' }}
+              >
+                <rect
+                  x={x}
+                  y={y}
+                  width={barW}
+                  height={h}
+                  rx="3"
+                  fill={isHovered ? '#38bdf8' : '#0ea5e9'}
+                  opacity={isHovered ? 1 : 0.85}
+                  style={{ transition: 'all 0.2s ease' }}
+                />
+                <text
+                  x={x + barW / 2}
+                  y={y - 5}
+                  textAnchor="middle"
+                  fontSize="10"
+                  fontWeight="600"
+                  fill={isHovered ? '#ffffff' : 'var(--text-muted, #94a3b8)'}
+                >
+                  {b.value}
+                </text>
+                <text
+                  x={x + barW / 2}
+                  y={svgH - 12}
+                  textAnchor="middle"
+                  fontSize="10"
+                  fontWeight={isHovered ? '600' : '400'}
+                  fill={isHovered ? '#ffffff' : 'var(--text-muted, #94a3b8)'}
+                >
+                  {b.label.length > 9 ? `${b.label.slice(0, 8)}…` : b.label}
+                </text>
+              </g>
+            );
+          })}
+        </svg>
+      </div>
+
+      {hoveredIdx != null && bars[hoveredIdx] && (
+        <div className="hover-tooltip-strip">
+          <span>{bars[hoveredIdx].label}: <strong>{bars[hoveredIdx].value} {unit}</strong></span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================================
+// 3. Donut Distribution Chart
+// ============================================================================
+function DonutChart({ data }) {
+  const [hoveredSlice, setHoveredSlice] = useState(null);
+  const slices = data?.slices || [];
+  const total = data?.total || slices.reduce((acc, s) => acc + (s.count || 0), 0);
+
+  if (!slices.length) {
+    return <div className="chart-empty">No categorical composition available.</div>;
+  }
+
+  const size = 180;
+  const radius = 78;
+  const innerRadius = 48;
+  const center = size / 2;
+
+  let cumulativeAngle = -Math.PI / 2;
+  const arcs = slices.map((slice) => {
+    const angle = total > 0 ? (slice.count / total) * (2 * Math.PI) : 0;
+    const start = cumulativeAngle;
+    const end = cumulativeAngle + angle;
+    cumulativeAngle += angle;
+
+    const x1 = center + radius * Math.cos(start);
+    const y1 = center + radius * Math.sin(start);
+    const x2 = center + radius * Math.cos(end);
+    const y2 = center + radius * Math.sin(end);
+
+    const ix1 = center + innerRadius * Math.cos(end);
+    const iy1 = center + innerRadius * Math.sin(end);
+    const ix2 = center + innerRadius * Math.cos(start);
+    const iy2 = center + innerRadius * Math.sin(start);
+
+    const largeArc = angle > Math.PI ? 1 : 0;
+    const path = total > 0 && slice.count > 0 ? `
+      M ${x1} ${y1}
+      A ${radius} ${radius} 0 ${largeArc} 1 ${x2} ${y2}
+      L ${ix1} ${iy1}
+      A ${innerRadius} ${innerRadius} 0 ${largeArc} 0 ${ix2} ${iy2}
+      Z
+    ` : '';
+
+    return { ...slice, path };
+  });
+
+  return (
+    <div className="donut-layout">
+      <div className="donut-svg-wrap">
+        <svg viewBox={`0 0 ${size} ${size}`} className="donut-svg">
+          {arcs.map((arc, idx) => (
+            <path
+              key={idx}
+              d={arc.path}
+              fill={arc.color || `hsl(${idx * 55 + 160}, 75%, 55%)`}
+              stroke="var(--bg-card, #0f172a)"
+              strokeWidth="2"
+              opacity={hoveredSlice === idx ? 1 : 0.88}
+              transform={hoveredSlice === idx ? 'scale(1.03) translate(-2, -2)' : ''}
+              onMouseEnter={() => setHoveredSlice(idx)}
+              onMouseLeave={() => setHoveredSlice(null)}
+              style={{ cursor: 'pointer', transition: 'transform 0.15s ease' }}
+            />
+          ))}
+          <text
+            x={center}
+            y={center - 2}
+            textAnchor="middle"
+            fontSize="17"
+            fontWeight="700"
+            fill="var(--text-bright, #fff)"
+          >
+            {hoveredSlice != null ? slices[hoveredSlice]?.count : total}
+          </text>
+          <text
+            x={center}
+            y={center + 14}
+            textAnchor="middle"
+            fontSize="9"
+            fill="var(--text-muted, #94a3b8)"
+          >
+            {hoveredSlice != null ? `${slices[hoveredSlice]?.pct}%` : 'Total'}
+          </text>
+        </svg>
+      </div>
+
+      <div className="donut-legend">
+        {slices.map((slice, idx) => (
+          <div
+            key={idx}
+            className={`legend-item ${hoveredSlice === idx ? 'active' : ''}`}
+            onMouseEnter={() => setHoveredSlice(idx)}
+            onMouseLeave={() => setHoveredSlice(null)}
+          >
+            <span className="legend-dot" style={{ backgroundColor: slice.color }} />
+            <span className="legend-label">{slice.label}</span>
+            <span className="legend-count">{slice.count}</span>
+            <span className="legend-pct">({slice.pct}%)</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// 4. Time-Series / Longitudinal Forecast Chart
+// ============================================================================
+function ForecastChart({ data }) {
+  const [hoveredPt, setHoveredPt] = useState(null);
+  const historical = data?.historical || [];
+  const forecast = data?.forecast || [];
+  const unit = data?.unit || '';
+  const metrics = data?.metrics || {};
+
+  const allPoints = [
+    ...historical.map((p, i) => ({ ...p, isForecast: false, idx: i, val: p.actual })),
+    ...forecast.map((p, i) => ({ ...p, isForecast: true, idx: historical.length + i, val: p.forecast }))
+  ];
+
+  if (!allPoints.length) {
+    return <div className="chart-empty">No forecast trajectory available.</div>;
+  }
+
+  const svgW = 560;
+  const svgH = 200;
+  const margin = { top: 22, right: 25, bottom: 35, left: 45 };
+  const innerW = svgW - margin.left - margin.right;
+  const innerH = svgH - margin.top - margin.bottom;
+
+  const minVal = Math.max(0, Math.min(...allPoints.map(p => Math.min(p.val, p.lower_95 != null ? p.lower_95 : p.val)), 0));
+  const maxVal = Math.max(...allPoints.map(p => Math.max(p.val, p.upper_95 != null ? p.upper_95 : p.val)), 10) * 1.08;
+
+  const getX = (i) => {
+    if (allPoints.length <= 1) return margin.left + innerW / 2;
+    return margin.left + (i / (allPoints.length - 1)) * innerW;
+  };
+
+  const getY = (val) => {
+    return margin.top + innerH - ((val - minVal) / (maxVal - minVal || 1)) * innerH;
+  };
+
+  let histPath = '';
+  historical.forEach((p, i) => {
+    const x = getX(i);
+    const y = getY(p.actual);
+    histPath += i === 0 ? `M ${x} ${y}` : ` L ${x} ${y}`;
+  });
+
+  let forecastPath = '';
+  if (historical.length > 0 && forecast.length > 0) {
+    const lastHist = historical[historical.length - 1];
+    forecastPath = `M ${getX(historical.length - 1)} ${getY(lastHist.actual)}`;
+    forecast.forEach((p, i) => {
+      const x = getX(historical.length + i);
+      const y = getY(p.forecast);
+      forecastPath += ` L ${x} ${y}`;
+    });
+  }
+
+  let ciPolygon = '';
+  if (historical.length > 0 && forecast.length > 0) {
+    const lastHist = historical[historical.length - 1];
+    const topPts = [`${getX(historical.length - 1)},${getY(lastHist.actual)}`];
+    const botPts = [`${getX(historical.length - 1)},${getY(lastHist.actual)}`];
+    forecast.forEach((p, i) => {
+      const x = getX(historical.length + i);
+      topPts.push(`${x},${getY(p.upper_95)}`);
+      botPts.push(`${x},${getY(p.lower_95)}`);
+    });
+    botPts.reverse();
+    ciPolygon = topPts.concat(botPts).join(' ');
+  }
+
+  const trendClass = metrics.trend_direction?.toLowerCase().replace(/[^a-z]/g, '-') || 'stable';
+
+  return (
+    <div className="forecast-chart-wrap">
+      <div className="forecast-badge-row">
+        <span className={`trend-badge ${trendClass}`}>
+          {metrics.trend_direction || 'Holt Damped Trend'}
+        </span>
+        <span className="forecast-chip">
+          Shift: <strong>{metrics.projected_change_pct >= 0 ? `+${metrics.projected_change_pct}%` : `${metrics.projected_change_pct}%`}</strong>
+        </span>
+        <span className="forecast-chip">
+          Fit: <strong>R² = {metrics.r_squared}</strong>
+        </span>
+      </div>
+
+      <div className="chart-svg-wrap">
+        <svg viewBox={`0 0 ${svgW} ${svgH}`} className="responsive-svg">
+          <defs>
+            <linearGradient id="forecastConeGrad2" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#818cf8" stopOpacity="0.25" />
+              <stop offset="100%" stopColor="#818cf8" stopOpacity="0.04" />
+            </linearGradient>
+          </defs>
+
+          {/* Gridlines */}
+          {[0, 0.33, 0.66, 1].map((ratio) => {
+            const y = margin.top + innerH * (1 - ratio);
+            const val = (minVal + (maxVal - minVal) * ratio).toFixed(1);
+            return (
+              <g key={ratio}>
+                <line
+                  x1={margin.left}
+                  y1={y}
+                  x2={svgW - margin.right}
+                  y2={y}
+                  stroke="var(--border-color, #334155)"
+                  strokeDasharray="3 3"
+                  opacity={0.3}
+                />
+                <text
+                  x={margin.left - 6}
+                  y={y + 3}
+                  textAnchor="end"
+                  fontSize="9"
+                  fill="var(--text-muted, #94a3b8)"
+                >
+                  {val}
+                </text>
+              </g>
+            );
+          })}
+
+          {/* 95% Confidence Interval Polygon */}
+          {ciPolygon && (
+            <polygon points={ciPolygon} fill="url(#forecastConeGrad2)" />
+          )}
+
+          {/* Historical Path */}
+          {histPath && (
+            <path
+              d={histPath}
+              fill="none"
+              stroke="#06b6d4"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          )}
+
+          {/* Forecast Path */}
+          {forecastPath && (
+            <path
+              d={forecastPath}
+              fill="none"
+              stroke="#f59e0b"
+              strokeWidth="2.5"
+              strokeDasharray="5 4"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          )}
+
+          {/* Historical Points */}
+          {historical.map((p, i) => {
+            const x = getX(i);
+            const y = getY(p.actual);
+            const isHov = hoveredPt?.idx === i;
+            return (
+              <circle
+                key={`h-${i}`}
+                cx={x}
+                cy={y}
+                r={isHov ? 5 : 3}
+                fill="#06b6d4"
+                stroke="#0f172a"
+                strokeWidth="1.5"
+                onMouseEnter={() => setHoveredPt({ ...p, idx: i, val: p.actual, isForecast: false })}
+                onMouseLeave={() => setHoveredPt(null)}
+                style={{ cursor: 'pointer', transition: 'r 0.15s ease' }}
+              />
+            );
+          })}
+
+          {/* Forecast Points */}
+          {forecast.map((p, i) => {
+            const idx = historical.length + i;
+            const x = getX(idx);
+            const y = getY(p.forecast);
+            const isHov = hoveredPt?.idx === idx;
+            return (
+              <circle
+                key={`f-${i}`}
+                cx={x}
+                cy={y}
+                r={isHov ? 5.5 : 3.5}
+                fill="#f59e0b"
+                stroke="#0f172a"
+                strokeWidth="1.5"
+                onMouseEnter={() => setHoveredPt({ ...p, idx, val: p.forecast, isForecast: true })}
+                onMouseLeave={() => setHoveredPt(null)}
+                style={{ cursor: 'pointer', transition: 'r 0.15s ease' }}
+              />
+            );
+          })}
+        </svg>
+      </div>
+
+      {hoveredPt && (
+        <div className="hover-tooltip-strip">
+          <span>{hoveredPt.period}: <strong>{hoveredPt.val} {unit}</strong> ({hoveredPt.isForecast ? 'Out-of-sample Forecast' : 'Historical Observation'})</span>
+          {hoveredPt.lower_95 != null && (
+            <span style={{ marginLeft: 8, color: 'var(--text-muted)' }}>[95% Range: {hoveredPt.lower_95} – {hoveredPt.upper_95}]</span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================================
+// MAIN VISUAL ANALYTICS PANEL COMPONENT
+// ============================================================================
+export default function VisualAnalyticsPanel({ visualDashboard, charts, forecast, selectedSheetId }) {
+  const [activeCategory, setActiveCategory] = useState('All');
+
+  // If new visualDashboard is available, use the autonomous multi-chart gallery
+  if (visualDashboard && visualDashboard.visualizations?.length > 0) {
+    const allVis = visualDashboard.visualizations;
+    const categories = visualDashboard.categories || ['All'];
+    const catCounts = visualDashboard.category_counts || {};
+
+    const filteredVis = activeCategory === 'All'
+      ? allVis
+      : allVis.filter(v => v.category === activeCategory);
+
+    return (
+      <div className="visual-analytics-panel">
+        <div className="section-title-row">
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
+              <h3>Autonomous AI Visual Intelligence Suite</h3>
+              <span className="badge-ai-count">{allVis.length} Projected Visualizations</span>
+            </div>
+            <p className="subtitle">
+              Multi-sheet relational projections, domain breakdowns, and Holt-Winters longitudinal forecasts synthesized across your uploaded workspace.
+            </p>
+          </div>
+        </div>
+
+        {/* Category Pill Filters */}
+        <div className="dashboard-filter-bar">
+          <span className="filter-label">Filter View:</span>
+          {categories.map((cat) => {
+            const count = catCounts[cat] || (cat === 'All' ? allVis.length : 0);
+            return (
+              <button
+                key={cat}
+                className={`dashboard-filter-pill ${activeCategory === cat ? 'active' : ''}`}
+                onClick={() => setActiveCategory(cat)}
+              >
+                <span>{cat}</span>
+                <span className="pill-count-chip">{count}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Multi-Chart Gallery Grid */}
+        <div className="visual-dashboard-grid">
+          {filteredVis.map((v) => {
+            const isCrossSheet = v.category === 'Cross-Sheet Intelligence';
+
+            return (
+              <div key={v.id} className={`visual-card ${isCrossSheet ? 'card-cross-sheet' : ''}`}>
+                {/* Card Top Badges */}
+                <div className="card-top-badges">
+                  <span className={`sheet-source-badge ${isCrossSheet ? 'badge-cross-accent' : ''}`}>
+                    {isCrossSheet ? '🔗 ' : '📄 '}
+                    {v.sheet_badge}
+                  </span>
+                  <span className="category-pill-badge">{v.category}</span>
+                  <span className="type-pill-badge">
+                    {v.chart_type === 'comparative_bar' && '📊 Grouped Bar'}
+                    {v.chart_type === 'bar' && '📊 Bar Breakdown'}
+                    {v.chart_type === 'donut' && '🍩 Distribution'}
+                    {v.chart_type === 'forecast' && '📈 Holt Forecast'}
+                  </span>
+                </div>
+
+                {/* Card Title & Subtitle */}
+                <div className="card-title-group">
+                  <h4>{v.title}</h4>
+                  {v.subtitle && <p className="card-sub">{v.subtitle}</p>}
+                </div>
+
+                {/* Card Visual Body */}
+                <div className="card-visual-body">
+                  {v.chart_type === 'comparative_bar' && (
+                    <ComparativeBarChart data={v.comparative_data} />
+                  )}
+                  {v.chart_type === 'bar' && (
+                    <SingleBarChart data={v.bar_data} />
+                  )}
+                  {v.chart_type === 'donut' && (
+                    <DonutChart data={v.donut_data} />
+                  )}
+                  {v.chart_type === 'forecast' && (
+                    <ForecastChart data={v.forecast_data} />
+                  )}
+                </div>
+
+                {/* AI Strategic Takeaway Banner */}
+                {v.ai_insight && (
+                  <div className="chart-ai-insight-banner">
+                    <div className="insight-header">
+                      <span className="insight-icon">💡</span>
+                      <span className="insight-title">AI Strategic Takeaway</span>
+                    </div>
+                    <div className="insight-content">
+                      <MarkdownView content={v.ai_insight} />
+                    </div>
+                  </div>
+                )}
+
+                {/* Stats Pills Row */}
+                {v.stats_pills && v.stats_pills.length > 0 && (
+                  <div className="card-stats-row">
+                    {v.stats_pills.map((pill, pIdx) => (
+                      <div key={pIdx} className="stat-pill-chip">
+                        <span className="stat-pill-label">{pill.label}:</span>
+                        <span className="stat-pill-value">{pill.value}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  // Fallback: Legacy 3-slot layout if visualDashboard is empty
+  return null;
 }
