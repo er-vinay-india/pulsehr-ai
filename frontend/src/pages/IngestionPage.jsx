@@ -207,7 +207,7 @@ export default function IngestionPage() {
                 {ds.sheets && ds.sheets.length > 0 && (
                   <div style={{ marginTop: "0.85rem" }}>
                     <div style={{ fontSize: "0.72rem", fontWeight: 700, color: "var(--fg-secondary)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.4rem" }}>
-                      Uploaded Sheets ({ds.sheets.length}):
+                      Uploaded {ds.sheets.length > 1 ? `Sheets (${ds.sheets.length})` : "Sheet"}:
                     </div>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
                       {ds.sheets.map(sheet => (
@@ -227,53 +227,34 @@ export default function IngestionPage() {
                           <Layers size={13} color="var(--accent-500)" />
                           <span style={{ fontWeight: 600, color: "var(--fg-primary)" }}>{sheet.name}</span>
                           <span style={{ color: "var(--fg-secondary)", fontSize: "0.75rem" }}>({sheet.row_count} rows)</span>
-                          <a
-                            href={getSheetDownloadUrl(sheet.id, "csv")}
-                            download={`${sheet.name}.csv`}
-                            style={{
-                              display: "inline-flex",
-                              alignItems: "center",
-                              gap: "4px",
-                              marginLeft: "4px",
-                              padding: "0.2rem 0.5rem",
-                              borderRadius: "4px",
-                              background: "rgba(126, 231, 217, 0.12)",
-                              border: "1px solid rgba(126, 231, 217, 0.3)",
-                              color: "var(--accent-500)",
-                              textDecoration: "none",
-                              fontSize: "0.725rem",
-                              fontWeight: 600,
-                              cursor: "pointer",
-                              transition: "all 0.15s ease"
-                            }}
-                            title={`Download '${sheet.name}' as CSV`}
-                          >
-                            <Download size={12} />
-                            <span>Download Sheet</span>
-                          </a>
-                          <a
-                            href={getSheetDownloadUrl(sheet.id, "xlsx")}
-                            download={`${sheet.name}.xlsx`}
-                            style={{
-                              display: "inline-flex",
-                              alignItems: "center",
-                              gap: "4px",
-                              padding: "0.2rem 0.5rem",
-                              borderRadius: "4px",
-                              background: "rgba(255, 255, 255, 0.06)",
-                              border: "1px solid var(--border-subtle)",
-                              color: "var(--fg-secondary)",
-                              textDecoration: "none",
-                              fontSize: "0.725rem",
-                              fontWeight: 500,
-                              cursor: "pointer",
-                              transition: "all 0.15s ease"
-                            }}
-                            title={`Download '${sheet.name}' as Excel (.xlsx)`}
-                          >
-                            <Download size={12} />
-                            <span>Excel</span>
-                          </a>
+
+                          {/* If workbook has multiple sheets, allow downloading individual sheet */}
+                          {ds.sheets.length > 1 && (
+                            <a
+                              href={getSheetDownloadUrl(sheet.id, "csv")}
+                              download={`${sheet.name}.csv`}
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "4px",
+                                marginLeft: "4px",
+                                padding: "0.2rem 0.5rem",
+                                borderRadius: "4px",
+                                background: "rgba(126, 231, 217, 0.12)",
+                                border: "1px solid rgba(126, 231, 217, 0.3)",
+                                color: "var(--accent-500)",
+                                textDecoration: "none",
+                                fontSize: "0.725rem",
+                                fontWeight: 600,
+                                cursor: "pointer",
+                                transition: "all 0.15s ease"
+                              }}
+                              title={`Download '${sheet.name}' as CSV`}
+                            >
+                              <Download size={12} />
+                              <span>Download</span>
+                            </a>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -301,10 +282,10 @@ export default function IngestionPage() {
                     whiteSpace: "nowrap",
                     transition: "all 0.15s ease"
                   }}
-                  title={`Download full ${ds.original_name} file`}
+                  title={`Download ${ds.original_name}`}
                 >
                   <Download size={14} />
-                  <span>Download File</span>
+                  <span>{ds.sheets && ds.sheets.length > 1 ? "Download Workbook" : "Download Sheet"}</span>
                 </a>
 
                 <button
