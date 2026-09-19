@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { UploadCloud, FileSpreadsheet, CheckCircle2, RefreshCw, Database, Layers, ArrowUpRight, Link2, Trash2, Download, Table } from "lucide-react";
+import { UploadCloud, FileSpreadsheet, CheckCircle2, RefreshCw, Database, Layers, ArrowUpRight, Link2, Trash2, Download, Table, AlertTriangle, X, ShieldAlert } from "lucide-react";
 import { uploadDatasetFile, listDatasets, deleteDataset, getDatasetDownloadUrl, getSheetDownloadUrl } from "../api/client";
 
 export default function IngestionPage() {
@@ -7,6 +7,11 @@ export default function IngestionPage() {
   const [uploading, setUploading] = useState(false);
   const [uploadResult, setUploadResult] = useState(null);
   const [error, setError] = useState(null);
+
+  // Consent modal state
+  const [datasetToDelete, setDatasetToDelete] = useState(null);
+  const [deleteConsent, setDeleteConsent] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const loadData = () => {
     listDatasets()
@@ -17,6 +22,17 @@ export default function IngestionPage() {
   useEffect(() => {
     loadData();
   }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape" && datasetToDelete && !deleting) {
+        setDatasetToDelete(null);
+        setDeleteConsent(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [datasetToDelete, deleting]);
 
   const handleFileUpload = async (e) => {
     const file = e.target.files?.[0];
@@ -38,13 +54,23 @@ export default function IngestionPage() {
     }
   };
 
-  const handleDelete = async (datasetId, filename) => {
-    if (!window.confirm(`Delete '${filename}' and remove its rows, metrics, search entries and relationships?`)) return;
+  const promptDelete = (dataset) => {
+    setDatasetToDelete(dataset);
+    setDeleteConsent(false);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!datasetToDelete || !deleteConsent || deleting) return;
+    setDeleting(true);
     try {
-      await deleteDataset(datasetId);
+      await deleteDataset(datasetToDelete.id);
+      setDatasetToDelete(null);
+      setDeleteConsent(false);
       loadData();
     } catch (err) {
       alert("Failed to delete dataset: " + err.message);
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -290,7 +316,7 @@ export default function IngestionPage() {
 
                 <button
                   type="button"
-                  onClick={() => handleDelete(ds.id, ds.original_name)}
+                  onClick={() => promptDelete(ds)}
                   style={{
                     display: "inline-flex",
                     alignItems: "center",
@@ -314,6 +340,97 @@ export default function IngestionPage() {
           ))}
         </div>
       </div>
+
+      {/* Consent Check Modal */}
+      {datasetToDelete && (
+        <div
+          className="modal-overlay"
+          onClick={() => !deleting && setDatasetToDelete(null)}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="modal-title"
+        >
+          <div className="modal-dialog" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div className="modal-title-group">
+                <div className="modal-icon-badge">
+                  <AlertTriangle size={20} />
+                </div>
+                <div>
+                  <h3 id="modal-title">Confirm Dataset Deletion</h3>
+                  <p>Explicit consent required before permanent removal</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="modal-close-btn"
+                onClick={() => !deleting && setDatasetToDelete(null)}
+                disabled={deleting}
+                title="Cancel and close"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="modal-body">
+              <div className="modal-target-box">
+                <FileSpreadsheet size={24} color="var(--accent-500)" style={{ flexShrink: 0 }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="target-name">{datasetToDelete.original_name}</div>
+                  <div className="target-meta">
+                    <span>{datasetToDelete.file_type.toUpperCase()}</span> · <span>{datasetToDelete.row_count} rows</span> · <span>{datasetToDelete.sheet_count} sheet(s)</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="modal-warning-box">
+                <div className="warning-title">
+                  <AlertTriangle size={15} />
+                  <span>Permanent Irreversible Action</span>
+                </div>
+                <ul>
+                  <li>Permanently erases all <strong>{datasetToDelete.row_count} indexed rows</strong> and cell values.</li>
+                  <li>Cleanses associated <strong>vector chunks & BM25 search indices</strong>.</li>
+                  <li>Unlinks all <strong>exact-key joins</strong> and relationships connected to this sheet.</li>
+                  <li>Removes stored file from local server storage.</li>
+                </ul>
+              </div>
+
+              <label className="modal-consent-checkbox">
+                <input
+                  type="checkbox"
+                  checked={deleteConsent}
+                  onChange={(e) => setDeleteConsent(e.target.checked)}
+                  disabled={deleting}
+                />
+                <span>
+                  I understand that this action is permanent, cannot be undone, and will immediately remove these rows from all analytics and Copilot searches.
+                </span>
+              </label>
+            </div>
+
+            <div className="modal-footer">
+              <button
+                type="button"
+                className="btn-cancel"
+                onClick={() => setDatasetToDelete(null)}
+                disabled={deleting}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn-danger-confirm"
+                onClick={handleConfirmDelete}
+                disabled={!deleteConsent || deleting}
+              >
+                <Trash2 size={14} />
+                <span>{deleting ? "Deleting..." : "Permanently Delete"}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
