@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import MarkdownView from './MarkdownView';
 
 export default function VisualAnalyticsPanel({ charts, forecast }) {
   const [hoveredBar, setHoveredBar] = useState(null);
@@ -419,7 +420,9 @@ export default function VisualAnalyticsPanel({ charts, forecast }) {
                 </div>
               )}
 
-              <p className="forecast-narrative">{activeForecastData.narrative}</p>
+              <div className="forecast-narrative">
+                <MarkdownView content={activeForecastData.narrative} />
+              </div>
             </div>
 
             <div className="forecast-metrics-pill-row">

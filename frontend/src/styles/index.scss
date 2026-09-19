@@ -2121,27 +2121,45 @@
     margin-top: 1rem;
 
     .story-body {
-      color: var(--fg-primary);
+      color: var(--fg-secondary);
       line-height: 1.65;
-      font-size: 0.9rem;
+      font-size: 0.925rem;
 
-      .story-heading-1, .story-heading-2, .story-heading-3 {
+      strong, b, .md-bold {
+        font-weight: 700 !important;
+        color: #ffffff !important;
+      }
+
+      h1, h2, h3 {
         color: #38bdf8;
-        margin: 1rem 0 0.5rem 0;
+        margin: 1.1rem 0 0.45rem 0;
+        font-weight: 700;
+        &:first-child { margin-top: 0; }
+      }
+
+      h4, h5 {
+        color: #7dd3fc;
+        margin: 0.9rem 0 0.35rem 0;
         font-weight: 700;
       }
 
-      .story-paragraph {
-        margin: 0.5rem 0;
+      p {
+        margin: 0 0 0.65rem 0;
       }
 
-      .story-bullet {
-        margin: 0.4rem 0 0.4rem 1.25rem;
-        list-style-type: square;
-        color: var(--fg-secondary);
+      ul, ol {
+        margin: 0.4rem 0 0.75rem 1.35rem;
+        padding: 0;
 
-        strong {
-          color: var(--fg-primary);
+        li {
+          margin-bottom: 0.35rem;
+          line-height: 1.55;
+          color: var(--fg-secondary);
+
+          strong, b, .md-bold {
+            color: #ffffff !important;
+            font-weight: 700 !important;
+          }
         }
       }
     }
@@ -2344,11 +2362,16 @@
         font-size: 0.85rem;
         color: var(--fg-secondary);
         max-width: 650px;
-        line-height: 1.5;
+        line-height: 1.55;
         margin: 0;
 
-        strong {
-          color: var(--fg-primary);
+        strong, b, .md-bold {
+          color: #ffffff !important;
+          font-weight: 700 !important;
+        }
+
+        .markdown-content p {
+          margin: 0;
         }
       }
 
@@ -2438,14 +2461,45 @@
     background: var(--surface-inset);
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
-    padding: 1rem 1.25rem;
+    padding: 1.15rem 1.35rem;
     margin: 1rem 0;
     font-size: 0.885rem;
-    line-height: 1.6;
+    line-height: 1.65;
     color: var(--fg-secondary);
 
-    strong {
-      color: var(--fg-primary);
+    strong, b, .md-bold {
+      color: #ffffff !important;
+      font-weight: 700 !important;
+    }
+
+    h1, h2, h3 {
+      color: #38bdf8;
+      margin: 0.85rem 0 0.4rem 0;
+      font-weight: 700;
+      &:first-child { margin-top: 0; }
+    }
+
+    h4, h5 {
+      color: #7dd3fc;
+      margin: 0.75rem 0 0.35rem 0;
+      font-weight: 700;
+    }
+
+    p {
+      margin: 0 0 0.55rem 0;
+    }
+
+    ul, ol {
+      margin: 0.35rem 0 0.65rem 1.35rem;
+      padding: 0;
+
+      li {
+        margin-bottom: 0.3rem;
+        strong, b, .md-bold {
+          color: #ffffff !important;
+          font-weight: 700 !important;
+        }
+      }
     }
   }
 

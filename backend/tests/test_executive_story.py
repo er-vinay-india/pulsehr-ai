@@ -199,3 +199,19 @@ def test_build_multi_measure_forecasts():
     assert 'Attendance Rate' in res['forecasts']
     assert 'Performance Score' in res['forecasts']
 
+
+def test_clean_ai_markdown_code_fences():
+    from app.services.executive_story import clean_ai_markdown
+    raw_wrapped = "```markdown\n# Executive Headline\n**Key Finding**: 42 employees.\n```"
+    assert clean_ai_markdown(raw_wrapped) == "# Executive Headline\n**Key Finding**: 42 employees."
+
+    raw_generic = "```\n- **Item 1**\n```"
+    assert clean_ai_markdown(raw_generic) == "- **Item 1**"
+
+    raw_clean = "### Clean Headline\nNormal text."
+    assert clean_ai_markdown(raw_clean) == "### Clean Headline\nNormal text."
+
+    assert clean_ai_markdown("") == ""
+    assert clean_ai_markdown(None) == ""
+
+

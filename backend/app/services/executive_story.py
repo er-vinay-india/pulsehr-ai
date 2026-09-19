@@ -68,6 +68,22 @@ def detect_sheet_domain(columns: list[str]) -> tuple[str, str]:
     return "Workforce Operations & Demographics", "General Tabular Analytics"
 
 
+def clean_ai_markdown(text: str) -> str:
+    """Strips enclosing markdown code fences (```markdown ... ```) and cleans whitespace."""
+    if not text:
+        return ''
+    s = str(text).strip()
+    if s.startswith('```markdown'):
+        s = s[len('```markdown'):].lstrip('\r\n')
+    elif s.startswith('```md'):
+        s = s[len('```md'):].lstrip('\r\n')
+    elif s.startswith('```'):
+        s = s[3:].lstrip('\r\n')
+    if s.endswith('```'):
+        s = s[:-3].rstrip('\r\n')
+    return s.strip()
+
+
 def profile_sheet_data(records: list[dict], columns: list[str], sheet_name: str = 'Sheet') -> dict:
     """Computes comprehensive deterministic ground-truth aggregates, thresholds, and multi-metric charts for ANY sheet."""
     if not records:
@@ -368,7 +384,7 @@ def generate_ai_narrative(ground_truth: dict, sheet_name: str, original_file: st
             if resp.status_code == 200:
                 result = resp.json().get('response', '').strip()
                 if result:
-                    return result
+                    return clean_ai_markdown(result)
     except Exception:
         pass
 
@@ -585,7 +601,7 @@ def compute_relational_story(conn, model: str | None = None) -> dict | None:
                 'model': target_model, 'prompt': prompt, 'stream': False, 'options': {'temperature': 0.15}
             })
             if resp.status_code == 200:
-                narrative = resp.json().get('response', '').strip()
+                narrative = clean_ai_markdown(resp.json().get('response', ''))
     except Exception:
         pass
 
@@ -638,9 +654,12 @@ def get_or_generate_executive_story(sheet_id: int | None = None, force_refresh: 
                     ('global',)
                 ).fetchone()
             if cached:
+                cached_narrative = json.loads(cached['narrative_json'])
+                if isinstance(cached_narrative, dict) and 'text' in cached_narrative:
+                    cached_narrative['text'] = clean_ai_markdown(cached_narrative['text'])
                 return {
                     'sheet_id': sheet_id,
-                    'narrative': json.loads(cached['narrative_json']),
+                    'narrative': cached_narrative,
                     'evaluation': json.loads(cached['evaluation_json']),
                     'charts': json.loads(cached['charts_json']),
                     'forecast': json.loads(cached['forecast_json']),

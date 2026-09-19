@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import MarkdownView from './MarkdownView';
 
 export default function RelationalInsightCard({ relationalData }) {
   if (!relationalData) return null;
@@ -37,41 +38,6 @@ export default function RelationalInsightCard({ relationalData }) {
   const activeQuadrantObj = quadrantConfigs.find(q => q.key === activeQuadrant) || quadrantConfigs[0];
   const activeEmployees = quadrants[activeQuadrant] || [];
 
-  // Format simple markdown
-  const formatMarkdown = (text) => {
-    if (!text) return null;
-    return text.split('\n').map((line, i) => {
-      const trimmed = line.trim();
-      if (!trimmed) return <div key={i} style={{ height: '6px' }} />;
-      if (trimmed.startsWith('### ')) {
-        return <h4 key={i} className="story-heading-3">{trimmed.replace('### ', '')}</h4>;
-      }
-      if (trimmed.startsWith('#### ')) {
-        return <h5 key={i} className="story-heading-4">{trimmed.replace('#### ', '')}</h5>;
-      }
-      if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
-        return (
-          <li
-            key={i}
-            className="story-bullet"
-            dangerouslySetInnerHTML={{
-              __html: trimmed.substring(2).replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-            }}
-          />
-        );
-      }
-      return (
-        <p
-          key={i}
-          className="story-paragraph"
-          dangerouslySetInnerHTML={{
-            __html: trimmed.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-          }}
-        />
-      );
-    });
-  };
-
   return (
     <div className="card-panel relational-panel" style={{ marginTop: '20px' }}>
       <div className="panel-header">
@@ -95,7 +61,7 @@ export default function RelationalInsightCard({ relationalData }) {
 
       {/* Relational Narrative */}
       <div className="relational-narrative-box">
-        {formatMarkdown(narrative)}
+        <MarkdownView content={narrative} />
       </div>
 
       {/* 4-Quadrant Matrix */}
