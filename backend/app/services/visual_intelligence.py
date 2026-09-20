@@ -663,10 +663,16 @@ def build_workspace_visual_dashboard(conn, sheet_id: int | None = None, model: s
             srcs = [clean_file_label(meta['original_name'])]
 
             if chart_type == 'bar':
-                insight = (
-                    f"**Distribution Analysis**: Across {len(p['bars'])} {p['category_col'].lower()}s, **{p['bars'][0]['label']}** leads with **{p['bars'][0]['value']} {unit}**, followed by {p['bars'][1]['label']} ({p['bars'][1]['value']} {unit})."
-                    if len(p['bars']) >= 2 else ""
-                )
+                cat_disp = format_display_label(p['category_col']).lower()
+                cat_noun = f"{cat_disp} entities" if any(k in cat_disp for k in ('store', 'group', 'unit', 'team', 'dept', 'department')) else f"{cat_disp} segments"
+                if len(p['bars']) >= 2:
+                    v0 = p['bars'][0]['value']
+                    v1 = p['bars'][1]['value']
+                    v0_str = f"${v0:,.2f}" if unit == '$' else (f"{v0:,.2f} {unit}" if isinstance(v0, float) else f"{v0} {unit}")
+                    v1_str = f"${v1:,.2f}" if unit == '$' else (f"{v1:,.2f} {unit}" if isinstance(v1, float) else f"{v1} {unit}")
+                    insight = f"**Distribution Analysis**: Across {len(p['bars'])} {cat_noun}, **{p['bars'][0]['label']}** leads with **{v0_str}**, followed by {p['bars'][1]['label']} ({v1_str})."
+                else:
+                    insight = ""
                 visualizations.append({
                     'id': f"dynamic_{p['plan_id']}_{sid}",
                     'title': p['title'],

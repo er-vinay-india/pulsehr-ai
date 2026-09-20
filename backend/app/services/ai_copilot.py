@@ -123,6 +123,7 @@ def query_copilot(
         f"{domain_guideline}"
         f"{labels_context}"
         "When referencing columns or metrics in user-facing explanations, use readable sentence-cased display labels (e.g. 'weekly sales', 'holiday flag', 'fuel price', 'CPI') instead of raw underscores or snake_case. Retain raw column names only inside SQL, code blocks, or tool queries. "
+        "Write answers in clean, standard GitHub Markdown. Use **bold** for key figures and headings. Do not escape asterisks. Write currency figures like '$80.93M' naturally without LaTeX math delimiters; only use '$$...$$' for legitimate multi-variable mathematical formulas. "
         "Use only the supplied source records and full-sheet statistics. There is no default workforce or Kaggle baseline. "
         "Cite the filename, sheet and row for factual claims. Rows joined by exact keys retain separate sources; "
         "conflicting values must be reported with their sources, never silently overwritten. "

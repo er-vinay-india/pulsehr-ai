@@ -400,7 +400,9 @@ def generate_ai_narrative(ground_truth: dict, sheet_name: str, original_file: st
         f"1. Executive Headline: 1 bold sentence summarizing what this dataset reveals about organizational operations.\n"
         f"2. Key Findings & Critical Thresholds: 3-4 bullet points highlighting exact numbers, percentages, and group observations.\n"
         f"{action_req}\n"
-        f"Format in GitHub markdown with bold key figures. Be concise, authoritative, and professional."
+        f"Format in standard GitHub markdown with bold key figures (e.g. **$80.93M**). "
+        f"Do not escape asterisks or dollar signs. Do not use LaTeX math delimiters (like $...$) for currency or figures. "
+        f"Be concise, authoritative, and professional."
     )
 
     try:

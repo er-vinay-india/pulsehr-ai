@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { investigateEvidence } from '../api/client';
 import { formatDisplayLabel } from '../utils/displayFormatters';
+import MarkdownView from './MarkdownView';
 
 export default function InvestigationDrawer({
   investigationTarget,
@@ -357,7 +358,9 @@ export default function InvestigationDrawer({
                         <h4>Execution Steps</h4>
                         <ol className="steps-ordered-list">
                           {meth.steps.map((step, sIdx) => (
-                            <li key={sIdx}>{step}</li>
+                            <li key={sIdx}>
+                              <MarkdownView content={step} inline />
+                            </li>
                           ))}
                         </ol>
                       </div>

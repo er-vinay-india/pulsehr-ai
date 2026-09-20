@@ -1,9 +1,6 @@
 import React, { useEffect, useState, useRef } from "react";
 import { Send, Sparkles, BrainCircuit, Bot, User, FileSpreadsheet, Cpu } from "lucide-react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import remarkMath from "remark-math";
-import rehypeKatex from "rehype-katex";
+import MarkdownView from "../components/MarkdownView";
 import { askCopilot, getCopilotSuggestions, getAvailableModels } from "../api/client";
 
 import CopilotTools from "../components/CopilotTools";
@@ -182,14 +179,7 @@ export default function CopilotPage({ onSelectEmployee }) {
             </div>
             <div className="message-content">
               <div className="message-bubble">
-                <div className="markdown-content">
-                  <ReactMarkdown
-                    remarkPlugins={[remarkGfm, remarkMath]}
-                    rehypePlugins={[rehypeKatex]}
-                  >
-                    {m.content}
-                  </ReactMarkdown>
-                </div>
+                <MarkdownView content={m.content} />
                 {m.citations?.length > 0 && <details style={{ marginTop: 12 }}><summary>Source records ({m.citations.length})</summary>{m.citations.map(c => <div key={c.chunk_id} style={{ margin: '8px 0' }}><strong>{c.source_file} / {c.sheet_name}</strong>{c.type === 'exact_join' && <span> · Connected by exact key</span>}<p>{c.text}</p></div>)}</details>}
                 {m.artifacts?.map(artifact => (
                   <a key={artifact.url} href={artifact.url} download className="chip-btn" style={{ display: 'inline-block', marginTop: 12 }}>Download PowerPoint</a>

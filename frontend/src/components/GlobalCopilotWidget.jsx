@@ -12,10 +12,7 @@ import {
   User,
   ExternalLink
 } from 'lucide-react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import remarkMath from 'remark-math';
-import rehypeKatex from 'rehype-katex';
+import MarkdownView from './MarkdownView';
 import { askCopilot, getCopilotSuggestions, getAvailableModels } from '../api/client';
 import CopilotTools from './CopilotTools';
 
@@ -259,12 +256,7 @@ export default function GlobalCopilotWidget({
                     </div>
                     <div className="msg-content-wrap">
                       <div className="msg-text markdown-body">
-                        <ReactMarkdown
-                          remarkPlugins={[remarkGfm, remarkMath]}
-                          rehypePlugins={[rehypeKatex]}
-                        >
-                          {msg.content}
-                        </ReactMarkdown>
+                        <MarkdownView content={msg.content} />
                       </div>
 
                       {/* Citations & Evidence Links */}
