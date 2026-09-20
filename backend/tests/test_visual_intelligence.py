@@ -130,8 +130,8 @@ def test_get_sheet_raw_projections_for_data_explorer():
         bars = [p for p in proj['projections'] if p['type'] == 'bar']
         assert len(bars) >= 2
         titles = [b['title'] for b in bars]
-        assert any('Performance Score' in t for t in titles)
-        assert any('Overtime Hours' in t for t in titles)
+        assert any('performance score' in t.lower() for t in titles)
+        assert any('overtime hours' in t.lower() for t in titles)
 
         # Verify donut chart for Risk Level
         donuts = [p for p in proj['projections'] if p['type'] == 'donut']

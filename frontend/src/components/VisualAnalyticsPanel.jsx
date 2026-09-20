@@ -18,12 +18,14 @@ import {
   ChevronDown
 } from 'lucide-react';
 import MarkdownView from './MarkdownView';
+import { formatDisplayLabel } from '../utils/displayFormatters';
 
 // ============================================================================
 // Standard Evidence Identification Bar Component
 // ============================================================================
 function ChartEvidenceHeader({ visualization, onInvestigate }) {
   const metric = visualization.measured_metric || visualization.title;
+  const metricDisplay = visualization.metric_label || formatDisplayLabel(metric);
   const unit = visualization.unit || 'units';
   const pop = visualization.population || 'All Active Records';
   const sources = visualization.source_sheets || [visualization.sheet_badge];
@@ -33,9 +35,9 @@ function ChartEvidenceHeader({ visualization, onInvestigate }) {
   return (
     <div className="chart-evidence-header-bar">
       <div className="evidence-meta-row">
-        <div className="evidence-meta-pill" title="Measured Metric and Unit">
+        <div className="evidence-meta-pill" title={`Source field: ${metric}`}>
           <span className="meta-label">Measuring:</span>
-          <span className="meta-value">{metric} ({unit})</span>
+          <span className="meta-value">{metricDisplay} ({unit})</span>
         </div>
         <div className="evidence-meta-pill" title="Population Cohort and Active Scope">
           <span className="meta-label">Population:</span>
@@ -618,12 +620,12 @@ function ChartDetailModal({
                   <span>Rank</span>
                   <ArrowUpDown size={12} className={sortField === 'rank' ? 'active-sort' : ''} />
                 </th>
-                <th onClick={() => handleSort('label')} className="sortable-th th-label">
-                  <span>{entityLabel}</span>
+                <th onClick={() => handleSort('label')} className="sortable-th th-label" title={`Category dimension: ${entityLabel}`}>
+                  <span>{formatDisplayLabel(entityLabel)}</span>
                   <ArrowUpDown size={12} className={sortField === 'label' ? 'active-sort' : ''} />
                 </th>
-                <th onClick={() => handleSort('value')} className="sortable-th th-val">
-                  <span>{metricName}</span>
+                <th onClick={() => handleSort('value')} className="sortable-th th-val" title={`Source field: ${metricName}`}>
+                  <span>{formatDisplayLabel(metricName)}</span>
                   <ArrowUpDown size={12} className={sortField === 'value' ? 'active-sort' : ''} />
                 </th>
                 {benchmarkMean != null && (
@@ -927,7 +929,9 @@ function DynamicBarChart({ visualization, onInvestigate }) {
   const maxVal = Math.max(...bars.map((b) => b.value), 1);
   const benchmarkPct = maxVal > 0 ? Math.min(100, Math.max(0, (overallMean / maxVal) * 100)) : 0;
 
-  const entityLabelClean = categoryCol.replace('_', ' ');
+  const entityLabelClean = visualization.category_label || formatDisplayLabel(categoryCol);
+  const metricLabelClean = visualization.metric_label || formatDisplayLabel(visualization.metric_col || 'Measure');
+  const rankingBasisClean = visualization.ranking_basis || `Ranked by ${metricLabelClean.toLowerCase()}`;
 
   return (
     <div className="dynamic-bar-chart-wrap bounded-chart-container">
@@ -939,8 +943,8 @@ function DynamicBarChart({ visualization, onInvestigate }) {
         onViewModeChange={setViewMode}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
-        entityLabel={`${entityLabelClean}s`}
-        rankingBasis={visualization.ranking_basis || `${visualization.metric_col || 'Measure'} (Ranked High to Low)`}
+        entityLabel={entityLabelClean.toLowerCase().endsWith('s') ? entityLabelClean.toLowerCase() : `${entityLabelClean.toLowerCase()}s`}
+        rankingBasis={rankingBasisClean}
         benchmarkMean={overallMean}
         isCurrency={isCurrency}
         unit={unit}
@@ -1028,7 +1032,7 @@ function DynamicBarChart({ visualization, onInvestigate }) {
         unit={unit}
         isCurrency={isCurrency}
         entityLabel={entityLabelClean}
-        metricName={visualization.metric_col || visualization.measured_metric}
+        metricName={metricLabelClean}
         population={visualization.population}
         entityType={entityType}
         sheetId={visualization.sheet_ids?.[0]}
@@ -1252,7 +1256,7 @@ function DynamicLineChart({ visualization, onInvestigate }) {
         >
           <span>Date: <strong>{hoveredPoint.period}</strong></span>
           <span className="pill-sep">·</span>
-          <span>{visualization.metric_col || 'Measure'}: <strong>{formatVal(hoveredPoint.value)}</strong></span>
+          <span>{visualization.metric_label || formatDisplayLabel(visualization.metric_col || 'Measure')}: <strong>{formatVal(hoveredPoint.value)}</strong></span>
           {rangeMean > 0 && (
             <>
               <span className="pill-sep">·</span>
@@ -1283,7 +1287,7 @@ function DynamicLineChart({ visualization, onInvestigate }) {
         unit={unit}
         isCurrency={isCurrency}
         entityLabel="Period Date"
-        metricName={visualization.metric_col || visualization.measured_metric}
+        metricName={visualization.metric_label || formatDisplayLabel(visualization.metric_col || visualization.measured_metric)}
         population={visualization.population}
         entityType="time_series"
         sheetId={visualization.sheet_ids?.[0]}

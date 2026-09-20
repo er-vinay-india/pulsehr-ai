@@ -5,6 +5,7 @@ from ..core import config
 from ..db.database import get_connection
 from .hybrid_retrieval import hybrid_search
 from .copilot_tools import ToolRequest, infer_tool, execute_tool
+from .display_formatters import format_display_label, sanitize_llm_text
 
 
 def get_available_models() -> list[dict]:
@@ -82,6 +83,7 @@ def query_copilot(
 
     domain_guideline = ""
     active_sheet_name = ""
+    column_mapping = {}
     try:
         with get_connection() as conn:
             sheet = None
@@ -95,6 +97,7 @@ def query_copilot(
             if sheet:
                 active_sheet_name = sheet["name"]
                 cols = json.loads(sheet["columns_json"] or "[]")
+                column_mapping = {c: format_display_label(c) for c in cols}
                 from .executive_story import detect_sheet_domain
                 d_name, d_type = detect_sheet_domain(cols)
                 if "retail" in d_name.lower() or "commercial" in d_name.lower():
@@ -113,9 +116,13 @@ def query_copilot(
     except Exception:
         pass
 
+    labels_context = f"FIELD DISPLAY LABELS (use sentence-cased labels in explanations): {json.dumps(column_mapping)}\n" if column_mapping else ""
+
     prompt = (
         "You are Pulse Analytics Copilot, an evidence-based analytics assistant for the user's uploaded spreadsheets. "
         f"{domain_guideline}"
+        f"{labels_context}"
+        "When referencing columns or metrics in user-facing explanations, use readable sentence-cased display labels (e.g. 'weekly sales', 'holiday flag', 'fuel price', 'CPI') instead of raw underscores or snake_case. Retain raw column names only inside SQL, code blocks, or tool queries. "
         "Use only the supplied source records and full-sheet statistics. There is no default workforce or Kaggle baseline. "
         "Cite the filename, sheet and row for factual claims. Rows joined by exact keys retain separate sources; "
         "conflicting values must be reported with their sources, never silently overwritten. "
@@ -142,6 +149,9 @@ def query_copilot(
         answer = ("The language model is unavailable. Here are relevant source records (not a calculated answer):\n\n" +
                   '\n'.join('- ' + r['text'] for r in evidence[:8])) if evidence else (
                   'No matching uploaded records were found. Upload a relevant sheet or specify its filename and the field you need.')
+    elif column_mapping:
+        answer = sanitize_llm_text(answer, column_mapping)
+
     return {'query': user_query, 'answer': answer, 'model_used': target_model,
             'citations': [{**item, 'type': 'exact_join' if 'exact_join' in item.get('retrieval_methods', []) else 'hybrid_search'} for item in evidence],
             'exact_matches': [], 'suggested_questions': [], 'related_rows': len(related)}

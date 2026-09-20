@@ -172,14 +172,14 @@ def test_walmart_visual_dashboard_structure(populated_walmart_db):
 
         # First chart should be a Sales chart
         first_chart = dash["visualizations"][0]
-        assert "Sales" in first_chart["title"] or "Weekly_Sales" in first_chart["title"]
+        assert "sales" in first_chart["title"].lower() or "weekly_sales" in first_chart["title"].lower()
 
 
 def test_walmart_data_density_metadata_and_benchmark_preservation(populated_walmart_db):
     """Verify that high-cardinality charts preserve true dataset metrics and density metadata."""
     with get_connection() as conn:
         dash = build_workspace_visual_dashboard(conn)
-        store_bar = next((v for v in dash["visualizations"] if v.get("chart_type") == "bar" and "Store" in v.get("title", "")), None)
+        store_bar = next((v for v in dash["visualizations"] if v.get("chart_type") == "bar" and "store" in v.get("title", "").lower()), None)
         assert store_bar is not None
         assert store_bar["overall_mean"] is not None
         assert store_bar["overall_mean"] > 1_000_000  # Network mean is ~$1.05M
@@ -187,7 +187,7 @@ def test_walmart_data_density_metadata_and_benchmark_preservation(populated_walm
         assert store_bar["total_categories"] >= 4
         assert store_bar["is_high_cardinality"] == (store_bar["total_categories"] > 10)
         assert store_bar["spread_ratio"] > 1.0
-        assert "High to Low" in store_bar["ranking_basis"]
+        assert "high to low" in store_bar["ranking_basis"].lower()
 
         line_chart = next((v for v in dash["visualizations"] if v.get("chart_type") == "line" and "Weekly_Sales" in v.get("measured_metric", "")), None)
         assert line_chart is not None

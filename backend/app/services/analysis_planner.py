@@ -23,6 +23,7 @@ import numpy as np
 import pandas as pd
 
 from ..core import config
+from .display_formatters import format_display_label, generate_analytical_title
 
 logger = logging.getLogger(__name__)
 
@@ -321,23 +322,33 @@ def evaluate_chart_prerequisites(
                 bars.append({"label": lbl, "value": round(float(r[c_name]), 2)})
 
             if len(bars) >= 2:
-                cat_label_clean = primary_cat.replace('_', ' ')
                 overall_mean = round(float(df[c_name].mean()), 2) if not df[c_name].empty else 0.0
                 overall_total = round(float(df[c_name].sum()), 2) if not df[c_name].empty else 0.0
                 spread_ratio = round(bars[0]["value"] / max(bars[-1]["value"], 0.01), 2) if bars[-1]["value"] > 0 else 1.0
 
+                chart_title, chart_sub = generate_analytical_title(
+                    calc_type=calc_type,
+                    metric_col=num_col,
+                    group_col=primary_cat,
+                    total_count=len(bars)
+                )
+
+                ranking_basis_text = f"{format_display_label(measure_title)} (high to low)"
+
                 supported_plans.append({
                     "chart_type": "bar",
                     "plan_id": f"bar_{num_col}_{primary_cat}",
-                    "title": f"{measure_title} by {cat_label_clean}",
-                    "subtitle": f"{calc_type} ranked across {len(bars)} recorded {cat_label_clean.lower()} entities",
+                    "title": chart_title,
+                    "subtitle": chart_sub,
                     "measured_metric": num_col,
+                    "metric_label": format_display_label(num_col),
+                    "category_label": format_display_label(primary_cat),
                     "unit": unit,
                     "aggregation_rule": calc_type,
                     "category_col": primary_cat,
                     "metric_col": num_col,
                     "bars": bars,
-                    "population": f"{n_rows} source records across {len(bars)} {cat_label_clean.lower()} groups",
+                    "population": f"{n_rows} source records across {len(bars)} {format_display_label(primary_cat).lower()} groups",
                     "source_sheets": [original_file],
                     "coverage_pct": round((num_meta['valid_count'] / max(1, n_rows)) * 100, 1),
                     "missing_records": num_meta['missing_count'],
@@ -345,7 +356,7 @@ def evaluate_chart_prerequisites(
                     "overall_mean": overall_mean,
                     "overall_total": overall_total,
                     "total_categories": len(bars),
-                    "ranking_basis": f"{measure_title} (High to Low)",
+                    "ranking_basis": ranking_basis_text,
                     "spread_ratio": spread_ratio
                 })
 
@@ -370,12 +381,20 @@ def evaluate_chart_prerequisites(
                 bars.append({"label": lbl, "value": round(float(r[c_name]), 2)})
 
             if len(bars) == 2:
+                comp_title, comp_sub = generate_analytical_title(
+                    calc_type="Arithmetic Mean",
+                    metric_col=best_num_col,
+                    group_col=cat_col,
+                    comparison_type="binary_flag"
+                )
                 supported_plans.append({
                     "chart_type": "bar",
                     "plan_id": f"bar_compare_{cat_col}",
-                    "title": f"Holiday Season Impact: Average {best_num_col} Comparison",
-                    "subtitle": f"Comparative performance between {bars[0]['label']} and {bars[1]['label']}",
+                    "title": comp_title,
+                    "subtitle": comp_sub,
                     "measured_metric": best_num_col,
+                    "metric_label": format_display_label(best_num_col),
+                    "category_label": format_display_label(cat_col),
                     "unit": unit,
                     "aggregation_rule": "Arithmetic Mean",
                     "category_col": cat_col,
@@ -409,12 +428,21 @@ def evaluate_chart_prerequisites(
                     "pct": round((cnt / tot) * 100, 1),
                     "color": palette[i % len(palette)]
                 })
+            donut_title, donut_sub = generate_analytical_title(
+                calc_type="Distribution",
+                metric_col=cat_col,
+                group_col=cat_col,
+                comparison_type="donut",
+                total_count=tot
+            )
             supported_plans.append({
                 "chart_type": "donut",
                 "plan_id": f"donut_{cat_col}",
-                "title": f"Distribution Composition by {cat_col}",
-                "subtitle": f"Proportional composition of {tot} recorded entities",
-                "measured_metric": f"{cat_col} Share",
+                "title": donut_title,
+                "subtitle": donut_sub,
+                "measured_metric": f"{format_display_label(cat_col)} share",
+                "metric_label": format_display_label(cat_col),
+                "category_label": format_display_label(cat_col),
                 "unit": "periods & %",
                 "category_col": cat_col,
                 "total_population": tot,
@@ -445,10 +473,8 @@ def evaluate_chart_prerequisites(
                 # Aggregate by date if multiple rows exist per date (e.g. 45 stores per week)
                 if is_additive:
                     time_grp = sorted_df.groupby('__date_str')[c_name].sum().reset_index()
-                    agg_desc = "Total Network"
                 else:
                     time_grp = sorted_df.groupby('__date_str')[c_name].mean().reset_index()
-                    agg_desc = "Average"
 
                 points = [
                     {"period": str(r['__date_str']), "value": round(float(r[c_name]), 2)}
@@ -457,14 +483,22 @@ def evaluate_chart_prerequisites(
                 ]
 
                 if len(points) >= 5:
-                    clean_metric_name = num_col.replace('_', ' ')
                     available_years = sorted(list({p['period'][:4] for p in points if len(p['period']) >= 4 and p['period'][:4].isdigit()}))
+                    line_title, line_sub = generate_analytical_title(
+                        calc_type="Total" if is_additive else "Average",
+                        metric_col=num_col,
+                        group_col=d_col,
+                        comparison_type="time_series",
+                        total_count=len(points)
+                    )
                     supported_plans.append({
                         "chart_type": "line",
                         "plan_id": f"line_{num_col}_{d_col}",
-                        "title": f"{agg_desc} {clean_metric_name} Over Time",
-                        "subtitle": f"Longitudinal progression across {len(points)} recorded periods ({points[0]['period']} to {points[-1]['period']})",
+                        "title": line_title,
+                        "subtitle": line_sub,
                         "measured_metric": num_col,
+                        "metric_label": format_display_label(num_col),
+                        "category_label": format_display_label(d_col),
                         "unit": unit,
                         "date_col": d_col,
                         "metric_col": num_col,

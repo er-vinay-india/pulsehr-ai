@@ -11,6 +11,7 @@ import pandas as pd
 
 from ..core import config
 from ..db.database import get_connection
+from .display_formatters import format_display_label
 
 logger = logging.getLogger(__name__)
 ALIASES = {
@@ -92,7 +93,7 @@ def prepare_sheets(frames, source, embed=True):
         for column in frame.columns:
             values = [row[column] for row in records if value_key(row[column])]
             numeric, unit = numeric_values(pd.Series(values, dtype=object), column)
-            profile = {'column': column, 'canonical': canonical(column), 'nonempty': len(values),
+            profile = {'column': column, 'canonical': canonical(column), 'display_name': format_display_label(column), 'nonempty': len(values),
                        'missing': len(records) - len(values), 'distinct': len({value_key(v) for v in values})}
             # IDs, booleans and numeric-looking codes are not measures.
             identifier = canonical(column).endswith('id') or canonical(column).endswith('_id') or 'code' in canonical(column)
@@ -207,9 +208,38 @@ def catalogue(conn):
     for row in conn.execute('SELECT s.*,d.original_name FROM sheets s JOIN dataset_uploads d ON d.id=s.dataset_id ORDER BY s.id'):
         entry = dict(row)
         entry['columns'] = json.loads(entry.pop('columns_json'))
-        entry['profiles'] = [{k: v for k, v in p.items() if k not in ('vector', 'embedding_model')} for p in json.loads(entry.pop('profile_json'))]
+        profiles = json.loads(entry.pop('profile_json') or '[]')
+        for p in profiles:
+            if 'display_name' not in p and 'column' in p:
+                p['display_name'] = format_display_label(p['column'])
+        entry['profiles'] = [{k: v for k, v in p.items() if k not in ('vector', 'embedding_model')} for p in profiles]
+        entry['display_columns'] = {c: format_display_label(c) for c in entry['columns']}
         output.append(entry)
     return output
+
+
+def backfill_display_names():
+    """Lightweight migration: ensures existing stored sheet profiles include display_name."""
+    conn = get_connection()
+    try:
+        rows = conn.execute("SELECT id, profile_json FROM sheets").fetchall()
+        for r in rows:
+            sid = r["id"]
+            if not r["profile_json"]:
+                continue
+            profiles = json.loads(r["profile_json"])
+            modified = False
+            for p in profiles:
+                if 'display_name' not in p and 'column' in p:
+                    p['display_name'] = format_display_label(p['column'])
+                    modified = True
+            if modified:
+                conn.execute("UPDATE sheets SET profile_json=? WHERE id=?", (json.dumps(profiles), sid))
+        conn.commit()
+    except Exception as e:
+        logger.warning(f"Failed to backfill display names: {e}")
+    finally:
+        conn.close()
 
 
 def relationships(conn):

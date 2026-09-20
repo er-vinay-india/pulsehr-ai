@@ -38,6 +38,7 @@ from .industrial_analytics import (
 )
 from .analysis_planner import evaluate_chart_prerequisites
 from .fact_discovery import discover_prioritized_hr_facts
+from .display_formatters import format_display_label, generate_analytical_title
 
 
 PALETTE = [
@@ -183,6 +184,7 @@ def get_sheet_raw_projections(conn, sheet_id: int) -> dict:
 
         stat_item = {
             'column': c,
+            'display_name': format_display_label(c),
             'nonempty': nonempty,
             'missing': missing,
             'distinct': distinct,
@@ -228,10 +230,10 @@ def get_sheet_raw_projections(conn, sheet_id: int) -> dict:
             is_additive = unit in ('days', 'hrs', 'count', '$') and 'rate' not in str(num_col).lower()
             if is_additive:
                 grp = df.groupby(primary_cat)[clean_c].sum().reset_index()
-                title = f"Total {num_col} by {primary_cat}"
+                calc_type = "Summation"
             else:
                 grp = df.groupby(primary_cat)[clean_c].mean().reset_index()
-                title = f"Average {num_col} by {primary_cat}"
+                calc_type = "Arithmetic Mean"
 
             grp = grp.sort_values(by=clean_c, ascending=False)
             bars = [
@@ -240,6 +242,12 @@ def get_sheet_raw_projections(conn, sheet_id: int) -> dict:
                 if pd.notna(r[primary_cat])
             ]
             if bars:
+                title, _ = generate_analytical_title(
+                    calc_type=calc_type,
+                    metric_col=num_col,
+                    group_col=primary_cat,
+                    total_count=len(bars)
+                )
                 projections.append({
                     'id': f"proj_bar_{num_col}",
                     'type': 'bar',
@@ -264,10 +272,17 @@ def get_sheet_raw_projections(conn, sheet_id: int) -> dict:
             for idx, (lbl, cnt) in enumerate(vc.items())
         ]
         if len(slices) >= 2:
+            donut_title, _ = generate_analytical_title(
+                calc_type="Distribution",
+                metric_col=cat_col,
+                group_col=cat_col,
+                comparison_type="donut",
+                total_count=tot
+            )
             projections.append({
                 'id': f"proj_donut_{cat_col}",
                 'type': 'donut',
-                'title': f"{cat_col} Distribution",
+                'title': donut_title,
                 'category_col': cat_col,
                 'total': tot,
                 'slices': slices
@@ -512,9 +527,12 @@ def build_workspace_visual_dashboard(conn, sheet_id: int | None = None, model: s
             right_file = sheet_meta_map[right_sid]['original_name']
             badge_label = f"Cross-Sheet Join: {clean_file_label(left_file)} ↔ {clean_file_label(right_file)}"
 
+            c1_disp = format_display_label(col1_raw)
+            c2_disp = format_display_label(col2_raw)
+
             visualizations.append({
                 'id': f"comp_{left_sid}_{right_sid}_{col1_raw}_{col2_raw}",
-                'title': f"Cross-Sheet Impact: {col1_raw} vs {col2_raw} by Department",
+                'title': f"{c1_disp} and {c2_disp.lower()} by department",
                 'subtitle': f"Unified relational view connecting `{left_file}` and `{right_file}`",
                 'category': 'Cross-Sheet Intelligence',
                 'chart_type': 'comparative_bar',
@@ -523,8 +541,8 @@ def build_workspace_visual_dashboard(conn, sheet_id: int | None = None, model: s
                 'comparative_data': {
                     'category_col': 'Department',
                     'series': [
-                        {'name': f"Avg {col1_raw}", 'unit': u1, 'color': '#10b981'},
-                        {'name': f"Avg {col2_raw}", 'unit': u2, 'color': '#f43f5e'}
+                        {'name': f"Average {c1_disp.lower()}", 'unit': u1, 'color': '#10b981'},
+                        {'name': f"Average {c2_disp.lower()}", 'unit': u2, 'color': '#f43f5e'}
                     ],
                     'items': items
                 },

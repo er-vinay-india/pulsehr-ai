@@ -25,6 +25,7 @@ import pandas as pd
 from ..core import config
 from ..db.database import get_connection
 from .executive_story import coerce_to_numeric
+from .display_formatters import format_display_label
 
 logger = logging.getLogger(__name__)
 
@@ -229,10 +230,14 @@ def build_store_investigation(
     obs_tot_str = f"${store_total / 1_000_000:,.2f}M Total" if is_currency and store_total >= 1_000_000 else (f"${store_total:,.2f}" if is_currency else f"{store_total:,.0f}")
     benchmark_str = f"${net_val:,.2f}/wk (All Stores Network Average)" if is_currency else f"{net_val:,.2f} (Network Average)"
 
+    m_disp = format_display_label(metric_col)
+    m_lower = m_disp.lower()
+
+    avg_item_name = f"{m_disp} (average)" if m_lower.startswith(("weekly", "monthly", "daily", "annual", "hourly")) else f"Weekly {m_lower} (average)"
     items = [
-        {"name": f"Weekly {metric_col} (Avg)", "value": round(store_val, 2), "unit": "$" if is_currency else "pts"},
-        {"name": f"Total {metric_col}", "value": round(store_total, 2), "unit": "$" if is_currency else "pts"},
-        {"name": "Total Recorded Periods", "value": weeks_count, "unit": "weeks"}
+        {"name": avg_item_name, "value": round(store_val, 2), "unit": "$" if is_currency else "pts"},
+        {"name": f"Total {m_lower}", "value": round(store_total, 2), "unit": "$" if is_currency else "pts"},
+        {"name": "Total recorded periods", "value": weeks_count, "unit": "weeks"}
     ]
 
     if holiday_col and holiday_col in store_rows.columns:
@@ -240,16 +245,18 @@ def build_store_investigation(
         h_sales = coerce_to_numeric(store_rows.loc[h_mask, metric_col]).dropna()
         r_sales = coerce_to_numeric(store_rows.loc[~h_mask, metric_col]).dropna()
         if not h_sales.empty:
-            items.append({"name": "Holiday Periods (Avg)", "value": round(float(h_sales.mean()), 2), "unit": "$" if is_currency else "pts"})
+            items.append({"name": "Holiday periods (average)", "value": round(float(h_sales.mean()), 2), "unit": "$" if is_currency else "pts"})
         if not r_sales.empty:
-            items.append({"name": "Regular Periods (Avg)", "value": round(float(r_sales.mean()), 2), "unit": "$" if is_currency else "pts"})
+            items.append({"name": "Regular periods (average)", "value": round(float(r_sales.mean()), 2), "unit": "$" if is_currency else "pts"})
 
     for macro_col, macro_unit in [('Temperature', '°F'), ('Fuel_Price', '$'), ('CPI', 'index'), ('Unemployment', '%')]:
         m_col = next((c for c in store_rows.columns if c.lower().replace('_', '') == macro_col.lower().replace('_', '')), None)
         if m_col:
             m_s = coerce_to_numeric(store_rows[m_col]).dropna()
             if not m_s.empty:
-                items.append({"name": f"Avg {macro_col.replace('_', ' ')}", "value": round(float(m_s.mean()), 2), "unit": macro_unit})
+                macro_disp = format_display_label(macro_col)
+                macro_label = f"Average {macro_disp.lower()}" if macro_disp != "CPI" else "Average CPI"
+                items.append({"name": macro_label, "value": round(float(m_s.mean()), 2), "unit": macro_unit})
 
     sort_col = date_col if (date_col and date_col in store_rows.columns) else metric_col
     sorted_rows = store_rows.sort_values(by=sort_col, ascending=False) if (sort_col and sort_col in store_rows.columns) else store_rows
@@ -279,7 +286,7 @@ def build_store_investigation(
         "sheet_name": target_sheet["name"],
         "source_file": target_sheet["original_name"],
         "observation": {
-            "headline": f"{display_name}: Commercial Performance & Drivers Investigation",
+            "headline": f"{display_name}: Performance and drivers",
             "observed_value": f"{obs_val_str} ({obs_tot_str})",
             "benchmark_value": benchmark_str,
             "variance": f"{diff_pct:+0.1f}% vs Network Baseline",
@@ -297,7 +304,7 @@ def build_store_investigation(
             ]
         },
         "timelines_and_breakdowns": {
-            "title": f"{display_name} Trading & Environmental Indicators",
+            "title": f"{display_name} trading and environmental indicators",
             "items": items
         },
         "source_records": source_records,
@@ -360,10 +367,13 @@ def build_time_series_investigation(
     period_avg_str = f"${period_avg:,.2f}/store" if is_currency else f"{period_avg:,.2f}/unit"
     base_str = f"${net_week_avg / 1_000_000:,.2f}M (Weekly Network Benchmark)" if is_currency and net_week_avg >= 1_000_000 else (f"${net_week_avg:,.2f}" if is_currency else f"{net_week_avg:,.0f}")
 
+    m_disp = format_display_label(metric_col)
+    m_lower = m_disp.lower()
+
     items = [
-        {"name": f"Network Total {metric_col}", "value": round(period_total, 2), "unit": "$" if is_currency else "pts"},
-        {"name": f"Store Average {metric_col}", "value": round(period_avg, 2), "unit": "$" if is_currency else "pts"},
-        {"name": "Reporting Locations", "value": len(period_rows), "unit": "stores"}
+        {"name": f"Network total {m_lower}", "value": round(period_total, 2), "unit": "$" if is_currency else "pts"},
+        {"name": f"Store average {m_lower}", "value": round(period_avg, 2), "unit": "$" if is_currency else "pts"},
+        {"name": "Reporting locations", "value": len(period_rows), "unit": "stores"}
     ]
 
     if store_col and store_col in period_rows.columns:
@@ -373,12 +383,12 @@ def build_time_series_investigation(
         for _, r in top_stores.iterrows():
             s_name = f"Store {str(r[store_col]).replace('.0', '')}"
             val = float(r['__num']) if pd.notna(r['__num']) else 0.0
-            items.append({"name": f"Top Store: {s_name}", "value": round(val, 2), "unit": "$" if is_currency else "pts"})
+            items.append({"name": f"Top store: {s_name}", "value": round(val, 2), "unit": "$" if is_currency else "pts"})
 
-    holiday_note = "Regular Trading Week"
+    holiday_note = "Regular trading week"
     if holiday_col and holiday_col in period_rows.columns:
         is_hol = period_rows[holiday_col].astype(str).str.strip().isin(['1', '1.0', 'true', 'True']).any()
-        holiday_note = "National Holiday Week (Flag = 1)" if is_hol else "Non-Holiday Week (Flag = 0)"
+        holiday_note = "National holiday week (flag = 1)" if is_hol else "Non-holiday week (flag = 0)"
 
     sorted_rows = period_rows.sort_values(by=metric_col, ascending=False) if metric_col in period_rows.columns else period_rows
     source_records = [
@@ -405,7 +415,7 @@ def build_time_series_investigation(
         "sheet_name": target_sheet["name"],
         "source_file": target_sheet["original_name"],
         "observation": {
-            "headline": f"Trading Period {formatted_date}: Network Performance Investigation",
+            "headline": f"Trading period {formatted_date}: Network performance",
             "observed_value": f"{period_tot_str} ({period_avg_str})",
             "benchmark_value": base_str,
             "variance": f"{diff_pct:+0.1f}% vs Average Week",
@@ -423,7 +433,7 @@ def build_time_series_investigation(
             ]
         },
         "timelines_and_breakdowns": {
-            "title": f"Week {formatted_date} Top Store Contributors & Metrics",
+            "title": f"Week {formatted_date} top store contributors",
             "items": items
         },
         "source_records": source_records,
@@ -487,11 +497,11 @@ def build_dimension_investigation(
     other_avg_str = f"${other_avg:,.2f}/wk ({other_cohort_name})" if is_currency else f"{other_avg:,.2f} ({other_cohort_name})"
 
     items = [
-        {"name": f"{cohort_name} Average", "value": round(cohort_avg, 2), "unit": "$" if is_currency else "pts"},
-        {"name": f"{other_cohort_name} Average", "value": round(other_avg, 2), "unit": "$" if is_currency else "pts"},
-        {"name": f"{cohort_name} Total Volume", "value": round(cohort_total, 2), "unit": "$" if is_currency else "pts"},
-        {"name": f"{cohort_name} Sample Count", "value": len(cohort_rows), "unit": "periods"},
-        {"name": f"{other_cohort_name} Sample Count", "value": len(other_rows), "unit": "periods"}
+        {"name": f"{cohort_name} average", "value": round(cohort_avg, 2), "unit": "$" if is_currency else "pts"},
+        {"name": f"{other_cohort_name} average", "value": round(other_avg, 2), "unit": "$" if is_currency else "pts"},
+        {"name": f"{cohort_name} total volume", "value": round(cohort_total, 2), "unit": "$" if is_currency else "pts"},
+        {"name": f"{cohort_name} sample count", "value": len(cohort_rows), "unit": "periods"},
+        {"name": f"{other_cohort_name} sample count", "value": len(other_rows), "unit": "periods"}
     ]
 
     source_records = [
@@ -510,6 +520,8 @@ def build_dimension_investigation(
         "How do markdown timings before and after holiday weeks impact overall gross margin elasticity?"
     ]
 
+    dim_disp = format_display_label(dim_col)
+
     return {
         "available": True,
         "investigation_type": "dimension",
@@ -518,7 +530,7 @@ def build_dimension_investigation(
         "sheet_name": target_sheet["name"],
         "source_file": target_sheet["original_name"],
         "observation": {
-            "headline": f"{cohort_name}: Comparative Cohort Investigation",
+            "headline": f"{cohort_name}: Comparative cohort",
             "observed_value": f"{cohort_avg_str} ({cohort_tot_str})",
             "benchmark_value": other_avg_str,
             "variance": f"{diff_pct:+0.1f}% vs {other_cohort_name}",
@@ -536,7 +548,7 @@ def build_dimension_investigation(
             ]
         },
         "timelines_and_breakdowns": {
-            "title": f"{dim_col} Cohort Comparison Breakdown",
+            "title": f"{dim_disp} cohort breakdown",
             "items": items
         },
         "source_records": source_records,

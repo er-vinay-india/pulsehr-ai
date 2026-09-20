@@ -13,6 +13,7 @@ import {
   ChevronRight
 } from 'lucide-react';
 import { investigateEvidence } from '../api/client';
+import { formatDisplayLabel } from '../utils/displayFormatters';
 
 export default function InvestigationDrawer({
   investigationTarget,
@@ -87,8 +88,8 @@ export default function InvestigationDrawer({
                 {data?.source_file || 'Workspace Sheet'}
               </span>
               {data?.metric && (
-                <span className="metric-tag">
-                  Target Metric: <strong>{data.metric}</strong>
+                <span className="metric-tag" title={`Source field: ${data.metric}`}>
+                  Target Metric: <strong>{formatDisplayLabel(data.metric)}</strong>
                 </span>
               )}
             </div>
@@ -303,7 +304,9 @@ export default function InvestigationDrawer({
                             <th># Row</th>
                             <th>Source File</th>
                             {recordColumns.map((col) => (
-                              <th key={col}>{col}</th>
+                              <th key={col} title={`Source field: ${col}`}>
+                                {formatDisplayLabel(col)}
+                              </th>
                             ))}
                           </tr>
                         </thead>

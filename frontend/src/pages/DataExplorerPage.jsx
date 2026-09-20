@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { getSheets, getSheetRows, getJoinedRows, getSheetProjections } from '../api/client';
+import { formatDisplayLabel } from '../utils/displayFormatters';
 
 export default function DataExplorerPage() {
   const [catalog, setCatalog] = useState({ sheets: [], relationships: [] });
@@ -153,7 +154,11 @@ export default function DataExplorerPage() {
                   <thead>
                     <tr>
                       <th>Source row</th>
-                      {columns.map(c => <th key={c}>{c}</th>)}
+                      {columns.map(c => (
+                        <th key={c} title={`Source field: ${c}`}>
+                          {formatDisplayLabel(c)}
+                        </th>
+                      ))}
                     </tr>
                   </thead>
                   <tbody>
@@ -197,7 +202,9 @@ export default function DataExplorerPage() {
               <div className="column-profiles-kpi-grid">
                 {projectionsData.column_stats?.map((col) => (
                   <div key={col.column} className="kpi-card column-stat-card">
-                    <div className="kpi-label">{col.column}</div>
+                    <div className="kpi-label" title={`Source field: ${col.column}`}>
+                      {col.display_name || formatDisplayLabel(col.column)}
+                    </div>
                     {col.is_numeric ? (
                       <>
                         <div className="kpi-value" style={{ fontSize: '1.25rem' }}>
@@ -242,7 +249,7 @@ export default function DataExplorerPage() {
                       <div key={proj.id} className="visual-card">
                         <div className="card-title-group">
                           <h4>{proj.title}</h4>
-                          <p className="card-sub">Direct data extract grouped by {proj.category_col} ({proj.unit || 'value'})</p>
+                          <p className="card-sub">Direct data extract grouped by {formatDisplayLabel(proj.category_col)} ({proj.unit || 'value'})</p>
                         </div>
                         <div className="card-visual-body">
                           <div className="chart-svg-wrap">

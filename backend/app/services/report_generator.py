@@ -6,6 +6,7 @@ from pptx.dml.color import RGBColor
 
 from ..core import config
 from ..db.database import get_connection
+from .display_formatters import format_display_label
 
 # Executive Theme Palette (matching web UI)
 C_BG = RGBColor(23, 20, 18)          # --surface #171412
@@ -65,7 +66,8 @@ def _table_slide(prs, title, headers, rows, source):
     set_slide_background(slide)
     add_header(slide, title, "PulseHR / Calculated workforce report")
     table = slide.shapes.add_table(len(rows) + 1, len(headers), Inches(.8), Inches(1.8), Inches(11.7), Inches(.48 * (len(rows) + 1))).table
-    for ri, values in enumerate([headers, *rows]):
+    display_headers = [format_display_label(h) for h in headers]
+    for ri, values in enumerate([display_headers, *rows]):
         for ci, value in enumerate(values):
             cell = table.cell(ri, ci)
             cell.fill.solid()
