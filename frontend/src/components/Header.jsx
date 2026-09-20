@@ -1,14 +1,24 @@
 import React from "react";
-import { LayoutDashboard, Table, BrainCircuit, Presentation, UploadCloud, Download, FileText } from "lucide-react";
-import { triggerPresentationGeneration, openExecutivePrintReport } from "../api/client";
+import {
+  LayoutDashboard,
+  Table,
+  BrainCircuit,
+  UploadCloud,
+  FileText,
+  Sparkles,
+  RotateCw,
+  Presentation
+} from "lucide-react";
+import { openExecutivePrintReport } from "../api/client";
 
-export default function Header({ activeTab, onSelectTab }) {
+export default function Header({ activeTab, onSelectTab, onOpenPresentationModal, activeJob }) {
   const tabs = [
     { id: "overview", label: "Executive Overview", short: "Overview", icon: LayoutDashboard },
     { id: "explorer", label: "Data Explorer", short: "Explore", icon: Table },
-    { id: "presentations", label: "Presentations", short: "Reports", icon: Presentation },
     { id: "ingestion", label: "Ingestion Studio", short: "Upload", icon: UploadCloud }
   ];
+
+  const isJobRunning = activeJob && (activeJob.status === "in_progress" || activeJob.status === "pending");
 
   return (
     <header className="app-header">
@@ -51,15 +61,25 @@ export default function Header({ activeTab, onSelectTab }) {
             <FileText size={15} />
             <span>PDF Report</span>
           </button>
+
           <button
             type="button"
-            className="btn-primary"
-            onClick={() => triggerPresentationGeneration().catch(err => window.alert(err.message))}
-            title="Export PowerPoint (.pptx) Presentation"
-            aria-label="Export PowerPoint"
+            className={`btn-primary btn-create-pres ${isJobRunning ? "is-generating" : ""}`}
+            onClick={onOpenPresentationModal}
+            title="Launch AI-Assisted Presentation Pipeline"
+            aria-label="Create presentation"
           >
-            <Download size={15} />
-            <span>Export .PPTX</span>
+            {isJobRunning ? (
+              <>
+                <RotateCw size={15} className="spin-icon" />
+                <span>Generating {activeJob.progress_pct || 0}%</span>
+              </>
+            ) : (
+              <>
+                <Sparkles size={15} />
+                <span>Create presentation</span>
+              </>
+            )}
           </button>
         </div>
       </div>

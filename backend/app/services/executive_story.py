@@ -169,7 +169,7 @@ def profile_sheet_data(records: list[dict], columns: list[str], sheet_name: str 
             'median': round(col_median, 2),
             'min': round(col_min, 2),
             'max': round(col_max, 2),
-            'sum': round(col_sum, 1) if unit in ('days', 'hrs', 'count', '$') else None
+            'sum': round(col_sum, 1)
         })
 
         # Bar chart grouped by primary_cat
@@ -318,16 +318,18 @@ def profile_sheet_data(records: list[dict], columns: list[str], sheet_name: str 
                 'tone': 'warning' if gt_3 > 0 else 'good'
             })
         elif any(k in c_lower for k in ('sales', 'weeklysales', 'revenue', 'volume', 'amount', 'profit')):
+            s_val = m.get('sum') or 0
             thresholds.append({
                 'label': f'Total {col}',
-                'value': f"${m['sum']:,.0f}" if mean_v > 100 else f"{m['sum']:,.0f} units",
+                'value': f"${s_val:,.0f}" if mean_v > 100 else f"{s_val:,.0f} units",
                 'sub': f"Average: ${mean_v:,.2f} · Peak: ${m['max']:,.2f}" if mean_v > 100 else f"Average: {mean_v} · Peak: {m['max']}",
                 'tone': 'good'
             })
         elif 'overtime' in c_lower or 'hours' in c_lower:
+            s_val = m.get('sum') or 0
             thresholds.append({
                 'label': f'Total {col}',
-                'value': f"{m['sum']} {u}",
+                'value': f"{s_val} {u}",
                 'sub': f"Average {mean_v} {u} per record",
                 'tone': 'warning' if mean_v > 10 else 'neutral'
             })

@@ -203,3 +203,94 @@ export async function investigateEvidence(rawTarget = {}) {
   return res.json();
 }
 
+export async function getPresentationThemes() {
+  const res = await fetch(`${API_BASE}/presentations/themes`);
+  if (!res.ok) throw new Error("Failed to load presentation themes");
+  return res.json();
+}
+
+export async function startPresentationGeneration(scope) {
+  const res = await fetch(`${API_BASE}/presentations/generate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(scope),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Failed to start presentation generation");
+  }
+  return res.json();
+}
+
+export async function getPresentationJob(jobId) {
+  const res = await fetch(`${API_BASE}/presentations/jobs/${jobId}`);
+  if (!res.ok) throw new Error("Failed to fetch presentation job status");
+  return res.json();
+}
+
+export async function cancelPresentationJob(jobId) {
+  const res = await fetch(`${API_BASE}/presentations/jobs/${jobId}/cancel`, {
+    method: "POST"
+  });
+  if (!res.ok) throw new Error("Failed to cancel presentation job");
+  return res.json();
+}
+
+export async function getPresentationDeck(deckId) {
+  const res = await fetch(`${API_BASE}/presentations/decks/${deckId}`);
+  if (!res.ok) throw new Error("Failed to load presentation deck");
+  return res.json();
+}
+
+export async function updatePresentationDeck(deckId, deckSpec) {
+  const res = await fetch(`${API_BASE}/presentations/decks/${deckId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(deckSpec)
+  });
+  if (!res.ok) throw new Error("Failed to save presentation deck");
+  return res.json();
+}
+
+export async function regenerateSlide(deckSpec, slideId, prompt) {
+  const res = await fetch(`${API_BASE}/presentations/regenerate-slide`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ deck_spec: deckSpec, slide_id: slideId, prompt })
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Failed to regenerate slide");
+  }
+  return res.json();
+}
+
+export async function exportPresentationPptx(deckSpec) {
+  const res = await fetch(`${API_BASE}/presentations/export-pptx`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ deck_spec: deckSpec })
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Failed to export PowerPoint");
+  }
+  const blob = await res.blob();
+  const filename = `${deckSpec.metadata?.title?.replace(/[^a-zA-Z0-9_-]/g, "_") || "Presentation"}.pptx`;
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(url);
+}
+
+export async function getPresentationDecks() {
+  const res = await fetch(`${API_BASE}/presentations/decks`);
+  if (!res.ok) throw new Error("Failed to load saved presentations");
+  return res.json();
+}
+
+

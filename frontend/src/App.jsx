@@ -5,12 +5,12 @@ import EmployeeDrawer from "./components/EmployeeDrawer.jsx";
 import GlobalCopilotWidget from "./components/GlobalCopilotWidget.jsx";
 import OverviewPage from "./pages/OverviewPage.jsx";
 import DataExplorerPage from "./pages/DataExplorerPage.jsx";
-import PresentationsPage from "./pages/PresentationsPage.jsx";
 import IngestionPage from "./pages/IngestionPage.jsx";
+import CreatePresentationModal from "./components/CreatePresentationModal.jsx";
 
 function parseHash() {
   const hash = window.location.hash.replace("#", "").trim();
-  const valid = ["overview", "explorer", "presentations", "ingestion"];
+  const valid = ["overview", "explorer", "ingestion"];
   return valid.includes(hash) ? hash : "overview";
 }
 
@@ -19,11 +19,19 @@ export default function App() {
   const [selectedEmployeeId, setSelectedEmployeeId] = useState(null);
   const [copilotOpen, setCopilotOpen] = useState(() => window.location.hash.replace("#", "").trim() === "copilot");
 
+  // Presentation Pipeline Modal & Job State
+  const [presentationModalOpen, setPresentationModalOpen] = useState(false);
+  const [activePresentationJob, setActivePresentationJob] = useState(null);
+  const [activeDeck, setActiveDeck] = useState(null);
+
   useEffect(() => {
     const handleHashChange = () => {
       const h = window.location.hash.replace("#", "").trim();
       if (h === "copilot") {
         setCopilotOpen(true);
+        setActiveTab("overview");
+      } else if (h === "presentation" || h === "presentations") {
+        setPresentationModalOpen(true);
         setActiveTab("overview");
       } else {
         setActiveTab(parseHash());
@@ -40,6 +48,10 @@ export default function App() {
       setCopilotOpen(true);
       return;
     }
+    if (tab === "presentation" || tab === "presentations") {
+      setPresentationModalOpen(true);
+      return;
+    }
     window.location.hash = tab;
     setActiveTab(tab);
   };
@@ -47,7 +59,12 @@ export default function App() {
   return (
     <div className="app">
       <a className="skip-link" href="#main-content" onClick={e => { e.preventDefault(); document.getElementById("main-content")?.focus(); }}>Skip to content</a>
-      <Header activeTab={activeTab} onSelectTab={handleSelectTab} />
+      <Header
+        activeTab={activeTab}
+        onSelectTab={handleSelectTab}
+        onOpenPresentationModal={() => setPresentationModalOpen(true)}
+        activeJob={activePresentationJob}
+      />
 
       <main id="main-content" className="app-main" tabIndex={-1}>
         {activeTab === "overview" && (
@@ -61,15 +78,26 @@ export default function App() {
             onSelectEmployee={setSelectedEmployeeId}
           />
         )}
-        {activeTab === "presentations" && (
-          <PresentationsPage />
-        )}
         {activeTab === "ingestion" && (
           <IngestionPage />
         )}
       </main>
 
       <Footer />
+
+      {/* AI Presentation Pipeline & Studio Modal */}
+      <CreatePresentationModal
+        isOpen={presentationModalOpen}
+        onClose={() => setPresentationModalOpen(false)}
+        activeJobId={activePresentationJob?.job_id}
+        initialDeck={activeDeck}
+        onJobUpdate={job => {
+          setActivePresentationJob(job);
+          if (job?.deck) {
+            setActiveDeck(job.deck);
+          }
+        }}
+      />
 
       {/* Global Right-Side Floating Copilot Widget */}
       <GlobalCopilotWidget

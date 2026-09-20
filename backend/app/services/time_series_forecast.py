@@ -49,7 +49,7 @@ def infer_measure_unit(col_name: str) -> str:
         return 'hrs'
     if any(k in c_lower for k in ('day', 'days')):
         return 'days'
-    if any(k in c_lower for k in ('salary', 'compensation', 'pay', 'bonus', 'wage', 'cost')):
+    if any(k in c_lower for k in ('salary', 'compensation', 'pay', 'bonus', 'wage', 'cost', 'sales', 'revenue', 'price', 'spend')):
         return '$'
     if any(k in c_lower for k in ('count', 'headcount', 'volume', 'hires', 'candidates', 'applications')):
         return 'count'

@@ -132,3 +132,29 @@ CREATE TABLE IF NOT EXISTS executive_narratives (
 );
 CREATE INDEX IF NOT EXISTS idx_narratives_target ON executive_narratives(target_type, target_id);
 
+CREATE TABLE IF NOT EXISTS presentation_decks (
+    id TEXT PRIMARY KEY, -- 'deck_xxx'
+    title TEXT NOT NULL,
+    dataset_id INTEGER,
+    sheet_id INTEGER,
+    theme_id TEXT NOT NULL DEFAULT 'executive_dark',
+    spec_json TEXT NOT NULL,
+    pptx_filename TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS presentation_jobs (
+    id TEXT PRIMARY KEY, -- 'pres_job_xxx'
+    status TEXT NOT NULL, -- 'pending', 'in_progress', 'ready', 'failed', 'cancelled'
+    stage TEXT NOT NULL, -- 'collecting_findings', 'planning_outline', 'preparing_charts', 'building_slides', 'verifying_facts', 'ready', 'failed', 'cancelled'
+    stage_label TEXT NOT NULL,
+    progress_pct INTEGER NOT NULL DEFAULT 0,
+    deck_id TEXT REFERENCES presentation_decks(id),
+    error TEXT,
+    scope_json TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+
