@@ -11,7 +11,8 @@ export default function PresentationRevealDeck({
   activeSlideIndex = 0,
   onSlideChange = () => {},
   isEditable = false,
-  onUpdateSlide = () => {}
+  onUpdateSlide = () => {},
+  onViewEvidence = () => {}
 }) {
   const deckRef = useRef(null);
   const revealInstance = useRef(null);
@@ -138,6 +139,7 @@ export default function PresentationRevealDeck({
               theme={theme}
               isEditable={isEditable}
               onUpdate={updated => onUpdateSlide(activeSlideIndex, updated)}
+              onViewEvidence={onViewEvidence}
             />
           )}
         </div>
@@ -193,6 +195,7 @@ export default function PresentationRevealDeck({
                   theme={theme}
                   isEditable={isEditable && activeSlideIndex === idx}
                   onUpdate={updated => onUpdateSlide(idx, updated)}
+                  onViewEvidence={onViewEvidence}
                 />
               </section>
             ))}

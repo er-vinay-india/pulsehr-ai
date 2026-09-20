@@ -91,6 +91,7 @@ export default function App() {
         onClose={() => setPresentationModalOpen(false)}
         activeJobId={activePresentationJob?.job_id || activePresentationJob?.id}
         initialDeck={activeDeck}
+        initialScopeType={activeTab === "overview" ? "workspace" : "workspace"}
         onJobUpdate={job => {
           setActivePresentationJob(job);
           if (job?.deck) {

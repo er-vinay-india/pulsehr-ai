@@ -20,7 +20,14 @@ import {
   AlertTriangle,
   Layers,
   ChevronRight,
-  RefreshCw
+  RefreshCw,
+  Database,
+  Link2,
+  CheckSquare,
+  Square,
+  ShieldCheck,
+  Info,
+  Calendar
 } from "lucide-react";
 import {
   getPresentationThemes,
@@ -31,17 +38,20 @@ import {
   getSheets,
   updatePresentationDeck,
   regenerateSlide,
-  exportPresentationPptx
+  exportPresentationPptx,
+  previewPresentationScope
 } from "../api/client";
 import PresentationRevealDeck from "./PresentationRevealDeck.jsx";
+import EvidenceInspectionDrawer from "./EvidenceInspectionDrawer.jsx";
 
 const STAGES = [
-  { id: "collecting_findings", label: "Collecting Findings", desc: "Capturing verified metrics & dataset snapshot" },
-  { id: "planning_outline", label: "Planning Outline", desc: "Structuring domain-aware presentation narrative" },
-  { id: "preparing_charts", label: "Preparing Charts", desc: "Extracting Top 10 rankings, trends & KPI metrics" },
-  { id: "building_slides", label: "Building Slides", desc: "Assembling executive slide layouts & content runs" },
-  { id: "verifying_facts", label: "Verifying Facts", desc: "Auditing deterministic numbers & styling standards" },
-  { id: "ready", label: "Ready to Review", desc: "Generating native editable PowerPoint export" }
+  { id: "reviewing_coverage", label: "Reviewing Coverage", desc: "Evaluating eligible datasets, boundaries & date ranges" },
+  { id: "validating_relationships", label: "Validating Relationships", desc: "Checking cross-sheet link integrity & foreign keys" },
+  { id: "collecting_findings", label: "Collecting Findings", desc: "Capturing executive findings & freezing evidence ledger" },
+  { id: "synthesizing_outcomes", label: "Synthesizing Outcomes", desc: "Computing macro operational outcomes & benchmarks" },
+  { id: "building_slides", label: "Building Slides", desc: "Assembling executive slide deck layouts & visual charts" },
+  { id: "verifying_claims", label: "Verifying Claims", desc: "Auditing deterministic claim numbers (±0.1%)" },
+  { id: "ready", label: "Ready to Review", desc: "Presentation sealed with cryptographic snapshot hash" }
 ];
 
 export default function CreatePresentationModal({
@@ -49,16 +59,24 @@ export default function CreatePresentationModal({
   onClose,
   activeJobId = null,
   initialDeck = null,
+  initialScopeType = "workspace",
   onJobUpdate = () => {}
 }) {
   const [viewMode, setViewMode] = useState("config"); // "config" | "generating" | "studio"
   const [themes, setThemes] = useState([]);
   const [sheets, setSheets] = useState([]);
 
-  // Config form state
+  // Scope form state
+  const [scopeType, setScopeType] = useState(initialScopeType); // "workspace" | "connected_group" | "custom_sheets" | "single_sheet"
+  const [selectedGroupId, setSelectedGroupId] = useState("");
+  const [customSheetIds, setCustomSheetIds] = useState([]);
+  const [scopePreview, setScopePreview] = useState(null);
+  const [isLoadingPreview, setIsLoadingPreview] = useState(false);
+
+  // Core config form state
   const [objective, setObjective] = useState("Executive Leadership Review");
   const [audience, setAudience] = useState("C-Suite & Operations Leadership");
-  const [targetLength, setTargetLength] = useState(6);
+  const [targetLength, setTargetLength] = useState(8);
   const [selectedThemeId, setSelectedThemeId] = useState("executive_dark");
   const [selectedSheetId, setSelectedSheetId] = useState("");
   const [instructions, setInstructions] = useState("");
@@ -67,7 +85,7 @@ export default function CreatePresentationModal({
   // Job progress state
   const [currentJobId, setCurrentJobId] = useState(activeJobId);
   const [jobProgress, setJobProgress] = useState(0);
-  const [jobStage, setJobStage] = useState("collecting_findings");
+  const [jobStage, setJobStage] = useState("reviewing_coverage");
   const [jobStageLabel, setJobStageLabel] = useState("Initiating pipeline...");
   const [jobError, setJobError] = useState(null);
 
@@ -79,6 +97,10 @@ export default function CreatePresentationModal({
   const [regeneratePrompt, setRegeneratePrompt] = useState("");
   const [showRegenModal, setShowRegenModal] = useState(false);
   const [speakerNotesOpen, setSpeakerNotesOpen] = useState(true);
+
+  // Evidence Inspection Drawer state
+  const [isEvidenceDrawerOpen, setIsEvidenceDrawerOpen] = useState(false);
+  const [selectedEvidenceSlide, setSelectedEvidenceSlide] = useState(null);
 
   // Poll timer
   const pollTimerRef = useRef(null);
@@ -100,10 +122,46 @@ export default function CreatePresentationModal({
           if (!selectedSheetId) {
             setSelectedSheetId(String(res.sheets[0].id));
           }
+          setCustomSheetIds(res.sheets.map(s => String(s.id)));
         }
       })
       .catch(console.error);
   }, [isOpen]);
+
+  // 2. Preflight Scope Preview live auditor
+  useEffect(() => {
+    if (!isOpen || viewMode !== "config") return;
+
+    let isMounted = true;
+    setIsLoadingPreview(true);
+
+    const payload = {
+      scope_type: scopeType,
+      sheet_id: selectedSheetId ? Number(selectedSheetId) : null,
+      sheet_ids: scopeType === "custom_sheets" ? customSheetIds.map(Number) : [],
+      group_id: scopeType === "connected_group" && selectedGroupId !== "" ? Number(selectedGroupId) : null
+    };
+
+    previewPresentationScope(payload)
+      .then(res => {
+        if (isMounted) {
+          setScopePreview(res);
+          if (res.connected_groups && res.connected_groups.length > 0 && selectedGroupId === "") {
+            setSelectedGroupId(String(res.connected_groups[0].group_id));
+          }
+        }
+      })
+      .catch(err => {
+        console.warn("Preflight scope preview error:", err);
+      })
+      .finally(() => {
+        if (isMounted) setIsLoadingPreview(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isOpen, viewMode, scopeType, selectedSheetId, customSheetIds, selectedGroupId]);
 
   // 2. Initial viewMode determination
   useEffect(() => {
@@ -196,14 +254,17 @@ export default function CreatePresentationModal({
         audience,
         target_length: Number(targetLength),
         theme_id: selectedThemeId,
+        scope_type: scopeType,
         sheet_id: selectedSheetId ? Number(selectedSheetId) : null,
+        sheet_ids: scopeType === "custom_sheets" ? customSheetIds.map(Number) : [],
+        group_id: scopeType === "connected_group" && selectedGroupId !== "" ? Number(selectedGroupId) : null,
         instructions
       };
       const res = await startPresentationGeneration(scope);
       setCurrentJobId(res.job_id);
       setJobProgress(5);
-      setJobStage("collecting_findings");
-      setJobStageLabel("Initiating presentation generation pipeline...");
+      setJobStage("reviewing_coverage");
+      setJobStageLabel("Initiating workspace presentation pipeline...");
       setViewMode("generating");
       onJobUpdate({ ...res, progress_pct: 5 });
     } catch (err) {
@@ -428,8 +489,203 @@ export default function CreatePresentationModal({
         {viewMode === "config" && (
           <div className="pres-config-body">
             <div className="config-form-grid">
-              {/* Left Column: Core Parameters */}
+              {/* Left Column: Scope & Core Parameters */}
               <div className="config-col">
+                {/* PRESENTATION SCOPE SELECTION */}
+                <div className="form-group">
+                  <label className="section-label">Presentation Scope</label>
+                  <div className="scope-selection-grid">
+                    {[
+                      {
+                        id: "workspace",
+                        title: "Executive Workspace Summary",
+                        desc: "All eligible datasets & validated relationships",
+                        icon: Layers
+                      },
+                      {
+                        id: "connected_group",
+                        title: "Selected Connected Group",
+                        desc: "Related sheets linked by validated keys",
+                        icon: Link2
+                      },
+                      {
+                        id: "custom_sheets",
+                        title: "Selected Sheets",
+                        desc: "Custom multi-sheet comparison",
+                        icon: CheckSquare
+                      },
+                      {
+                        id: "single_sheet",
+                        title: "Single Sheet",
+                        desc: "Focused deep dive on one dataset",
+                        icon: Database
+                      }
+                    ].map(opt => {
+                      const isSelected = scopeType === opt.id;
+                      const IconComp = opt.icon;
+                      return (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          className={`scope-option-card ${isSelected ? "selected" : ""}`}
+                          onClick={() => setScopeType(opt.id)}
+                        >
+                          <div className="scope-card-top">
+                            <IconComp size={15} className="scope-icon" />
+                            <span className="scope-title">{opt.title}</span>
+                            {isSelected && <CheckCircle2 size={14} className="scope-check" />}
+                          </div>
+                          <span className="scope-desc">{opt.desc}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* SCOPE-DEPENDENT DATASET PICKERS */}
+                {scopeType === "single_sheet" && (
+                  <div className="form-group">
+                    <label htmlFor="pres-sheet">Source Dataset / Sheet</label>
+                    <select
+                      id="pres-sheet"
+                      className="form-select"
+                      value={selectedSheetId}
+                      onChange={e => setSelectedSheetId(e.target.value)}
+                    >
+                      {sheets.map(s => (
+                        <option key={s.id} value={s.id}>
+                          {s.name} ({s.row_count.toLocaleString()} rows)
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {scopeType === "connected_group" && (
+                  <div className="form-group">
+                    <label htmlFor="pres-group">Select Connected Group</label>
+                    {scopePreview?.connected_groups && scopePreview.connected_groups.length > 0 ? (
+                      <select
+                        id="pres-group"
+                        className="form-select"
+                        value={selectedGroupId}
+                        onChange={e => setSelectedGroupId(e.target.value)}
+                      >
+                        {scopePreview.connected_groups.map(g => (
+                          <option key={g.group_id} value={g.group_id}>
+                            Group {g.group_id + 1}: {g.sheet_names.join(" + ")} ({g.total_rows.toLocaleString()} rows)
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <div className="empty-group-note">
+                        <span>No multi-sheet relationships detected. Evaluated within individual group boundaries.</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {scopeType === "custom_sheets" && (
+                  <div className="form-group">
+                    <label>Choose Sheets to Include ({customSheetIds.length} of {sheets.length} selected)</label>
+                    <div className="custom-sheets-checklist">
+                      {sheets.map(s => {
+                        const isChecked = customSheetIds.includes(String(s.id));
+                        return (
+                          <label key={s.id} className={`sheet-checkbox-row ${isChecked ? "checked" : ""}`}>
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={e => {
+                                if (e.target.checked) {
+                                  setCustomSheetIds([...customSheetIds, String(s.id)]);
+                                } else {
+                                  setCustomSheetIds(customSheetIds.filter(id => id !== String(s.id)));
+                                }
+                              }}
+                            />
+                            <span className="sheet-check-name">{s.name}</span>
+                            <span className="sheet-check-rows">{s.row_count.toLocaleString()} rows</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* LIVE PREFLIGHT AUDIT CARD */}
+                <div className="preflight-summary-card">
+                  <div className="preflight-header">
+                    <div className="preflight-title">
+                      <ShieldCheck size={14} style={{ color: "#8ef0c8" }} />
+                      <span>Preflight Scope &amp; Integrity Audit</span>
+                    </div>
+                    {isLoadingPreview ? (
+                      <span className="preflight-status loading">
+                        <RotateCw size={11} className="spin-icon" /> Auditing...
+                      </span>
+                    ) : (
+                      <span className="preflight-status ready">Verified Scope</span>
+                    )}
+                  </div>
+
+                  {scopePreview ? (
+                    <div className="preflight-details-stack">
+                      <div className="preflight-row">
+                        <span className="preflight-lbl">
+                          <Database size={12} /> Sources:
+                        </span>
+                        <span className="preflight-val">
+                          {scopePreview.included_sheets?.length || 0} datasets ({(scopePreview.total_records || 0).toLocaleString()} rows)
+                        </span>
+                      </div>
+
+                      <div className="preflight-row">
+                        <span className="preflight-lbl">
+                          <Calendar size={12} /> Period:
+                        </span>
+                        <span className="preflight-val">
+                          {scopePreview.reporting_period_summary || "Complete timeline"}
+                        </span>
+                      </div>
+
+                      {scopePreview.is_partial_year && (
+                        <div className="preflight-warning-pill">
+                          <AlertTriangle size={12} />
+                          <span>Partial Year Disclosure Active (&lt; 330 days in cycle)</span>
+                        </div>
+                      )}
+
+                      <div className="preflight-row">
+                        <span className="preflight-lbl">
+                          <Link2 size={12} /> Relationships:
+                        </span>
+                        <span className="preflight-val">
+                          {scopePreview.validated_relationships?.length || 0} validated links ({scopePreview.relationship_coverage_pct || 100}% coverage)
+                        </span>
+                      </div>
+
+                      {scopePreview.disconnected_boundary_note && (
+                        <div className="preflight-boundary-note">
+                          <Info size={12} />
+                          <span>{scopePreview.disconnected_boundary_note}</span>
+                        </div>
+                      )}
+
+                      {scopePreview.exclusions && scopePreview.exclusions.length > 0 && (
+                        <div className="preflight-exclusions">
+                          <span className="exclusions-lbl">Excluded:</span>
+                          <span className="exclusions-val">
+                            {scopePreview.exclusions.map(ex => `${ex.name} (${ex.reason})`).join("; ")}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="preflight-skeleton">Evaluating workspace datasets and relational coverage...</div>
+                  )}
+                </div>
+
                 <div className="form-group">
                   <label htmlFor="pres-obj">Presentation Objective / Topic</label>
                   <input
@@ -438,22 +694,22 @@ export default function CreatePresentationModal({
                     className="form-input"
                     value={objective}
                     onChange={e => setObjective(e.target.value)}
-                    placeholder="e.g. Executive Sales Performance & Seasonal Peak Review"
+                    placeholder="e.g. Executive Operations & Performance Review"
                   />
                   <div className="quick-suggestions">
+                    <button
+                      type="button"
+                      className="suggestion-tag"
+                      onClick={() => setObjective("Consolidated Executive Operations & Performance Review")}
+                    >
+                      Consolidated Executive
+                    </button>
                     <button
                       type="button"
                       className="suggestion-tag"
                       onClick={() => setObjective("Executive Store Revenue & Seasonal Sales Variance")}
                     >
                       Sales Variance
-                    </button>
-                    <button
-                      type="button"
-                      className="suggestion-tag"
-                      onClick={() => setObjective("Operational Throughput & Leader Benchmarks")}
-                    >
-                      Store Leaderboard
                     </button>
                     <button
                       type="button"
@@ -495,22 +751,6 @@ export default function CreatePresentationModal({
                       <option value="10">10 Slides (Detailed Deep Dive)</option>
                     </select>
                   </div>
-                </div>
-
-                <div className="form-group">
-                  <label htmlFor="pres-sheet">Source Dataset / Sheet</label>
-                  <select
-                    id="pres-sheet"
-                    className="form-select"
-                    value={selectedSheetId}
-                    onChange={e => setSelectedSheetId(e.target.value)}
-                  >
-                    {sheets.map(s => (
-                      <option key={s.id} value={s.id}>
-                        {s.name} ({s.row_count.toLocaleString()} rows)
-                      </option>
-                    ))}
-                  </select>
                 </div>
 
                 <div className="form-group">
@@ -760,9 +1000,42 @@ export default function CreatePresentationModal({
                     ))}
                   </select>
                 </div>
+
+                {deckSpec.metadata?.validation_summary && (
+                  <div
+                    className={`validation-summary-chip ${deckSpec.metadata.validation_summary.status === "passed" ? "verified" : "flagged"}`}
+                    title={`Claim Verification: ${deckSpec.metadata.validation_summary.passed_verification} of ${deckSpec.metadata.validation_summary.total_metrics_checked} verified within ±0.1%`}
+                  >
+                    <ShieldCheck size={13} />
+                    <span>
+                      {deckSpec.metadata.validation_summary.status === "passed"
+                        ? `Verified (±0.1%) · ${deckSpec.metadata.validation_summary.passed_verification}/${deckSpec.metadata.validation_summary.total_metrics_checked} Passed`
+                        : `${deckSpec.metadata.validation_summary.discrepancies_flagged?.length || 1} Discrepancy Flagged`}
+                    </span>
+                  </div>
+                )}
+
+                {deckSpec.metadata?.snapshot_hash && (
+                  <span className="snapshot-seal-chip" title={`Cryptographic Snapshot Hash: ${deckSpec.metadata.snapshot_hash}`}>
+                    SHA256: {deckSpec.metadata.snapshot_hash.slice(0, 8)}...
+                  </span>
+                )}
               </div>
 
               <div className="toolbar-right">
+                <button
+                  type="button"
+                  className={`btn-ghost-sm ${isEvidenceDrawerOpen ? "active" : ""}`}
+                  onClick={() => {
+                    setSelectedEvidenceSlide(deckSpec.slides[activeSlideIndex]);
+                    setIsEvidenceDrawerOpen(true);
+                  }}
+                  title="Audit calculation methodology, board briefing & reproducible audit ledger"
+                >
+                  <ShieldCheck size={14} />
+                  <span>Audit Evidence</span>
+                </button>
+
                 <button
                   type="button"
                   className={`btn-ghost-sm ${speakerNotesOpen ? "active" : ""}`}
@@ -854,6 +1127,10 @@ export default function CreatePresentationModal({
                   onSlideChange={setActiveSlideIndex}
                   isEditable={true}
                   onUpdateSlide={handleUpdateSlide}
+                  onViewEvidence={(slide) => {
+                    setSelectedEvidenceSlide(slide);
+                    setIsEvidenceDrawerOpen(true);
+                  }}
                 />
 
                 {/* BOTTOM SPEAKER NOTES DRAWER */}
@@ -938,6 +1215,21 @@ export default function CreatePresentationModal({
             </div>
           </div>
         )}
+
+        {/* EVIDENCE INSPECTION DRAWER */}
+        <EvidenceInspectionDrawer
+          isOpen={isEvidenceDrawerOpen}
+          onClose={() => setIsEvidenceDrawerOpen(false)}
+          slide={selectedEvidenceSlide || deckSpec?.slides?.[activeSlideIndex]}
+          evidenceLedger={deckSpec?.metadata?.evidence_ledger || []}
+          snapshotHash={deckSpec?.metadata?.snapshot_hash}
+          validationSummary={deckSpec?.metadata?.validation_summary}
+          allSlides={deckSpec?.slides || []}
+          onSelectSlide={(idx) => {
+            setActiveSlideIndex(idx);
+            setSelectedEvidenceSlide(deckSpec?.slides?.[idx]);
+          }}
+        />
       </div>
     </div>
   );

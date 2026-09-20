@@ -14,6 +14,8 @@ from ..services.presentation_service import (
     job_manager,
     start_presentation_job,
     regenerate_single_slide,
+    preview_presentation_scope,
+    verify_presentation_claims,
 )
 from ..services.report_generator import export_spec_to_pptx
 
@@ -27,8 +29,22 @@ class GeneratePresentationRequest(BaseModel):
     audience: str | None = "C-Suite & Operations Leadership"
     target_length: int | None = 6
     theme_id: str | None = "executive_dark"
+    scope_type: str | None = "workspace"  # "workspace" | "connected_group" | "custom_sheets" | "single_sheet"
     sheet_id: int | None = None
+    sheet_ids: list[int] | None = None
+    group_id: str | None = None
     instructions: str | None = ""
+
+
+class ScopePreviewRequest(BaseModel):
+    scope_type: str | None = "workspace"
+    sheet_id: int | None = None
+    sheet_ids: list[int] | None = None
+    group_id: str | None = None
+
+
+class RevalidateRequest(BaseModel):
+    deck_spec: dict[str, Any]
 
 
 class RegenerateSlideRequest(BaseModel):
@@ -47,15 +63,26 @@ def get_themes():
     return {"themes": list(THEMES.values())}
 
 
+@router.post("/scope-preview")
+def get_scope_preview(req: ScopePreviewRequest):
+    """Preflights presentation scope, reporting periods, partial-year status, and relationship coverage."""
+    with get_connection() as conn:
+        res = preview_presentation_scope(conn, req.model_dump())
+    return res
+
+
 @router.post("/generate")
 def start_presentation_generation(req: GeneratePresentationRequest):
-    """Spawns an asynchronous 6-stage presentation generation job."""
+    """Spawns an asynchronous 7-stage presentation generation job."""
     scope = {
         "objective": req.objective or "Executive Leadership Review",
         "audience": req.audience or "C-Suite & Operations Leadership",
         "target_length": req.target_length or 6,
         "theme_id": req.theme_id or "executive_dark",
+        "scope_type": req.scope_type or "workspace",
         "sheet_id": req.sheet_id,
+        "sheet_ids": req.sheet_ids or [],
+        "group_id": req.group_id,
         "instructions": req.instructions or "",
     }
     job_id = start_presentation_job(scope)
@@ -63,10 +90,35 @@ def start_presentation_generation(req: GeneratePresentationRequest):
     return {
         "job_id": job_id,
         "status": "in_progress",
-        "stage": "collecting_findings",
-        "progress": 5,
-        "message": "Initiating analytical presentation pipeline...",
+        "stage": "reviewing_coverage",
+        "progress": 15,
+        "message": "Initiating 7-stage analytical presentation pipeline...",
     }
+
+
+@router.get("/decks/{deck_id}/evidence")
+def get_deck_evidence(deck_id: str):
+    """Returns the frozen evidence ledger, snapshot hash, and claim verification summary."""
+    with get_connection() as conn:
+        row = conn.execute("SELECT spec_json FROM presentation_decks WHERE id = ?", (deck_id,)).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Presentation deck not found")
+    spec = json.loads(row["spec_json"])
+    return {
+        "deck_id": deck_id,
+        "snapshot_hash": spec.get("metadata", {}).get("data_snapshot_hash"),
+        "validation_summary": spec.get("metadata", {}).get("validation_summary"),
+        "evidence_ledger": spec.get("evidence_ledger", [])
+    }
+
+
+@router.post("/revalidate")
+def revalidate_deck_claims(req: RevalidateRequest):
+    """Deterministically re-verifies all slide numerical claims against the evidence ledger within +/- 0.1%."""
+    deck_spec = req.deck_spec
+    ledger = deck_spec.get("evidence_ledger", [])
+    res = verify_presentation_claims(deck_spec, ledger)
+    return res
 
 
 @router.get("/jobs/{job_id}")

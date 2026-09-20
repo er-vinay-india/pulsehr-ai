@@ -209,6 +209,19 @@ export async function getPresentationThemes() {
   return res.json();
 }
 
+export async function previewPresentationScope(scope) {
+  const res = await fetch(`${API_BASE}/presentations/scope-preview`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(scope),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Failed to preview presentation scope");
+  }
+  return res.json();
+}
+
 export async function startPresentationGeneration(scope) {
   const res = await fetch(`${API_BASE}/presentations/generate`, {
     method: "POST",
@@ -219,6 +232,22 @@ export async function startPresentationGeneration(scope) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.detail || "Failed to start presentation generation");
   }
+  return res.json();
+}
+
+export async function getPresentationDeckEvidence(deckId) {
+  const res = await fetch(`${API_BASE}/presentations/decks/${deckId}/evidence`);
+  if (!res.ok) throw new Error("Failed to load presentation evidence ledger");
+  return res.json();
+}
+
+export async function revalidatePresentationDeck(deckSpec) {
+  const res = await fetch(`${API_BASE}/presentations/revalidate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ deck_spec: deckSpec }),
+  });
+  if (!res.ok) throw new Error("Failed to revalidate presentation deck claims");
   return res.json();
 }
 

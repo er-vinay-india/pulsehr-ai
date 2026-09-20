@@ -85,9 +85,15 @@ def _save_deck(prs) -> Path:
 def _render_footer(slide, slide_data, colors):
     sources = slide_data.get("evidence_sources", [])
     limitations = slide_data.get("limitations")
+    evidence_id = slide_data.get("evidence_id")
+    is_partial = slide_data.get("is_partial_year")
     parts = []
+    if evidence_id:
+        parts.append(f"[{evidence_id}]")
     if sources:
         parts.append(f"Evidence: {', '.join(str(s) for s in sources)}")
+    if is_partial:
+        parts.append("Partial Year Data")
     if limitations:
         parts.append(f"Scope: {limitations}")
     if not parts:
@@ -97,7 +103,7 @@ def _render_footer(slide, slide_data, colors):
     tf = footer_box.text_frame
     tf.word_wrap = True
     p = tf.paragraphs[0]
-    p.text = " | ".join(parts)[:140]
+    p.text = " | ".join(parts)[:160]
     p.font.size = Pt(9)
     p.font.color.rgb = colors["secondary"]
 

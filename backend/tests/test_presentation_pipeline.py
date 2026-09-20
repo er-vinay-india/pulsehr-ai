@@ -168,7 +168,7 @@ def test_presentation_job_manager_cancellation():
 
     job = manager.get_job(job_id)
     assert job["status"] in ("in_progress", "pending")
-    assert job["stage"] in ("collecting_findings", "queued")
+    assert job["stage"] in ("reviewing_coverage", "collecting_findings", "queued")
 
     manager.update_stage(job_id, "planning_outline", "Structuring presentation slides", 35)
     job = manager.get_job(job_id)
@@ -193,22 +193,33 @@ def test_presentations_api_endpoints():
     themes = res.json()["themes"]
     assert len(themes) == 4
 
-    # 2. Start generation job
+    # 2. Scope preview
+    prev_res = client.post("/api/presentations/scope-preview", json={
+        "scope_type": "workspace"
+    })
+    assert prev_res.status_code == 200
+    prev_data = prev_res.json()
+    assert prev_data["eligible"] is True
+    assert prev_data["total_included_sheets"] >= 1
+    assert "reporting_period_summary" in prev_data
+
+    # 3. Start generation job with scope
     res = client.post("/api/presentations/generate", json={
         "objective": "API Integration Test",
         "theme_id": "clean_light",
-        "sheet_id": sheet_id
+        "scope_type": "workspace"
     })
     assert res.status_code == 200
     job_id = res.json()["job_id"]
     assert job_id is not None
+    assert res.json()["stage"] == "reviewing_coverage"
 
-    # 3. Poll job
+    # 4. Poll job
     res = client.get(f"/api/presentations/jobs/{job_id}")
     assert res.status_code == 200
     assert "stage" in res.json()
 
-    # 4. Cancel job
+    # 5. Cancel job
     res = client.post(f"/api/presentations/jobs/{job_id}/cancel")
     assert res.status_code == 200
     assert res.json()["status"] == "cancelled"
@@ -240,4 +251,109 @@ def test_ready_job_attaches_deck():
     assert "deck" in data
     assert data["deck"]["id"] == deck_id
     assert len(data["deck"]["slides"]) >= 4
+
+    # Test evidence inspection endpoint
+    ev_res = client.get(f"/api/presentations/decks/{deck_id}/evidence")
+    assert ev_res.status_code == 200
+    ev_data = ev_res.json()
+    assert ev_data["deck_id"] == deck_id
+    assert len(ev_data["evidence_ledger"]) > 0
+
+    # Test revalidation endpoint
+    reval_res = client.post("/api/presentations/revalidate", json={"deck_spec": spec})
+    assert reval_res.status_code == 200
+    reval_data = reval_res.json()
+    assert reval_data["status"] == "PASSED"
+    assert reval_data["total_metrics_checked"] > 0
+
+
+def test_detect_sheet_date_range_and_partial_year():
+    from app.services.presentation_service import detect_sheet_date_range
+
+    # 1. Partial year (e.g. 5 months)
+    records_partial = [
+        {"Date": f"2023-0{m}-15", "Sales": 1000 * m}
+        for m in range(1, 6)
+    ]
+    res_partial = detect_sheet_date_range(records_partial, ["Date", "Sales"])
+    assert res_partial["has_date"] is True
+    assert res_partial["is_partial_year"] is True
+    assert "Partial Year" in res_partial["period_label"]
+
+    # 2. Multi-year (> 2 years)
+    records_multi = [
+        {"Date": "2020-01-01", "Sales": 100},
+        {"Date": "2021-01-01", "Sales": 200},
+        {"Date": "2023-01-01", "Sales": 300}
+    ]
+    res_multi = detect_sheet_date_range(records_multi, ["Date", "Sales"])
+    assert res_multi["has_date"] is True
+    assert res_multi["is_partial_year"] is False
+    assert "Years" in res_multi["period_label"]
+
+
+def test_workspace_evidence_collection_and_eight_slides():
+    from app.services.presentation_service import (
+        collect_workspace_evidence,
+        generate_presentation_deck_spec,
+        verify_presentation_claims
+    )
+    client = TestClient(app)
+    sheet_id = seed_test_sales_sheet(client)
+
+    scope = {
+        "scope_type": "workspace",
+        "objective": "Consolidated Board Review",
+        "audience": "Board of Directors",
+        "theme_id": "corporate_navy"
+    }
+
+    with get_connection() as conn:
+        evidence = collect_workspace_evidence(conn, scope)
+
+    assert evidence["total_records"] >= 100
+    assert len(evidence["evidence_ledger"]) == 8
+    assert evidence["snapshot_hash"] is not None
+
+    evidence_ids = [e["evidence_id"] for e in evidence["evidence_ledger"]]
+    assert "EVID-EXEC-01" in evidence_ids
+    assert "EVID-KPI-01" in evidence_ids
+    assert "EVID-STRENGTH-01" in evidence_ids
+    assert "EVID-HEADWIND-01" in evidence_ids
+    assert "EVID-REL-01" in evidence_ids
+    assert "EVID-LESSON-01" in evidence_ids
+    assert "EVID-REC-01" in evidence_ids
+    assert "EVID-GOV-01" in evidence_ids
+
+    # Generate 8 slides
+    deck_spec = generate_presentation_deck_spec(scope, evidence["primary_ctx"], workspace_evidence=evidence)
+    assert len(deck_spec["slides"]) == 8
+    assert deck_spec["metadata"]["validation_summary"]["status"] == "PASSED"
+
+    # Check that Slide 7 contains structured proposals with unassigned owner roles
+    slide_7 = deck_spec["slides"][6]
+    assert slide_7["category"] == "STRATEGIC PROPOSALS"
+    assert "structured_proposals" in slide_7
+    for prop in slide_7["structured_proposals"]:
+        assert "motivating_finding" in prop
+        assert "proposed_response" in prop
+        assert "priority" in prop
+        assert "owner_role" in prop
+        assert "Unassigned" in prop["owner_role"]
+        assert "success_metric" in prop
+        assert "dependencies" in prop
+
+    # Check that speaker notes contain Presenter Briefing (Board Scrutiny)
+    for s in deck_spec["slides"]:
+        assert "=== PRESENTER BRIEFING (BOARD SCRUTINY) ===" in s["speaker_notes"]
+        assert "• How Calculated:" in s["speaker_notes"]
+        assert "• What it Establishes:" in s["speaker_notes"]
+        assert "• What it Does NOT Establish:" in s["speaker_notes"]
+        assert "• Anticipated Board Q&A:" in s["speaker_notes"]
+
+    # Verify claim verifier
+    ver_res = verify_presentation_claims(deck_spec, evidence["evidence_ledger"])
+    assert ver_res["status"] == "PASSED"
+    assert ver_res["passed_verification"] > 0
+    assert ver_res["discrepancies_flagged"] == 0
 

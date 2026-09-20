@@ -224,7 +224,8 @@ export default function PresentationSlideContent({
   slide,
   theme,
   isEditable = false,
-  onUpdate = () => {}
+  onUpdate = () => {},
+  onViewEvidence = () => {}
 }) {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [titleVal, setTitleVal] = useState(slide.title);
@@ -250,8 +251,26 @@ export default function PresentationSlideContent({
 
   const renderHeader = () => (
     <div className="slide-header-block">
-      <div className="slide-category-tag" style={{ color: theme.brand_color }}>
-        {slide.category || "EXECUTIVE REVIEW"}
+      <div className="slide-header-top-line">
+        <div className="slide-category-tag" style={{ color: theme.brand_color }}>
+          {slide.category || "EXECUTIVE REVIEW"}
+        </div>
+        {slide.evidence_id && (
+          <button
+            type="button"
+            className="slide-evidence-badge-btn"
+            onClick={() => onViewEvidence && onViewEvidence(slide)}
+            title="Inspect calculation methodology, evidence sources & board scrutiny briefing"
+          >
+            <ShieldCheck size={12} />
+            <span>{slide.evidence_id}</span>
+            {slide.finding_type && (
+              <span className="finding-type-subtag">
+                · {slide.finding_type.replace("_", " ").toUpperCase()}
+              </span>
+            )}
+          </button>
+        )}
       </div>
       {isEditable && isEditingTitle ? (
         <input
@@ -273,11 +292,18 @@ export default function PresentationSlideContent({
           {slide.title}
         </h2>
       )}
-      {slide.subtitle && (
-        <div className="slide-subtitle" style={{ color: theme.accent_color }}>
-          {slide.subtitle}
-        </div>
-      )}
+      <div className="slide-subtitle-row">
+        {slide.subtitle && (
+          <div className="slide-subtitle" style={{ color: theme.accent_color }}>
+            {slide.subtitle}
+          </div>
+        )}
+        {(slide.is_partial_year || slide.limitations?.includes("Partial Year")) && (
+          <span className="slide-partial-year-badge" title="Covers fewer than 330 days in annual cycle">
+            Partial Year Data
+          </span>
+        )}
+      </div>
     </div>
   );
 
@@ -286,11 +312,17 @@ export default function PresentationSlideContent({
     const limitations = slide.limitations;
     return (
       <div className="slide-footer-block" style={{ color: theme.secondary_text }}>
-        <div className="footer-left">
+        <div
+          className="footer-left clickable-evidence"
+          onClick={() => onViewEvidence && onViewEvidence(slide)}
+          title="Click to inspect verifiable evidence & board briefing"
+        >
           <ShieldCheck size={13} style={{ color: theme.success_color }} />
           <span>
+            {slide.evidence_id ? `[${slide.evidence_id}] ` : ""}
             {sources.length > 0 ? `Evidence: ${sources.join(" · ")}` : "Verified Deterministic Ground Truth Engine"}
           </span>
+          <span className="footer-inspect-cta">View Evidence &rarr;</span>
         </div>
         {limitations && (
           <div className="footer-right">
@@ -466,14 +498,51 @@ export default function PresentationSlideContent({
               <p className="rec-narrative">
                 <FormattedText text={slide.narrative} defaultColor={theme.primary_text} />
               </p>
-              <div className="rec-bullets-list">
-                {(slide.bullets || []).map((b, i) => (
-                  <div key={i} className="rec-bullet-box">
-                    <span className="rec-number" style={{ color: theme.brand_color }}>0{i+1}</span>
-                    <FormattedText text={b} defaultColor={theme.secondary_text} />
-                  </div>
-                ))}
-              </div>
+              {slide.structured_proposals && slide.structured_proposals.length > 0 ? (
+                <div className="structured-proposals-list">
+                  {slide.structured_proposals.map((prop, i) => (
+                    <div key={i} className="structured-proposal-card" style={{ borderColor: theme.card_border }}>
+                      <div className="proposal-card-header">
+                        <span className={`proposal-priority-badge priority-${(prop.priority || "medium").toLowerCase()}`}>
+                          {prop.priority} Priority
+                        </span>
+                        <span className="proposal-owner-badge" title="Role explicitly designated without inventing named owners">
+                          {prop.owner_role || "Unassigned - Operational Lead"}
+                        </span>
+                      </div>
+                      <div className="proposal-finding-row">
+                        <span className="prop-section-lbl" style={{ color: theme.accent_color }}>Finding:</span>
+                        <span className="prop-text" style={{ color: theme.primary_text }}>{prop.finding}</span>
+                      </div>
+                      <div className="proposal-response-row">
+                        <span className="prop-section-lbl" style={{ color: theme.brand_color }}>Response:</span>
+                        <span className="prop-text" style={{ color: theme.secondary_text }}>{prop.response}</span>
+                      </div>
+                      <div className="proposal-meta-footer" style={{ borderTopColor: theme.card_border }}>
+                        {prop.success_metric && (
+                          <span className="prop-footer-item">
+                            <strong style={{ color: theme.primary_text }}>Target:</strong> {prop.success_metric}
+                          </span>
+                        )}
+                        {prop.dependencies && (
+                          <span className="prop-footer-item">
+                            <strong style={{ color: theme.primary_text }}>Dep:</strong> {prop.dependencies}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="rec-bullets-list">
+                  {(slide.bullets || []).map((b, i) => (
+                    <div key={i} className="rec-bullet-box">
+                      <span className="rec-number" style={{ color: theme.brand_color }}>0{i+1}</span>
+                      <FormattedText text={b} defaultColor={theme.secondary_text} />
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="priorities-card-stack">
