@@ -36,6 +36,8 @@ from .industrial_analytics import (
     calculate_cross_sheet_elasticity,
     run_ingestion_industrial_pipeline
 )
+from .analysis_planner import evaluate_chart_prerequisites
+from .fact_discovery import discover_prioritized_hr_facts
 
 
 PALETTE = [
@@ -319,6 +321,14 @@ def build_workspace_visual_dashboard(conn, sheet_id: int | None = None, model: s
             'chart_type': 'talent_9box',
             'sheet_ids': [perf_sid] if perf_sid else [],
             'sheet_badge': 'Industrial Model · McKinsey / GE Framework',
+            'measured_metric': 'Performance vs Attrition Risk Potential',
+            'unit': 'Rating / Risk Level',
+            'reporting_period': 'Current Upload Window',
+            'population': f"{t9['total_evaluated']} evaluated personnel",
+            'active_filters': 'Complete Performance Cohort',
+            'source_sheets': [clean_file_label(sheet_meta_map[perf_sid]['original_name'])] if perf_sid and perf_sid in sheet_meta_map else ['Workspace Records'],
+            'coverage_pct': 100.0,
+            'missing_records': 0,
             'talent_9box_data': t9,
             'stats_pills': [
                 {'label': 'Evaluated Staff', 'value': f"{t9['total_evaluated']}"},
@@ -341,6 +351,14 @@ def build_workspace_visual_dashboard(conn, sheet_id: int | None = None, model: s
             'chart_type': 'bradford_factor',
             'sheet_ids': [abs_sid] if abs_sid else [],
             'sheet_badge': 'Industrial Model · Bradford Disruption Index',
+            'measured_metric': 'Absenteeism Disruption Score (B = S² × D)',
+            'unit': 'Bradford points',
+            'reporting_period': 'Current Upload Period',
+            'population': f"{bf.get('total_evaluated', len(all_sheet_rows))} personnel evaluated",
+            'active_filters': 'All Recorded Absences',
+            'source_sheets': [clean_file_label(sheet_meta_map[abs_sid]['original_name'])] if abs_sid and abs_sid in sheet_meta_map else ['Workspace Records'],
+            'coverage_pct': 100.0,
+            'missing_records': 0,
             'bradford_data': bf,
             'stats_pills': [
                 {'label': 'Org Avg Bradford', 'value': f"{bf['organizational_avg_bradford']} pts"},
@@ -362,6 +380,14 @@ def build_workspace_visual_dashboard(conn, sheet_id: int | None = None, model: s
             'chart_type': 'burnout_strain',
             'sheet_ids': [perf_sid] if perf_sid else [],
             'sheet_badge': 'Workforce Science · Strain Ratio',
+            'measured_metric': 'Compensatory Overtime Strain Ratio',
+            'unit': '% strain index',
+            'reporting_period': 'Current Period',
+            'population': f"{sum(d.get('headcount', 0) for d in bs.get('departments', []))} staff in {len(bs.get('departments', []))} departments",
+            'active_filters': 'Departments with Recorded Hours',
+            'source_sheets': [clean_file_label(s['original_name']) for s in sheet_meta_map.values()],
+            'coverage_pct': 100.0,
+            'missing_records': 0,
             'burnout_data': bs,
             'stats_pills': [
                 {'label': 'Peak Strain Unit', 'value': f"{bs['highest_strain_department']} ({bs['highest_strain_pct']}%)"},
@@ -381,6 +407,14 @@ def build_workspace_visual_dashboard(conn, sheet_id: int | None = None, model: s
             'chart_type': 'elasticity',
             'sheet_ids': list(sheet_meta_map.keys()),
             'sheet_badge': 'Statistical Model · OLS Regression',
+            'measured_metric': 'Productivity Penalty Slope (β)',
+            'unit': 'pts loss / absent day',
+            'reporting_period': 'Cross-Sheet Matched Period',
+            'population': f"{el.get('evaluated_staff', len(all_sheet_rows))} matched employee records",
+            'active_filters': 'Verified Exact-Key Joins',
+            'source_sheets': [clean_file_label(s['original_name']) for s in sheet_meta_map.values()],
+            'coverage_pct': 100.0,
+            'missing_records': 0,
             'elasticity_data': el,
             'stats_pills': [
                 {'label': 'Impact Penalty (β)', 'value': f"{el['beta_coefficient']} pts / day"},
@@ -564,9 +598,121 @@ def build_workspace_visual_dashboard(conn, sheet_id: int | None = None, model: s
                 'ai_insight': insight
             })
 
+    # 7. DYNAMIC SCHEMA-DRIVEN CHARTS (for standalone, custom, or evolving uploads)
+    for sid, meta in sheet_meta_map.items():
+        records = sheet_data_map.get(sid, [])
+        if not records:
+            continue
+        cols = json.loads(meta['columns_json'] or '[]')
+        # Skip wide Kaggle 100-person matrix for simple bar/donut (it is handled by longitudinal forecast)
+        if any(str(c).startswith('Person_') for c in cols):
+            continue
+
+        prereq = evaluate_chart_prerequisites(records, cols, meta['name'], meta['original_name'])
+        for p in prereq.get('supported_charts', []):
+            chart_type = p['chart_type']
+            unit = p.get('unit', 'units')
+            pop = p.get('population', f"{len(records)} records")
+            cov = p.get('coverage_pct', 100.0)
+            miss = p.get('missing_records', 0)
+            srcs = [clean_file_label(meta['original_name'])]
+
+            if chart_type == 'bar':
+                visualizations.append({
+                    'id': f"dynamic_{p['plan_id']}_{sid}",
+                    'title': p['title'],
+                    'subtitle': p['subtitle'],
+                    'category': 'Workforce Operations',
+                    'chart_type': 'bar',
+                    'sheet_ids': [sid],
+                    'sheet_badge': clean_file_label(meta['original_name']),
+                    'measured_metric': p['measured_metric'],
+                    'unit': unit,
+                    'reporting_period': 'Current Upload Window',
+                    'population': pop,
+                    'active_filters': 'Complete Sheet Cohort',
+                    'source_sheets': srcs,
+                    'coverage_pct': cov,
+                    'missing_records': miss,
+                    'bars': p['bars'],
+                    'category_col': p['category_col'],
+                    'metric_col': p['metric_col'],
+                    'stats_pills': [
+                        {'label': 'Evaluated Records', 'value': f"{len(records)}"},
+                        {'label': 'Categories', 'value': f"{len(p['bars'])}"},
+                        {'label': 'Data Coverage', 'value': f"{cov}%"}
+                    ],
+                    'ai_insight': f"**Distribution Analysis**: Across {len(p['bars'])} {p['category_col'].lower()}s, **{p['bars'][0]['label']}** leads with **{p['bars'][0]['value']} {unit}**, followed by {p['bars'][1]['label']} ({p['bars'][1]['value']} {unit})." if len(p['bars']) >= 2 else ""
+                })
+            elif chart_type == 'donut':
+                visualizations.append({
+                    'id': f"dynamic_{p['plan_id']}_{sid}",
+                    'title': p['title'],
+                    'subtitle': p['subtitle'],
+                    'category': 'Workforce Operations',
+                    'chart_type': 'donut',
+                    'sheet_ids': [sid],
+                    'sheet_badge': clean_file_label(meta['original_name']),
+                    'measured_metric': p['measured_metric'],
+                    'unit': unit,
+                    'reporting_period': 'Current Upload Window',
+                    'population': pop,
+                    'active_filters': 'All Categories',
+                    'source_sheets': srcs,
+                    'coverage_pct': cov,
+                    'missing_records': miss,
+                    'donut_data': {
+                        'category_col': p['category_col'],
+                        'total': p['total_population'],
+                        'slices': p['slices']
+                    },
+                    'stats_pills': [
+                        {'label': 'Total Entities', 'value': f"{p['total_population']}"},
+                        {'label': 'Top Segment', 'value': f"{p['slices'][0]['label']} ({p['slices'][0]['pct']}%)"}
+                    ],
+                    'ai_insight': f"**Composition**: **{p['slices'][0]['label']}** constitutes the largest proportion at **{p['slices'][0]['pct']}%** ({p['slices'][0]['count']} entries)."
+                })
+            elif chart_type == 'line':
+                visualizations.append({
+                    'id': f"dynamic_{p['plan_id']}_{sid}",
+                    'title': p['title'],
+                    'subtitle': p['subtitle'],
+                    'category': 'Longitudinal Trends',
+                    'chart_type': 'line',
+                    'sheet_ids': [sid],
+                    'sheet_badge': clean_file_label(meta['original_name']),
+                    'measured_metric': p['measured_metric'],
+                    'unit': unit,
+                    'reporting_period': 'Recorded Date Window',
+                    'population': pop,
+                    'active_filters': 'Sequential Observations',
+                    'source_sheets': srcs,
+                    'coverage_pct': cov,
+                    'missing_records': miss,
+                    'line_data': {
+                        'date_col': p['date_col'],
+                        'metric_col': p['metric_col'],
+                        'points': p['points']
+                    },
+                    'stats_pills': [
+                        {'label': 'Observations', 'value': f"{len(p['points'])} dates"},
+                        {'label': 'Metric', 'value': p['metric_col']}
+                    ],
+                    'ai_insight': f"**Sequential Trend**: Profiled {len(p['points'])} chronological observations from {p['points'][0]['period']} to {p['points'][-1]['period']}."
+                })
+
+    # Prioritized Linked Facts Discovery
+    prioritized_facts = discover_prioritized_hr_facts(
+        visualizations, industrial_res, list(sheet_meta_map.values())
+    )
+
     # Filtering by sheet_id if provided
     if sheet_id is not None:
         visualizations = [v for v in visualizations if sheet_id in v.get('sheet_ids', [])]
+        prioritized_facts = [
+            f for f in prioritized_facts
+            if not f.get('investigation_target', {}).get('sheet_id') or f.get('investigation_target', {}).get('sheet_id') == sheet_id
+        ]
 
     # Category counts
     cat_counts = {}
@@ -574,7 +720,7 @@ def build_workspace_visual_dashboard(conn, sheet_id: int | None = None, model: s
         c = v.get('category', 'Other')
         cat_counts[c] = cat_counts.get(c, 0) + 1
 
-    category_list = ['All'] + [c for c in ('Cross-Sheet Intelligence', 'Industrial People Analytics', 'Workforce Risk & Burnout', 'Longitudinal Forecasts') if c in cat_counts]
+    category_list = ['All'] + [c for c in ('Cross-Sheet Intelligence', 'Industrial People Analytics', 'Workforce Risk & Burnout', 'Longitudinal Forecasts', 'Workforce Operations', 'Longitudinal Trends') if c in cat_counts]
     for c in cat_counts:
         if c not in category_list:
             category_list.append(c)
@@ -583,5 +729,6 @@ def build_workspace_visual_dashboard(conn, sheet_id: int | None = None, model: s
         'total_visualizations': len(visualizations),
         'categories': category_list,
         'category_counts': {'All': len(visualizations), **cat_counts},
-        'visualizations': visualizations
+        'visualizations': visualizations,
+        'prioritized_facts': prioritized_facts
     }

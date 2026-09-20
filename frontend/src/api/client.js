@@ -180,3 +180,15 @@ export const getSheetRows = (id, page, search) => readSheetApi(`/api/sheets/${id
 export const getJoinedRows = (id, page) => readSheetApi(`/api/sheets/relationships/${id}/rows?page=${page}`);
 export const getSheetProjections = (id) => readSheetApi(`/api/sheets/${id}/projections`);
 
+export async function investigateEvidence({ entityType = "department", targetId = null, metric = null, sheetId = null, chartId = null } = {}) {
+  const params = new URLSearchParams();
+  if (entityType) params.set("entity_type", entityType);
+  if (targetId) params.set("target_id", targetId);
+  if (metric) params.set("metric", metric);
+  if (sheetId) params.set("sheet_id", sheetId);
+  if (chartId) params.set("chart_id", chartId);
+  const res = await fetch(`${API_BASE}/analytics/investigate?${params.toString()}`);
+  if (!res.ok) throw new Error("Failed to execute investigation query");
+  return res.json();
+}
+

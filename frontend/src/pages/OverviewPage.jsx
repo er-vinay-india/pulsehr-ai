@@ -10,11 +10,22 @@ import ExecutiveStoryCard from '../components/ExecutiveStoryCard';
 import VisualAnalyticsPanel from '../components/VisualAnalyticsPanel';
 import RelationalInsightCard from '../components/RelationalInsightCard';
 import AiQualityAuditModal from '../components/AiQualityAuditModal';
+import LinkedFactsColumn from '../components/LinkedFactsColumn';
+import InvestigationDrawer from '../components/InvestigationDrawer';
 import {
   StorySkeletonLoader,
   VisualsSkeletonLoader,
   RelationalSkeletonLoader
 } from '../components/OverviewSkeletons';
+import {
+  ChevronDown,
+  ChevronUp,
+  FileSpreadsheet,
+  Activity,
+  Layers,
+  Sparkles,
+  ArrowRight
+} from 'lucide-react';
 
 export default function OverviewPage({ onNavigateTab }) {
   // Chunk 1: Base Catalog & Scope Metadata (< 20ms)
@@ -41,8 +52,12 @@ export default function OverviewPage({ onNavigateTab }) {
   const [loadingRelational, setLoadingRelational] = useState(true);
   const [relationalError, setRelationalError] = useState('');
 
-  // Modal State
+  // Investigation Drawer Context
+  const [investigationTarget, setInvestigationTarget] = useState(null);
+
+  // Modal & Expandable Accordion State
   const [showAuditModal, setShowAuditModal] = useState(false);
+  const [showNarrativeAccordion, setShowNarrativeAccordion] = useState(false);
 
   // --------------------------------------------------------------------------
   // Chunk Fetchers
@@ -160,6 +175,16 @@ export default function OverviewPage({ onNavigateTab }) {
     }
   };
 
+  // Focus chart anchor interaction
+  const handleFocusChart = (chartId) => {
+    const el = document.getElementById(chartId);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.classList.add('chart-focus-highlight');
+      setTimeout(() => el.classList.remove('chart-focus-highlight'), 2400);
+    }
+  };
+
   const fmt = (n) =>
     n == null ? 'Not available' : Number(n).toLocaleString(undefined, { maximumFractionDigits: 3 });
 
@@ -171,15 +196,32 @@ export default function OverviewPage({ onNavigateTab }) {
 
   return (
     <div className="overview-page">
-      {/* 1. Top Executive Banner (Always present immediately) */}
-      <div className="executive-banner">
-        <div className="banner-content">
-          <h2>Executive Overview</h2>
-          <p>Live AI-synthesized intelligence and multi-measure forecasting across your uploaded workforce sheets.</p>
+      {/* 1. Compact Top Workspace Header & Scope Filters */}
+      <div className="compact-workspace-header">
+        <div className="workspace-title-block">
+          <div className="title-row">
+            <h2>Executive Overview</h2>
+            <span className="status-live-badge">
+              <span className="live-dot" />
+              <span>Analysis Current</span>
+            </span>
+          </div>
+          <p className="workspace-sub-note">
+            Visual People Analytics & Evidence Intelligence across active workforce workbooks.
+          </p>
         </div>
-        <button className="btn-primary" onClick={() => onNavigateTab('copilot')}>
-          Ask AI Copilot
-        </button>
+
+        <div className="header-actions-group">
+          {storyData?.story_meta?.model && (
+            <span className="model-chip" title="Active local LLM engine">
+              Model: {storyData.story_meta.model}
+            </span>
+          )}
+          <button className="btn-primary-compact" onClick={() => onNavigateTab('copilot')}>
+            <Sparkles size={14} />
+            <span>Ask AI Copilot</span>
+          </button>
+        </div>
       </div>
 
       {baseError && <p role="alert" className="error-banner">{baseError}</p>}
@@ -190,7 +232,7 @@ export default function OverviewPage({ onNavigateTab }) {
           <div style={{ fontSize: '2.5rem', marginBottom: '1rem' }}>🗂️</div>
           <h3 style={{ fontSize: '1.35rem', marginBottom: '0.5rem', color: 'var(--fg-primary)' }}>Workspace is Empty</h3>
           <p style={{ color: 'var(--fg-secondary)', maxWidth: 520, margin: '0 auto 1.5rem auto', lineHeight: 1.5 }}>
-            All previous sheets, records, and cached AI stories have been completely cleaned up. Upload a CSV or Excel workbook in the Ingestion Studio to automatically generate industrial analytics, 9-Box matrices, and workforce forecasts.
+            All previous sheets, records, and cached stories have been cleaned up. Upload a CSV or Excel workbook in the Ingestion Studio to automatically generate dynamic charts, 9-Box matrices, and evidence-backed facts.
           </p>
           <button className="btn-primary" onClick={() => onNavigateTab('ingestion')}>
             Upload a Spreadsheet
@@ -198,233 +240,193 @@ export default function OverviewPage({ onNavigateTab }) {
         </div>
       )}
 
-      {/* 3. Sheet Scope Selector Bar (Renders when sheets exist) */}
-      {loadingBase ? (
-        <div className="sheet-selector-bar" style={{ opacity: 0.7 }}>
+      {/* 3. Sheet Scope Selector Bar */}
+      {hasSheets && (
+        <div className="sheet-selector-bar">
           <span className="sheet-tab-label">Analytics Scope:</span>
-          <div className="shimmer-box" style={{ width: 140, height: 30, borderRadius: 20 }} />
-          <div className="shimmer-box" style={{ width: 180, height: 30, borderRadius: 20 }} />
-        </div>
-      ) : (
-        hasSheets && baseData.sheets_list && baseData.sheets_list.length > 0 && (
-          <div className="sheet-selector-bar">
-            <span className="sheet-tab-label">Analytics Scope:</span>
+          <button
+            className={`sheet-tab-btn ${selectedSheetId === null ? 'active' : ''}`}
+            onClick={() => handleSelectSheet(null)}
+          >
+            <span>Cross-Sheet Global View</span>
+            <span className="tab-domain-tag">Consolidated</span>
+          </button>
+          {baseData?.sheets_list?.map((s) => (
             <button
-              className={`sheet-tab-btn ${selectedSheetId === null ? 'active' : ''}`}
-              onClick={() => handleSelectSheet(null)}
+              key={s.id}
+              className={`sheet-tab-btn ${selectedSheetId === s.id ? 'active' : ''}`}
+              onClick={() => handleSelectSheet(s.id)}
             >
-              <span>Cross-Sheet Global View</span>
-              <span className="tab-domain-tag">Consolidated</span>
+              <span>{s.original_name || s.name}</span>
+              <span className="tab-domain-tag">{s.domain}</span>
             </button>
-            {baseData.sheets_list.map((s) => (
-              <button
-                key={s.id}
-                className={`sheet-tab-btn ${selectedSheetId === s.id ? 'active' : ''}`}
-                onClick={() => handleSelectSheet(s.id)}
-              >
-                <span>{s.original_name || s.name}</span>
-                <span className="tab-domain-tag">{s.domain}</span>
-              </button>
-            ))}
-          </div>
-        )
+          ))}
+        </div>
       )}
 
-      {/* 4. Base KPI Grid (Renders when sheets exist) */}
-      {loadingBase ? (
-        <div className="kpi-grid">
-          {[1, 2, 3, 4].map((i) => (
-            <div className="kpi-card" key={i}>
-              <div className="shimmer-box" style={{ width: '60%', height: 14, borderRadius: 4, marginBottom: 8 }} />
-              <div className="shimmer-box" style={{ width: '40%', height: 28, borderRadius: 4 }} />
+      {/* 4. PRIMARY CHART-FIRST CANVAS: 2/3 Charts + 1/3 Prioritized Facts (Above the Fold) */}
+      {hasSheets && (
+        <div className="overview-primary-split">
+          {/* Main Visual Intelligence Area (~2/3 Width) */}
+          <main className="overview-charts-main" id="main-content">
+            {loadingVisuals ? (
+              <VisualsSkeletonLoader isScoped={selectedSheetId !== null} />
+            ) : visualsError ? (
+              <div className="card-panel error-notice">
+                <p>Could not load visual dashboard: {visualsError}</p>
+                <button className="btn-secondary" onClick={() => fetchVisuals(selectedSheetId)}>Retry Visuals</button>
+              </div>
+            ) : visualsData ? (
+              <VisualAnalyticsPanel
+                visualDashboard={visualsData}
+                charts={storyData?.charts}
+                forecast={storyData?.forecast}
+                selectedSheetId={selectedSheetId}
+                onInvestigate={(target) => setInvestigationTarget(target)}
+              />
+            ) : null}
+          </main>
+
+          {/* Prioritized Facts Sidebar (~1/3 Width) */}
+          <div className="overview-facts-sidebar">
+            <LinkedFactsColumn
+              facts={visualsData?.prioritized_facts || []}
+              onInvestigate={(target) => setInvestigationTarget(target)}
+              onFocusChart={handleFocusChart}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* 5. Compact Workspace Catalog KPI Strip */}
+      {hasSheets && (
+        <div className="kpi-grid compact-kpi-strip" style={{ marginTop: '1.5rem' }}>
+          {[
+            ['Active Datasets', baseData.stats?.datasets],
+            ['Workforce Sheets', baseData.stats?.sheets],
+            ['Source Records', baseData.stats?.rows],
+            ['Verified Key Relationships', baseData.stats?.linked_relationships]
+          ].map(([label, value]) => (
+            <div className="kpi-card compact-card" key={label}>
+              <div className="kpi-label">{label}</div>
+              <div className="kpi-value">{fmt(value)}</div>
             </div>
           ))}
         </div>
-      ) : (
-        hasSheets && (
-          <>
-            <div className="kpi-grid">
-              {[
-                ['Datasets', baseData.stats?.datasets],
-                ['Sheets', baseData.stats?.sheets],
-                ['Source rows', baseData.stats?.rows],
-                ['Exact key relationships', baseData.stats?.linked_relationships]
-              ].map(([label, value]) => (
-                <div className="kpi-card" key={label}>
-                  <div className="kpi-label">{label}</div>
-                  <div className="kpi-value">{fmt(value)}</div>
-                </div>
-              ))}
-            </div>
-            {baseData.note && <p className="subtitle">{baseData.note}</p>}
-          </>
-        )
       )}
 
-      {/* 5. CHUNK 2: AI Executive Story & Quality Audit Card (Only if sheets exist) */}
+      {/* 6. Cross-Sheet Relational Story & Talent Quadrants (Below Primary Charts) */}
       {hasSheets && (
-        <>
-          {loadingStory ? (
-            <StorySkeletonLoader isScoped={selectedSheetId !== null} />
-          ) : storyError ? (
-            <div className="card-panel error-notice" style={{ marginTop: '1.25rem' }}>
-              <p>Could not load executive story: {storyError}</p>
-              <button className="btn-secondary" onClick={() => fetchStory(selectedSheetId)}>Retry Story</button>
-            </div>
-          ) : storyData?.executive_story ? (
-            <ExecutiveStoryCard
-              story={storyData.executive_story}
-              evaluation={storyData.evaluation}
-              meta={storyData.story_meta}
-              onRefresh={handleRefreshStory}
-              isRefreshing={isRefreshingStory}
-              onOpenAudit={() => setShowAuditModal(true)}
-            />
-          ) : null}
-        </>
-      )}
-
-      {/* 6. CHUNK 3: Visual Analytics & Industrial Models Dashboard (Only if sheets exist) */}
-      {hasSheets && (
-        <>
-          {loadingVisuals ? (
-            <VisualsSkeletonLoader isScoped={selectedSheetId !== null} />
-          ) : visualsError ? (
-            <div className="card-panel error-notice" style={{ marginTop: '1.25rem' }}>
-              <p>Could not load visual dashboard: {visualsError}</p>
-              <button className="btn-secondary" onClick={() => fetchVisuals(selectedSheetId)}>Retry Visuals</button>
-            </div>
-          ) : visualsData ? (
-            <VisualAnalyticsPanel
-              visualDashboard={visualsData}
-              charts={storyData?.charts}
-              forecast={storyData?.forecast}
-              selectedSheetId={selectedSheetId}
-            />
-          ) : null}
-        </>
-      )}
-
-      {/* 7. CHUNK 4: Cross-Sheet Relational Story & Talent Quadrants (Only if sheets exist) */}
-      {hasSheets && (
-        <>
+        <div style={{ marginTop: '1.5rem' }}>
           {loadingRelational ? (
             <RelationalSkeletonLoader />
           ) : relationalError ? (
-            <div className="card-panel error-notice" style={{ marginTop: '1.25rem' }}>
+            <div className="card-panel error-notice">
               <p>Could not load relational insights: {relationalError}</p>
-              <button className="btn-secondary" onClick={fetchRelational}>Retry Relational Analysis</button>
+              <button className="btn-secondary" onClick={fetchRelational}>Retry Relational</button>
             </div>
           ) : relationalData ? (
-            <RelationalInsightCard relationalData={relationalData} />
+            <RelationalInsightCard
+              relationalStory={relationalData}
+              onNavigateTab={onNavigateTab}
+            />
           ) : null}
-        </>
+        </div>
       )}
 
-      {/* 8. Per-Sheet Column Profiles (Only if sheets exist) */}
-      {!loadingBase && hasSheets && displayedSheets.length > 0 && (
-        <div style={{ marginTop: 20 }}>
-          {selectedSheetId !== null && (
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-              <span style={{ fontSize: '0.85rem', color: 'var(--fg-secondary)' }}>
-                Showing profile for focused sheet ({displayedSheets[0]?.original_name || 'Selected Sheet'}).
+      {/* 7. Expandable Full AI Executive Narrative & Quality Audit Accordion */}
+      {hasSheets && storyData?.executive_story && (
+        <div className="narrative-accordion-card card-panel" style={{ marginTop: '1.5rem' }}>
+          <div
+            className="accordion-header"
+            onClick={() => setShowNarrativeAccordion(!showNarrativeAccordion)}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => e.key === 'Enter' && setShowNarrativeAccordion(!showNarrativeAccordion)}
+            aria-expanded={showNarrativeAccordion}
+          >
+            <div className="accordion-title-group">
+              <Sparkles size={16} color="var(--accent)" />
+              <span className="accordion-title">Consolidated Executive Story & Model Quality Audit</span>
+              <span className="accordion-meta-badge">
+                {storyData.evaluation?.factual_accuracy_score != null
+                  ? `${storyData.evaluation.factual_accuracy_score}% Verified Accuracy`
+                  : 'Factual Audit'}
               </span>
-              <button
-                className="btn-secondary"
-                style={{ fontSize: '0.75rem', padding: '0.2rem 0.6rem' }}
-                onClick={() => handleSelectSheet(null)}
-              >
-                Show all sheets
-              </button>
+            </div>
+            <div className="accordion-toggle-icon">
+              {showNarrativeAccordion ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+            </div>
+          </div>
+
+          {showNarrativeAccordion && (
+            <div className="accordion-content-body">
+              <ExecutiveStoryCard
+                story={storyData.executive_story}
+                evaluation={storyData.evaluation}
+                meta={storyData.story_meta}
+                onRefresh={handleRefreshStory}
+                isRefreshing={isRefreshingStory}
+                onOpenAudit={() => setShowAuditModal(true)}
+              />
             </div>
           )}
+        </div>
+      )}
 
-          {[...displayedSheets].reverse().map((sheet) => (
-            <div className="card-panel" key={sheet.id} style={{ marginBottom: 20 }}>
-              <div className="panel-header">
-                <div>
-                  <h3>{sheet.original_name} / {sheet.name}</h3>
-                  <p className="panel-sub">{sheet.row_count} rows · {sheet.columns?.length || 0} columns</p>
-                </div>
-                <button className="btn-secondary" onClick={() => onNavigateTab('explorer')}>
-                  Explore sheet data
-                </button>
-              </div>
+      {/* 8. Detailed Sheet Catalog & Relationship Network (Below the Fold) */}
+      {hasSheets && (
+        <div className="card-panel" style={{ marginTop: '1.5rem' }}>
+          <div className="section-title-row">
+            <div>
+              <h3>Worksheet Catalog & Structural Profiling</h3>
+              <p className="subtitle">Deterministic schema profiles, uniqueness ratios, and verified key links.</p>
+            </div>
+            <button className="btn-secondary" onClick={() => onNavigateTab('data-explorer')}>
+              Open Data Explorer <ArrowRight size={13} style={{ marginLeft: 4 }} />
+            </button>
+          </div>
 
-              <div className="kpi-grid">
-                {sheet.profiles?.filter((p) => p.numeric).slice(0, 4).map((p) => (
-                  <div className="kpi-card" key={p.column}>
-                    <div className="kpi-label">Mean {p.column}{p.unit ? ` (${p.unit})` : ''}</div>
-                    <div className="kpi-value">{fmt(p.numeric.mean)}</div>
-                    <small>{p.nonempty} recorded values</small>
+          <div className="sheet-catalog-cards">
+            {displayedSheets.map((s) => (
+              <div key={s.id} className="sheet-summary-card">
+                <div className="sheet-card-header">
+                  <div className="sheet-name-group">
+                    <FileSpreadsheet size={16} color="var(--accent)" />
+                    <strong>{s.name}</strong>
+                    <span className="source-file-badge">{s.original_name}</span>
                   </div>
-                ))}
-              </div>
-
-              <details>
-                <summary>All {sheet.columns?.length || 0} column profiles</summary>
-                <div className="table-container">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Column</th>
-                        <th>Present</th>
-                        <th>Missing</th>
-                        <th>Distinct values</th>
-                        <th>Mean</th>
-                        <th>Minimum</th>
-                        <th>Maximum</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {sheet.profiles?.map((p) => (
-                        <tr key={p.column}>
-                          <td>{p.column}</td>
-                          <td>{p.nonempty}</td>
-                          <td>{p.missing}</td>
-                          <td>{p.distinct}</td>
-                          <td>{p.numeric ? fmt(p.numeric.mean) : '—'}</td>
-                          <td>{p.numeric ? fmt(p.numeric.min) : '—'}</td>
-                          <td>{p.numeric ? fmt(p.numeric.max) : '—'}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                  <span className="row-count-badge">{s.row_count} rows</span>
                 </div>
-              </details>
-            </div>
-          ))}
+                <div className="sheet-columns-chip-list">
+                  {(s.columns || []).map((col) => (
+                    <span key={col} className="col-chip">
+                      {col}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
-      {/* 9. Connected Information Summary (Only if sheets exist) */}
-      {!loadingBase && hasSheets && baseData?.relationships && (
-        <div className="card-panel" style={{ marginTop: 20 }}>
-          <h3>Connected information</h3>
-          {!baseData.relationships.length && (
-            <p>No shared keys found yet. Upload a related sheet to connect records.</p>
-          )}
-          {baseData.relationships.map((r) => (
-            <p key={r.id}>
-              <strong>
-                {r.left_file} / {r.left_name} [{r.left_column}] ↔ {r.right_file} / {r.right_name} [{r.right_column}]
-              </strong>
-              <br />
-              {r.status === 'linked' ? 'Exact join available' : 'Suggested relationship'} · {r.cardinality} · {r.matching_keys} shared values · {r.matching_pairs} matching row pairs
-              <br />
-              <small>{r.reason}</small>
-            </p>
-          ))}
-        </div>
+      {/* 9. Modal for AI Quality Fact-Checking Audit */}
+      {showAuditModal && storyData?.evaluation && (
+        <AiQualityAuditModal
+          evaluation={storyData.evaluation}
+          onClose={() => setShowAuditModal(false)}
+        />
       )}
 
-      {/* AI Quality Audit Matrix Modal */}
-      <AiQualityAuditModal
-        isOpen={showAuditModal}
-        onClose={() => setShowAuditModal(false)}
-        evaluation={storyData?.evaluation}
-        modelName={storyData?.story_meta?.model}
-      />
+      {/* 10. Reusable Contextual Evidence Investigation Drawer */}
+      {investigationTarget && (
+        <InvestigationDrawer
+          investigationTarget={investigationTarget}
+          onClose={() => setInvestigationTarget(null)}
+          onDrillDown={(newTarget) => setInvestigationTarget(newTarget)}
+        />
+      )}
     </div>
   );
 }

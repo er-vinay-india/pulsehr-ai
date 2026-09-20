@@ -4,6 +4,7 @@ from ..db.database import get_connection
 from ..services.sheet_catalog import overview
 from ..services.executive_story import get_or_generate_executive_story, compute_relational_story, detect_sheet_domain
 from ..services.visual_intelligence import build_workspace_visual_dashboard
+from ..services.investigation_service import run_contextual_investigation
 
 router = APIRouter(prefix='/api/analytics', tags=['analytics'])
 
@@ -85,6 +86,33 @@ def api_overview_relational(model: str | None = Query(None)):
         return {
             'relational_story': relational_res
         }
+    finally:
+        conn.close()
+
+
+@router.get('/investigate')
+def api_analytics_investigate(
+    entity_type: str = Query('department'),
+    target_id: str | None = Query(None),
+    metric: str | None = Query(None),
+    sheet_id: int | None = Query(None),
+    chart_id: str | None = Query(None)
+):
+    """Executes a deep evidence-grounded contextual investigation across source records and relationships."""
+    clean_sheet_id = int(sheet_id) if sheet_id is not None and not hasattr(sheet_id, 'default') else None
+    clean_target = str(target_id) if target_id is not None and not hasattr(target_id, 'default') else None
+    clean_metric = str(metric) if metric is not None and not hasattr(metric, 'default') else None
+    clean_chart = str(chart_id) if chart_id is not None and not hasattr(chart_id, 'default') else None
+    conn = get_connection()
+    try:
+        return run_contextual_investigation(
+            conn,
+            entity_type=entity_type,
+            target_id=clean_target,
+            metric=clean_metric,
+            sheet_id=clean_sheet_id,
+            chart_id=clean_chart
+        )
     finally:
         conn.close()
 

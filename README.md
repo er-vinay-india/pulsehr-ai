@@ -30,17 +30,13 @@ npm run dev -- --port 5175
 - **Complete Deletion Pipeline:** Deleting a dataset cascades to sheets, rows, search entries, vectors, relationships, and purges all cached narratives (`executive_narratives`). Deleting the last dataset leaves an empty application with a dedicated zero-state screen.
 - **Bulk Cleanup Endpoint:** `DELETE /api/upload/datasets` completely purges all workspace data in a single operation.
 
-### 2. Executive Overview: Progressive Chunked Loading & Industrial Science
-The Executive Overview decouples into 4 parallel asynchronous streams with dedicated skeleton loaders:
-- **Chunk 1: Base Catalog & Scope Metadata (`/api/analytics/overview/base`):** Instant rendering (< 20ms) of header banner, analytics scope selector tabs, KPI metrics, and sheet profiles.
-- **Chunk 2: Visual Intelligence Suite (`/api/analytics/overview/visuals`):** Computes formula-grounded industrial People Analytics models:
-  - **McKinsey / GE 9-Box Strategic Talent & Risk Matrix:** 3x3 talent-potential diagnostic with interactive roster drilldowns.
-  - **Bradford Factor Absenteeism Disruption Index ($B = S^2 \times D$):** Department disruption spectrum with recognized HR threshold tiers (<50 Normal, 51–200 Moderate, 201–500 High, >500 Critical).
-  - **Workforce Burnout & Workload Strain Index:** Overtime vs absenteeism multiplier ($(\text{OT}/160\text{h}) \times (1 + \text{Absent}/20\text{d}) \times 100\%$) pinpointing teams exceeding the 20% critical threshold.
-  - **Cross-Sheet Performance-Absenteeism Elasticity:** OLS regression slope ($\beta$), model fit ($R^2$), and operational tipping point days.
-  - **Longitudinal Attendance Trajectory Forecasting:** Multi-year daily hours model with Holt's damped smoothing and 95% confidence intervals.
-- **Chunk 3: AI Executive Story & Verifiable Audit (`/api/analytics/overview/story`):** Grounded executive narrative with numerical fact-checking and AI Quality Audit modal.
-- **Chunk 4: Cross-Sheet Relational Story (`/api/analytics/overview/relational`):** Automatic exact-key join correlation and talent quadrant segmentation.
+### 2. Executive Overview: Chart-First Intelligence & Prioritised Facts
+The Executive Overview presents a chart-first, evidence-grounded experience:
+- **Desktop 2/3 + 1/3 Split Canvas:** A wide (~2/3 width) main area contains the most meaningful charts above the fold, paired with a narrower (~1/3 width) column of prioritised facts (strengths and attention areas) linked directly to supporting charts with focus animations.
+- **Evidence Metadata Header:** Every chart displays measurement, unit, reporting period, target population, source spreadsheet provenance, and data coverage indicators.
+- **Contextual Investigation Drawer (`GET /api/analytics/investigate`):** Clicking any chart element, fact card, or table row slides open an investigation drawer showing what was observed, formula steps, episode breakdown (spells vs continuity without inventing habits), raw SQLite rows, cross-sheet connected evidence, and practical HR next steps.
+- **Progressive Chunked Loading:** Decoupled into 4 parallel asynchronous streams with dedicated skeleton loaders (`/base`, `/visuals`, `/story`, `/relational`).
+- **Untrusted Tabular Data Safety:** Cell contents are sanitized and enclosed in `<untrusted_tabular_data>` blocks with system boundaries preventing prompt injection, plus safe formula handling.
 
 ### 3. Data Explorer: Dual View Modes
 - **📋 Raw Table & Joins:** Paginated rows, column search, and inner joins between connected sheets.
@@ -79,6 +75,7 @@ Overlapping values and uniqueness determine cardinality (one-to-one, one-to-many
 - `GET /api/analytics/overview/story`: AI executive story and quality audit.
 - `GET /api/analytics/overview/relational`: Cross-sheet relational intelligence.
 - `GET /api/analytics/overview`: Full monolithic payload (100% backward-compatible).
+- `GET /api/analytics/investigate`: Deep contextual investigation drill-down for any chart element, fact, department, or individual.
 - `DELETE /api/upload/datasets/{id}`: Delete dataset and purge associated cached narratives.
 - `DELETE /api/upload/datasets`: Bulk workspace purge.
 - `POST /api/copilot/query`: Grounded chat or tool execution (`calculate`, `industrial_metric`, `presentation`, `arithmetic`).
@@ -88,7 +85,7 @@ Overlapping values and uniqueness determine cardinality (one-to-one, one-to-many
 ## Verification
 
 ```bash
-# Backend unit & integration suite (78 tests)
+# Backend unit & integration suite (91 tests)
 cd backend
 PYTHONPATH=. .venv/bin/pytest tests/ -v
 
