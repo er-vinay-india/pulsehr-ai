@@ -75,6 +75,14 @@ def get_presentation_job_status(job_id: str):
     job = job_manager.get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Presentation job not found")
+    if job.get("status") == "ready" and job.get("deck_id"):
+        try:
+            with get_connection() as conn:
+                row = conn.execute("SELECT spec_json FROM presentation_decks WHERE id = ?", (job["deck_id"],)).fetchone()
+                if row and row["spec_json"]:
+                    job["deck"] = json.loads(row["spec_json"])
+        except Exception as exc:
+            logger.warning(f"Could not attach deck spec to ready presentation job: {exc}")
     return job
 
 

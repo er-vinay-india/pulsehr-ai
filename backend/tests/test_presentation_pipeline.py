@@ -213,3 +213,31 @@ def test_presentations_api_endpoints():
     assert res.status_code == 200
     assert res.json()["status"] == "cancelled"
 
+
+def test_ready_job_attaches_deck():
+    client = TestClient(app)
+    sheet_id = seed_test_sales_sheet(client)
+    with get_connection() as conn:
+        ctx = capture_dataset_context(conn, sheet_id=sheet_id)
+    spec = generate_presentation_deck_spec({"objective": "Test Ready Deck"}, ctx)
+    deck_id = spec["id"]
+    with get_connection() as conn:
+        conn.execute(
+            "INSERT INTO presentation_decks (id, title, dataset_id, sheet_id, theme_id, spec_json, pptx_filename, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+            (deck_id, spec["metadata"]["title"], None, sheet_id, spec["metadata"]["theme_id"], json.dumps(spec), "test.pptx")
+        )
+        conn.commit()
+
+    from app.routers.presentations import job_manager as router_job_mgr
+    job_id = router_job_mgr.create_job({"objective": "Test Ready Deck"})
+    router_job_mgr.update_stage(job_id, "ready", "Presentation ready to review", 100, deck_id=deck_id)
+
+    res = client.get(f"/api/presentations/jobs/{job_id}")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["status"] == "ready"
+    assert "deck" in data
+    assert data["deck"]["id"] == deck_id
+    assert len(data["deck"]["slides"]) >= 4
+

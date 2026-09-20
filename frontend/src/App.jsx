@@ -89,7 +89,7 @@ export default function App() {
       <CreatePresentationModal
         isOpen={presentationModalOpen}
         onClose={() => setPresentationModalOpen(false)}
-        activeJobId={activePresentationJob?.job_id}
+        activeJobId={activePresentationJob?.job_id || activePresentationJob?.id}
         initialDeck={activeDeck}
         onJobUpdate={job => {
           setActivePresentationJob(job);

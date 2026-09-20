@@ -26,6 +26,7 @@ import {
   getPresentationThemes,
   startPresentationGeneration,
   getPresentationJob,
+  getPresentationDeck,
   cancelPresentationJob,
   getSheets,
   updatePresentationDeck,
@@ -61,6 +62,7 @@ export default function CreatePresentationModal({
   const [selectedThemeId, setSelectedThemeId] = useState("executive_dark");
   const [selectedSheetId, setSelectedSheetId] = useState("");
   const [instructions, setInstructions] = useState("");
+  const [autoDownload, setAutoDownload] = useState(true);
 
   // Job progress state
   const [currentJobId, setCurrentJobId] = useState(activeJobId);
@@ -118,18 +120,42 @@ export default function CreatePresentationModal({
   useEffect(() => {
     if (viewMode !== "generating" || !currentJobId) return;
 
+    let isMounted = true;
+
     const poll = async () => {
       try {
         const job = await getPresentationJob(currentJobId);
+        if (!isMounted) return;
+
         onJobUpdate(job);
         setJobProgress(job.progress_pct || 0);
         setJobStage(job.stage);
         setJobStageLabel(job.stage_label || "Processing...");
 
-        if (job.status === "ready" && job.deck) {
-          setDeckSpec(job.deck);
-          setViewMode("studio");
-          return;
+        if (job.status === "ready") {
+          let deck = job.deck;
+          if (!deck && job.deck_id) {
+            try {
+              deck = await getPresentationDeck(job.deck_id);
+            } catch (deckErr) {
+              console.error("Failed to fetch ready deck:", deckErr);
+            }
+          }
+
+          if (deck) {
+            setDeckSpec(deck);
+            setViewMode("studio");
+            onJobUpdate({ ...job, deck });
+
+            if (autoDownload) {
+              try {
+                await exportPresentationPptx(deck);
+              } catch (dlErr) {
+                console.warn("Auto-download PowerPoint failed:", dlErr);
+              }
+            }
+            return;
+          }
         }
 
         if (job.status === "failed") {
@@ -145,16 +171,19 @@ export default function CreatePresentationModal({
         pollTimerRef.current = setTimeout(poll, 1500);
       } catch (err) {
         console.error("Job polling error:", err);
-        pollTimerRef.current = setTimeout(poll, 2500);
+        if (isMounted) {
+          pollTimerRef.current = setTimeout(poll, 2500);
+        }
       }
     };
 
     poll();
 
     return () => {
+      isMounted = false;
       if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
     };
-  }, [viewMode, currentJobId]);
+  }, [viewMode, currentJobId, autoDownload]);
 
   if (!isOpen) return null;
 
@@ -379,7 +408,7 @@ export default function CreatePresentationModal({
                   title="Export native editable PowerPoint with charts and notes"
                 >
                   <Download size={14} />
-                  <span>{isExportingPptx ? "Exporting..." : "Export .PPTX"}</span>
+                  <span>{isExportingPptx ? "Preparing .PPTX..." : "Download .PPTX"}</span>
                 </button>
               </>
             )}
@@ -495,6 +524,18 @@ export default function CreatePresentationModal({
                     placeholder="e.g. Focus on holiday promotional lift and inventory replenishment cycles."
                   />
                 </div>
+
+                <div className="form-group" style={{ marginTop: "10px" }}>
+                  <label style={{ display: "inline-flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "0.82rem", color: "var(--fg-primary)", userSelect: "none" }}>
+                    <input
+                      type="checkbox"
+                      checked={autoDownload}
+                      onChange={e => setAutoDownload(e.target.checked)}
+                      style={{ width: "16px", height: "16px", cursor: "pointer", accentColor: "var(--brand-400)" }}
+                    />
+                    <span>Automatically download PowerPoint (.pptx) file when ready</span>
+                  </label>
+                </div>
               </div>
 
               {/* Right Column: Visual Theme Selection */}
@@ -567,9 +608,17 @@ export default function CreatePresentationModal({
           <div className="pres-generating-body">
             <div className="generating-header-card">
               <div className="pipeline-spinner-badge">
-                <RotateCw size={24} className="spin-icon" />
+                {jobStage === "ready" || jobProgress >= 100 ? (
+                  <CheckCircle2 size={28} style={{ color: "var(--brand-400, #ffad85)" }} />
+                ) : (
+                  <RotateCw size={24} className="spin-icon" />
+                )}
               </div>
-              <h4>Synthesizing Presentation Intelligence</h4>
+              <h4>
+                {jobStage === "ready" || jobProgress >= 100
+                  ? "Presentation Ready!"
+                  : "Synthesizing Presentation Intelligence"}
+              </h4>
               <p>{jobStageLabel}</p>
 
               {/* Progress bar */}
@@ -580,6 +629,52 @@ export default function CreatePresentationModal({
                 />
               </div>
               <span className="pipeline-progress-pct">{jobProgress}% Complete</span>
+
+              {(jobStage === "ready" || jobProgress >= 100) && (
+                <div style={{ display: "flex", gap: "10px", marginTop: "16px", justifyContent: "center" }}>
+                  <button
+                    type="button"
+                    className="btn-primary btn-sm"
+                    onClick={() => {
+                      if (deckSpec) {
+                        setViewMode("studio");
+                      } else if (currentJobId) {
+                        getPresentationJob(currentJobId).then(j => {
+                          if (j?.deck) {
+                            setDeckSpec(j.deck);
+                            setViewMode("studio");
+                          } else if (j?.deck_id) {
+                            getPresentationDeck(j.deck_id).then(d => {
+                              setDeckSpec(d);
+                              setViewMode("studio");
+                            });
+                          }
+                        });
+                      }
+                    }}
+                  >
+                    <Presentation size={14} />
+                    <span>Open in Studio</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-secondary btn-sm"
+                    onClick={() => {
+                      if (deckSpec) {
+                        exportPresentationPptx(deckSpec);
+                      } else if (currentJobId) {
+                        getPresentationJob(currentJobId).then(j => {
+                          const did = j?.deck_id;
+                          if (did) window.open(`/api/presentations/download/${did}`, "_blank");
+                        });
+                      }
+                    }}
+                  >
+                    <Download size={14} />
+                    <span>Download .PPTX</span>
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* 6 Stages Stepper */}
