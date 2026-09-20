@@ -26,6 +26,62 @@ import {
   Sparkles,
   ArrowRight
 } from 'lucide-react';
+import { formatDisplayLabel } from '../utils/displayFormatters';
+
+function SheetCatalogCard({ sheet }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const columns = sheet.columns || [];
+  const MAX_INITIAL_CHIPS = 12;
+  const hasMore = columns.length > MAX_INITIAL_CHIPS;
+  const visibleColumns = isExpanded ? columns : columns.slice(0, MAX_INITIAL_CHIPS);
+  const remainingCount = columns.length - MAX_INITIAL_CHIPS;
+
+  return (
+    <div className="sheet-summary-card">
+      <div className="sheet-card-header">
+        <div className="sheet-name-group">
+          <FileSpreadsheet size={16} color="var(--accent)" />
+          <strong>{sheet.name}</strong>
+          {sheet.original_name && (
+            <span className="source-file-badge" title={sheet.original_name}>
+              {sheet.original_name}
+            </span>
+          )}
+        </div>
+        <div className="sheet-meta-badges">
+          <span className="row-count-badge">
+            {Number(sheet.row_count || 0).toLocaleString()} rows · {columns.length} columns
+          </span>
+        </div>
+      </div>
+      <div className="sheet-columns-chip-list">
+        {visibleColumns.map((col) => (
+          <span key={col} className="col-chip" title={col}>
+            {formatDisplayLabel(col)}
+          </span>
+        ))}
+        {hasMore && (
+          <button
+            type="button"
+            className="btn-toggle-chips"
+            onClick={() => setIsExpanded((prev) => !prev)}
+            aria-expanded={isExpanded}
+          >
+            {isExpanded ? (
+              <>
+                Show fewer <ChevronUp size={12} />
+              </>
+            ) : (
+              <>
+                +{remainingCount} more columns <ChevronDown size={12} />
+              </>
+            )}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export default function OverviewPage({ onNavigateTab }) {
   // Chunk 1: Base Catalog & Scope Metadata (< 20ms)
@@ -378,30 +434,14 @@ export default function OverviewPage({ onNavigateTab }) {
               <h3>Worksheet Catalog & Structural Profiling</h3>
               <p className="subtitle">Deterministic schema profiles, uniqueness ratios, and verified key links.</p>
             </div>
-            <button className="btn-secondary" onClick={() => onNavigateTab('data-explorer')}>
+            <button className="btn-secondary" onClick={() => onNavigateTab('explorer')}>
               Open Data Explorer <ArrowRight size={13} style={{ marginLeft: 4 }} />
             </button>
           </div>
 
           <div className="sheet-catalog-cards">
             {displayedSheets.map((s) => (
-              <div key={s.id} className="sheet-summary-card">
-                <div className="sheet-card-header">
-                  <div className="sheet-name-group">
-                    <FileSpreadsheet size={16} color="var(--accent)" />
-                    <strong>{s.name}</strong>
-                    <span className="source-file-badge">{s.original_name}</span>
-                  </div>
-                  <span className="row-count-badge">{s.row_count} rows</span>
-                </div>
-                <div className="sheet-columns-chip-list">
-                  {(s.columns || []).map((col) => (
-                    <span key={col} className="col-chip">
-                      {col}
-                    </span>
-                  ))}
-                </div>
-              </div>
+              <SheetCatalogCard key={s.id} sheet={s} />
             ))}
           </div>
         </div>
