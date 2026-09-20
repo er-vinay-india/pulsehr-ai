@@ -11,12 +11,12 @@ def extract_numeric_claims(text: str) -> list[dict]:
     claims = []
     lines = text.split('\n')
     
-    # Patterns for percentages, counts, thresholds, and decimals
+    # Patterns for percentages, counts, thresholds, decimals, and comma-separated numbers
     pct_pattern = re.compile(r'(\b\d+(?:\.\d+)?)\s*%')
     threshold_pattern = re.compile(r'([><=≥≤]\s*\d+(?:\.\d+)?|\b(?:more than|less than|greater than|over|under)\s+\d+(?:\.\d+)?)\s*([a-zA-Z]+)?', re.IGNORECASE)
     ratio_pattern = re.compile(r'(\d+)\s+(?:out of|\/)\s+(\d+)', re.IGNORECASE)
-    metric_pattern = re.compile(r'(\b\d+(?:\.\d+)?)\s+(workers?|employees?|individuals?|people|days?|records?|rows?|hours?|pts|points?|score|rating|on leave|leave)', re.IGNORECASE)
-    num_pattern = re.compile(r'\b(\d+(?:\.\d+)?)\b')
+    metric_pattern = re.compile(r'(\b\d{1,3}(?:,\d{3})+(?:\.\d+)?|\b\d+(?:\.\d+)?)\s+(stores?|locations?|weeks?|workers?|employees?|individuals?|people|days?|records?|rows?|hours?|pts|points?|score|rating|on leave|leave|units?|dollars?|transactions?)', re.IGNORECASE)
+    num_pattern = re.compile(r'(?:[\$€£])?\b(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)\b')
 
     for line in lines:
         cleaned = line.strip()
@@ -27,8 +27,8 @@ def extract_numeric_claims(text: str) -> list[dict]:
         for match in ratio_pattern.finditer(cleaned):
             claims.append({
                 'text': match.group(0),
-                'numerator': float(match.group(1)),
-                'denominator': float(match.group(2)),
+                'numerator': float(match.group(1).replace(',', '')),
+                'denominator': float(match.group(2).replace(',', '')),
                 'type': 'ratio',
                 'context': cleaned[:100]
             })
@@ -37,14 +37,14 @@ def extract_numeric_claims(text: str) -> list[dict]:
         for match in pct_pattern.finditer(cleaned):
             claims.append({
                 'text': match.group(0),
-                'value': float(match.group(1)),
+                'value': float(match.group(1).replace(',', '')),
                 'type': 'percentage',
                 'context': cleaned[:100]
             })
             
-        # Extract metric mentions (e.g. "4 employees", "7 days", "88 workers")
+        # Extract metric mentions (e.g. "45 stores", "4 employees", "7 days", "143 weeks")
         for match in metric_pattern.finditer(cleaned):
-            val = float(match.group(1))
+            val = float(match.group(1).replace(',', ''))
             unit = match.group(2).lower()
             claims.append({
                 'text': match.group(0),
@@ -56,7 +56,11 @@ def extract_numeric_claims(text: str) -> list[dict]:
 
         # Extract remaining numeric claims
         for match in num_pattern.finditer(cleaned):
-            val = float(match.group(1))
+            val_str = match.group(1).replace(',', '')
+            try:
+                val = float(val_str)
+            except ValueError:
+                continue
             # skip markdown list numbering like "1. ", "2. "
             if cleaned.startswith(f"{int(val)}."):
                 continue

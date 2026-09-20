@@ -91,6 +91,8 @@ def run_contextual_investigation(
     name_col = None
     id_col = None
     date_col = None
+    store_col = None
+    holiday_col = None
 
     if not df.empty:
         for c in df.columns:
@@ -103,8 +105,12 @@ def run_contextual_investigation(
                 name_col = c
             if not id_col and (cl in ('id', 'employeeid', 'empid', 'code', 'candidateid') or cl.endswith('id') or cl.endswith('code')):
                 id_col = c
-            if not date_col and any(k in cl for k in ('date', 'timestamp', 'datetime', 'day')):
+            if not date_col and any(k in cl for k in ('date', 'timestamp', 'datetime', 'day', 'week')):
                 date_col = c
+            if not store_col and any(k in cl for k in ('store', 'location', 'branch', 'outlet', 'facility', 'shop')):
+                store_col = c
+            if not holiday_col and any(k in cl for k in ('holiday', 'holidayflag', 'season')):
+                holiday_col = c
 
     # Match metric column
     metric_col = None
@@ -116,23 +122,432 @@ def run_contextual_investigation(
                 metric_col = c
                 break
 
-    # Build investigation payload based on entity_type
+    # Build investigation payload based on entity_type & target
+    # 1. Store / Location investigation
+    is_store_target = (
+        entity_type in ("store", "location", "branch", "outlet")
+        or target_clean.lower().startswith("store")
+        or (store_col and (
+            target_clean in df[store_col].astype(str).str.replace('.0', '', regex=False).values
+            or (re.search(r'\b\d+\b', target_clean) and re.search(r'\b\d+\b', target_clean).group(0) in df[store_col].astype(str).str.replace('.0', '', regex=False).values)
+        ))
+    )
+    if is_store_target and store_col:
+        return build_store_investigation(
+            conn, all_sheets, sheet_records, target_sheet, store_col, target_clean, metric_col or metric_clean, date_col, holiday_col
+        )
+
+    # 2. Time-series / Date investigation
+    is_date_target = (
+        entity_type in ("time_series", "date", "period")
+        or (date_col and bool(re.search(r'\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}[-/]\d{1,2}[-/]\d{4}', target_clean)))
+    )
+    if is_date_target and date_col:
+        return build_time_series_investigation(
+            conn, all_sheets, sheet_records, target_sheet, date_col, target_clean, metric_col or metric_clean, store_col, holiday_col
+        )
+
+    # 3. Dimension / Holiday cohort investigation
+    is_holiday_target = (
+        entity_type in ("dimension", "cohort")
+        or target_clean in ("Holiday Weeks", "Regular Weeks", "Holiday", "Non-Holiday")
+        or (holiday_col and target_clean in ("0", "1", "Holiday Weeks", "Regular Weeks"))
+    )
+    if is_holiday_target and holiday_col:
+        return build_dimension_investigation(
+            conn, all_sheets, sheet_records, target_sheet, holiday_col, target_clean, metric_col or metric_clean
+        )
+
+    # 4. Department-level investigation
     if entity_type == "department" or (dept_col and target_clean in df[dept_col].astype(str).values):
         return build_department_investigation(
             conn, all_sheets, sheet_records, target_sheet, dept_col, target_clean, metric_col or metric_clean
         )
+    # 5. Individual employee investigation
     elif entity_type in ("employee", "person", "candidate") or (name_col and target_clean in df[name_col].astype(str).values):
         return build_individual_investigation(
             conn, all_sheets, sheet_records, target_sheet, name_col, id_col, target_clean, metric_col or metric_clean
         )
+    # 6. Model group investigation
     elif entity_type == "model_group":
         return build_model_group_investigation(
             conn, all_sheets, sheet_records, target_sheet, target_clean, metric_clean
         )
+    # 7. General investigation fallback
     else:
         return build_general_investigation(
             conn, all_sheets, sheet_records, target_sheet, target_clean, metric_col or metric_clean
         )
+
+
+
+# =============================================================================
+# STORE / LOCATION LEVEL INVESTIGATION
+# =============================================================================
+def build_store_investigation(
+    conn, all_sheets, sheet_records, target_sheet, store_col, target_clean, metric_col, date_col=None, holiday_col=None
+) -> dict:
+    records = sheet_records.get(target_sheet["id"], [])
+    df = pd.DataFrame(records)
+    if df.empty:
+        return build_general_investigation(conn, all_sheets, sheet_records, target_sheet, target_clean, metric_col)
+
+    # Extract store id: e.g. "Store 20" -> "20", "20" -> "20"
+    num_match = re.search(r'\b\d+\b', target_clean)
+    store_id_str = num_match.group(0) if num_match else target_clean.replace("Store", "").strip()
+
+    # Match store rows
+    store_mask = (
+        (df[store_col].astype(str).str.strip().str.replace(r'\.0$', '', regex=True) == store_id_str)
+        | (df[store_col].astype(str).str.strip().str.lower() == target_clean.lower())
+    )
+    store_rows = df[store_mask]
+    if store_rows.empty:
+        store_rows = df.head(100)
+        display_name = target_clean
+    else:
+        display_name = f"Store {store_id_str}" if store_id_str.isdigit() else str(store_rows[store_col].iloc[0])
+
+    num_series = coerce_to_numeric(store_rows[metric_col]) if metric_col in store_rows.columns else pd.Series([], dtype=float)
+    net_series = coerce_to_numeric(df[metric_col]) if metric_col in df.columns else pd.Series([], dtype=float)
+
+    store_val = float(num_series.dropna().mean()) if len(num_series.dropna()) else 0.0
+    net_val = float(net_series.dropna().mean()) if len(net_series.dropna()) else 0.0
+    store_total = float(num_series.dropna().sum()) if len(num_series.dropna()) else 0.0
+    diff_pct = ((store_val - net_val) / net_val * 100) if net_val > 0 else 0.0
+
+    weeks_count = len(store_rows)
+
+    period_str = f"{weeks_count} recorded trading periods"
+    if date_col and date_col in store_rows.columns:
+        parsed_dates = pd.to_datetime(store_rows[date_col], format='mixed', dayfirst=True, errors='coerce').dropna()
+        if not parsed_dates.empty:
+            period_str = f"{parsed_dates.min().strftime('%Y-%m-%d')} to {parsed_dates.max().strftime('%Y-%m-%d')} ({len(parsed_dates)} weeks)"
+
+    is_currency = any(k in str(metric_col).lower() for k in ('sale', 'rev', 'price', 'cost', 'spend', 'dollar', '$'))
+    obs_val_str = f"${store_val:,.2f}/wk" if is_currency else f"{store_val:,.2f}"
+    obs_tot_str = f"${store_total / 1_000_000:,.2f}M Total" if is_currency and store_total >= 1_000_000 else (f"${store_total:,.2f}" if is_currency else f"{store_total:,.0f}")
+    benchmark_str = f"${net_val:,.2f}/wk (All Stores Network Average)" if is_currency else f"{net_val:,.2f} (Network Average)"
+
+    items = [
+        {"name": f"Weekly {metric_col} (Avg)", "value": round(store_val, 2), "unit": "$" if is_currency else "pts"},
+        {"name": f"Total {metric_col}", "value": round(store_total, 2), "unit": "$" if is_currency else "pts"},
+        {"name": "Total Recorded Periods", "value": weeks_count, "unit": "weeks"}
+    ]
+
+    if holiday_col and holiday_col in store_rows.columns:
+        h_mask = store_rows[holiday_col].astype(str).str.strip().isin(['1', '1.0', 'true', 'True'])
+        h_sales = coerce_to_numeric(store_rows.loc[h_mask, metric_col]).dropna()
+        r_sales = coerce_to_numeric(store_rows.loc[~h_mask, metric_col]).dropna()
+        if not h_sales.empty:
+            items.append({"name": "Holiday Periods (Avg)", "value": round(float(h_sales.mean()), 2), "unit": "$" if is_currency else "pts"})
+        if not r_sales.empty:
+            items.append({"name": "Regular Periods (Avg)", "value": round(float(r_sales.mean()), 2), "unit": "$" if is_currency else "pts"})
+
+    for macro_col, macro_unit in [('Temperature', '°F'), ('Fuel_Price', '$'), ('CPI', 'index'), ('Unemployment', '%')]:
+        m_col = next((c for c in store_rows.columns if c.lower().replace('_', '') == macro_col.lower().replace('_', '')), None)
+        if m_col:
+            m_s = coerce_to_numeric(store_rows[m_col]).dropna()
+            if not m_s.empty:
+                items.append({"name": f"Avg {macro_col.replace('_', ' ')}", "value": round(float(m_s.mean()), 2), "unit": macro_unit})
+
+    sort_col = date_col if (date_col and date_col in store_rows.columns) else metric_col
+    sorted_rows = store_rows.sort_values(by=sort_col, ascending=False) if (sort_col and sort_col in store_rows.columns) else store_rows
+    source_records = [
+        {
+            "row_index": r.get("__row_index", idx + 1),
+            "sheet_name": target_sheet["name"],
+            "file": target_sheet["original_name"],
+            "data": {k: clean_val(v) for k, v in r.items() if not k.startswith("__")}
+        }
+        for idx, r in sorted_rows.head(25).iterrows()
+    ]
+
+    connected_records = find_connected_evidence(conn, all_sheets, sheet_records, store_rows, target_sheet["id"])
+
+    questions = [
+        f"What store square footage, floor format (e.g. Supercenter vs Express), and inventory replenishment cycles distinguish {display_name} from network benchmarks?",
+        f"How do weekly promotional markdowns and holiday stocking volumes correlate with observed sales spikes in {display_name}?",
+        "Do local demographic factors and competitive proximity account for variance in customer basket size and visit frequency?"
+    ]
+
+    return {
+        "available": True,
+        "investigation_type": "store",
+        "target": display_name,
+        "metric": metric_col,
+        "sheet_name": target_sheet["name"],
+        "source_file": target_sheet["original_name"],
+        "observation": {
+            "headline": f"{display_name}: Commercial Performance & Drivers Investigation",
+            "observed_value": f"{obs_val_str} ({obs_tot_str})",
+            "benchmark_value": benchmark_str,
+            "variance": f"{diff_pct:+0.1f}% vs Network Baseline",
+            "population_count": f"{weeks_count} recorded weekly periods",
+            "reporting_period": period_str
+        },
+        "methodology": {
+            "formula": f"Mean({metric_col}) = ∑({metric_col}) / Recorded Periods",
+            "numerator": f"Aggregated {metric_col} for {display_name} = {obs_tot_str}",
+            "denominator": f"Total Periods = {weeks_count} weeks",
+            "steps": [
+                f"Isolated {weeks_count} row records for {display_name} from `{target_sheet['original_name']}`.",
+                f"Calculated arithmetic mean {metric_col} of {obs_val_str} vs network baseline of {benchmark_str} ({diff_pct:+0.1f}%).",
+                f"Evaluated environmental conditions and holiday trading cycles across the {weeks_count} reporting periods."
+            ]
+        },
+        "timelines_and_breakdowns": {
+            "title": f"{display_name} Trading & Environmental Indicators",
+            "items": items
+        },
+        "source_records": source_records,
+        "connected_evidence": connected_records,
+        "limitations_and_uncertainty": [
+            f"Dataset contains aggregate weekly store totals. In-store customer footfall, average checkout basket size, and unit volume by SKU category are not present in `{target_sheet['original_name']}`.",
+            "Local pricing promotions, clearance markdowns, and inventory stockouts cannot be distinguished from baseline demand without itemized POS logs."
+        ],
+        "practical_hr_questions": questions,
+        "practical_questions": questions
+    }
+
+
+# =============================================================================
+# TIME-SERIES / PERIOD INVESTIGATION
+# =============================================================================
+def build_time_series_investigation(
+    conn, all_sheets, sheet_records, target_sheet, date_col, date_val, metric_col, store_col=None, holiday_col=None
+) -> dict:
+    records = sheet_records.get(target_sheet["id"], [])
+    df = pd.DataFrame(records)
+    if df.empty:
+        return build_general_investigation(conn, all_sheets, sheet_records, target_sheet, date_val, metric_col)
+
+    date_match = re.search(r'\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}[-/]\d{1,2}[-/]\d{4}', date_val)
+    date_str = date_match.group(0) if date_match else date_val.strip()
+
+    parsed_s = pd.to_datetime(df[date_col], format='mixed', dayfirst=True, errors='coerce')
+    target_dt = pd.to_datetime(date_str, format='mixed', dayfirst=True, errors='coerce')
+
+    if pd.notna(target_dt):
+        date_mask = (parsed_s.dt.strftime('%Y-%m-%d') == target_dt.strftime('%Y-%m-%d'))
+        formatted_date = target_dt.strftime('%Y-%m-%d')
+    else:
+        date_mask = df[date_col].astype(str).str.strip() == date_str
+        formatted_date = date_str
+
+    period_rows = df[date_mask]
+    if period_rows.empty:
+        period_rows = df.head(50)
+        formatted_date = date_str
+
+    is_currency = any(k in str(metric_col).lower() for k in ('sale', 'rev', 'price', 'cost', 'spend', 'dollar', '$'))
+
+    num_series = coerce_to_numeric(period_rows[metric_col]) if metric_col in period_rows.columns else pd.Series([], dtype=float)
+    net_series = coerce_to_numeric(df[metric_col]) if metric_col in df.columns else pd.Series([], dtype=float)
+
+    period_total = float(num_series.dropna().sum()) if len(num_series.dropna()) else 0.0
+    period_avg = float(num_series.dropna().mean()) if len(num_series.dropna()) else 0.0
+
+    if date_col and pd.notna(target_dt):
+        weekly_totals = df.groupby(parsed_s.dt.strftime('%Y-%m-%d'))[metric_col].apply(lambda s: coerce_to_numeric(s).dropna().sum())
+        net_week_avg = float(weekly_totals.mean()) if not weekly_totals.empty else float(net_series.dropna().mean()) * len(period_rows)
+    else:
+        net_week_avg = float(net_series.dropna().mean()) * len(period_rows)
+
+    diff_pct = ((period_total - net_week_avg) / net_week_avg * 100) if net_week_avg > 0 else 0.0
+
+    period_tot_str = f"${period_total / 1_000_000:,.2f}M" if is_currency and period_total >= 1_000_000 else (f"${period_total:,.2f}" if is_currency else f"{period_total:,.0f}")
+    period_avg_str = f"${period_avg:,.2f}/store" if is_currency else f"{period_avg:,.2f}/unit"
+    base_str = f"${net_week_avg / 1_000_000:,.2f}M (Weekly Network Benchmark)" if is_currency and net_week_avg >= 1_000_000 else (f"${net_week_avg:,.2f}" if is_currency else f"{net_week_avg:,.0f}")
+
+    items = [
+        {"name": f"Network Total {metric_col}", "value": round(period_total, 2), "unit": "$" if is_currency else "pts"},
+        {"name": f"Store Average {metric_col}", "value": round(period_avg, 2), "unit": "$" if is_currency else "pts"},
+        {"name": "Reporting Locations", "value": len(period_rows), "unit": "stores"}
+    ]
+
+    if store_col and store_col in period_rows.columns:
+        sorted_period = period_rows.copy()
+        sorted_period['__num'] = coerce_to_numeric(sorted_period[metric_col])
+        top_stores = sorted_period.sort_values(by='__num', ascending=False).head(5)
+        for _, r in top_stores.iterrows():
+            s_name = f"Store {str(r[store_col]).replace('.0', '')}"
+            val = float(r['__num']) if pd.notna(r['__num']) else 0.0
+            items.append({"name": f"Top Store: {s_name}", "value": round(val, 2), "unit": "$" if is_currency else "pts"})
+
+    holiday_note = "Regular Trading Week"
+    if holiday_col and holiday_col in period_rows.columns:
+        is_hol = period_rows[holiday_col].astype(str).str.strip().isin(['1', '1.0', 'true', 'True']).any()
+        holiday_note = "National Holiday Week (Flag = 1)" if is_hol else "Non-Holiday Week (Flag = 0)"
+
+    sorted_rows = period_rows.sort_values(by=metric_col, ascending=False) if metric_col in period_rows.columns else period_rows
+    source_records = [
+        {
+            "row_index": r.get("__row_index", idx + 1),
+            "sheet_name": target_sheet["name"],
+            "file": target_sheet["original_name"],
+            "data": {k: clean_val(v) for k, v in r.items() if not k.startswith("__")}
+        }
+        for idx, r in sorted_rows.head(25).iterrows()
+    ]
+
+    questions = [
+        f"Was the volume surge during the week ending {formatted_date} driven by chain-wide holiday demand or concentrated promotional campaigns in specific store tiers?",
+        f"How did inventory stock levels and replenishment velocity hold up across the {len(period_rows)} reporting store locations?",
+        "Did staffing schedules and freight logistics absorb the volume surge without stockouts or unplanned demurrage costs?"
+    ]
+
+    return {
+        "available": True,
+        "investigation_type": "time_series",
+        "target": f"Week {formatted_date}",
+        "metric": metric_col,
+        "sheet_name": target_sheet["name"],
+        "source_file": target_sheet["original_name"],
+        "observation": {
+            "headline": f"Trading Period {formatted_date}: Network Performance Investigation",
+            "observed_value": f"{period_tot_str} ({period_avg_str})",
+            "benchmark_value": base_str,
+            "variance": f"{diff_pct:+0.1f}% vs Average Week",
+            "population_count": f"{len(period_rows)} reporting locations",
+            "reporting_period": f"Week Ending {formatted_date} ({holiday_note})"
+        },
+        "methodology": {
+            "formula": f"Network Total({formatted_date}) = ∑({metric_col}) Across All Reporting Stores",
+            "numerator": f"Summed sales for {len(period_rows)} stores on {formatted_date} = {period_tot_str}",
+            "denominator": f"Single Weekly Period ({len(period_rows)} store locations)",
+            "steps": [
+                f"Isolated {len(period_rows)} store records matching Date = '{formatted_date}'.",
+                f"Calculated aggregate network volume of {period_tot_str} ({period_avg_str}).",
+                f"Compared against weekly network average of {base_str} ({diff_pct:+0.1f}% variance)."
+            ]
+        },
+        "timelines_and_breakdowns": {
+            "title": f"Week {formatted_date} Top Store Contributors & Metrics",
+            "items": items
+        },
+        "source_records": source_records,
+        "connected_evidence": [],
+        "limitations_and_uncertainty": [
+            f"Data captures aggregate store performance for week ending {formatted_date}. Single-day peaks (e.g. Black Friday or Super Bowl Saturday) cannot be isolated from weekly aggregates.",
+            "Weather anomalies (such as winter storms) or local transportation disruptions on this specific week are not itemized."
+        ],
+        "practical_hr_questions": questions,
+        "practical_questions": questions
+    }
+
+
+# =============================================================================
+# DIMENSION / COHORT INVESTIGATION
+# =============================================================================
+def build_dimension_investigation(
+    conn, all_sheets, sheet_records, target_sheet, dim_col, target_clean, metric_col
+) -> dict:
+    records = sheet_records.get(target_sheet["id"], [])
+    df = pd.DataFrame(records)
+    if df.empty:
+        return build_general_investigation(conn, all_sheets, sheet_records, target_sheet, target_clean, metric_col)
+
+    is_currency = any(k in str(metric_col).lower() for k in ('sale', 'rev', 'price', 'cost', 'spend', 'dollar', '$'))
+
+    is_holiday_dim = any(k in dim_col.lower() for k in ('holiday', 'season'))
+    if is_holiday_dim or "holiday" in target_clean.lower():
+        is_target_holiday = "holiday weeks" in target_clean.lower() or target_clean in ("1", "1.0", "Holiday")
+        if is_target_holiday:
+            cohort_name = "Holiday Weeks"
+            cohort_mask = df[dim_col].astype(str).str.strip().isin(['1', '1.0', 'true', 'True', 'holiday', 'Holiday Weeks'])
+            other_cohort_name = "Regular Weeks"
+            other_mask = ~cohort_mask
+        else:
+            cohort_name = "Regular Weeks"
+            cohort_mask = df[dim_col].astype(str).str.strip().isin(['0', '0.0', 'false', 'False', 'regular', 'Regular Weeks'])
+            other_cohort_name = "Holiday Weeks"
+            other_mask = ~cohort_mask
+    else:
+        cohort_name = target_clean
+        cohort_mask = df[dim_col].astype(str).str.strip().str.lower() == target_clean.lower()
+        other_cohort_name = f"All Other {dim_col}"
+        other_mask = ~cohort_mask
+
+    cohort_rows = df[cohort_mask]
+    other_rows = df[other_mask]
+
+    num_series = coerce_to_numeric(cohort_rows[metric_col]) if metric_col in cohort_rows.columns else pd.Series([], dtype=float)
+    other_series = coerce_to_numeric(other_rows[metric_col]) if metric_col in other_rows.columns else pd.Series([], dtype=float)
+
+    cohort_avg = float(num_series.dropna().mean()) if len(num_series.dropna()) else 0.0
+    cohort_total = float(num_series.dropna().sum()) if len(num_series.dropna()) else 0.0
+    other_avg = float(other_series.dropna().mean()) if len(other_series.dropna()) else 0.0
+    other_total = float(other_series.dropna().sum()) if len(other_series.dropna()) else 0.0
+
+    diff_pct = ((cohort_avg - other_avg) / other_avg * 100) if other_avg > 0 else 0.0
+
+    cohort_avg_str = f"${cohort_avg:,.2f}/wk" if is_currency else f"{cohort_avg:,.2f}"
+    cohort_tot_str = f"${cohort_total / 1_000_000:,.2f}M Total" if is_currency and cohort_total >= 1_000_000 else (f"${cohort_total:,.2f}" if is_currency else f"{cohort_total:,.0f}")
+    other_avg_str = f"${other_avg:,.2f}/wk ({other_cohort_name})" if is_currency else f"{other_avg:,.2f} ({other_cohort_name})"
+
+    items = [
+        {"name": f"{cohort_name} Average", "value": round(cohort_avg, 2), "unit": "$" if is_currency else "pts"},
+        {"name": f"{other_cohort_name} Average", "value": round(other_avg, 2), "unit": "$" if is_currency else "pts"},
+        {"name": f"{cohort_name} Total Volume", "value": round(cohort_total, 2), "unit": "$" if is_currency else "pts"},
+        {"name": f"{cohort_name} Sample Count", "value": len(cohort_rows), "unit": "periods"},
+        {"name": f"{other_cohort_name} Sample Count", "value": len(other_rows), "unit": "periods"}
+    ]
+
+    source_records = [
+        {
+            "row_index": r.get("__row_index", idx + 1),
+            "sheet_name": target_sheet["name"],
+            "file": target_sheet["original_name"],
+            "data": {k: clean_val(v) for k, v in r.items() if not k.startswith("__")}
+        }
+        for idx, r in cohort_rows.head(25).iterrows()
+    ]
+
+    questions = [
+        f"Does the {diff_pct:+0.1f}% variance observed during {cohort_name} hold consistently across all retail store tiers or is it heavily skewed by top supercenters?",
+        f"What additional inventory carrying costs and staffing overhead were incurred to capture {cohort_name} volume?",
+        "How do markdown timings before and after holiday weeks impact overall gross margin elasticity?"
+    ]
+
+    return {
+        "available": True,
+        "investigation_type": "dimension",
+        "target": cohort_name,
+        "metric": metric_col,
+        "sheet_name": target_sheet["name"],
+        "source_file": target_sheet["original_name"],
+        "observation": {
+            "headline": f"{cohort_name}: Comparative Cohort Investigation",
+            "observed_value": f"{cohort_avg_str} ({cohort_tot_str})",
+            "benchmark_value": other_avg_str,
+            "variance": f"{diff_pct:+0.1f}% vs {other_cohort_name}",
+            "population_count": f"{len(cohort_rows)} records evaluated",
+            "reporting_period": f"Comparative Evaluation across {len(df)} total periods"
+        },
+        "methodology": {
+            "formula": f"Mean({cohort_name}) vs Mean({other_cohort_name})",
+            "numerator": f"Sum of {metric_col} in {cohort_name} = {cohort_tot_str}",
+            "denominator": f"Count of {cohort_name} periods = {len(cohort_rows)} rows",
+            "steps": [
+                f"Partitioned {len(df)} workspace rows into {len(cohort_rows)} {cohort_name} and {len(other_rows)} {other_cohort_name}.",
+                f"Computed arithmetic mean for {cohort_name} ({cohort_avg_str}) vs {other_cohort_name} ({other_avg_str}).",
+                f"Determined net variance of {diff_pct:+0.1f}%."
+            ]
+        },
+        "timelines_and_breakdowns": {
+            "title": f"{dim_col} Cohort Comparison Breakdown",
+            "items": items
+        },
+        "source_records": source_records,
+        "connected_evidence": [],
+        "limitations_and_uncertainty": [
+            f"The classification of {dim_col} is based strictly on the recorded values in `{target_sheet['original_name']}`. Extended seasonal promotional run-up or post-event clearance days are not distinguished if outside the binary flag.",
+            "Promotional marketing expenditures and catalog circular releases are not provided in the dataset."
+        ],
+        "practical_hr_questions": questions,
+        "practical_questions": questions
+    }
 
 
 # =============================================================================

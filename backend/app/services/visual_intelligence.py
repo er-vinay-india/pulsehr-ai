@@ -608,8 +608,35 @@ def build_workspace_visual_dashboard(conn, sheet_id: int | None = None, model: s
         if any(str(c).startswith('Person_') for c in cols):
             continue
 
+        sample_row = records[0] if records else {}
+        domain_name, domain_type = detect_sheet_domain(cols)
+        is_retail = "retail" in domain_name.lower() or "commercial" in domain_name.lower()
+        is_wf = "workforce" in domain_name.lower() or "hr" in domain_name.lower()
+        ops_category = "Commercial & Sales Operations" if is_retail else ("Workforce Operations" if is_wf else "Operations & Performance")
+        trends_category = "Sales & Revenue Trends" if is_retail else ("Workforce Trends" if is_wf else "Longitudinal Trends")
+
         prereq = evaluate_chart_prerequisites(records, cols, meta['name'], meta['original_name'])
-        for p in prereq.get('supported_charts', []):
+        supported_charts = list(prereq.get('supported_charts', []))
+
+        def chart_priority(p):
+            m_col = str(p.get('metric_col', '')).lower()
+            c_type = p.get('chart_type', '')
+            is_pri = any(k in m_col for k in ('sales', 'revenue', 'performance', 'rating'))
+            if is_pri and c_type == 'line':
+                return 1
+            if is_pri and c_type == 'bar':
+                return 2
+            if 'compare' in p.get('plan_id', ''):
+                return 3
+            if c_type == 'donut':
+                return 4
+            if c_type == 'line':
+                return 5
+            return 6
+
+        supported_charts.sort(key=chart_priority)
+
+        for p in supported_charts:
             chart_type = p['chart_type']
             unit = p.get('unit', 'units')
             pop = p.get('population', f"{len(records)} records")
@@ -618,11 +645,15 @@ def build_workspace_visual_dashboard(conn, sheet_id: int | None = None, model: s
             srcs = [clean_file_label(meta['original_name'])]
 
             if chart_type == 'bar':
+                insight = (
+                    f"**Distribution Analysis**: Across {len(p['bars'])} {p['category_col'].lower()}s, **{p['bars'][0]['label']}** leads with **{p['bars'][0]['value']} {unit}**, followed by {p['bars'][1]['label']} ({p['bars'][1]['value']} {unit})."
+                    if len(p['bars']) >= 2 else ""
+                )
                 visualizations.append({
                     'id': f"dynamic_{p['plan_id']}_{sid}",
                     'title': p['title'],
                     'subtitle': p['subtitle'],
-                    'category': 'Workforce Operations',
+                    'category': ops_category,
                     'chart_type': 'bar',
                     'sheet_ids': [sid],
                     'sheet_badge': clean_file_label(meta['original_name']),
@@ -642,14 +673,14 @@ def build_workspace_visual_dashboard(conn, sheet_id: int | None = None, model: s
                         {'label': 'Categories', 'value': f"{len(p['bars'])}"},
                         {'label': 'Data Coverage', 'value': f"{cov}%"}
                     ],
-                    'ai_insight': f"**Distribution Analysis**: Across {len(p['bars'])} {p['category_col'].lower()}s, **{p['bars'][0]['label']}** leads with **{p['bars'][0]['value']} {unit}**, followed by {p['bars'][1]['label']} ({p['bars'][1]['value']} {unit})." if len(p['bars']) >= 2 else ""
+                    'ai_insight': insight
                 })
             elif chart_type == 'donut':
                 visualizations.append({
                     'id': f"dynamic_{p['plan_id']}_{sid}",
                     'title': p['title'],
                     'subtitle': p['subtitle'],
-                    'category': 'Workforce Operations',
+                    'category': ops_category,
                     'chart_type': 'donut',
                     'sheet_ids': [sid],
                     'sheet_badge': clean_file_label(meta['original_name']),
@@ -673,11 +704,33 @@ def build_workspace_visual_dashboard(conn, sheet_id: int | None = None, model: s
                     'ai_insight': f"**Composition**: **{p['slices'][0]['label']}** constitutes the largest proportion at **{p['slices'][0]['pct']}%** ({p['slices'][0]['count']} entries)."
                 })
             elif chart_type == 'line':
+                pts = p.get('points', [])
+                if pts and is_retail and unit == '$':
+                    max_pt = max(pts, key=lambda pt: pt.get('value', 0))
+                    min_pt = min(pts, key=lambda pt: pt.get('value', 0))
+                    avg_val = sum(pt.get('value', 0) for pt in pts) / len(pts)
+                    stats_pills = [
+                        {'label': 'Observation Periods', 'value': f"{len(pts)} dates"},
+                        {'label': 'Peak Volume', 'value': f"${max_pt['value'] / 1_000_000:.2f}M ({max_pt['period']})"},
+                        {'label': 'Network Mean', 'value': f"${avg_val / 1_000_000:.2f}M/wk"}
+                    ]
+                    line_insight = (
+                        f"**Revenue Trajectory**: Total weekly sales across all locations peaked on **{max_pt['period']}** at "
+                        f"**${max_pt['value'] / 1_000_000:.2f}M**, with lowest volume on **{min_pt['period']}** (${min_pt['value'] / 1_000_000:.2f}M). "
+                        f"Overall network volume stabilized around an average of **${avg_val / 1_000_000:.2f}M** per week across {len(pts)} observation dates."
+                    )
+                else:
+                    stats_pills = [
+                        {'label': 'Observations', 'value': f"{len(pts)} dates"},
+                        {'label': 'Metric', 'value': p['metric_col']}
+                    ]
+                    line_insight = f"**Sequential Trend**: Profiled {len(pts)} chronological observations from {pts[0]['period']} to {pts[-1]['period']}." if pts else ""
+
                 visualizations.append({
                     'id': f"dynamic_{p['plan_id']}_{sid}",
                     'title': p['title'],
                     'subtitle': p['subtitle'],
-                    'category': 'Longitudinal Trends',
+                    'category': trends_category,
                     'chart_type': 'line',
                     'sheet_ids': [sid],
                     'sheet_badge': clean_file_label(meta['original_name']),
@@ -694,11 +747,8 @@ def build_workspace_visual_dashboard(conn, sheet_id: int | None = None, model: s
                         'metric_col': p['metric_col'],
                         'points': p['points']
                     },
-                    'stats_pills': [
-                        {'label': 'Observations', 'value': f"{len(p['points'])} dates"},
-                        {'label': 'Metric', 'value': p['metric_col']}
-                    ],
-                    'ai_insight': f"**Sequential Trend**: Profiled {len(p['points'])} chronological observations from {p['points'][0]['period']} to {p['points'][-1]['period']}."
+                    'stats_pills': stats_pills,
+                    'ai_insight': line_insight
                 })
 
     # Prioritized Linked Facts Discovery

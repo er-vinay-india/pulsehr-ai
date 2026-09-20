@@ -6,7 +6,6 @@ export default function Header({ activeTab, onSelectTab }) {
   const tabs = [
     { id: "overview", label: "Executive Overview", short: "Overview", icon: LayoutDashboard },
     { id: "explorer", label: "Data Explorer", short: "Explore", icon: Table },
-    { id: "copilot", label: "AI HR Copilot", short: "Copilot", icon: BrainCircuit },
     { id: "presentations", label: "Presentations", short: "Reports", icon: Presentation },
     { id: "ingestion", label: "Ingestion Studio", short: "Upload", icon: UploadCloud }
   ];

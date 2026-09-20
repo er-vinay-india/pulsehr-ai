@@ -207,7 +207,7 @@ export default function OverviewPage({ onNavigateTab }) {
             </span>
           </div>
           <p className="workspace-sub-note">
-            Visual People Analytics & Evidence Intelligence across active workforce workbooks.
+            Evidence-Based Visual Analytics & Decision Intelligence across active workspace data.
           </p>
         </div>
 
@@ -217,10 +217,6 @@ export default function OverviewPage({ onNavigateTab }) {
               Model: {storyData.story_meta.model}
             </span>
           )}
-          <button className="btn-primary-compact" onClick={() => onNavigateTab('copilot')}>
-            <Sparkles size={14} />
-            <span>Ask AI Copilot</span>
-          </button>
         </div>
       </div>
 

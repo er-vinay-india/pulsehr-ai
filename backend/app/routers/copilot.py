@@ -9,10 +9,12 @@ class CopilotQueryRequest(BaseModel):
     query: str = Field(min_length=1, max_length=4000)
     model: str | None = None
     tool: ToolRequest | None = None
+    dataset_id: int | None = None
+    sheet_id: int | None = None
 
 @router.post("/query")
 def ask_copilot(req: CopilotQueryRequest):
-    return query_copilot(req.query, req.model, req.tool)
+    return query_copilot(req.query, req.model, req.tool, req.dataset_id, req.sheet_id)
 
 @router.get("/models")
 def list_models():

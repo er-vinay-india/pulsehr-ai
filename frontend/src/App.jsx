@@ -2,25 +2,32 @@ import React, { useState, useEffect } from "react";
 import Header from "./components/Header.jsx";
 import Footer from "./components/Footer.jsx";
 import EmployeeDrawer from "./components/EmployeeDrawer.jsx";
+import GlobalCopilotWidget from "./components/GlobalCopilotWidget.jsx";
 import OverviewPage from "./pages/OverviewPage.jsx";
 import DataExplorerPage from "./pages/DataExplorerPage.jsx";
-import CopilotPage from "./pages/CopilotPage.jsx";
 import PresentationsPage from "./pages/PresentationsPage.jsx";
 import IngestionPage from "./pages/IngestionPage.jsx";
 
 function parseHash() {
   const hash = window.location.hash.replace("#", "").trim();
-  const valid = ["overview", "explorer", "copilot", "presentations", "ingestion"];
+  const valid = ["overview", "explorer", "presentations", "ingestion"];
   return valid.includes(hash) ? hash : "overview";
 }
 
 export default function App() {
   const [activeTab, setActiveTab] = useState(parseHash);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState(null);
+  const [copilotOpen, setCopilotOpen] = useState(() => window.location.hash.replace("#", "").trim() === "copilot");
 
   useEffect(() => {
     const handleHashChange = () => {
-      setActiveTab(parseHash());
+      const h = window.location.hash.replace("#", "").trim();
+      if (h === "copilot") {
+        setCopilotOpen(true);
+        setActiveTab("overview");
+      } else {
+        setActiveTab(parseHash());
+      }
     };
     window.addEventListener("hashchange", handleHashChange);
     return () => window.removeEventListener("hashchange", handleHashChange);
@@ -29,6 +36,10 @@ export default function App() {
   useEffect(() => { window.scrollTo(0, 0); }, [activeTab]);
 
   const handleSelectTab = tab => {
+    if (tab === "copilot") {
+      setCopilotOpen(true);
+      return;
+    }
     window.location.hash = tab;
     setActiveTab(tab);
   };
@@ -50,11 +61,6 @@ export default function App() {
             onSelectEmployee={setSelectedEmployeeId}
           />
         )}
-        {activeTab === "copilot" && (
-          <CopilotPage
-            onSelectEmployee={setSelectedEmployeeId}
-          />
-        )}
         {activeTab === "presentations" && (
           <PresentationsPage />
         )}
@@ -64,6 +70,14 @@ export default function App() {
       </main>
 
       <Footer />
+
+      {/* Global Right-Side Floating Copilot Widget */}
+      <GlobalCopilotWidget
+        isOpen={copilotOpen}
+        onToggle={setCopilotOpen}
+        onClose={() => setCopilotOpen(false)}
+        onSelectEmployee={setSelectedEmployeeId}
+      />
 
       {selectedEmployeeId !== null && (
         <EmployeeDrawer

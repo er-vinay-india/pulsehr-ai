@@ -179,6 +179,7 @@ def discover_prioritized_hr_facts(
         c_type = chart.get('chart_type') or chart.get('type')
         chart_id = chart.get('id') or chart.get('plan_id')
 
+        # 4. Facts from Dynamic Bar Charts (Rankings, Benchmarks & Comparisons)
         if c_type == 'bar' and chart.get('bars'):
             bars = chart['bars']
             if len(bars) >= 2:
@@ -187,7 +188,8 @@ def discover_prioritized_hr_facts(
                 avg_val = round(sum(b['value'] for b in bars) / len(bars), 2)
                 unit = chart.get('unit', 'units')
                 metric_name = chart.get('metric_col') or chart.get('measured_metric') or 'Metric'
-                cat_col = chart.get('category_col', 'Department')
+                cat_col = chart.get('category_col', 'Category')
+                cat_clean = str(cat_col).lower()
 
                 # Difference calculation
                 if avg_val > 0:
@@ -195,38 +197,139 @@ def discover_prioritized_hr_facts(
                 else:
                     top_diff_pct = 0
 
-                is_negative_metric = any(k in str(metric_name).lower() for k in ('absent', 'leave', 'turnover', 'risk', 'attrition'))
+                is_sales = any(k in str(metric_name).lower() for k in ('sales', 'revenue', 'volume', 'amount'))
+                is_store = 'store' in cat_clean or 'location' in cat_clean or 'branch' in cat_clean
+                is_holiday = 'holiday' in cat_clean or 'flag' in cat_clean
 
-                if is_negative_metric:
-                    badge = "attention" if top_diff_pct > 15 else "strength"
-                    badge_lbl = "Elevated Volume" if badge == "attention" else "Balanced"
-                    impact = f"{top_item['label']} records the highest {metric_name.lower()}, requiring review of root causes."
+                if is_holiday and len(bars) == 2:
+                    h_bar = next((b for b in bars if 'holiday' in b['label'].lower()), bars[0])
+                    r_bar = next((b for b in bars if 'regular' in b['label'].lower()), bars[1])
+                    uplift = round(((h_bar['value'] - r_bar['value']) / max(0.01, r_bar['value'])) * 100, 1)
+                    val_prefix = "$" if unit == "$" else ""
+                    candidates.append({
+                        "id": f"fact_holiday_{chart_id}",
+                        "badge": "shift",
+                        "badge_label": "Seasonal Shift",
+                        "headline": f"Holiday Season Uplift: {uplift:+0.1f}% Sales Surge ({val_prefix}{h_bar['value']:,.0f}/wk)",
+                        "value": f"{val_prefix}{h_bar['value']:,.0f} {unit}",
+                        "comparison": f"vs {val_prefix}{r_bar['value']:,.0f} {unit} in regular periods",
+                        "why_it_matters": "Holiday weeks generate significant revenue concentration requiring inventory buffer and operational alignment.",
+                        "linked_chart_id": chart_id,
+                        "evidence_strength": "High (Direct holiday flag comparison across full period)",
+                        "hr_relevance": 92,
+                        "investigation_target": {
+                            "type": "dimension",
+                            "target": h_bar['label'],
+                            "title": "Holiday Season Sales Impact",
+                            "metric": metric_name,
+                            "sheet_id": chart.get('sheet_ids', [None])[0] if chart.get('sheet_ids') else None
+                        }
+                    })
+                elif is_store and is_sales:
+                    # Top store fact
+                    candidates.append({
+                        "id": f"fact_store_top_{chart_id}",
+                        "badge": "strength",
+                        "badge_label": "Location Leader",
+                        "headline": f"{top_item['label']} Network Leader: ${top_item['value']:,.0f} Average Weekly Sales",
+                        "value": f"${top_item['value']:,.0f}",
+                        "comparison": f"+{top_diff_pct}% vs Store Average (${avg_val:,.0f})",
+                        "why_it_matters": "Demonstrates dependable sales execution and customer demand across reporting periods.",
+                        "linked_chart_id": chart_id,
+                        "evidence_strength": f"High ({len(bars)} locations evaluated)",
+                        "hr_relevance": 90,
+                        "investigation_target": {
+                            "type": "store",
+                            "target": top_item['label'],
+                            "title": f"{top_item['label']} Sales Breakdown",
+                            "metric": metric_name,
+                            "sheet_id": chart.get('sheet_ids', [None])[0] if chart.get('sheet_ids') else None
+                        }
+                    })
+                    # Bottom store attention fact
+                    if len(bars) >= 5:
+                        bot_diff = round(((bottom_item['value'] - avg_val) / max(0.01, avg_val)) * 100, 1)
+                        candidates.append({
+                            "id": f"fact_store_bot_{chart_id}",
+                            "badge": "attention",
+                            "badge_label": "Operational Review",
+                            "headline": f"{bottom_item['label']} Growth Focus: Lowest Weekly Average (${bottom_item['value']:,.0f})",
+                            "value": f"${bottom_item['value']:,.0f}",
+                            "comparison": f"{bot_diff:+0.1f}% vs Store Average (${avg_val:,.0f})",
+                            "why_it_matters": "Identifies locations with constrained throughput warranting review of regional demand and merchandise mix.",
+                            "linked_chart_id": chart_id,
+                            "evidence_strength": f"High ({len(bars)} locations evaluated)",
+                            "hr_relevance": 85,
+                            "investigation_target": {
+                                "type": "store",
+                                "target": bottom_item['label'],
+                                "title": f"{bottom_item['label']} Sales Breakdown",
+                                "metric": metric_name,
+                                "sheet_id": chart.get('sheet_ids', [None])[0] if chart.get('sheet_ids') else None
+                            }
+                        })
                 else:
-                    badge = "strength"
-                    badge_lbl = "Benchmark Leader"
-                    impact = f"{top_item['label']} leads organization across {cat_col.lower()}s with peak {metric_name.lower()}."
+                    is_negative_metric = any(k in str(metric_name).lower() for k in ('absent', 'leave', 'turnover', 'risk', 'attrition'))
+                    if is_negative_metric:
+                        badge = "attention" if top_diff_pct > 15 else "strength"
+                        badge_lbl = "Elevated Volume" if badge == "attention" else "Balanced"
+                        impact = f"{top_item['label']} records the highest {metric_name.lower()}, requiring review of root causes."
+                    else:
+                        badge = "strength"
+                        badge_lbl = "Benchmark Leader"
+                        impact = f"{top_item['label']} leads cohort across {cat_col.lower()}s with peak {metric_name.lower()}."
+
+                    candidates.append({
+                        "id": f"fact_bar_{chart_id}_{top_item['label']}",
+                        "badge": badge,
+                        "badge_label": badge_lbl,
+                        "headline": f"{top_item['label']} Benchmark: Peak {metric_name} ({top_item['value']} {unit})",
+                        "value": f"{top_item['value']} {unit}",
+                        "comparison": f"+{top_diff_pct}% vs Cohort Average ({avg_val} {unit})",
+                        "why_it_matters": impact,
+                        "linked_chart_id": chart_id,
+                        "evidence_strength": f"High ({len(bars)} {cat_col.lower()}s verified)",
+                        "hr_relevance": 88 if is_negative_metric else 86,
+                        "investigation_target": {
+                            "type": "department" if "dept" in str(cat_col).lower() else "category",
+                            "department": top_item['label'],
+                            "title": f"{top_item['label']} {metric_name} Breakdown",
+                            "metric": metric_name,
+                            "sheet_id": chart.get('sheet_ids', [None])[0] if chart.get('sheet_ids') else None
+                        }
+                    })
+
+        # 5. Facts from Time Series Line Charts (Sequential Peaks & Trajectories)
+        elif c_type == 'line' and chart.get('points'):
+            pts = chart['points']
+            if len(pts) >= 5:
+                peak_pt = max(pts, key=lambda p: p['value'])
+                low_pt = min(pts, key=lambda p: p['value'])
+                metric_name = chart.get('metric_col') or chart.get('measured_metric') or 'Metric'
+                unit = chart.get('unit', '')
+                prefix = "$" if unit == "$" else ""
 
                 candidates.append({
-                    "id": f"fact_bar_{chart_id}_{top_item['label']}",
-                    "badge": badge,
-                    "badge_label": badge_lbl,
-                    "headline": f"{top_item['label']} Benchmark: Peak {metric_name} ({top_item['value']} {unit})",
-                    "value": f"{top_item['value']} {unit}",
-                    "comparison": f"+{top_diff_pct}% vs Org Average ({avg_val} {unit})",
-                    "why_it_matters": impact,
+                    "id": f"fact_line_peak_{chart_id}",
+                    "badge": "shift",
+                    "badge_label": "Peak Period",
+                    "headline": f"Peak {metric_name} Volume: {prefix}{peak_pt['value']:,.0f} {unit} ({peak_pt['period']})",
+                    "value": f"{prefix}{peak_pt['value']:,.0f} {unit}",
+                    "comparison": f"Range: {prefix}{low_pt['value']:,.0f} to {prefix}{peak_pt['value']:,.0f} {unit}",
+                    "why_it_matters": f"Pinpoints maximum seasonal volume across {len(pts)} tracked periods.",
                     "linked_chart_id": chart_id,
-                    "evidence_strength": f"High ({len(bars)} {cat_col.lower()}s verified)",
-                    "hr_relevance": 88 if is_negative_metric else 86,
+                    "evidence_strength": f"High ({len(pts)} consecutive time observations)",
+                    "hr_relevance": 89,
                     "investigation_target": {
-                        "type": "department" if "dept" in str(cat_col).lower() else "category",
-                        "department": top_item['label'],
-                        "title": f"{top_item['label']} {metric_name} Breakdown",
+                        "type": "time_series",
+                        "target": str(peak_pt['period']),
+                        "title": f"{metric_name} Temporal Distribution",
                         "metric": metric_name,
                         "sheet_id": chart.get('sheet_ids', [None])[0] if chart.get('sheet_ids') else None
                     }
                 })
 
-        # 5. Facts from Longitudinal Forecasts
+        # 6. Facts from Longitudinal Forecasts
         elif c_type == 'forecast' and chart.get('forecast_data'):
             fd = chart['forecast_data']
             metrics = fd.get('metrics', {})

@@ -72,11 +72,17 @@ export async function getEmployeeDetail(id) {
   return res.json();
 }
 
-export async function askCopilot(query, model = null, tool = null) {
+export async function askCopilot(query, model = null, tool = null, datasetId = null, sheetId = null) {
   const res = await fetch(`${API_BASE}/copilot/query`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ query, model, tool })
+    body: JSON.stringify({
+      query,
+      model,
+      tool,
+      dataset_id: datasetId,
+      sheet_id: sheetId
+    })
   });
   if (!res.ok) throw new Error("Failed to query AI copilot");
   return res.json();
@@ -180,7 +186,12 @@ export const getSheetRows = (id, page, search) => readSheetApi(`/api/sheets/${id
 export const getJoinedRows = (id, page) => readSheetApi(`/api/sheets/relationships/${id}/rows?page=${page}`);
 export const getSheetProjections = (id) => readSheetApi(`/api/sheets/${id}/projections`);
 
-export async function investigateEvidence({ entityType = "department", targetId = null, metric = null, sheetId = null, chartId = null } = {}) {
+export async function investigateEvidence(rawTarget = {}) {
+  const entityType = rawTarget.entityType || rawTarget.entity_type || rawTarget.type || "department";
+  const targetId = rawTarget.targetId || rawTarget.target_id || rawTarget.target || rawTarget.department || null;
+  const metric = rawTarget.metric || null;
+  const sheetId = rawTarget.sheetId || rawTarget.sheet_id || null;
+  const chartId = rawTarget.chartId || rawTarget.chart_id || null;
   const params = new URLSearchParams();
   if (entityType) params.set("entity_type", entityType);
   if (targetId) params.set("target_id", targetId);

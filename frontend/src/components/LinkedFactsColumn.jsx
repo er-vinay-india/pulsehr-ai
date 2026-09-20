@@ -18,11 +18,11 @@ export default function LinkedFactsColumn({
     return (
       <div className="linked-facts-column empty-facts">
         <div className="facts-header">
-          <h3>Key HR Findings & Evidence</h3>
+          <h3>Key Findings & Evidence</h3>
         </div>
         <div className="facts-empty-notice">
           <Info size={18} />
-          <p>Analyzing workforce patterns across active sheets...</p>
+          <p>Analyzing verified patterns across active sheets...</p>
         </div>
       </div>
     );
@@ -59,11 +59,11 @@ export default function LinkedFactsColumn({
   };
 
   return (
-    <aside className="linked-facts-column" aria-label="Prioritized HR Findings and Evidence">
+    <aside className="linked-facts-column" aria-label="Prioritized Findings and Evidence">
       <div className="facts-header">
         <div className="facts-header-left">
-          <h3>Prioritized HR Findings</h3>
-          <span className="facts-count-tag">{facts.length} Verified Insights</span>
+          <h3>Prioritized Evidence</h3>
+          <span className="facts-count-tag">{facts.length} Key Insights</span>
         </div>
       </div>
 

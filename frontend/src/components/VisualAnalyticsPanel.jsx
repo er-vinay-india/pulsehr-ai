@@ -441,17 +441,34 @@ function ComparativeBarChart({ data, onInvestigate }) {
 }
 
 // ============================================================================
-// 6. Dynamic Categorical Bar Chart (Rankings & Department Benchmarks)
+// 6. Dynamic Categorical Bar Chart (Rankings & Benchmarks)
 // ============================================================================
 function DynamicBarChart({ visualization, onInvestigate }) {
   const bars = visualization.bars || [];
+  const [showAll, setShowAll] = useState(false);
   const maxVal = Math.max(...bars.map((b) => b.value), 1);
   const unit = visualization.unit || '';
+  const isCurrency = unit === '$';
+
+  const visibleBars = bars.length > 15 && !showAll ? bars.slice(0, 15) : bars;
+
+  const isStore =
+    visualization.category_col?.toLowerCase().includes('store') ||
+    bars.some((b) => String(b.label).toLowerCase().startsWith('store'));
+
+  const formatVal = (v) => {
+    if (isCurrency) {
+      if (Math.abs(v) >= 1_000_000) return `$${(v / 1_000_000).toFixed(2)}M`;
+      if (Math.abs(v) >= 1_000) return `$${(v / 1_000).toFixed(1)}k`;
+      return `$${v.toFixed(2)}`;
+    }
+    return `${v.toLocaleString()} ${unit}`;
+  };
 
   return (
     <div className="dynamic-bar-chart-wrap">
       <div className="dynamic-bars-list">
-        {bars.map((bar, idx) => {
+        {visibleBars.map((bar, idx) => {
           const pct = Math.min(100, Math.max(6, (bar.value / maxVal) * 100));
           return (
             <div
@@ -460,7 +477,11 @@ function DynamicBarChart({ visualization, onInvestigate }) {
               onClick={() =>
                 onInvestigate &&
                 onInvestigate({
-                  entityType: visualization.category_col?.toLowerCase().includes('dept') ? 'department' : 'category',
+                  entityType: isStore
+                    ? 'store'
+                    : visualization.category_col?.toLowerCase().includes('dept')
+                    ? 'department'
+                    : 'category',
                   targetId: bar.label,
                   metric: visualization.metric_col || visualization.measured_metric,
                   sheetId: visualization.sheet_ids?.[0]
@@ -471,13 +492,183 @@ function DynamicBarChart({ visualization, onInvestigate }) {
               <span className="dynamic-bar-label">{bar.label}</span>
               <div className="dynamic-track">
                 <div className="dynamic-fill" style={{ width: `${pct}%` }}>
-                  <span className="dynamic-val">{bar.value} {unit}</span>
+                  <span className="dynamic-val">{formatVal(bar.value)}</span>
                 </div>
               </div>
             </div>
           );
         })}
       </div>
+      {bars.length > 15 && (
+        <div className="bar-pagination-row" style={{ marginTop: '0.75rem', textAlign: 'center' }}>
+          <button
+            type="button"
+            className="btn-show-more-bars"
+            onClick={() => setShowAll(!showAll)}
+          >
+            {showAll ? `Show Top 15 Entries` : `Show All ${bars.length} Entries (${bars.length - 15} more)`}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================================
+// 6b. Dynamic Chronological Line Chart (Sequential Trajectories & Peaks)
+// ============================================================================
+function DynamicLineChart({ visualization, onInvestigate }) {
+  const lineData = visualization.line_data || {};
+  const points = lineData.points || [];
+  const unit = visualization.unit || '';
+  const isCurrency = unit === '$';
+  const [hoveredPoint, setHoveredPoint] = useState(null);
+
+  if (!points || points.length === 0) {
+    return (
+      <div className="dynamic-line-empty" style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+        <p>No continuous chronological observations available for plotting.</p>
+      </div>
+    );
+  }
+
+  const values = points.map((p) => p.value);
+  const minVal = Math.min(...values);
+  const maxVal = Math.max(...values);
+  const valRange = Math.max(1, maxVal - minVal);
+
+  const svgW = 700;
+  const svgH = 220;
+  const padX = 55;
+  const padY = 30;
+
+  const getX = (idx) => padX + (idx / Math.max(1, points.length - 1)) * (svgW - padX * 2);
+  const getY = (val) => svgH - padY - ((val - minVal) / valRange) * (svgH - padY * 2);
+
+  const pointsStr = points.map((p, i) => `${getX(i)},${getY(p.value)}`).join(' ');
+  const areaPointsStr = `${getX(0)},${svgH - padY} ${pointsStr} ${getX(points.length - 1)},${svgH - padY}`;
+
+  const formatVal = (v) => {
+    if (isCurrency) {
+      if (Math.abs(v) >= 1_000_000_000) return `$${(v / 1_000_000_000).toFixed(2)}B`;
+      if (Math.abs(v) >= 1_000_000) return `$${(v / 1_000_000).toFixed(2)}M`;
+      if (Math.abs(v) >= 1_000) return `$${(v / 1_000).toFixed(1)}k`;
+      return `$${v.toFixed(2)}`;
+    }
+    return `${v.toLocaleString()} ${unit}`;
+  };
+
+  const tickCount = Math.min(6, points.length);
+  const tickIndices = Array.from({ length: tickCount }, (_, i) =>
+    Math.round((i / (tickCount - 1)) * (points.length - 1))
+  );
+
+  return (
+    <div className="dynamic-line-chart-wrap">
+      <div className="line-chart-svg-container">
+        <svg viewBox={`0 0 ${svgW} ${svgH}`} className="dynamic-line-svg" style={{ width: '100%', height: 'auto', display: 'block' }}>
+          <defs>
+            <linearGradient id={`grad-${visualization.id}`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#38bdf8" stopOpacity="0.32" />
+              <stop offset="100%" stopColor="#38bdf8" stopOpacity="0.0" />
+            </linearGradient>
+          </defs>
+
+          {/* Grid lines */}
+          <line x1={padX} y1={padY} x2={svgW - padX} y2={padY} stroke="rgba(255,255,255,0.08)" strokeDasharray="3,3" />
+          <line x1={padX} y1={(padY + svgH - padY) / 2} x2={svgW - padX} y2={(padY + svgH - padY) / 2} stroke="rgba(255,255,255,0.08)" strokeDasharray="3,3" />
+          <line x1={padX} y1={svgH - padY} x2={svgW - padX} y2={svgH - padY} stroke="rgba(255,255,255,0.18)" strokeWidth="1" />
+
+          {/* Y-axis labels */}
+          <text x={padX - 8} y={padY + 4} textAnchor="end" fill="var(--fg-secondary, #94a3b8)" fontSize="10">
+            {formatVal(maxVal)}
+          </text>
+          <text x={padX - 8} y={svgH - padY} textAnchor="end" fill="var(--fg-secondary, #94a3b8)" fontSize="10">
+            {formatVal(minVal)}
+          </text>
+
+          {/* Area Fill */}
+          <polygon points={areaPointsStr} fill={`url(#grad-${visualization.id})`} />
+
+          {/* Polyline path */}
+          <polyline points={pointsStr} fill="none" stroke="#38bdf8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+
+          {/* Interactive data point circles */}
+          {points.map((p, i) => {
+            const cx = getX(i);
+            const cy = getY(p.value);
+            const isHovered = hoveredPoint?.period === p.period;
+
+            return (
+              <circle
+                key={i}
+                cx={cx}
+                cy={cy}
+                r={isHovered ? 6 : (points.length > 50 ? 2.5 : 3.5)}
+                fill={isHovered ? "#f59e0b" : "#38bdf8"}
+                stroke="#0f172a"
+                strokeWidth="1.5"
+                onMouseEnter={() => setHoveredPoint(p)}
+                onClick={() =>
+                  onInvestigate &&
+                  onInvestigate({
+                    entityType: 'time_series',
+                    targetId: p.period,
+                    metric: visualization.metric_col || visualization.measured_metric,
+                    sheetId: visualization.sheet_ids?.[0]
+                  })
+                }
+                style={{ cursor: 'pointer' }}
+              />
+            );
+          })}
+
+          {/* X-axis tick labels */}
+          {tickIndices.map((idx) => {
+            const p = points[idx];
+            if (!p) return null;
+            return (
+              <text
+                key={idx}
+                x={getX(idx)}
+                y={svgH - padY + 18}
+                textAnchor="middle"
+                fill="var(--fg-secondary, #94a3b8)"
+                fontSize="10"
+              >
+                {p.period}
+              </text>
+            );
+          })}
+        </svg>
+      </div>
+
+      {/* Interactive Tooltip & Click Prompt */}
+      {hoveredPoint ? (
+        <div
+          className="line-hover-pill active"
+          onClick={() =>
+            onInvestigate &&
+            onInvestigate({
+              entityType: 'time_series',
+              targetId: hoveredPoint.period,
+              metric: visualization.metric_col || visualization.measured_metric,
+              sheetId: visualization.sheet_ids?.[0]
+            })
+          }
+          style={{ cursor: 'pointer' }}
+        >
+          <span>Period: <strong>{hoveredPoint.period}</strong></span>
+          <span className="pill-sep" style={{ margin: '0 8px' }}>·</span>
+          <span>{visualization.metric_col || 'Measure'}: <strong>{formatVal(hoveredPoint.value)}</strong></span>
+          <span className="pill-click-hint" style={{ marginLeft: 12, color: 'var(--accent, #38bdf8)' }}>Click to investigate period →</span>
+        </div>
+      ) : (
+        <div className="line-hover-pill idle">
+          <span>{points.length} Chronological Observations ({points[0]?.period} to {points[points.length - 1]?.period})</span>
+          <span className="pill-hint" style={{ marginLeft: 12, color: 'var(--text-muted, #64748b)' }}>Hover or click any data point to drill down</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -714,11 +905,11 @@ export default function VisualAnalyticsPanel({
         <div className="section-title-row">
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
-              <h3>Primary Visual Intelligence & People Analytics</h3>
+              <h3>Primary Visual Intelligence & Analytics</h3>
               <span className="badge-ai-count">{allVis.length} Visualizations Ready</span>
             </div>
             <p className="subtitle">
-              Dynamic, evidence-backed charts profiling workforce health, performance distribution, and operational disruption.
+              Dynamic, evidence-backed charts profiling trends, performance distribution, and operational patterns.
             </p>
           </div>
         </div>
@@ -812,7 +1003,7 @@ export default function VisualAnalyticsPanel({
                     <DynamicDonutChart data={v.donut_data} onInvestigate={onInvestigate} metricName={v.measured_metric} />
                   )}
                   {v.chart_type === 'line' && (
-                    <DynamicBarChart visualization={v} onInvestigate={onInvestigate} />
+                    <DynamicLineChart visualization={v} onInvestigate={onInvestigate} />
                   )}
                 </div>
 
