@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   FileSpreadsheet,
   Layers,
@@ -6,7 +6,16 @@ import {
   ExternalLink,
   ChevronRight,
   TrendingUp,
-  AlertCircle
+  AlertCircle,
+  Table,
+  Filter,
+  ArrowUpDown,
+  SlidersHorizontal,
+  Calendar,
+  X,
+  BarChart2,
+  PieChart,
+  ChevronDown
 } from 'lucide-react';
 import MarkdownView from './MarkdownView';
 
@@ -441,73 +450,402 @@ function ComparativeBarChart({ data, onInvestigate }) {
 }
 
 // ============================================================================
-// 6. Dynamic Categorical Bar Chart (Rankings & Benchmarks)
+// Shared Modal: Complete Dataset Detail Table View
 // ============================================================================
-function DynamicBarChart({ visualization, onInvestigate }) {
-  const bars = visualization.bars || [];
-  const [showAll, setShowAll] = useState(false);
-  const maxVal = Math.max(...bars.map((b) => b.value), 1);
-  const unit = visualization.unit || '';
-  const isCurrency = unit === '$';
+function ChartDetailModal({
+  isOpen,
+  onClose,
+  title,
+  subtitle,
+  items = [],
+  benchmarkMean,
+  benchmarkTotal,
+  unit = '',
+  isCurrency = false,
+  entityLabel = 'Entity',
+  metricName = 'Observed Value',
+  population = 'All records',
+  entityType = 'category',
+  sheetId = null,
+  onInvestigate
+}) {
+  const [filterText, setFilterText] = useState('');
+  const [sortField, setSortField] = useState('rank'); // 'rank', 'label', 'value'
+  const [sortAsc, setSortAsc] = useState(true);
 
-  const visibleBars = bars.length > 15 && !showAll ? bars.slice(0, 15) : bars;
+  // Close on Escape key
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
 
-  const isStore =
-    visualization.category_col?.toLowerCase().includes('store') ||
-    bars.some((b) => String(b.label).toLowerCase().startsWith('store'));
+  if (!isOpen) return null;
 
   const formatVal = (v) => {
+    if (v == null || isNaN(v)) return '—';
     if (isCurrency) {
+      if (Math.abs(v) >= 1_000_000_000) return `$${(v / 1_000_000_000).toFixed(2)}B`;
       if (Math.abs(v) >= 1_000_000) return `$${(v / 1_000_000).toFixed(2)}M`;
       if (Math.abs(v) >= 1_000) return `$${(v / 1_000).toFixed(1)}k`;
-      return `$${v.toFixed(2)}`;
+      return `$${Number(v).toFixed(2)}`;
     }
-    return `${v.toLocaleString()} ${unit}`;
+    return `${Number(v).toLocaleString()} ${unit}`;
+  };
+
+  const highest = items.length > 0 ? items.reduce((prev, curr) => (curr.value > prev.value ? curr : prev), items[0]) : null;
+  const lowest = items.length > 0 ? items.reduce((prev, curr) => (curr.value < prev.value ? curr : prev), items[0]) : null;
+  const spreadRatio = lowest && lowest.value > 0 ? (highest.value / lowest.value).toFixed(2) : null;
+
+  const filteredItems = items.filter((it) =>
+    String(it.label || '').toLowerCase().includes(filterText.toLowerCase().trim())
+  );
+
+  const sortedItems = [...filteredItems].sort((a, b) => {
+    if (sortField === 'rank') {
+      return sortAsc ? (a.rank || 0) - (b.rank || 0) : (b.rank || 0) - (a.rank || 0);
+    }
+    if (sortField === 'label') {
+      return sortAsc ? String(a.label).localeCompare(String(b.label)) : String(b.label).localeCompare(String(a.label));
+    }
+    if (sortField === 'value') {
+      return sortAsc ? a.value - b.value : b.value - a.value;
+    }
+    return 0;
+  });
+
+  const handleSort = (field) => {
+    if (sortField === field) {
+      setSortAsc(!sortAsc);
+    } else {
+      setSortField(field);
+      setSortAsc(field === 'label' || field === 'rank');
+    }
   };
 
   return (
-    <div className="dynamic-bar-chart-wrap">
-      <div className="dynamic-bars-list">
-        {visibleBars.map((bar, idx) => {
-          const pct = Math.min(100, Math.max(6, (bar.value / maxVal) * 100));
-          return (
-            <div
-              key={idx}
-              className="dynamic-bar-row interactive-row"
-              onClick={() =>
-                onInvestigate &&
-                onInvestigate({
-                  entityType: isStore
-                    ? 'store'
-                    : visualization.category_col?.toLowerCase().includes('dept')
-                    ? 'department'
-                    : 'category',
-                  targetId: bar.label,
-                  metric: visualization.metric_col || visualization.measured_metric,
-                  sheetId: visualization.sheet_ids?.[0]
-                })
-              }
-              title={`Click to investigate ${bar.label}`}
-            >
-              <span className="dynamic-bar-label">{bar.label}</span>
-              <div className="dynamic-track">
-                <div className="dynamic-fill" style={{ width: `${pct}%` }}>
-                  <span className="dynamic-val">{formatVal(bar.value)}</span>
-                </div>
-              </div>
+    <div className="chart-detail-modal-backdrop" onClick={onClose} role="presentation">
+      <div
+        className="chart-detail-modal-content"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="detail-modal-title"
+      >
+        <div className="modal-header">
+          <div>
+            <div className="modal-title-row">
+              <Table size={18} className="modal-header-icon" />
+              <h3 id="detail-modal-title">Complete Dataset View: {title}</h3>
             </div>
-          );
-        })}
-      </div>
-      {bars.length > 15 && (
-        <div className="bar-pagination-row" style={{ marginTop: '0.75rem', textAlign: 'center' }}>
-          <button
-            type="button"
-            className="btn-show-more-bars"
-            onClick={() => setShowAll(!showAll)}
-          >
-            {showAll ? `Show Top 15 Entries` : `Show All ${bars.length} Entries (${bars.length - 15} more)`}
+            <p className="modal-subtitle">
+              {subtitle || `Comprehensive tabular profile of ${items.length} records · Scope: ${population}`}
+            </p>
+          </div>
+          <button type="button" className="btn-modal-close" onClick={onClose} aria-label="Close table view">
+            <X size={18} />
           </button>
+        </div>
+
+        {/* Aggregate KPI Summary Strip */}
+        <div className="modal-kpi-summary-strip">
+          <div className="modal-kpi-pill">
+            <span className="kpi-label">Total Entities:</span>
+            <span className="kpi-val">{items.length}</span>
+          </div>
+          {benchmarkMean != null && (
+            <div className="modal-kpi-pill highlight-benchmark">
+              <span className="kpi-label">Dataset Benchmark (Mean):</span>
+              <span className="kpi-val">{formatVal(benchmarkMean)}</span>
+            </div>
+          )}
+          {highest && (
+            <div className="modal-kpi-pill">
+              <span className="kpi-label">Highest ({highest.label}):</span>
+              <span className="kpi-val text-green">{formatVal(highest.value)}</span>
+            </div>
+          )}
+          {lowest && (
+            <div className="modal-kpi-pill">
+              <span className="kpi-label">Lowest ({lowest.label}):</span>
+              <span className="kpi-val text-coral">{formatVal(lowest.value)}</span>
+            </div>
+          )}
+          {spreadRatio && (
+            <div className="modal-kpi-pill">
+              <span className="kpi-label">Dispersion Spread:</span>
+              <span className="kpi-val">{spreadRatio}x</span>
+            </div>
+          )}
+        </div>
+
+        {/* Search and Table Controls */}
+        <div className="modal-toolbar">
+          <div className="modal-search-box">
+            <Search size={14} className="search-icon" />
+            <input
+              type="text"
+              placeholder={`Search ${items.length} ${entityLabel.toLowerCase()}s...`}
+              value={filterText}
+              onChange={(e) => setFilterText(e.target.value)}
+              className="modal-search-input"
+            />
+            {filterText && (
+              <button
+                type="button"
+                className="btn-clear-search"
+                onClick={() => setFilterText('')}
+                aria-label="Clear filter"
+              >
+                <X size={12} />
+              </button>
+            )}
+          </div>
+          <span className="modal-showing-count">
+            Showing <strong>{sortedItems.length}</strong> of {items.length} {entityLabel.toLowerCase()}
+          </span>
+        </div>
+
+        {/* Scrollable Table Container */}
+        <div className="modal-table-scroll-wrap">
+          <table className="chart-detail-table">
+            <thead>
+              <tr>
+                <th onClick={() => handleSort('rank')} className="sortable-th th-rank">
+                  <span>Rank</span>
+                  <ArrowUpDown size={12} className={sortField === 'rank' ? 'active-sort' : ''} />
+                </th>
+                <th onClick={() => handleSort('label')} className="sortable-th th-label">
+                  <span>{entityLabel}</span>
+                  <ArrowUpDown size={12} className={sortField === 'label' ? 'active-sort' : ''} />
+                </th>
+                <th onClick={() => handleSort('value')} className="sortable-th th-val">
+                  <span>{metricName}</span>
+                  <ArrowUpDown size={12} className={sortField === 'value' ? 'active-sort' : ''} />
+                </th>
+                {benchmarkMean != null && (
+                  <th className="th-benchmark">
+                    <span>vs Benchmark</span>
+                  </th>
+                )}
+                {benchmarkTotal != null && (
+                  <th className="th-share">
+                    <span>Share of Total</span>
+                  </th>
+                )}
+                <th className="th-action">
+                  <span>Evidence Drilldown</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {sortedItems.map((item, idx) => {
+                const diffPct = benchmarkMean ? ((item.value - benchmarkMean) / benchmarkMean) * 100 : null;
+                const sharePct = benchmarkTotal ? ((item.value / benchmarkTotal) * 100).toFixed(2) : null;
+                const isPositive = diffPct != null && diffPct >= 0;
+
+                return (
+                  <tr key={idx} className="detail-table-row">
+                    <td className="td-rank">
+                      <span className="table-rank-chip">#{item.rank || idx + 1}</span>
+                    </td>
+                    <td className="td-label font-semibold">{item.label}</td>
+                    <td className="td-val font-mono">{formatVal(item.value)}</td>
+                    {benchmarkMean != null && (
+                      <td className="td-benchmark">
+                        {diffPct != null ? (
+                          <span className={`diff-pill ${isPositive ? 'diff-up' : 'diff-down'}`}>
+                            {isPositive ? `+${diffPct.toFixed(1)}%` : `${diffPct.toFixed(1)}%`}
+                          </span>
+                        ) : '—'}
+                      </td>
+                    )}
+                    {benchmarkTotal != null && (
+                      <td className="td-share font-mono text-muted">
+                        {sharePct != null ? `${sharePct}%` : '—'}
+                      </td>
+                    )}
+                    <td className="td-action">
+                      {onInvestigate && (
+                        <button
+                          type="button"
+                          className="btn-table-investigate"
+                          onClick={() => {
+                            onClose();
+                            onInvestigate({
+                              entityType: entityType,
+                              targetId: item.label,
+                              metric: metricName,
+                              sheetId: sheetId
+                            });
+                          }}
+                          title={`Investigate ${item.label}`}
+                        >
+                          <span>Investigate</span>
+                          <ChevronRight size={13} />
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+              {sortedItems.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="modal-empty-search">
+                    No {entityLabel.toLowerCase()} matched "{filterText}".
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Modal Footer */}
+        <div className="modal-footer">
+          <span className="footer-pop-note">
+            Full data population: <strong>{population}</strong> · Source: Verified Sheet Catalog
+          </span>
+          <button type="button" className="btn-modal-done" onClick={onClose}>
+            Done
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================================
+// Shared Toolbar: Data Density Adaptation Controls
+// ============================================================================
+function DataDensityToolbar({
+  totalCount,
+  visibleCount,
+  viewMode,
+  onViewModeChange,
+  searchQuery,
+  onSearchChange,
+  entityLabel = 'entities',
+  rankingBasis = '',
+  benchmarkMean,
+  isCurrency = false,
+  unit = '',
+  onOpenModal
+}) {
+  const formatVal = (v) => {
+    if (v == null || isNaN(v)) return '—';
+    if (isCurrency) {
+      if (Math.abs(v) >= 1_000_000) return `$${(v / 1_000_000).toFixed(2)}M`;
+      if (Math.abs(v) >= 1_000) return `$${(v / 1_000).toFixed(1)}k`;
+      return `$${Number(v).toFixed(2)}`;
+    }
+    return `${Number(v).toLocaleString()} ${unit}`;
+  };
+
+  const isHighCount = totalCount > 10;
+
+  return (
+    <div className="density-toolbar-wrap">
+      {/* Top Meta Line: Status disclosure + Benchmark */}
+      <div className="density-meta-line">
+        <div className="density-subset-pill">
+          {searchQuery ? (
+            <span>
+              Matching <strong>{visibleCount}</strong> of <strong>{totalCount}</strong> {entityLabel}
+            </span>
+          ) : viewMode === 'top' && isHighCount ? (
+            <span>
+              Showing <strong>Top {visibleCount}</strong> of <strong>{totalCount}</strong> {entityLabel} · {rankingBasis}
+            </span>
+          ) : viewMode === 'bottom' && isHighCount ? (
+            <span>
+              Showing <strong>Bottom {visibleCount}</strong> of <strong>{totalCount}</strong> {entityLabel} · Lowest Performer View
+            </span>
+          ) : (
+            <span>
+              Showing all <strong>{totalCount}</strong> {entityLabel}
+            </span>
+          )}
+        </div>
+
+        {benchmarkMean != null && (
+          <div className="density-benchmark-chip" title="Weighted dataset average across all records">
+            <span className="benchmark-label">Network Mean:</span>
+            <span className="benchmark-value">{formatVal(benchmarkMean)}</span>
+          </div>
+        )}
+      </div>
+
+      {/* Control Strip: Segmented View Buttons + In-Chart Search */}
+      {isHighCount && (
+        <div className="density-controls-row">
+          <div className="density-mode-switcher" role="group" aria-label="Ranking view mode">
+            <button
+              type="button"
+              className={`density-mode-btn ${viewMode === 'top' && !searchQuery ? 'active' : ''}`}
+              onClick={() => {
+                onSearchChange('');
+                onViewModeChange('top');
+              }}
+              title="View Top 10 highest ranking entities"
+            >
+              Top 10
+            </button>
+            <button
+              type="button"
+              className={`density-mode-btn ${viewMode === 'bottom' && !searchQuery ? 'active' : ''}`}
+              onClick={() => {
+                onSearchChange('');
+                onViewModeChange('bottom');
+              }}
+              title="View Bottom 10 lowest ranking entities"
+            >
+              Bottom 10
+            </button>
+            <button
+              type="button"
+              className={`density-mode-btn ${viewMode === 'all' && !searchQuery ? 'active' : ''}`}
+              onClick={() => {
+                onSearchChange('');
+                onViewModeChange('all');
+              }}
+              title={`View all ${totalCount} entities in a contained scrollable list`}
+            >
+              All (Scroll)
+            </button>
+            <button
+              type="button"
+              className="density-mode-btn btn-table-trigger"
+              onClick={onOpenModal}
+              title="Open full sortable detail table"
+            >
+              <Table size={12} />
+              <span>Table ({totalCount})</span>
+            </button>
+          </div>
+
+          <div className="density-search-wrap">
+            <Search size={12} className="density-search-icon" />
+            <input
+              type="text"
+              placeholder={`Filter ${entityLabel}...`}
+              value={searchQuery}
+              onChange={(e) => onSearchChange(e.target.value)}
+              className="density-search-input"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                className="density-search-clear"
+                onClick={() => onSearchChange('')}
+                aria-label="Clear filter"
+              >
+                <X size={11} />
+              </button>
+            )}
+          </div>
         </div>
       )}
     </div>
@@ -515,14 +853,215 @@ function DynamicBarChart({ visualization, onInvestigate }) {
 }
 
 // ============================================================================
-// 6b. Dynamic Chronological Line Chart (Sequential Trajectories & Peaks)
+// 6. Dynamic Categorical Bar Chart (Rankings, Subsets & Benchmarks)
+// ============================================================================
+function DynamicBarChart({ visualization, onInvestigate }) {
+  const bars = visualization.bars || [];
+  const unit = visualization.unit || '';
+  const isCurrency = unit === '$';
+  const categoryCol = visualization.category_col || 'Entity';
+  const isHighCount = bars.length > 10;
+
+  const [viewMode, setViewMode] = useState(isHighCount ? 'top' : 'all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showDetailModal, setShowDetailModal] = useState(false);
+
+  const isStore =
+    categoryCol.toLowerCase().includes('store') ||
+    bars.some((b) => String(b.label).toLowerCase().startsWith('store'));
+
+  const entityType = isStore
+    ? 'store'
+    : categoryCol.toLowerCase().includes('dept')
+    ? 'department'
+    : 'category';
+
+  const overallMean =
+    visualization.overall_mean != null
+      ? visualization.overall_mean
+      : bars.length > 0
+      ? bars.reduce((acc, b) => acc + b.value, 0) / bars.length
+      : 0;
+
+  const overallTotal =
+    visualization.overall_total != null
+      ? visualization.overall_total
+      : bars.reduce((acc, b) => acc + b.value, 0);
+
+  const formatVal = (v) => {
+    if (v == null || isNaN(v)) return '—';
+    if (isCurrency) {
+      if (Math.abs(v) >= 1_000_000_000) return `$${(v / 1_000_000_000).toFixed(2)}B`;
+      if (Math.abs(v) >= 1_000_000) return `$${(v / 1_000_000).toFixed(2)}M`;
+      if (Math.abs(v) >= 1_000) return `$${(v / 1_000).toFixed(1)}k`;
+      return `$${Number(v).toFixed(2)}`;
+    }
+    return `${Number(v).toLocaleString()} ${unit}`;
+  };
+
+  // Map each bar with absolute rank
+  const allBarsWithRanks = useMemo(() => {
+    return bars.map((b, idx) => ({
+      ...b,
+      rank: idx + 1
+    }));
+  }, [bars]);
+
+  // Filter based on search query
+  const filteredBars = useMemo(() => {
+    if (!searchQuery.trim()) return allBarsWithRanks;
+    return allBarsWithRanks.filter((b) =>
+      String(b.label).toLowerCase().includes(searchQuery.toLowerCase().trim())
+    );
+  }, [allBarsWithRanks, searchQuery]);
+
+  // Slice displayed bars based on viewMode
+  const displayedBars = useMemo(() => {
+    if (searchQuery.trim()) return filteredBars;
+    if (!isHighCount) return filteredBars;
+    if (viewMode === 'top') return filteredBars.slice(0, 10);
+    if (viewMode === 'bottom') return filteredBars.slice(-10);
+    return filteredBars; // 'all' mode
+  }, [filteredBars, searchQuery, isHighCount, viewMode]);
+
+  const maxVal = Math.max(...bars.map((b) => b.value), 1);
+  const benchmarkPct = maxVal > 0 ? Math.min(100, Math.max(0, (overallMean / maxVal) * 100)) : 0;
+
+  const entityLabelClean = categoryCol.replace('_', ' ');
+
+  return (
+    <div className="dynamic-bar-chart-wrap bounded-chart-container">
+      {/* Density Adaptive Toolbar */}
+      <DataDensityToolbar
+        totalCount={bars.length}
+        visibleCount={displayedBars.length}
+        viewMode={viewMode}
+        onViewModeChange={setViewMode}
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        entityLabel={`${entityLabelClean}s`}
+        rankingBasis={visualization.ranking_basis || `${visualization.metric_col || 'Measure'} (Ranked High to Low)`}
+        benchmarkMean={overallMean}
+        isCurrency={isCurrency}
+        unit={unit}
+        onOpenModal={() => setShowDetailModal(true)}
+      />
+
+      {/* Horizontal Bar Visual List (Bounded Height Container) */}
+      <div className={`dynamic-bars-list ${viewMode === 'all' || searchQuery ? 'density-bars-scroll-list' : 'density-bars-fixed-list'}`}>
+        {displayedBars.map((bar) => {
+          const pct = Math.min(100, Math.max(6, (bar.value / maxVal) * 100));
+          const diffPct = overallMean ? ((bar.value - overallMean) / overallMean) * 100 : null;
+          const isAboveBenchmark = diffPct != null && diffPct >= 0;
+
+          return (
+            <div
+              key={bar.rank}
+              className="dynamic-bar-row interactive-row"
+              onClick={() =>
+                onInvestigate &&
+                onInvestigate({
+                  entityType: entityType,
+                  targetId: bar.label,
+                  metric: visualization.metric_col || visualization.measured_metric,
+                  sheetId: visualization.sheet_ids?.[0]
+                })
+              }
+              title={`#${bar.rank} ${bar.label}: ${formatVal(bar.value)} (${isAboveBenchmark ? '+' : ''}${diffPct?.toFixed(1)}% vs network average) · Click to investigate`}
+            >
+              {/* Rank Chip */}
+              <span className={`bar-rank-badge ${bar.rank <= 3 ? 'rank-podium' : ''}`}>
+                #{bar.rank}
+              </span>
+
+              {/* Entity Label */}
+              <span className="dynamic-bar-label" title={bar.label}>
+                {bar.label}
+              </span>
+
+              {/* Progress Track with Benchmark Reference Marker */}
+              <div className="dynamic-track">
+                {benchmarkPct > 0 && (
+                  <div
+                    className="benchmark-marker-line"
+                    style={{ left: `${benchmarkPct}%` }}
+                    title={`Network Mean: ${formatVal(overallMean)}`}
+                  />
+                )}
+                <div
+                  className={`dynamic-fill ${bar.rank <= 3 ? 'fill-top-ranked' : ''}`}
+                  style={{ width: `${pct}%` }}
+                >
+                  <span className="dynamic-val">{formatVal(bar.value)}</span>
+                </div>
+              </div>
+
+              {/* vs Benchmark Comparison Pill */}
+              {diffPct != null && (
+                <span className={`bar-diff-pill ${isAboveBenchmark ? 'diff-up' : 'diff-down'}`}>
+                  {isAboveBenchmark ? `+${diffPct.toFixed(1)}%` : `${diffPct.toFixed(1)}%`}
+                </span>
+              )}
+            </div>
+          );
+        })}
+
+        {displayedBars.length === 0 && (
+          <div className="density-empty-state">
+            <p>No {entityLabelClean.toLowerCase()}s matching "{searchQuery}".</p>
+            <button type="button" className="btn-inline-reset" onClick={() => setSearchQuery('')}>
+              Clear Search
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Complete Dataset Detail Modal */}
+      <ChartDetailModal
+        isOpen={showDetailModal}
+        onClose={() => setShowDetailModal(false)}
+        title={visualization.title}
+        subtitle={visualization.subtitle}
+        items={allBarsWithRanks}
+        benchmarkMean={overallMean}
+        benchmarkTotal={overallTotal}
+        unit={unit}
+        isCurrency={isCurrency}
+        entityLabel={entityLabelClean}
+        metricName={visualization.metric_col || visualization.measured_metric}
+        population={visualization.population}
+        entityType={entityType}
+        sheetId={visualization.sheet_ids?.[0]}
+        onInvestigate={onInvestigate}
+      />
+    </div>
+  );
+}
+
+// ============================================================================
+// 6b. Dynamic Chronological Line Chart (Sequential Trajectories & Zoom)
 // ============================================================================
 function DynamicLineChart({ visualization, onInvestigate }) {
   const lineData = visualization.line_data || {};
   const points = lineData.points || [];
   const unit = visualization.unit || '';
   const isCurrency = unit === '$';
+  const availableYears = lineData.available_years || [];
+  const isDense = points.length > 30;
+
+  const [rangeMode, setRangeMode] = useState('all');
   const [hoveredPoint, setHoveredPoint] = useState(null);
+  const [showDetailModal, setShowDetailModal] = useState(false);
+
+  const activePoints = useMemo(() => {
+    if (!isDense || rangeMode === 'all') return points;
+    if (rangeMode === 'last52') return points.slice(-52);
+    if (rangeMode.startsWith('year:')) {
+      const yr = rangeMode.split(':')[1];
+      return points.filter((p) => p.period.startsWith(yr));
+    }
+    return points;
+  }, [points, isDense, rangeMode]);
 
   if (!points || points.length === 0) {
     return (
@@ -532,41 +1071,94 @@ function DynamicLineChart({ visualization, onInvestigate }) {
     );
   }
 
-  const values = points.map((p) => p.value);
-  const minVal = Math.min(...values);
-  const maxVal = Math.max(...values);
+  const values = activePoints.map((p) => p.value);
+  const minVal = values.length > 0 ? Math.min(...values) : 0;
+  const maxVal = values.length > 0 ? Math.max(...values) : 1;
   const valRange = Math.max(1, maxVal - minVal);
+  const rangeMean = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0;
 
   const svgW = 700;
-  const svgH = 220;
+  const svgH = 210;
   const padX = 55;
-  const padY = 30;
+  const padY = 25;
 
-  const getX = (idx) => padX + (idx / Math.max(1, points.length - 1)) * (svgW - padX * 2);
+  const getX = (idx) => padX + (idx / Math.max(1, activePoints.length - 1)) * (svgW - padX * 2);
   const getY = (val) => svgH - padY - ((val - minVal) / valRange) * (svgH - padY * 2);
 
-  const pointsStr = points.map((p, i) => `${getX(i)},${getY(p.value)}`).join(' ');
-  const areaPointsStr = `${getX(0)},${svgH - padY} ${pointsStr} ${getX(points.length - 1)},${svgH - padY}`;
+  const pointsStr = activePoints.map((p, i) => `${getX(i)},${getY(p.value)}`).join(' ');
+  const areaPointsStr = `${getX(0)},${svgH - padY} ${pointsStr} ${getX(activePoints.length - 1)},${svgH - padY}`;
 
   const formatVal = (v) => {
+    if (v == null || isNaN(v)) return '—';
     if (isCurrency) {
       if (Math.abs(v) >= 1_000_000_000) return `$${(v / 1_000_000_000).toFixed(2)}B`;
       if (Math.abs(v) >= 1_000_000) return `$${(v / 1_000_000).toFixed(2)}M`;
       if (Math.abs(v) >= 1_000) return `$${(v / 1_000).toFixed(1)}k`;
-      return `$${v.toFixed(2)}`;
+      return `$${Number(v).toFixed(2)}`;
     }
-    return `${v.toLocaleString()} ${unit}`;
+    return `${Number(v).toLocaleString()} ${unit}`;
   };
 
-  const tickCount = Math.min(6, points.length);
+  const tickCount = Math.min(6, activePoints.length);
   const tickIndices = Array.from({ length: tickCount }, (_, i) =>
-    Math.round((i / (tickCount - 1)) * (points.length - 1))
+    Math.round((i / Math.max(1, tickCount - 1)) * (activePoints.length - 1))
   );
 
+  const pointsWithRanks = useMemo(() => {
+    return points.map((p, idx) => ({
+      rank: idx + 1,
+      label: p.period,
+      value: p.value
+    }));
+  }, [points]);
+
   return (
-    <div className="dynamic-line-chart-wrap">
+    <div className="dynamic-line-chart-wrap bounded-chart-container">
+      {/* Dense Time-Series Range Presets & Table Button */}
+      {isDense && (
+        <div className="line-range-toolbar">
+          <div className="range-pills-group">
+            <button
+              type="button"
+              className={`range-pill-btn ${rangeMode === 'all' ? 'active' : ''}`}
+              onClick={() => setRangeMode('all')}
+            >
+              All ({points.length} wks)
+            </button>
+            <button
+              type="button"
+              className={`range-pill-btn ${rangeMode === 'last52' ? 'active' : ''}`}
+              onClick={() => setRangeMode('last52')}
+            >
+              Last 52 Wks (1Y)
+            </button>
+            {availableYears.map((yr) => (
+              <button
+                key={yr}
+                type="button"
+                className={`range-pill-btn ${rangeMode === `year:${yr}` ? 'active' : ''}`}
+                onClick={() => setRangeMode(`year:${yr}`)}
+              >
+                {yr}
+              </button>
+            ))}
+          </div>
+
+          <button
+            type="button"
+            className="btn-line-table-view"
+            onClick={() => setShowDetailModal(true)}
+            title="View complete time-series table"
+          >
+            <Table size={12} />
+            <span>Table View</span>
+          </button>
+        </div>
+      )}
+
+      {/* SVG Canvas (Bounded Height) */}
       <div className="line-chart-svg-container">
-        <svg viewBox={`0 0 ${svgW} ${svgH}`} className="dynamic-line-svg" style={{ width: '100%', height: 'auto', display: 'block' }}>
+        <svg viewBox={`0 0 ${svgW} ${svgH}`} className="dynamic-line-svg" preserveAspectRatio="none">
           <defs>
             <linearGradient id={`grad-${visualization.id}`} x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor="#38bdf8" stopOpacity="0.32" />
@@ -594,7 +1186,7 @@ function DynamicLineChart({ visualization, onInvestigate }) {
           <polyline points={pointsStr} fill="none" stroke="#38bdf8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
 
           {/* Interactive data point circles */}
-          {points.map((p, i) => {
+          {activePoints.map((p, i) => {
             const cx = getX(i);
             const cy = getY(p.value);
             const isHovered = hoveredPoint?.period === p.period;
@@ -604,7 +1196,7 @@ function DynamicLineChart({ visualization, onInvestigate }) {
                 key={i}
                 cx={cx}
                 cy={cy}
-                r={isHovered ? 6 : (points.length > 50 ? 2.5 : 3.5)}
+                r={isHovered ? 6 : (activePoints.length > 50 ? 2.5 : 3.5)}
                 fill={isHovered ? "#f59e0b" : "#38bdf8"}
                 stroke="#0f172a"
                 strokeWidth="1.5"
@@ -625,13 +1217,13 @@ function DynamicLineChart({ visualization, onInvestigate }) {
 
           {/* X-axis tick labels */}
           {tickIndices.map((idx) => {
-            const p = points[idx];
+            const p = activePoints[idx];
             if (!p) return null;
             return (
               <text
                 key={idx}
                 x={getX(idx)}
-                y={svgH - padY + 18}
+                y={svgH - padY + 16}
                 textAnchor="middle"
                 fill="var(--fg-secondary, #94a3b8)"
                 fontSize="10"
@@ -643,7 +1235,7 @@ function DynamicLineChart({ visualization, onInvestigate }) {
         </svg>
       </div>
 
-      {/* Interactive Tooltip & Click Prompt */}
+      {/* Interactive Tooltip & Status Strip */}
       {hoveredPoint ? (
         <div
           className="line-hover-pill active"
@@ -658,64 +1250,223 @@ function DynamicLineChart({ visualization, onInvestigate }) {
           }
           style={{ cursor: 'pointer' }}
         >
-          <span>Period: <strong>{hoveredPoint.period}</strong></span>
-          <span className="pill-sep" style={{ margin: '0 8px' }}>·</span>
+          <span>Date: <strong>{hoveredPoint.period}</strong></span>
+          <span className="pill-sep">·</span>
           <span>{visualization.metric_col || 'Measure'}: <strong>{formatVal(hoveredPoint.value)}</strong></span>
-          <span className="pill-click-hint" style={{ marginLeft: 12, color: 'var(--accent, #38bdf8)' }}>Click to investigate period →</span>
+          {rangeMean > 0 && (
+            <>
+              <span className="pill-sep">·</span>
+              <span style={{ color: hoveredPoint.value >= rangeMean ? '#10b981' : '#f43f5e' }}>
+                {hoveredPoint.value >= rangeMean ? '+' : ''}{(((hoveredPoint.value - rangeMean) / rangeMean) * 100).toFixed(1)}% vs period avg
+              </span>
+            </>
+          )}
+          <span className="pill-click-hint">Click to investigate date →</span>
         </div>
       ) : (
         <div className="line-hover-pill idle">
-          <span>{points.length} Chronological Observations ({points[0]?.period} to {points[points.length - 1]?.period})</span>
-          <span className="pill-hint" style={{ marginLeft: 12, color: 'var(--text-muted, #64748b)' }}>Hover or click any data point to drill down</span>
+          <span>
+            Showing <strong>{activePoints.length}</strong> of <strong>{points.length}</strong> dates ({activePoints[0]?.period} to {activePoints[activePoints.length - 1]?.period}) · Avg: <strong>{formatVal(rangeMean)}</strong>
+          </span>
+          <span className="pill-hint">Hover point for detail · Click to investigate</span>
         </div>
       )}
+
+      {/* Detail Table Modal */}
+      <ChartDetailModal
+        isOpen={showDetailModal}
+        onClose={() => setShowDetailModal(false)}
+        title={visualization.title}
+        subtitle={visualization.subtitle}
+        items={pointsWithRanks}
+        benchmarkMean={rangeMean}
+        unit={unit}
+        isCurrency={isCurrency}
+        entityLabel="Period Date"
+        metricName={visualization.metric_col || visualization.measured_metric}
+        population={visualization.population}
+        entityType="time_series"
+        sheetId={visualization.sheet_ids?.[0]}
+        onInvestigate={onInvestigate}
+      />
     </div>
   );
 }
 
 // ============================================================================
-// 7. Dynamic Categorical Donut Chart (Proportional Composition)
+// 7. Dynamic Categorical Donut Chart (Proportional Composition & High-Cardinality)
 // ============================================================================
 function DynamicDonutChart({ data, onInvestigate, metricName }) {
-  const slices = data?.slices || [];
+  const rawSlices = data?.slices || [];
   const total = data?.total || 0;
   const [hoveredSlice, setHoveredSlice] = useState(null);
+  const [viewMode, setViewMode] = useState('donut'); // 'donut' | 'ranked'
+  const [showDetailModal, setShowDetailModal] = useState(false);
+
+  const isHighCardinality = rawSlices.length > 6;
+
+  // If >6 slices, group top 5 and group remaining into 'Other'
+  const displaySlices = useMemo(() => {
+    if (!isHighCardinality || viewMode === 'ranked') return rawSlices;
+    const top5 = rawSlices.slice(0, 5);
+    const rest = rawSlices.slice(5);
+    const restCount = rest.reduce((acc, s) => acc + (s.count || 0), 0);
+    const restPct = total > 0 ? ((restCount / total) * 100).toFixed(1) : 0;
+    return [
+      ...top5,
+      {
+        label: `Other (${rest.length} segments)`,
+        count: restCount,
+        pct: Number(restPct),
+        color: '#64748b',
+        isGrouped: true
+      }
+    ];
+  }, [rawSlices, isHighCardinality, viewMode, total]);
 
   let cumulativeAngle = 0;
   const radius = 60;
   const cx = 80;
   const cy = 80;
 
+  const maxSliceCount = Math.max(...rawSlices.map((s) => s.count || 0), 1);
+
+  const slicesWithRanks = useMemo(() => {
+    return rawSlices.map((s, idx) => ({
+      rank: idx + 1,
+      label: s.label,
+      value: s.count
+    }));
+  }, [rawSlices]);
+
   return (
-    <div className="dynamic-donut-wrap">
-      <div className="donut-svg-col">
-        <svg viewBox="0 0 160 160" className="donut-svg">
-          {slices.map((slice, idx) => {
-            const angle = (slice.count / (total || 1)) * 360;
-            const startAngle = cumulativeAngle;
-            cumulativeAngle += angle;
+    <div className="dynamic-donut-wrap bounded-chart-container">
+      {/* High Cardinality Switcher Bar */}
+      {isHighCardinality && (
+        <div className="donut-density-bar">
+          <span className="donut-cardinality-badge">
+            {rawSlices.length} Distinct Segments
+          </span>
+          <div className="donut-mode-toggle">
+            <button
+              type="button"
+              className={`donut-toggle-btn ${viewMode === 'donut' ? 'active' : ''}`}
+              onClick={() => setViewMode('donut')}
+              title="Donut Composition View"
+            >
+              <PieChart size={12} />
+              <span>Donut</span>
+            </button>
+            <button
+              type="button"
+              className={`donut-toggle-btn ${viewMode === 'ranked' ? 'active' : ''}`}
+              onClick={() => setViewMode('ranked')}
+              title="Ranked List View"
+            >
+              <BarChart2 size={12} />
+              <span>Ranked List</span>
+            </button>
+            <button
+              type="button"
+              className="donut-toggle-btn"
+              onClick={() => setShowDetailModal(true)}
+              title="View full table"
+            >
+              <Table size={12} />
+              <span>Table</span>
+            </button>
+          </div>
+        </div>
+      )}
 
-            const rad1 = ((startAngle - 90) * Math.PI) / 180.0;
-            const rad2 = ((startAngle + angle - 90) * Math.PI) / 180.0;
+      {viewMode === 'donut' ? (
+        <div className="donut-visual-content">
+          <div className="donut-svg-col">
+            <svg viewBox="0 0 160 160" className="donut-svg">
+              {displaySlices.map((slice, idx) => {
+                const angle = (slice.count / (total || 1)) * 360;
+                const startAngle = cumulativeAngle;
+                cumulativeAngle += angle;
 
-            const x1 = cx + radius * Math.cos(rad1);
-            const y1 = cy + radius * Math.sin(rad1);
-            const x2 = cx + radius * Math.cos(rad2);
-            const y2 = cy + radius * Math.sin(rad2);
+                const rad1 = ((startAngle - 90) * Math.PI) / 180.0;
+                const rad2 = ((startAngle + angle - 90) * Math.PI) / 180.0;
 
-            const largeArc = angle > 180 ? 1 : 0;
-            const d = `M ${cx} ${cy} L ${x1} ${y1} A ${radius} ${radius} 0 ${largeArc} 1 ${x2} ${y2} Z`;
+                const x1 = cx + radius * Math.cos(rad1);
+                const y1 = cy + radius * Math.sin(rad1);
+                const x2 = cx + radius * Math.cos(rad2);
+                const y2 = cy + radius * Math.sin(rad2);
 
-            return (
-              <path
+                const largeArc = angle > 180 ? 1 : 0;
+                const d = `M ${cx} ${cy} L ${x1} ${y1} A ${radius} ${radius} 0 ${largeArc} 1 ${x2} ${y2} Z`;
+
+                return (
+                  <path
+                    key={idx}
+                    d={d}
+                    fill={slice.color}
+                    opacity={hoveredSlice?.label === slice.label ? 1 : 0.85}
+                    stroke="#0f172a"
+                    strokeWidth="2"
+                    onMouseEnter={() => setHoveredSlice(slice)}
+                    onMouseLeave={() => setHoveredSlice(null)}
+                    onClick={() =>
+                      !slice.isGrouped &&
+                      onInvestigate &&
+                      onInvestigate({
+                        entityType: 'category',
+                        targetId: slice.label,
+                        metric: metricName
+                      })
+                    }
+                    style={{ cursor: slice.isGrouped ? 'default' : 'pointer' }}
+                  />
+                );
+              })}
+              {/* Inner cutout for donut hole */}
+              <circle cx={cx} cy={cy} r="35" fill="var(--surface-primary, #0f172a)" />
+              <text x={cx} y={cy - 2} textAnchor="middle" fill="var(--fg-primary)" fontSize="14" fontWeight="700">
+                {total}
+              </text>
+              <text x={cx} y={cy + 12} textAnchor="middle" fill="var(--fg-secondary)" fontSize="9">
+                Total
+              </text>
+            </svg>
+          </div>
+
+          <div className="donut-legend-col">
+            {displaySlices.map((slice, idx) => (
+              <div
                 key={idx}
-                d={d}
-                fill={slice.color}
-                opacity={hoveredSlice?.label === slice.label ? 1 : 0.85}
-                stroke="#0f172a"
-                strokeWidth="2"
+                className={`donut-legend-row ${hoveredSlice?.label === slice.label ? 'highlighted' : ''}`}
                 onMouseEnter={() => setHoveredSlice(slice)}
                 onMouseLeave={() => setHoveredSlice(null)}
+                onClick={() =>
+                  !slice.isGrouped &&
+                  onInvestigate &&
+                  onInvestigate({
+                    entityType: 'category',
+                    targetId: slice.label,
+                    metric: metricName
+                  })
+                }
+              >
+                <span className="legend-chip-dot" style={{ backgroundColor: slice.color }} />
+                <span className="legend-label">{slice.label}</span>
+                <span className="legend-count">{slice.count}</span>
+                <span className="legend-pct">({slice.pct}%)</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        /* Ranked List View for Donut Data */
+        <div className="donut-ranked-list density-bars-scroll-list">
+          {rawSlices.map((slice, idx) => {
+            const pct = Math.min(100, Math.max(6, (slice.count / maxSliceCount) * 100));
+            return (
+              <div
+                key={idx}
+                className="dynamic-bar-row interactive-row"
                 onClick={() =>
                   onInvestigate &&
                   onInvestigate({
@@ -724,44 +1475,35 @@ function DynamicDonutChart({ data, onInvestigate, metricName }) {
                     metric: metricName
                   })
                 }
-                style={{ cursor: 'pointer' }}
-              />
+              >
+                <span className="bar-rank-badge">#{idx + 1}</span>
+                <span className="dynamic-bar-label">{slice.label}</span>
+                <div className="dynamic-track">
+                  <div className="dynamic-fill" style={{ width: `${pct}%`, backgroundColor: slice.color }}>
+                    <span className="dynamic-val">{slice.count} ({slice.pct}%)</span>
+                  </div>
+                </div>
+              </div>
             );
           })}
-          {/* Inner cutout for donut hole */}
-          <circle cx={cx} cy={cy} r="35" fill="var(--surface-primary, #0f172a)" />
-          <text x={cx} y={cy - 2} textAnchor="middle" fill="var(--fg-primary)" fontSize="14" fontWeight="700">
-            {total}
-          </text>
-          <text x={cx} y={cy + 12} textAnchor="middle" fill="var(--fg-secondary)" fontSize="9">
-            Total
-          </text>
-        </svg>
-      </div>
+        </div>
+      )}
 
-      <div className="donut-legend-col">
-        {slices.map((slice, idx) => (
-          <div
-            key={idx}
-            className={`donut-legend-row ${hoveredSlice?.label === slice.label ? 'highlighted' : ''}`}
-            onMouseEnter={() => setHoveredSlice(slice)}
-            onMouseLeave={() => setHoveredSlice(null)}
-            onClick={() =>
-              onInvestigate &&
-              onInvestigate({
-                entityType: 'category',
-                targetId: slice.label,
-                metric: metricName
-              })
-            }
-          >
-            <span className="legend-chip-dot" style={{ backgroundColor: slice.color }} />
-            <span className="legend-label">{slice.label}</span>
-            <span className="legend-count">{slice.count}</span>
-            <span className="legend-pct">({slice.pct}%)</span>
-          </div>
-        ))}
-      </div>
+      {/* Detail Table Modal */}
+      <ChartDetailModal
+        isOpen={showDetailModal}
+        onClose={() => setShowDetailModal(false)}
+        title="Categorical Distribution Composition"
+        subtitle={`Full distribution across ${rawSlices.length} categories · Total count: ${total}`}
+        items={slicesWithRanks}
+        benchmarkTotal={total}
+        unit="entries"
+        entityLabel="Category"
+        metricName={metricName || "Frequency Count"}
+        population={`${total} total entries`}
+        entityType="category"
+        onInvestigate={onInvestigate}
+      />
     </div>
   );
 }

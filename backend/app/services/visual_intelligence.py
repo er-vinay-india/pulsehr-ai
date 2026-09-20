@@ -668,6 +668,13 @@ def build_workspace_visual_dashboard(conn, sheet_id: int | None = None, model: s
                     'bars': p['bars'],
                     'category_col': p['category_col'],
                     'metric_col': p['metric_col'],
+                    'overall_mean': p.get('overall_mean'),
+                    'overall_total': p.get('overall_total'),
+                    'total_categories': p.get('total_categories', len(p['bars'])),
+                    'ranking_basis': p.get('ranking_basis', 'Ranked High to Low'),
+                    'aggregation_rule': p.get('aggregation_rule', 'Arithmetic Mean'),
+                    'spread_ratio': p.get('spread_ratio', 1.0),
+                    'is_high_cardinality': p.get('is_high_cardinality', len(p['bars']) > 10),
                     'stats_pills': [
                         {'label': 'Evaluated Records', 'value': f"{len(records)}"},
                         {'label': 'Categories', 'value': f"{len(p['bars'])}"},
@@ -745,7 +752,11 @@ def build_workspace_visual_dashboard(conn, sheet_id: int | None = None, model: s
                     'line_data': {
                         'date_col': p['date_col'],
                         'metric_col': p['metric_col'],
-                        'points': p['points']
+                        'points': p['points'],
+                        'total_periods': p.get('total_periods', len(p['points'])),
+                        'period_min_date': p.get('period_min_date'),
+                        'period_max_date': p.get('period_max_date'),
+                        'available_years': p.get('available_years', [])
                     },
                     'stats_pills': stats_pills,
                     'ai_insight': line_insight

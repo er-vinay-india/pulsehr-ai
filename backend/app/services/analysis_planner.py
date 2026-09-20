@@ -322,6 +322,10 @@ def evaluate_chart_prerequisites(
 
             if len(bars) >= 2:
                 cat_label_clean = primary_cat.replace('_', ' ')
+                overall_mean = round(float(df[c_name].mean()), 2) if not df[c_name].empty else 0.0
+                overall_total = round(float(df[c_name].sum()), 2) if not df[c_name].empty else 0.0
+                spread_ratio = round(bars[0]["value"] / max(bars[-1]["value"], 0.01), 2) if bars[-1]["value"] > 0 else 1.0
+
                 supported_plans.append({
                     "chart_type": "bar",
                     "plan_id": f"bar_{num_col}_{primary_cat}",
@@ -337,7 +341,12 @@ def evaluate_chart_prerequisites(
                     "source_sheets": [original_file],
                     "coverage_pct": round((num_meta['valid_count'] / max(1, n_rows)) * 100, 1),
                     "missing_records": num_meta['missing_count'],
-                    "is_high_cardinality": len(bars) > 15
+                    "is_high_cardinality": len(bars) > 10,
+                    "overall_mean": overall_mean,
+                    "overall_total": overall_total,
+                    "total_categories": len(bars),
+                    "ranking_basis": f"{measure_title} (High to Low)",
+                    "spread_ratio": spread_ratio
                 })
 
     # Additional Plan A2: Segment / Flag Comparison (e.g. Holiday Weeks vs Regular Weeks)
@@ -449,6 +458,7 @@ def evaluate_chart_prerequisites(
 
                 if len(points) >= 5:
                     clean_metric_name = num_col.replace('_', ' ')
+                    available_years = sorted(list({p['period'][:4] for p in points if len(p['period']) >= 4 and p['period'][:4].isdigit()}))
                     supported_plans.append({
                         "chart_type": "line",
                         "plan_id": f"line_{num_col}_{d_col}",
@@ -462,7 +472,11 @@ def evaluate_chart_prerequisites(
                         "population": f"{n_rows} records aggregated across {len(points)} time periods",
                         "source_sheets": [original_file],
                         "coverage_pct": round((num_meta['valid_count'] / max(1, n_rows)) * 100, 1),
-                        "missing_records": num_meta['missing_count']
+                        "missing_records": num_meta['missing_count'],
+                        "total_periods": len(points),
+                        "period_min_date": points[0]['period'],
+                        "period_max_date": points[-1]['period'],
+                        "available_years": available_years
                     })
 
     if not supported_plans:
