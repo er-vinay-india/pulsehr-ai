@@ -38,6 +38,13 @@ export async function getOverviewRelational(model = null) {
   return res.json();
 }
 
+export async function getOverviewEvidencePackage(sheetId = null) {
+  const url = sheetId ? `${API_BASE}/analytics/overview/evidence-package?sheet_id=${sheetId}` : `${API_BASE}/analytics/overview/evidence-package`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error("Failed to fetch shared evidence package");
+  return res.json();
+}
+
 
 export async function refreshOverviewStory(sheetId = null, model = null) {
   const params = new URLSearchParams();

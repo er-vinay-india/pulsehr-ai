@@ -32,6 +32,33 @@ def init_db(conn: sqlite3.Connection | None = None) -> None:
     try:
         conn.executescript(config.SCHEMA_PATH.read_text())
 
+        # Ensure display_name column exists in dataset_uploads and sheets
+        du_cols = [r[1] for r in conn.execute("PRAGMA table_info(dataset_uploads)").fetchall()]
+        if "display_name" not in du_cols:
+            conn.execute("ALTER TABLE dataset_uploads ADD COLUMN display_name TEXT")
+
+        s_cols = [r[1] for r in conn.execute("PRAGMA table_info(sheets)").fetchall()]
+        if "display_name" not in s_cols:
+            conn.execute("ALTER TABLE sheets ADD COLUMN display_name TEXT")
+
+        # Backfill display names for existing datasets
+        try:
+            import json
+            from ..services.sheet_naming_pipeline import generate_sheet_display_name
+
+            unnamed = conn.execute(
+                "SELECT id, filename, original_name, columns_json, sample_preview_json FROM dataset_uploads WHERE display_name IS NULL OR display_name = ''"
+            ).fetchall()
+            for row in unnamed:
+                cols = json.loads(row["columns_json"] or "[]")
+                sample = json.loads(row["sample_preview_json"] or "[]")
+                naming = generate_sheet_display_name(row["original_name"] or row["filename"], cols, sample)
+                disp = naming["display_name"]
+                conn.execute("UPDATE dataset_uploads SET display_name = ? WHERE id = ?", (disp, row["id"]))
+                conn.execute("UPDATE sheets SET display_name = ? WHERE dataset_id = ? AND (display_name IS NULL OR display_name = '')", (disp, row["id"]))
+        except Exception:
+            pass
+
         # Initialize vector virtual table if not exists
         has_vec = conn.execute(
             "SELECT 1 FROM sqlite_master WHERE type='table' AND name='tabular_vectors'"

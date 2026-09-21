@@ -13,6 +13,7 @@ from typing import Any
 import pandas as pd
 
 from .display_formatters import format_display_label
+from .semantic_mapping import is_identity_header
 
 
 def discover_prioritized_hr_facts(
@@ -191,6 +192,8 @@ def discover_prioritized_hr_facts(
                 unit = chart.get('unit', 'units')
                 metric_name = chart.get('metric_col') or chart.get('measured_metric') or 'Metric'
                 cat_col = chart.get('category_col', 'Category')
+                if is_identity_header(str(metric_name)) or is_identity_header(str(cat_col)):
+                    continue
                 cat_clean = str(cat_col).lower()
 
                 # Difference calculation

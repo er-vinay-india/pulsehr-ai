@@ -58,9 +58,20 @@ def read_sheets(path):
                 break
             except UnicodeDecodeError:
                 continue
+    elif path.suffix.lower() == '.xls':
+        try:
+            with pd.ExcelFile(path, engine='xlrd') as book:
+                frames = {name: pd.read_excel(book, sheet_name=name, dtype=str, keep_default_na=False) for name in book.sheet_names}
+        except ImportError:
+            raise ValueError("Missing 'xlrd' library required for older .xls spreadsheets. Please install xlrd>=2.0.1.")
+        except Exception as exc:
+            raise ValueError(f"Failed to parse Excel .xls spreadsheet: {exc}")
     else:
-        with pd.ExcelFile(path) as book:
-            frames = {name: pd.read_excel(book, sheet_name=name, dtype=str, keep_default_na=False) for name in book.sheet_names}
+        try:
+            with pd.ExcelFile(path) as book:
+                frames = {name: pd.read_excel(book, sheet_name=name, dtype=str, keep_default_na=False) for name in book.sheet_names}
+        except Exception as exc:
+            raise ValueError(f"Failed to parse Excel spreadsheet: {exc}")
     if sum(len(f) for f in frames.values()) > 20000:
         raise ValueError('Upload at most 20,000 rows per file. Split larger files before uploading.')
     for frame in frames.values():
@@ -119,11 +130,12 @@ def prepare_sheets(frames, source, embed=True):
     return prepared
 
 
-def insert_sheets(conn, dataset_id, prepared):
+def insert_sheets(conn, dataset_id, prepared, display_name=None):
     from .rag_service import pack_vector
     for sheet in prepared:
-        sid = conn.execute('INSERT INTO sheets(dataset_id,name,columns_json,profile_json,row_count) VALUES (?,?,?,?,?)',
-                           (dataset_id, sheet['name'], json.dumps(sheet['columns']), json.dumps(sheet['profiles']), len(sheet['records']))).lastrowid
+        sheet_disp = display_name or sheet.get('display_name') or sheet['name']
+        sid = conn.execute('INSERT INTO sheets(dataset_id,name,display_name,columns_json,profile_json,row_count) VALUES (?,?,?,?,?,?)',
+                           (dataset_id, sheet['name'], sheet_disp, json.dumps(sheet['columns']), json.dumps(sheet['profiles']), len(sheet['records']))).lastrowid
         for i, record in enumerate(sheet['records']):
             conn.execute('INSERT INTO sheet_rows(sheet_id,row_index,data_json) VALUES (?,?,?)', (sid, i, json.dumps(record)))
             conn.executemany('INSERT INTO sheet_cells VALUES (?,?,?,?)', [(sid, i, col, value_key(value)) for col, value in record.items() if value_key(value)])
@@ -205,8 +217,9 @@ def rebuild_relationships(conn):
 
 def catalogue(conn):
     output = []
-    for row in conn.execute('SELECT s.*,d.original_name FROM sheets s JOIN dataset_uploads d ON d.id=s.dataset_id ORDER BY s.id'):
+    for row in conn.execute('SELECT s.*, d.original_name, d.display_name AS dataset_display_name FROM sheets s JOIN dataset_uploads d ON d.id=s.dataset_id ORDER BY s.id'):
         entry = dict(row)
+        entry['display_name'] = entry.get('display_name') or entry.get('dataset_display_name') or entry.get('original_name') or entry.get('name')
         entry['columns'] = json.loads(entry.pop('columns_json'))
         profiles = json.loads(entry.pop('profile_json') or '[]')
         for p in profiles:

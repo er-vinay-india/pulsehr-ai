@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { getSheets, getSheetRows, getJoinedRows, getSheetProjections } from '../api/client';
 import { formatDisplayLabel } from '../utils/displayFormatters';
+import DataTable from '../components/DataTable';
 
 export default function DataExplorerPage() {
   const [catalog, setCatalog] = useState({ sheets: [], relationships: [] });
@@ -60,6 +61,7 @@ export default function DataExplorerPage() {
     return () => { active = false; };
   }, [selected, viewMode]);
 
+  const selectedSheet = catalog.sheets.find(s => String(s.id) === String(selected));
   const link = catalog.relationships.find(r => String(r.id) === relation);
   const left = catalog.sheets.find(s => s.id === link?.left_sheet);
   const right = catalog.sheets.find(s => s.id === link?.right_sheet);
@@ -84,7 +86,7 @@ export default function DataExplorerPage() {
             className={`toggle-btn ${viewMode === 'table' ? 'active' : ''}`}
             onClick={() => setViewMode('table')}
           >
-            📋 Raw Table & Joins
+            📋 Interactive Data Table
           </button>
           <button
             className={`toggle-btn ${viewMode === 'projections' ? 'active' : ''}`}
@@ -102,7 +104,9 @@ export default function DataExplorerPage() {
           <select value={selected} onChange={e => { setSelected(e.target.value); setRelation(''); setPage(1); setSearch(''); }}>
             <option value="">Choose a sheet</option>
             {catalog.sheets.map(s => (
-              <option key={s.id} value={s.id}>{s.original_name} / {s.name} ({s.row_count} rows)</option>
+              <option key={s.id} value={s.id}>
+                {s.display_name || s.original_name} {s.name && s.name !== 'Sheet1' ? `· ${s.name}` : ''} ({s.row_count} rows)
+              </option>
             ))}
           </select>
         </label>
@@ -120,8 +124,8 @@ export default function DataExplorerPage() {
             </label>
             {!relation && (
               <label>
-                Search{' '}
-                <input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder="Search all column values" />
+                Server Search{' '}
+                <input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder="Search all rows in DB" />
               </label>
             )}
           </>
@@ -132,51 +136,30 @@ export default function DataExplorerPage() {
 
       {link && viewMode === 'table' && (
         <p style={{ fontSize: '0.85rem', color: 'var(--fg-secondary)', margin: '0.5rem 0' }}>
-          Inner join: left = {left?.original_name} / {left?.name}; right = {right?.original_name} / {right?.name}. {link.cardinality}. Values match after trimming whitespace and ignoring case. Unmatched rows remain in their original sheets.
+          Inner join: left = {left?.display_name || left?.original_name}; right = {right?.display_name || right?.original_name}. {link.cardinality}. Values match after trimming whitespace and ignoring case. Unmatched rows remain in their original sheets.
         </p>
       )}
 
       {error && <p role="alert" className="error-banner">{error}</p>}
       {!catalog.sheets.length && <p>No sheets available. Upload a CSV or Excel workbook.</p>}
 
-      {/* VIEW 1: RAW TABLE VIEW */}
+      {/* VIEW 1: INTERACTIVE DATA TABLE VIEW */}
       {viewMode === 'table' && (
         <>
-          {loading ? (
+          {data ? (
+            <DataTable
+              columns={columns}
+              rows={rows}
+              totalRows={data.total}
+              serverPage={page}
+              serverTotalPages={data.pages}
+              onPageChange={newPage => setPage(newPage)}
+              loading={loading}
+              sourceLabel={relation ? 'relational_join' : (selectedSheet?.display_name || selectedSheet?.original_name || 'table')}
+            />
+          ) : loading ? (
             <p className="loading-state">Loading rows…</p>
-          ) : data && (
-            <>
-              <p style={{ fontSize: '0.85rem', color: 'var(--fg-secondary)', margin: '0.75rem 0 0.5rem' }}>
-                {data.total} {relation ? 'matching row pairs' : 'rows'} · Page {page} of {data.pages}
-              </p>
-              <div className="table-container">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Source row</th>
-                      {columns.map(c => (
-                        <th key={c} title={`Source field: ${c}`}>
-                          {formatDisplayLabel(c)}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rows.map((row, i) => (
-                      <tr key={i}>
-                        <td>{row.number}</td>
-                        {columns.map(c => <td key={c}>{String(row.values[c] ?? '—')}</td>)}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <div className="table-pagination">
-                <button className="btn-secondary" disabled={page <= 1} onClick={() => setPage(p => p - 1)}>Previous</button>
-                <button className="btn-secondary" disabled={page >= data.pages} onClick={() => setPage(p => p + 1)}>Next</button>
-              </div>
-            </>
-          )}
+          ) : null}
         </>
       )}
 
@@ -190,7 +173,7 @@ export default function DataExplorerPage() {
               {/* Sheet Summary Bar */}
               <div className="sheet-summary-banner">
                 <div>
-                  <h3>{projectionsData.original_name} ({projectionsData.sheet_name})</h3>
+                  <h3>{selectedSheet?.display_name || projectionsData.original_name} {projectionsData.sheet_name && projectionsData.sheet_name !== 'Sheet1' ? `(${projectionsData.sheet_name})` : ''}</h3>
                   <p className="subtitle">{projectionsData.row_count} total records · {projectionsData.col_count} columns profiled</p>
                 </div>
               </div>

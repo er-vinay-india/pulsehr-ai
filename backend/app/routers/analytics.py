@@ -15,16 +15,18 @@ def get_base_overview() -> dict:
     conn = get_connection()
     try:
         sheets_rows = conn.execute(
-            'SELECT s.id, s.name, s.row_count, s.columns_json, d.original_name '
+            'SELECT s.id, s.name, s.display_name AS sheet_display_name, s.row_count, s.columns_json, d.original_name, d.display_name AS dataset_display_name '
             'FROM sheets s JOIN dataset_uploads d ON d.id=s.dataset_id ORDER BY s.id ASC'
         ).fetchall()
         sheets_list = []
         for r in sheets_rows:
             cols = json.loads(r['columns_json']) if r['columns_json'] else []
             domain, _ = detect_sheet_domain(cols)
+            disp = r['sheet_display_name'] or r['dataset_display_name'] or r['original_name'] or r['name']
             sheets_list.append({
                 'id': r['id'],
                 'name': r['name'],
+                'display_name': disp,
                 'original_name': r['original_name'],
                 'row_count': r['row_count'],
                 'col_count': len(cols),
@@ -86,6 +88,19 @@ def api_overview_relational(model: str | None = Query(None)):
         return {
             'relational_story': relational_res
         }
+    finally:
+        conn.close()
+
+
+@router.get('/overview/evidence-package')
+def api_overview_evidence_package(sheet_id: int | None = Query(None)):
+    """Returns the unified, versioned shared evidence package consumed by both Executive Overview and Presentations."""
+    clean_sheet_id = int(sheet_id) if sheet_id is not None and not hasattr(sheet_id, 'default') else None
+    scope = {"scope_type": "workspace"} if clean_sheet_id is None else {"scope_type": "single_sheet", "sheet_id": clean_sheet_id}
+    conn = get_connection()
+    try:
+        from ..services.shared_evidence_package import build_shared_evidence_package
+        return build_shared_evidence_package(conn, scope)
     finally:
         conn.close()
 

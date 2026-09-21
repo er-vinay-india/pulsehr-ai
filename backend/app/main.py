@@ -6,6 +6,7 @@ from .core import config
 from .db.database import init_db, get_connection
 from .services.sheet_catalog import migrate_existing, backfill_display_names
 from .routers import analytics, employees, upload, copilot, reports, sheets, presentations
+from .routers import decision_brief
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -34,6 +35,7 @@ app.add_middleware(
 )
 
 app.include_router(analytics.router)
+app.include_router(decision_brief.router)
 app.include_router(employees.router)
 app.include_router(upload.router)
 app.include_router(copilot.router)

@@ -1,6 +1,10 @@
 import React, { useEffect, useState } from "react";
-import { UploadCloud, FileSpreadsheet, CheckCircle2, RefreshCw, Database, Layers, ArrowUpRight, Link2, Trash2, Download, Table, AlertTriangle, X, ShieldAlert, Loader2, Clock, ShieldCheck } from "lucide-react";
-import { uploadDatasetFile, listDatasets, deleteDataset, getDatasetDownloadUrl, getSheetDownloadUrl } from "../api/client";
+import { UploadCloud, FileSpreadsheet } from "lucide-react";
+import { uploadDatasetFile, listDatasets, deleteDataset } from "../api/client";
+import UploadProgressCard from "../components/ingestion/UploadProgressCard";
+import UploadResultCard from "../components/ingestion/UploadResultCard";
+import DatasetListCard from "../components/ingestion/DatasetListCard";
+import DeleteConsentModal from "../components/ingestion/DeleteConsentModal";
 
 export default function IngestionPage() {
   const [datasets, setDatasets] = useState([]);
@@ -36,9 +40,10 @@ export default function IngestionPage() {
       timer = setInterval(() => {
         setUploadElapsed(prev => {
           const next = prev + 1;
-          if (next >= 20) setUploadStep(5);
-          else if (next >= 12) setUploadStep(4);
-          else if (next >= 5) setUploadStep(3);
+          if (next >= 22) setUploadStep(6);
+          else if (next >= 16) setUploadStep(5);
+          else if (next >= 11) setUploadStep(4);
+          else if (next >= 6) setUploadStep(3);
           else if (next >= 2) setUploadStep(2);
           return next;
         });
@@ -173,88 +178,11 @@ export default function IngestionPage() {
         />
 
         {uploading ? (
-          <div className="ingestion-progress-card">
-            <div className="progress-card-header">
-              <div className="progress-spinner-wrap">
-                <Loader2 size={32} className="spin-animation" color="var(--brand-400)" />
-              </div>
-              <div className="progress-title-block">
-                <h3>Ingesting & Vectorizing Spreadsheet</h3>
-                <p className="progress-file-info">
-                  <FileSpreadsheet size={16} color="var(--accent-500)" />
-                  <strong>{uploadingFile?.name || "Processing spreadsheet"}</strong>
-                  {uploadingFile?.size && <span className="file-size-badge">{uploadingFile.size}</span>}
-                </p>
-              </div>
-              <div className="progress-timer-badge">
-                <Clock size={14} />
-                <span>{uploadElapsed}s elapsed</span>
-              </div>
-            </div>
-
-            {/* Visual Animated Progress Bar */}
-            <div className="progress-bar-container">
-              <div className="progress-bar-fill animated-gradient-bar" />
-            </div>
-
-            {/* Pipeline Stage Checklist */}
-            <div className="pipeline-steps-list">
-              <div className={`pipeline-step ${uploadStep >= 1 ? (uploadStep > 1 ? "completed" : "active") : "pending"}`}>
-                <div className="step-icon">
-                  {uploadStep > 1 ? <CheckCircle2 size={16} color="var(--emerald-tier)" /> : (uploadStep === 1 ? <Loader2 size={16} className="spin-animation" color="var(--brand-400)" /> : <div className="step-bullet" />)}
-                </div>
-                <div className="step-text">
-                  <span className="step-title">1. Uploading file & verifying schema bounds</span>
-                  <span className="step-sub">Checking file format (.csv, .xlsx, .xls) and validating contents</span>
-                </div>
-              </div>
-
-              <div className={`pipeline-step ${uploadStep >= 2 ? (uploadStep > 2 ? "completed" : "active") : "pending"}`}>
-                <div className="step-icon">
-                  {uploadStep > 2 ? <CheckCircle2 size={16} color="var(--emerald-tier)" /> : (uploadStep === 2 ? <Loader2 size={16} className="spin-animation" color="var(--brand-400)" /> : <div className="step-bullet" />)}
-                </div>
-                <div className="step-text">
-                  <span className="step-title">2. Extracting worksheets & normalizing rows</span>
-                  <span className="step-sub">Sanitizing empty cells and retaining 100% of source records</span>
-                </div>
-              </div>
-
-              <div className={`pipeline-step ${uploadStep >= 3 ? (uploadStep > 3 ? "completed" : "active") : "pending"}`}>
-                <div className="step-icon">
-                  {uploadStep > 3 ? <CheckCircle2 size={16} color="var(--emerald-tier)" /> : (uploadStep === 3 ? <Loader2 size={16} className="spin-animation" color="var(--brand-400)" /> : <div className="step-bullet" />)}
-                </div>
-                <div className="step-text">
-                  <span className="step-title">3. Profiling columns & statistical summaries</span>
-                  <span className="step-sub">Computing min/max/mean metrics and detecting unique identifiers</span>
-                </div>
-              </div>
-
-              <div className={`pipeline-step ${uploadStep >= 4 ? (uploadStep > 4 ? "completed" : "active") : "pending"}`}>
-                <div className="step-icon">
-                  {uploadStep > 4 ? <CheckCircle2 size={16} color="var(--emerald-tier)" /> : (uploadStep === 4 ? <Loader2 size={16} className="spin-animation" color="var(--brand-400)" /> : <div className="step-bullet" />)}
-                </div>
-                <div className="step-text">
-                  <span className="step-title">4. Generating vector embeddings & BM25 search indices</span>
-                  <span className="step-sub">Batching rows through local embedding model for high-precision retrieval</span>
-                </div>
-              </div>
-
-              <div className={`pipeline-step ${uploadStep >= 5 ? "active" : "pending"}`}>
-                <div className="step-icon">
-                  {uploadStep >= 5 ? <Loader2 size={16} className="spin-animation" color="var(--brand-400)" /> : <div className="step-bullet" />}
-                </div>
-                <div className="step-text">
-                  <span className="step-title">5. Discovering cross-sheet key joins & updating catalog</span>
-                  <span className="step-sub">Connecting foreign keys and updating the real-time overview</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="progress-safety-footer">
-              <ShieldCheck size={16} color="var(--accent-500)" style={{ flexShrink: 0 }} />
-              <span>Large spreadsheets with thousands of rows take 15–40s for full vector embedding. Duplicate uploads are blocked while this job runs.</span>
-            </div>
-          </div>
+          <UploadProgressCard
+            uploadingFile={uploadingFile}
+            uploadElapsed={uploadElapsed}
+            uploadStep={uploadStep}
+          />
         ) : (
           <label htmlFor="file-upload-input" className="dropzone-label">
             <div className="dropzone-icon">
@@ -273,82 +201,7 @@ export default function IngestionPage() {
       </div>
 
       {/* Success / Error Message */}
-      {uploadResult && (
-        <div className="alert-box alert-success" style={{ flexDirection: "column" }}>
-          <div style={{ display: "flex", gap: "0.85rem", alignItems: "flex-start" }}>
-            <CheckCircle2 size={24} color="var(--emerald-tier)" style={{ flexShrink: 0, marginTop: "2px" }} />
-            <div>
-              <strong style={{ fontSize: "1.05rem" }}>Upload & Analysis Complete!</strong>
-              <p style={{ marginTop: "4px" }}>{uploadResult.message}</p>
-              <div className="upload-meta-pills" style={{ marginTop: "8px" }}>
-                <span><strong>File:</strong> {uploadResult.filename}</span>
-                <span><strong>Sheets:</strong> {uploadResult.sheets.join(", ")}</span>
-                <span><strong>Total Rows:</strong> {uploadResult.total_rows}</span>
-                <span><strong>Searchable rows:</strong> {uploadResult.indexed_chunks}</span>
-                {uploadResult.linked_employees > 0 && (
-                  <span style={{ color: "var(--accent-500)", borderColor: "rgba(126,231,217,0.3)" }}>
-                    <Link2 size={13} style={{ display: "inline", verticalAlign: "middle", marginRight: "4px" }} />
-                    <strong>Linked:</strong> {uploadResult.linked_employees} Employees
-                  </span>
-                )}
-              </div>
-              <div style={{ marginTop: "10px", display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-                <a
-                  href={getDatasetDownloadUrl(uploadResult.dataset_id)}
-                  download={uploadResult.filename}
-                  className="btn-secondary"
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "6px",
-                    textDecoration: "none",
-                    fontSize: "0.8rem",
-                    padding: "0.35rem 0.75rem",
-                    color: "var(--accent-500)",
-                    borderColor: "rgba(126, 231, 217, 0.3)"
-                  }}
-                >
-                  <Download size={14} />
-                  <span>Download Ingested File</span>
-                </a>
-              </div>
-            </div>
-          </div>
-
-          {/* Sample Preview Table */}
-          {uploadResult.sample_preview && uploadResult.sample_preview.length > 0 && (
-            <div style={{ marginTop: "1.25rem", width: "100%" }}>
-              <div style={{ fontSize: "0.8rem", fontWeight: 700, color: "var(--brand-400)", marginBottom: "6px" }}>
-                PARSED DATA PREVIEW (FIRST {uploadResult.sample_preview.length} ROWS)
-              </div>
-              <div style={{ overflowX: "auto", background: "rgba(0,0,0,0.3)", borderRadius: "8px", border: "1px solid var(--border-subtle)" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.8rem" }}>
-                  <thead>
-                    <tr style={{ background: "#15110f", borderBottom: "1px solid var(--border)" }}>
-                      {uploadResult.columns.map((col, idx) => (
-                        <th key={idx} style={{ padding: "8px 12px", textAlign: "left", color: "var(--brand-400)", fontWeight: 700 }}>
-                          {col}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {uploadResult.sample_preview.map((row, rIdx) => (
-                      <tr key={rIdx} style={{ borderBottom: "1px solid var(--border-subtle)" }}>
-                        {uploadResult.columns.map((col, cIdx) => (
-                          <td key={cIdx} style={{ padding: "8px 12px", color: "var(--fg-primary)" }}>
-                            {String(row[col] !== undefined && row[col] !== null ? row[col] : "—")}
-                          </td>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
+      <UploadResultCard uploadResult={uploadResult} />
 
       {error && (
         <div className="alert-box alert-error">
@@ -370,224 +223,24 @@ export default function IngestionPage() {
 
         <div className="dataset-list">
           {datasets.map(ds => (
-            <div key={ds.id} className="dataset-card">
-              <div className="dataset-icon">
-                <FileSpreadsheet size={24} color="var(--accent-500)" />
-              </div>
-              <div className="dataset-details">
-                <div className="dataset-title-row">
-                  <h4>{ds.original_name}</h4>
-                  <span className="filetype-badge">{ds.file_type.toUpperCase()}</span>
-                </div>
-                <p className="dataset-summary">{ds.summary_insights}</p>
-                <div className="dataset-stats">
-                  <span><strong>{ds.row_count}</strong> Rows</span> · 
-                  <span><strong>{ds.col_count}</strong> Columns</span> · 
-                  <span><strong>{ds.sheet_count}</strong> Sheet(s)</span> · 
-                  <span>Ingested {new Date(ds.uploaded_at).toLocaleDateString()}</span>
-                </div>
-
-                {ds.sheets && ds.sheets.length > 0 && (
-                  <div style={{ marginTop: "0.85rem" }}>
-                    <div style={{ fontSize: "0.72rem", fontWeight: 700, color: "var(--fg-secondary)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.4rem" }}>
-                      Uploaded {ds.sheets.length > 1 ? `Sheets (${ds.sheets.length})` : "Sheet"}:
-                    </div>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
-                      {ds.sheets.map(sheet => (
-                        <div
-                          key={sheet.id}
-                          style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: "8px",
-                            background: "rgba(255, 255, 255, 0.04)",
-                            border: "1px solid var(--border-subtle)",
-                            borderRadius: "6px",
-                            padding: "0.35rem 0.65rem",
-                            fontSize: "0.8rem"
-                          }}
-                        >
-                          <Layers size={13} color="var(--accent-500)" />
-                          <span style={{ fontWeight: 600, color: "var(--fg-primary)" }}>{sheet.name}</span>
-                          <span style={{ color: "var(--fg-secondary)", fontSize: "0.75rem" }}>({sheet.row_count} rows)</span>
-
-                          {/* If workbook has multiple sheets, allow downloading individual sheet */}
-                          {ds.sheets.length > 1 && (
-                            <a
-                              href={getSheetDownloadUrl(sheet.id, "csv")}
-                              download={`${sheet.name}.csv`}
-                              style={{
-                                display: "inline-flex",
-                                alignItems: "center",
-                                gap: "4px",
-                                marginLeft: "4px",
-                                padding: "0.2rem 0.5rem",
-                                borderRadius: "4px",
-                                background: "rgba(126, 231, 217, 0.12)",
-                                border: "1px solid rgba(126, 231, 217, 0.3)",
-                                color: "var(--accent-500)",
-                                textDecoration: "none",
-                                fontSize: "0.725rem",
-                                fontWeight: 600,
-                                cursor: "pointer",
-                                transition: "all 0.15s ease"
-                              }}
-                              title={`Download '${sheet.name}' as CSV`}
-                            >
-                              <Download size={12} />
-                              <span>Download</span>
-                            </a>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem", alignItems: "flex-end", flexShrink: 0 }}>
-                <a
-                  href={getDatasetDownloadUrl(ds.id)}
-                  download={ds.original_name}
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "6px",
-                    background: "rgba(126, 231, 217, 0.1)",
-                    border: "1px solid rgba(126, 231, 217, 0.3)",
-                    borderRadius: "6px",
-                    padding: "0.45rem 0.8rem",
-                    color: "var(--accent-500)",
-                    textDecoration: "none",
-                    fontSize: "0.8rem",
-                    fontWeight: 600,
-                    cursor: "pointer",
-                    whiteSpace: "nowrap",
-                    transition: "all 0.15s ease"
-                  }}
-                  title={`Download ${ds.original_name}`}
-                >
-                  <Download size={14} />
-                  <span>{ds.sheets && ds.sheets.length > 1 ? "Download Workbook" : "Download Sheet"}</span>
-                </a>
-
-                <button
-                  type="button"
-                  onClick={() => promptDelete(ds)}
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "5px",
-                    color: "var(--rose-tier)",
-                    background: "rgba(255, 180, 190, 0.08)",
-                    border: "1px solid rgba(255, 180, 190, 0.2)",
-                    borderRadius: "6px",
-                    padding: "0.4rem 0.65rem",
-                    cursor: "pointer",
-                    fontSize: "0.775rem",
-                    transition: "all 0.15s ease"
-                  }}
-                  title={`Delete ${ds.original_name}`}
-                >
-                  <Trash2 size={14} color="var(--rose-tier)" />
-                  <span>Delete</span>
-                </button>
-              </div>
-            </div>
+            <DatasetListCard
+              key={ds.id}
+              dataset={ds}
+              onPromptDelete={promptDelete}
+            />
           ))}
         </div>
       </div>
 
       {/* Consent Check Modal */}
-      {datasetToDelete && (
-        <div
-          className="modal-overlay"
-          onClick={() => !deleting && setDatasetToDelete(null)}
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="modal-title"
-        >
-          <div className="modal-dialog" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <div className="modal-title-group">
-                <div className="modal-icon-badge">
-                  <AlertTriangle size={20} />
-                </div>
-                <div>
-                  <h3 id="modal-title">Confirm Dataset Deletion</h3>
-                  <p>Explicit consent required before permanent removal</p>
-                </div>
-              </div>
-              <button
-                type="button"
-                className="modal-close-btn"
-                onClick={() => !deleting && setDatasetToDelete(null)}
-                disabled={deleting}
-                title="Cancel and close"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <div className="modal-body">
-              <div className="modal-target-box">
-                <FileSpreadsheet size={24} color="var(--accent-500)" style={{ flexShrink: 0 }} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div className="target-name">{datasetToDelete.original_name}</div>
-                  <div className="target-meta">
-                    <span>{datasetToDelete.file_type.toUpperCase()}</span> · <span>{datasetToDelete.row_count} rows</span> · <span>{datasetToDelete.sheet_count} sheet(s)</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="modal-warning-box">
-                <div className="warning-title">
-                  <AlertTriangle size={15} />
-                  <span>Permanent Irreversible Action</span>
-                </div>
-                <ul>
-                  <li>Permanently erases all <strong>{datasetToDelete.row_count} indexed rows</strong> and cell values.</li>
-                  <li>Cleanses associated <strong>vector chunks & BM25 search indices</strong>.</li>
-                  <li>Unlinks all <strong>exact-key joins</strong> and relationships connected to this sheet.</li>
-                  <li>Removes stored file from local server storage.</li>
-                </ul>
-              </div>
-
-              <label className="modal-consent-checkbox">
-                <input
-                  type="checkbox"
-                  checked={deleteConsent}
-                  onChange={(e) => setDeleteConsent(e.target.checked)}
-                  disabled={deleting}
-                />
-                <span>
-                  I understand that this action is permanent, cannot be undone, and will immediately remove these rows from all analytics and Copilot searches.
-                </span>
-              </label>
-            </div>
-
-            <div className="modal-footer">
-              <button
-                type="button"
-                className="btn-cancel"
-                onClick={() => setDatasetToDelete(null)}
-                disabled={deleting}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="btn-danger-confirm"
-                onClick={handleConfirmDelete}
-                disabled={!deleteConsent || deleting}
-              >
-                <Trash2 size={14} />
-                <span>{deleting ? "Deleting..." : "Permanently Delete"}</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <DeleteConsentModal
+        datasetToDelete={datasetToDelete}
+        deleteConsent={deleteConsent}
+        setDeleteConsent={setDeleteConsent}
+        deleting={deleting}
+        onClose={() => setDatasetToDelete(null)}
+        onConfirmDelete={handleConfirmDelete}
+      />
     </div>
   );
 }

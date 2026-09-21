@@ -12,6 +12,7 @@ from ..core import config
 from ..db.database import get_connection
 from ..services.sheet_catalog import read_sheets, prepare_sheets, insert_sheets, rebuild_relationships, prepare_existing_column_vectors
 from ..services.industrial_analytics import run_ingestion_industrial_pipeline
+from ..services.sheet_naming_pipeline import generate_sheet_display_name
 
 router = APIRouter(prefix='/api/upload', tags=['upload'])
 _upload_lock = threading.Lock()
@@ -36,18 +37,24 @@ def upload_file(file: UploadFile = File(...)):
             total = sum(len(s['records']) for s in prepared)
             first = prepared[0]
             column_updates = prepare_existing_column_vectors()
+
+            # Run AI Sheet Naming & Semantic Classification pipeline
+            naming = generate_sheet_display_name(original, first['columns'], first['records'])
+            display_name = naming['display_name']
+
             conn = get_connection()
             with conn:
-                dataset_id = conn.execute('''INSERT INTO dataset_uploads(filename,original_name,file_type,sheet_count,row_count,col_count,columns_json,sample_preview_json,summary_insights)
-                    VALUES (?,?,?,?,?,?,?,?,?)''', (path.name, original, suffix[1:], len(prepared), total, len(first['columns']), json.dumps(first['columns']), json.dumps(first['records'][:5]),
+                dataset_id = conn.execute('''INSERT INTO dataset_uploads(filename,original_name,display_name,file_type,sheet_count,row_count,col_count,columns_json,sample_preview_json,summary_insights)
+                    VALUES (?,?,?,?,?,?,?,?,?,?)''', (path.name, original, display_name, suffix[1:], len(prepared), total, len(first['columns']), json.dumps(first['columns']), json.dumps(first['records'][:5]),
                     f'{len(prepared)} sheets and {total} rows. All original values retained.')).lastrowid
                 for sid, profiles in column_updates:
                     conn.execute('UPDATE sheets SET profile_json=? WHERE id=?', (json.dumps(profiles), sid))
-                insert_sheets(conn, dataset_id, prepared)
+                insert_sheets(conn, dataset_id, prepared, display_name=display_name)
                 rebuild_relationships(conn)
                 industrial_res = run_ingestion_industrial_pipeline(conn, dataset_id)
                 linked = conn.execute("SELECT COUNT(*) FROM sheet_relationships WHERE status='linked' AND (left_sheet IN (SELECT id FROM sheets WHERE dataset_id=?) OR right_sheet IN (SELECT id FROM sheets WHERE dataset_id=?))", (dataset_id, dataset_id)).fetchone()[0]
             return {'status': 'success', 'dataset_id': dataset_id, 'filename': original,
+                    'display_name': display_name, 'domain': naming['domain'], 'description': naming['description'],
                     'sheets': list(frames), 'total_rows': total, 'columns': first['columns'], 'sample_preview': first['records'][:5],
                     'indexed_chunks': total, 'vector_chunks': sum(len(s['vectors']) for s in prepared), 'linked_relationships': linked,
                     'industrial_analytics': industrial_res,
@@ -72,7 +79,7 @@ def list_datasets():
             item = dict(row)
             item['columns'] = json.loads(item.pop('columns_json') or '[]')
             item.pop('sample_preview_json', None)
-            item['sheets'] = [dict(s) for s in conn.execute('SELECT id,name,row_count FROM sheets WHERE dataset_id=?', (row['id'],))]
+            item['sheets'] = [dict(s) for s in conn.execute('SELECT id,name,display_name,row_count FROM sheets WHERE dataset_id=?', (row['id'],))]
             datasets.append(item)
         return {'datasets': datasets}
     finally:

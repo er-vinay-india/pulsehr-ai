@@ -40,3 +40,4 @@ urllib3==2.8.0
 uvicorn==0.53.0
 xlsxwriter==3.2.9
 rank-bm25==0.2.2
+xlrd>=2.0.1

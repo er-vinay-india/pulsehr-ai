@@ -7,6 +7,7 @@ import {
   refreshOverviewStory
 } from '../api/client';
 import ExecutiveStoryCard from '../components/ExecutiveStoryCard';
+import DecisionBrief from '../components/DecisionBrief';
 import VisualAnalyticsPanel from '../components/VisualAnalyticsPanel';
 import RelationalInsightCard from '../components/RelationalInsightCard';
 import AiQualityAuditModal from '../components/AiQualityAuditModal';
@@ -41,8 +42,8 @@ function SheetCatalogCard({ sheet }) {
       <div className="sheet-card-header">
         <div className="sheet-name-group">
           <FileSpreadsheet size={16} color="var(--accent)" />
-          <strong>{sheet.name}</strong>
-          {sheet.original_name && (
+          <strong>{sheet.display_name || sheet.name}</strong>
+          {sheet.original_name && (sheet.display_name || sheet.name) !== sheet.original_name && (
             <span className="source-file-badge" title={sheet.original_name}>
               {sheet.original_name}
             </span>
@@ -259,7 +260,7 @@ export default function OverviewPage({ onNavigateTab }) {
             <h2>Executive Overview</h2>
             <span className="status-live-badge">
               <span className="live-dot" />
-              <span>Analysis Current</span>
+              <span>Uploaded sources</span>
             </span>
           </div>
           <p className="workspace-sub-note">
@@ -284,7 +285,7 @@ export default function OverviewPage({ onNavigateTab }) {
           <div style={{ fontSize: '2.5rem', marginBottom: '1rem' }}>🗂️</div>
           <h3 style={{ fontSize: '1.35rem', marginBottom: '0.5rem', color: 'var(--fg-primary)' }}>Workspace is Empty</h3>
           <p style={{ color: 'var(--fg-secondary)', maxWidth: 520, margin: '0 auto 1.5rem auto', lineHeight: 1.5 }}>
-            All previous sheets, records, and cached stories have been cleaned up. Upload a CSV or Excel workbook in the Ingestion Studio to automatically generate dynamic charts, 9-Box matrices, and evidence-backed facts.
+            All previous sheets, records, and cached stories have been cleaned up. Upload a CSV or Excel workbook in the Ingestion Studio to discover supported comparisons, relationships, and evidence-backed findings.
           </p>
           <button className="btn-primary" onClick={() => onNavigateTab('ingestion')}>
             Upload a Spreadsheet
@@ -309,13 +310,17 @@ export default function OverviewPage({ onNavigateTab }) {
               className={`sheet-tab-btn ${selectedSheetId === s.id ? 'active' : ''}`}
               onClick={() => handleSelectSheet(s.id)}
             >
-              <span>{s.original_name || s.name}</span>
+              <span>{s.display_name || s.original_name || s.name}</span>
               <span className="tab-domain-tag">{s.domain}</span>
             </button>
           ))}
         </div>
       )}
 
+      {hasSheets && <DecisionBrief sheetId={selectedSheetId} onExplore={() => onNavigateTab('explorer')} />}
+
+      <details className="overview-existing-analysis">
+        <summary>Explore existing charts, models & source catalogue</summary>
       {/* 4. PRIMARY CHART-FIRST CANVAS: 2/3 Charts + 1/3 Prioritized Facts (Above the Fold) */}
       {hasSheets && (
         <div className="overview-primary-split">
@@ -355,7 +360,7 @@ export default function OverviewPage({ onNavigateTab }) {
         <div className="kpi-grid compact-kpi-strip" style={{ marginTop: '1.5rem' }}>
           {[
             ['Active Datasets', baseData.stats?.datasets],
-            ['Workforce Sheets', baseData.stats?.sheets],
+            ['Source Sheets', baseData.stats?.sheets],
             ['Source Records', baseData.stats?.rows],
             ['Verified Key Relationships', baseData.stats?.linked_relationships]
           ].map(([label, value]) => (
@@ -367,8 +372,8 @@ export default function OverviewPage({ onNavigateTab }) {
         </div>
       )}
 
-      {/* 6. Cross-Sheet Relational Story & Talent Quadrants (Below Primary Charts) */}
-      {hasSheets && (
+      {/* 6. Workspace relationships are shown only in workspace scope. */}
+      {hasSheets && selectedSheetId === null && (
         <div style={{ marginTop: '1.5rem' }}>
           {loadingRelational ? (
             <RelationalSkeletonLoader />
@@ -446,6 +451,8 @@ export default function OverviewPage({ onNavigateTab }) {
           </div>
         </div>
       )}
+
+      </details>
 
       {/* 9. Modal for AI Quality Fact-Checking Audit */}
       {showAuditModal && storyData?.evaluation && (
