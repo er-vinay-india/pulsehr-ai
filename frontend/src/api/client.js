@@ -334,4 +334,24 @@ export async function getPresentationDecks() {
   return res.json();
 }
 
+export async function getDeckNarration(deckId) {
+  const res = await fetch(`${API_BASE}/presentations/${deckId}/narration`);
+  if (!res.ok) throw new Error("Failed to load narration manifest");
+  return res.json();
+}
+
+export async function generateDeckNarration(deckId, voice = "andrew") {
+  const res = await fetch(`${API_BASE}/presentations/${deckId}/narration`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ voice })
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Failed to generate narration");
+  }
+  return res.json();
+}
+
+
 

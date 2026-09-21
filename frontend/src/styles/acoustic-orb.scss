@@ -1,0 +1,356 @@
+// Acoustic Executive AI Orb Presenter Styling
+
+.acoustic-orb-presenter {
+  position: fixed;
+  bottom: 24px;
+  right: 28px;
+  z-index: 1050;
+  font-family: inherit;
+  user-select: none;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+
+  // Minimized Floating Orb Trigger
+  &.minimized {
+    .orb-trigger-btn {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 8px 16px 8px 8px;
+      background: rgba(10, 14, 23, 0.88);
+      border: 1px solid rgba(56, 189, 248, 0.25);
+      border-radius: 9999px;
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6), 0 0 20px rgba(56, 189, 248, 0.15);
+      cursor: pointer;
+      color: #f1f5f9;
+      transition: all 0.25s ease;
+
+      &:hover {
+        border-color: rgba(56, 189, 248, 0.5);
+        box-shadow: 0 12px 35px rgba(0, 0, 0, 0.7), 0 0 25px rgba(56, 189, 248, 0.3);
+        transform: translateY(-2px);
+      }
+
+      .mini-canvas-wrap {
+        width: 38px;
+        height: 38px;
+        border-radius: 50%;
+        overflow: hidden;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: radial-gradient(circle, #0f172a 0%, #020617 100%);
+      }
+
+      .orb-badge-label {
+        display: flex;
+        flex-direction: column;
+        text-align: left;
+
+        .title {
+          font-size: 0.82rem;
+          font-weight: 600;
+          letter-spacing: 0.02em;
+          color: #f8fafc;
+        }
+
+        .status {
+          font-size: 0.7rem;
+          color: #38bdf8;
+          display: flex;
+          align-items: center;
+          gap: 4px;
+
+          .pulse-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #38bdf8;
+            box-shadow: 0 0 8px #38bdf8;
+            animation: pulse-ring 1.5s infinite;
+          }
+        }
+      }
+    }
+  }
+
+  // Expanded Executive Presenter HUD Panel
+  &.expanded {
+    .orb-hud-card {
+      width: 380px;
+      background: rgba(11, 15, 25, 0.92);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 20px;
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.8), 0 0 35px rgba(56, 189, 248, 0.12);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      animation: hud-appear 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .orb-hud-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(255, 255, 255, 0.02);
+
+      .hud-title-group {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+
+        .insignia-icon {
+          color: #38bdf8;
+          width: 16px;
+          height: 16px;
+        }
+
+        .hud-title {
+          font-size: 0.82rem;
+          font-weight: 700;
+          letter-spacing: 0.04em;
+          text-transform: uppercase;
+          color: #e2e8f0;
+        }
+
+        .live-tag {
+          font-size: 0.65rem;
+          font-weight: 700;
+          text-transform: uppercase;
+          padding: 2px 6px;
+          border-radius: 4px;
+          background: rgba(56, 189, 248, 0.15);
+          color: #38bdf8;
+          border: 1px solid rgba(56, 189, 248, 0.3);
+        }
+      }
+
+      .header-actions {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+
+        .icon-btn {
+          background: transparent;
+          border: none;
+          color: #94a3b8;
+          width: 26px;
+          height: 26px;
+          border-radius: 6px;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: all 0.15s;
+
+          &:hover {
+            color: #f8fafc;
+            background: rgba(255, 255, 255, 0.08);
+          }
+        }
+      }
+    }
+
+    // Central Visualizer Area
+    .orb-visualizer-stage {
+      position: relative;
+      height: 160px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(circle at center, rgba(14, 165, 233, 0.08) 0%, transparent 70%);
+      overflow: hidden;
+
+      canvas {
+        display: block;
+      }
+
+      .orb-frequency-glow {
+        position: absolute;
+        width: 140px;
+        height: 140px;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(56, 189, 248, 0.15) 0%, transparent 70%);
+        pointer-events: none;
+        transition: transform 0.1s ease-out;
+      }
+    }
+
+    // Live Transcript Area
+    .orb-transcript-box {
+      padding: 10px 16px;
+      margin: 0 14px 10px;
+      background: rgba(15, 23, 42, 0.65);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 10px;
+      max-height: 54px;
+      overflow-y: auto;
+
+      .transcript-text {
+        font-size: 0.78rem;
+        line-height: 1.4;
+        color: #cbd5e1;
+        font-style: italic;
+      }
+    }
+
+    // Controller Bottom Bar
+    .orb-controls-section {
+      padding: 12px 16px 16px;
+      background: rgba(2, 6, 23, 0.4);
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+
+      // Progress scrubber
+      .timeline-bar-wrap {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 0.7rem;
+        color: #94a3b8;
+
+        .progress-track {
+          flex: 1;
+          height: 4px;
+          background: rgba(255, 255, 255, 0.1);
+          border-radius: 2px;
+          position: relative;
+          cursor: pointer;
+          overflow: hidden;
+
+          .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #38bdf8, #f59e0b);
+            border-radius: 2px;
+            transition: width 0.1s linear;
+          }
+        }
+      }
+
+      // Buttons row
+      .playback-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+
+        .left-toggles {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+
+          .pill-btn {
+            font-size: 0.72rem;
+            padding: 4px 8px;
+            border-radius: 6px;
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: #94a3b8;
+            cursor: pointer;
+            transition: all 0.15s;
+
+            &.active {
+              background: rgba(56, 189, 248, 0.2);
+              border-color: rgba(56, 189, 248, 0.4);
+              color: #38bdf8;
+              font-weight: 600;
+            }
+
+            &:hover:not(.active) {
+              color: #f8fafc;
+              background: rgba(255, 255, 255, 0.1);
+            }
+          }
+        }
+
+        .main-play-group {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+
+          .play-btn {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+            border: 1px solid rgba(56, 189, 248, 0.4);
+            color: #ffffff;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 14px rgba(2, 132, 199, 0.4);
+            transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+
+            &:hover {
+              transform: scale(1.06);
+              box-shadow: 0 6px 20px rgba(2, 132, 199, 0.6);
+            }
+
+            &:active {
+              transform: scale(0.96);
+            }
+
+            svg {
+              width: 18px;
+              height: 18px;
+            }
+          }
+
+          .nav-step-btn {
+            background: transparent;
+            border: none;
+            color: #94a3b8;
+            cursor: pointer;
+            width: 28px;
+            height: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 6px;
+            transition: all 0.15s;
+
+            &:hover {
+              color: #f8fafc;
+              background: rgba(255, 255, 255, 0.08);
+            }
+          }
+        }
+
+        .voice-select-wrap {
+          select {
+            background: rgba(15, 23, 42, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            color: #e2e8f0;
+            font-size: 0.72rem;
+            padding: 4px 8px;
+            border-radius: 6px;
+            cursor: pointer;
+            outline: none;
+
+            &:focus {
+              border-color: #38bdf8;
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+@keyframes pulse-ring {
+  0% { transform: scale(0.95); opacity: 0.8; }
+  50% { transform: scale(1.2); opacity: 1; }
+  100% { transform: scale(0.95); opacity: 0.8; }
+}
+
+@keyframes hud-appear {
+  from { opacity: 0; transform: translateY(12px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}

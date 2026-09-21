@@ -288,3 +288,52 @@ def download_deck_pptx(deck_id: str):
         media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'}
     )
+
+
+class GenerateNarrationRequest(BaseModel):
+    voice: str = "andrew"
+
+
+@router.post("/{deck_id}/narration")
+async def generate_narration(deck_id: str, req: GenerateNarrationRequest = GenerateNarrationRequest()):
+    """Generates studio-quality neural voiceover audio for every slide in a presentation deck."""
+    from ..services.presentation.narration_service import generate_deck_narration_async, EXECUTIVE_VOICES
+    try:
+        manifest = await generate_deck_narration_async(deck_id, voice_key=req.voice)
+        return manifest
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except Exception as exc:
+        logger.error(f"Narration generation failed for deck {deck_id}: {exc}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to generate narration: {str(exc)}")
+
+
+@router.get("/{deck_id}/narration")
+def get_narration(deck_id: str):
+    """Returns the narration manifest and audio file links for a presentation deck."""
+    from ..services.presentation.narration_service import get_deck_narration_manifest, EXECUTIVE_VOICES
+    manifest = get_deck_narration_manifest(deck_id)
+    if not manifest:
+        return {
+            "status": "not_generated",
+            "deck_id": deck_id,
+            "available_voices": list(EXECUTIVE_VOICES.values()),
+            "slides": []
+        }
+    manifest["available_voices"] = list(EXECUTIVE_VOICES.values())
+    return manifest
+
+
+@router.get("/{deck_id}/narration/slide/{slide_order}")
+def stream_slide_narration(deck_id: str, slide_order: int):
+    """Streams the MP3 audio narration file for a specific slide."""
+    from ..services.presentation.narration_service import get_narration_dir
+    mp3_path = get_narration_dir(deck_id) / f"slide_{slide_order}.mp3"
+    if not mp3_path.exists():
+        raise HTTPException(status_code=404, detail=f"Audio for slide {slide_order} not found.")
+    return FileResponse(
+        path=str(mp3_path),
+        media_type="audio/mpeg",
+        filename=f"slide_{slide_order}.mp3"
+    )
+

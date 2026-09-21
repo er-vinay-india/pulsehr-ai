@@ -12,6 +12,7 @@ import {
   FileText
 } from "lucide-react";
 import PresentationSlideContent from "./PresentationSlideContent.jsx";
+import AcousticOrbPresenter from "./presentation/AcousticOrbPresenter.jsx";
 import "../styles/frontend-slides.scss";
 
 export default function FrontendSlidesDeck({
@@ -23,7 +24,9 @@ export default function FrontendSlidesDeck({
   readOnly = false,
   onUpdateSlide = () => {},
   onViewEvidence = () => {},
-  onExportHtml = null
+  onExportHtml = null,
+  deckId = null,
+  deckSpec = null
 }) {
   const containerRef = useRef(null);
   const stageRef = useRef(null);
@@ -414,6 +417,18 @@ export default function FrontendSlidesDeck({
         className="frontend-slides-progress-bar"
         style={{ width: `${progressPct}%` }}
       />
+
+      {/* Acoustic Executive AI Orb Presenter */}
+      {(deckId || deckSpec?.id) && (
+        <AcousticOrbPresenter
+          deckId={deckId || deckSpec?.id}
+          deckSpec={deckSpec}
+          currentSlideOrder={activeSlideIndex + 1}
+          totalSlides={slides.length}
+          onAdvanceSlide={() => onSlideChange(Math.min(slides.length - 1, activeSlideIndex + 1))}
+          onPrevSlide={() => onSlideChange(Math.max(0, activeSlideIndex - 1))}
+        />
+      )}
     </div>
   );
 }

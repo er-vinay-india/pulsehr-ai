@@ -181,6 +181,8 @@ export default function DeckStudioView({
         {/* CENTER: REVEAL.JS 16:9 PRESENTER */}
         <div className="studio-presenter-center">
           <PresentationRevealDeck
+            deckId={deckSpec.id}
+            deckSpec={deckSpec}
             slides={deckSpec.slides}
             theme={currentTheme}
             activeSlideIndex={activeSlideIndex}
