@@ -11,10 +11,11 @@ class CopilotQueryRequest(BaseModel):
     tool: ToolRequest | None = None
     dataset_id: int | None = None
     sheet_id: int | None = None
+    prior_context: dict | None = None
 
 @router.post("/query")
 def ask_copilot(req: CopilotQueryRequest):
-    return query_copilot(req.query, req.model, req.tool, req.dataset_id, req.sheet_id)
+    return query_copilot(req.query, req.model, req.tool, req.dataset_id, req.sheet_id, req.prior_context)
 
 @router.get("/models")
 def list_models():

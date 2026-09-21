@@ -3,13 +3,16 @@ import ast
 import math
 import operator
 import re
-from typing import Literal
+from typing import Literal, Any
 
 import pandas as pd
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..core import config
 from ..db.database import get_connection
+
+
+from .copilot_query_planner import plan_analytical_query, execute_analytical_plan, AnalyticalQueryPlan
 
 
 class CalculationRequest(BaseModel):
@@ -25,11 +28,12 @@ class CalculationRequest(BaseModel):
 
 
 class ToolRequest(BaseModel):
-    model_config = ConfigDict(extra='forbid')
-    name: Literal['calculate', 'presentation', 'arithmetic', 'industrial_metric']
+    model_config = ConfigDict(extra='forbid', arbitrary_types_allowed=True)
+    name: Literal['calculate', 'presentation', 'arithmetic', 'industrial_metric', 'analytical_plan']
     calculation: CalculationRequest | None = None
     expression: str | None = Field(default=None, max_length=200)
     industrial_metric: str | None = None
+    analytical_plan: Any | None = None
 
 
 def load_frame(request: CalculationRequest):
@@ -160,9 +164,15 @@ def format_calculation(result):
     return '\n\n'.join(rows) + '\n\n' + result['note']
 
 
-def infer_tool(query: str) -> ToolRequest | None:
-    """Conservative shortcuts; explicit controls handle arbitrary columns/filters."""
+def infer_tool(
+    query: str,
+    dataset_id: int | None = None,
+    sheet_id: int | None = None,
+    prior_context: dict[str, Any] | None = None
+) -> ToolRequest | None:
+    """Conservative shortcuts and structured analytical query planning for domain questions."""
     q = query.strip().lower().rstrip('?')
+
     expression = re.sub(r'^(calculate|what is|compute)\s+', '', q)
     if re.fullmatch(r'[\d\s.+*/()\-]+', expression) and re.search(r'\d', expression):
         return ToolRequest(name='arithmetic', expression=expression)
@@ -175,6 +185,11 @@ def infer_tool(query: str) -> ToolRequest | None:
         cols = {'attendance': 'attendance_rate', 'attendance rate': 'attendance_rate', 'overtime': 'overtime_hours', 'overtime hours': 'overtime_hours', 'rating': 'rating', 'punctuality': 'punctuality_rate'}
         ops = {'total': 'sum', 'average': 'mean', 'mean': 'mean', 'minimum': 'min', 'maximum': 'max', 'median': 'median'}
         return ToolRequest(name='calculate', calculation=CalculationRequest(operation=ops[op], column=cols[metric], group_by='department' if grouped else None))
+
+    # Check for analytical ranking/breakdown questions (e.g. lowest attendance department)
+    analytical_plan = plan_analytical_query(query, dataset_id=dataset_id, sheet_id=sheet_id, prior_context=prior_context)
+    if analytical_plan:
+        return ToolRequest(name='analytical_plan', analytical_plan=analytical_plan)
     if any(k in q for k in ('bradford', 'bradford factor', 'bradford score', 'absence disruption')):
         return ToolRequest(name='industrial_metric', industrial_metric='bradford_factor')
     if any(k in q for k in ('9 box', '9-box', 'nine box', 'talent matrix', 'potential matrix')):
@@ -188,10 +203,38 @@ def infer_tool(query: str) -> ToolRequest | None:
     return None
 
 
-def execute_tool(query: str, request: ToolRequest) -> dict:
+def execute_tool(
+    query: str,
+    request: ToolRequest,
+    dataset_id: int | None = None,
+    sheet_id: int | None = None
+) -> dict:
     artifacts, result = [], None
     try:
-        if request.name == 'arithmetic':
+        if request.name == 'analytical_plan':
+            plan = request.analytical_plan
+            if not plan:
+                plan = plan_analytical_query(query, dataset_id=dataset_id, sheet_id=sheet_id)
+            plan_res = execute_analytical_plan(plan)
+            suggested = plan_res.get('suggested_questions') or [
+                "What is the attendance breakdown by department?",
+                "Which department has the lowest attendance in July?",
+                "Show weekly attendance drilldown"
+            ]
+            return {
+                'query': query,
+                'answer': plan_res['answer'],
+                'model_used': 'Verified analytical query planner',
+                'tool_used': 'analytical_plan',
+                'status': plan_res.get('status', 'success'),
+                'evidence': plan_res.get('evidence'),
+                'calculation': plan_res.get('raw_analysis'),
+                'artifacts': [],
+                'citations': plan_res.get('citations', []),
+                'exact_matches': [],
+                'suggested_questions': suggested
+            }
+        elif request.name == 'arithmetic':
             answer = f"{request.expression} = **{arithmetic(request.expression):,.12g}**"
         elif request.name == 'calculate':
             if request.calculation is None:

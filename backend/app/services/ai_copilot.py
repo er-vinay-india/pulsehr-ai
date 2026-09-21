@@ -70,12 +70,13 @@ def query_copilot(
     selected_model: str | None = None,
     tool: ToolRequest | None = None,
     dataset_id: int | None = None,
-    sheet_id: int | None = None
+    sheet_id: int | None = None,
+    prior_context: dict | None = None
 ) -> dict:
     from .sheet_catalog import linked_evidence
-    requested_tool = tool or infer_tool(user_query)
+    requested_tool = tool or infer_tool(user_query, dataset_id=dataset_id, sheet_id=sheet_id, prior_context=prior_context)
     if requested_tool:
-        return execute_tool(user_query, requested_tool)
+        return execute_tool(user_query, requested_tool, dataset_id=dataset_id, sheet_id=sheet_id)
     evidence = hybrid_search(user_query, top_k=8)
     related = linked_evidence(evidence, limit=12)
     evidence.extend(related)
