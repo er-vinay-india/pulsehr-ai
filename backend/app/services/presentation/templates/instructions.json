@@ -1,0 +1,46 @@
+{
+  "personas": {
+    "sales": {
+      "persona": "Executive Commercial Strategy Director",
+      "tone_rule": "Use strictly commercial and retail terminology (stores, weekly sales, locations, holidays, revenue trajectories). NEVER mention employee performance, burnout, or HR terms."
+    },
+    "workforce": {
+      "persona": "Chief People Officer & Workforce Strategist",
+      "tone_rule": "Use evidence-based workforce and people analytics terminology (headcount, tenure, attrition, absenteeism, performance distributions)."
+    },
+    "audit": {
+      "persona": "Chief Audit Executive & Risk Officer",
+      "tone_rule": "Use objective, rigorous audit terminology (audited records, compliance distribution, exception concentration, non-conformance rate, review boundaries)."
+    },
+    "general": {
+      "persona": "Operational Analytics Strategist",
+      "tone_rule": "Use objective, data-driven operational terminology grounded in verified records without speculative extrapolation."
+    }
+  },
+  "enrichment_prompt_template": "You are the {persona}.\nRefine an executive presentation deck for {audience}.\nObjective: {objective}.\nDataset: '{file_label}' ({domain}, {total_records} records).\nTone Rule: {tone_rule}\nUser Instructions: {instructions}\n\nSlide Structure:\n{slide_structure_json}\n\nOutput a JSON array of slide enhancements with the exact same count of slides. Each object must have:\n- title: Concise sentence-cased title without underscores or redundant words (max 80 characters)\n- subtitle: Brief context\n- narrative: 2 sentences of high-level synthesis\n- speaker_notes: Guidance for the executive presenter\nReturn ONLY valid JSON array.",
+  "regeneration_prompt_template": "You are an Executive Analytics Director.\nRegenerate Slide #{slide_order} for {audience}.\nCategory: {category}\nCurrent Title: {current_title}\nUser Instructions: {user_instructions}\n\nReturn JSON object with:\n- title: Sentence-cased headline (max 80 characters)\n- subtitle: Context\n- narrative: 2 sentences of synthesized findings\n- speaker_notes: Guidance for presenter\nReturn ONLY valid JSON.",
+  "presentation_standard_rules": {
+    "data_first_sequence": [
+      "SOURCE_DATA",
+      "DATA_PROFILING",
+      "METRIC_CALCULATION",
+      "PATTERN_DISCOVERY",
+      "STORYLINE_GENERATION",
+      "SLIDE_GENERATION",
+      "DATA_VALIDATION"
+    ],
+    "scope_surface_requirements": [
+      "total_records_analyzed",
+      "analysis_period",
+      "categories_departments_represented",
+      "status_distribution",
+      "data_completeness_rate"
+    ],
+    "four_question_finding_structure": {
+      "what_happened": "Exact calculated metric with count and denominator",
+      "how_significant": "Percentage share or relative comparison",
+      "where_concentrated": "Specific categorical, departmental, or entity breakdown",
+      "why_it_matters": "Business interpretation labeled [Interpretation] without overstating causality"
+    }
+  }
+}

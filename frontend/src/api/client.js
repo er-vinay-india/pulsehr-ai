@@ -312,7 +312,12 @@ export async function exportPresentationPptx(deckSpec) {
     throw new Error(err.detail || "Failed to export PowerPoint");
   }
   const blob = await res.blob();
-  const filename = `${deckSpec.metadata?.title?.replace(/[^a-zA-Z0-9_-]/g, "_") || "Presentation"}.pptx`;
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  const ts = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+  const rawTitle = deckSpec.metadata?.title || deckSpec.title || "Executive_Presentation";
+  const cleanTitle = rawTitle.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 40).replace(/^_+|_+$/g, "") || "Presentation";
+  const filename = `${cleanTitle}_${ts}.pptx`;
   const url = window.URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;

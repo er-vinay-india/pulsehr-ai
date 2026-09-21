@@ -1,0 +1,28 @@
+{
+  "briefing_header": "=== PRESENTER BRIEFING (BOARD SCRUTINY) ===",
+  "bullet_labels": {
+    "what_it_establishes": "• What it Establishes:",
+    "how_calculated": "• How Calculated:",
+    "what_it_does_not_establish": "• What it Does NOT Establish:",
+    "limitations": "• Key Assumptions & Limitations:",
+    "chart_explanation": "• Chart Explanation:",
+    "takeaway": "• Audience Takeaway:",
+    "board_qa": "• Anticipated Board Q&A:",
+    "script_header": "=== CONVERSATIONAL NARRATION SCRIPT (~140 WPM) ==="
+  },
+  "default_board_qa": [
+    {
+      "question": "What is the primary data source?",
+      "answer": "Locally evaluated non-null records in {source_sheet}."
+    },
+    {
+      "question": "How can this figure be audited?",
+      "answer": "Deterministic SQL evaluation against snapshot hash {snapshot_hash} reproduces the figure within ±0.1%."
+    }
+  ],
+  "standard_limitations": {
+    "single_sheet": "Single dataset evaluated on verified empirical records without external benchmarking data.",
+    "partial_year": "Observation period covers fewer than 330 days; full-year extrapolation should be avoided.",
+    "correlation_boundary": "Data demonstrates observed distribution and correlation; underlying causal mechanisms require longitudinal testing."
+  }
+}

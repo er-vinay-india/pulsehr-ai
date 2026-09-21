@@ -94,7 +94,9 @@ export default function App() {
         initialScopeType={activeTab === "overview" ? "workspace" : "workspace"}
         onJobUpdate={job => {
           setActivePresentationJob(job);
-          if (job?.deck) {
+          if (!job || job.status === "in_progress" || !job.deck) {
+            setActiveDeck(null);
+          } else if (job.deck) {
             setActiveDeck(job.deck);
           }
         }}

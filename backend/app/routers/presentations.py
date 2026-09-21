@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import datetime
 import json
 import logging
-from typing import Any
+import re
+from typing import Any, Literal
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -25,6 +27,7 @@ router = APIRouter(prefix="/api/presentations", tags=["presentations"])
 
 
 class GeneratePresentationRequest(BaseModel):
+    deck_style: Literal["standard", "decision_brief"] = "standard"
     objective: str | None = "Executive Leadership Review"
     audience: str | None = "C-Suite & Operations Leadership"
     target_length: int | None = 6
@@ -75,6 +78,7 @@ def get_scope_preview(req: ScopePreviewRequest):
 def start_presentation_generation(req: GeneratePresentationRequest):
     """Spawns an asynchronous 7-stage presentation generation job."""
     scope = {
+        "deck_style": req.deck_style,
         "objective": req.objective or "Executive Leadership Review",
         "audience": req.audience or "C-Suite & Operations Leadership",
         "target_length": req.target_length or 6,
@@ -244,7 +248,10 @@ def export_presentation_to_pptx(req: ExportPptxRequest):
     try:
         deck_spec = req.deck_spec
         pptx_path = export_spec_to_pptx(deck_spec)
-        filename = f"{deck_spec.get('id', 'presentation')}.pptx"
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        title_raw = deck_spec.get("metadata", {}).get("title") or deck_spec.get("title") or "Executive_Presentation"
+        clean_title = re.sub(r'[^a-zA-Z0-9_-]', '_', title_raw)[:40].strip('_') or "Presentation"
+        filename = f"{clean_title}_{timestamp}.pptx"
         return FileResponse(
             path=str(pptx_path),
             filename=filename,
@@ -259,17 +266,22 @@ def export_presentation_to_pptx(req: ExportPptxRequest):
 @router.get("/download/{deck_id}")
 def download_deck_pptx(deck_id: str):
     """Exports or serves a PowerPoint presentation for a stored deck."""
+    deck_spec = None
+    with get_connection() as conn:
+        row = conn.execute("SELECT spec_json FROM presentation_decks WHERE id = ?", (deck_id,)).fetchone()
+    if row:
+        deck_spec = json.loads(row["spec_json"])
+
     pptx_path = config.EXPORTS_DIR / f"presentation_{deck_id}.pptx"
     if not pptx_path.exists():
-        # Load from DB and export
-        with get_connection() as conn:
-            row = conn.execute("SELECT spec_json FROM presentation_decks WHERE id = ?", (deck_id,)).fetchone()
-        if not row:
+        if not deck_spec:
             raise HTTPException(status_code=404, detail="Presentation deck not found")
-        deck_spec = json.loads(row["spec_json"])
         pptx_path = export_spec_to_pptx(deck_spec)
 
-    filename = f"presentation_{deck_id}.pptx"
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    title_raw = (deck_spec.get("metadata", {}).get("title") if deck_spec else None) or f"presentation_{deck_id}"
+    clean_title = re.sub(r'[^a-zA-Z0-9_-]', '_', title_raw)[:40].strip('_') or "Presentation"
+    filename = f"{clean_title}_{timestamp}.pptx"
     return FileResponse(
         path=str(pptx_path),
         filename=filename,

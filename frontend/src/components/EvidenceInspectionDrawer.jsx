@@ -12,7 +12,9 @@ import {
   ExternalLink,
   ChevronDown,
   ChevronRight,
-  Info
+  Info,
+  Layers,
+  BarChart3
 } from "lucide-react";
 
 export default function EvidenceInspectionDrawer({
@@ -22,10 +24,11 @@ export default function EvidenceInspectionDrawer({
   evidenceLedger = [],
   snapshotHash = null,
   validationSummary = null,
+  coverageManifest = null,
   allSlides = [],
   onSelectSlide = () => {}
 }) {
-  const [activeTab, setActiveTab] = useState("board_briefing"); // "board_briefing" | "ledger_all"
+  const [activeTab, setActiveTab] = useState("board_briefing"); // "board_briefing" | "ledger_all" | "coverage_manifest"
   const [expandedQa, setExpandedQa] = useState({});
 
   if (!isOpen) return null;
@@ -110,6 +113,14 @@ export default function EvidenceInspectionDrawer({
           >
             <Database size={14} />
             <span>Complete Evidence Ledger ({evidenceLedger.length || 8})</span>
+          </button>
+          <button
+            type="button"
+            className={`drawer-tab-btn ${activeTab === "coverage_manifest" ? "active" : ""}`}
+            onClick={() => setActiveTab("coverage_manifest")}
+          >
+            <Layers size={14} />
+            <span>Coverage Manifest {coverageManifest ? `(${coverageManifest.coverage_pct ?? 100}%)` : ""}</span>
           </button>
         </div>
 
@@ -331,6 +342,83 @@ export default function EvidenceInspectionDrawer({
                     })}
                   </tbody>
                 </table>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 3: COVERAGE MANIFEST */}
+          {activeTab === "coverage_manifest" && (
+            <div className="coverage-manifest-scroll">
+              <div className="manifest-banner">
+                <div className="manifest-stat-card">
+                  <span className="stat-num">{coverageManifest?.total_candidate_findings || evidenceLedger.length || 8}</span>
+                  <span className="stat-label">Material Candidates</span>
+                </div>
+                <div className="manifest-stat-card stat-main">
+                  <span className="stat-num">{coverageManifest?.main_deck_count || allSlides.length || 8}</span>
+                  <span className="stat-label">Main Deck</span>
+                </div>
+                <div className="manifest-stat-card stat-appendix">
+                  <span className="stat-num">{coverageManifest?.appendix_count || 0}</span>
+                  <span className="stat-label">Appendix</span>
+                </div>
+                <div className="manifest-stat-card stat-excluded">
+                  <span className="stat-num">{coverageManifest?.excluded_count || 0}</span>
+                  <span className="stat-label">Excluded</span>
+                </div>
+                <div className="manifest-stat-card stat-pct">
+                  <span className="stat-num">{coverageManifest?.coverage_pct ?? 100}%</span>
+                  <span className="stat-label">Analytical Coverage</span>
+                </div>
+              </div>
+
+              <div className="manifest-lead-note">
+                Every material finding identified in workspace profiling is explicitly accounted for below with analytical placement and justifications.
+              </div>
+
+              <div className="manifest-items-list">
+                {(coverageManifest?.items || evidenceLedger.map((ev, i) => ({
+                  finding_id: ev.evidence_id,
+                  evidence_id: ev.evidence_id,
+                  title: ev.title,
+                  category: ev.finding_type || "measured_fact",
+                  importance: "high",
+                  disposition: "main_deck",
+                  slide_index: ev.slide_index || (i + 1),
+                  slide_title: ev.title,
+                  reason: "Included in primary narrative flow."
+                }))).map((item, idx) => {
+                  const disp = item.disposition || "main_deck";
+                  return (
+                    <div key={item.finding_id || idx} className={`manifest-item-card disp-${disp}`}>
+                      <div className="manifest-item-header">
+                        <div className="manifest-item-id-wrap">
+                          <span className={`disposition-tag disp-${disp}`}>
+                            {disp === "main_deck" ? "Main Deck" : disp === "appendix" ? "Appendix" : "Excluded"}
+                          </span>
+                          <span className="manifest-ev-id">[{item.evidence_id || item.finding_id}]</span>
+                          <span className="manifest-cat-label">{item.category}</span>
+                        </div>
+                        {item.slide_index && (
+                          <button
+                            type="button"
+                            className="btn-jump-slide"
+                            onClick={() => {
+                              onSelectSlide(item.slide_index - 1);
+                              setActiveTab("board_briefing");
+                            }}
+                          >
+                            Slide {item.slide_index}
+                          </button>
+                        )}
+                      </div>
+                      <div className="manifest-item-title">{item.title}</div>
+                      <div className="manifest-item-reason">
+                        <span className="reason-lbl">Disposition Rationale:</span> {item.reason}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}

@@ -1,0 +1,81 @@
+{
+  "system_guidelines_version": "2.0",
+  "narrative_framework": {
+    "name": "Boardroom Eight-Stage Narrative Standard",
+    "description": "A guiding narrative structure that expands organically into 12 to 20+ slides depending on dataset depth and complexity.",
+    "stages": [
+      {
+        "stage_number": 1,
+        "category": "EXECUTIVE SUMMARY",
+        "description": "High-impact opening framing audited population size, baseline mean, completeness, and executive scope.",
+        "allowed_layouts": ["title_hero"],
+        "recommended_visual_hook": "none"
+      },
+      {
+        "stage_number": 2,
+        "category": "ANALYSIS SCOPE & BASELINE",
+        "description": "Empirical baseline, observation window, non-null accounting, and central tendency benchmark.",
+        "allowed_layouts": ["kpi_summary", "full_chart_takeaway"],
+        "recommended_visual_hook": "none"
+      },
+      {
+        "stage_number": 3,
+        "category": "OPERATIONAL STRENGTHS",
+        "description": "What went well: peak surge capacity, top-performing cohorts, and positive empirical signals. Expand into 1-3 slides for multiple findings.",
+        "allowed_layouts": ["chart_narrative", "comparison_split", "full_chart_takeaway"],
+        "recommended_visual_hook": "line_chart"
+      },
+      {
+        "stage_number": 4,
+        "category": "OPERATIONAL HEADWINDS",
+        "description": "What needs attention: performance dispersion, risk concentrations, and operational variance. Expand into 1-3 slides for multiple findings.",
+        "allowed_layouts": ["chart_narrative", "comparison_split"],
+        "recommended_visual_hook": "bar_chart"
+      },
+      {
+        "stage_number": 5,
+        "category": "TALENT & WORKFORCE SCIENCE",
+        "description": "Industrial People Analytics and connected discovery. Generate dedicated slides for each available model: McKinsey 9-Box, Burnout Strain, Bradford Factor, and Relational Linkages.",
+        "allowed_layouts": ["chart_narrative", "comparison_split"],
+        "recommended_visual_hook": "talent_9box"
+      },
+      {
+        "stage_number": 6,
+        "category": "HONEST GOVERNANCE",
+        "description": "Explicit boundaries separating established empirical facts from unmeasured variables, plus detailed categorical frequency distributions.",
+        "allowed_layouts": ["comparison_split", "table_detail"],
+        "recommended_visual_hook": "table_categorical"
+      },
+      {
+        "stage_number": 7,
+        "category": "STRATEGIC ROADMAP",
+        "description": "Actionable, phased initiatives and tactical execution governance (RACI ownership, SLA windows, risk mitigations).",
+        "allowed_layouts": ["action_plan", "table_detail"],
+        "recommended_visual_hook": "raci_matrix"
+      },
+      {
+        "stage_number": 8,
+        "category": "GOVERNANCE & AUDIT TRAIL",
+        "description": "Immutable cryptographic SHA-256 seal and record-level evidence ledger. Split across Part 1 and Part 2 if more than 6 findings.",
+        "allowed_layouts": ["table_detail"],
+        "recommended_visual_hook": "evidence_ledger_part1"
+      }
+    ]
+  },
+  "slide_count_rules": {
+    "min_slides": 10,
+    "target_range": "14-18 slides",
+    "rule": "Do not compress rich findings into a single slide. Every distinct strength, risk area, industrial model, and roadmap phase should receive a dedicated, uncrowded slide."
+  },
+  "content_rules": {
+    "ground_truth": "Every numerical claim must be derived from the provided evidence package.",
+    "phrasing": "State counts as 'X of Y records (Z%)'.",
+    "headline_style": "Action-oriented, conclusion-driven headlines under 78 characters.",
+    "four_core_questions": [
+      "What happened? (Empirical observation)",
+      "How significant is it? (Magnitude, percentage, spread)",
+      "Where is it concentrated? (Top cohort, department, date)",
+      "Why does it matter? (Operational impact and priority)"
+    ]
+  }
+}
