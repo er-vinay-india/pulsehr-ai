@@ -86,7 +86,7 @@ function SheetCatalogCard({ sheet }) {
   );
 }
 
-export default function OverviewPage({ onNavigateTab }) {
+export default function OverviewPage({ onNavigateTab, onScopeChange }) {
   // Chunk 1: Base Catalog & Scope Metadata (< 20ms)
   const [baseData, setBaseData] = useState(null);
   const [loadingBase, setLoadingBase] = useState(true);
@@ -343,7 +343,18 @@ export default function OverviewPage({ onNavigateTab }) {
 
       {hasSheets && (
         <ErrorBoundary title="Executive Decision Brief Error">
-          <DecisionBrief sheetId={selectedSheetId} onExplore={() => onNavigateTab('explorer')} />
+          <DecisionBrief
+            sheetId={selectedSheetId}
+            onExplore={() => onNavigateTab('explorer')}
+            onSnapshotLoaded={(snapshot, sid) => {
+              const primarySheet = baseData?.sheets?.find((s) => s.id === sid) || baseData?.sheets?.[0];
+              onScopeChange?.({
+                datasetId: primarySheet?.dataset_id || null,
+                sheetId: sid || primarySheet?.id || null,
+                snapshotId: snapshot
+              });
+            }}
+          />
         </ErrorBoundary>
       )}
 

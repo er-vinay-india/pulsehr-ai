@@ -1,0 +1,42 @@
+/* Responsive containment; keep scrolling inside panels rather than clipping controls. */
+.copilot-drawer-panel {
+  height: 100dvh;
+  max-height: 100dvh;
+  box-sizing: border-box;
+  .copilot-drawer-header, .copilot-input-form { flex-shrink: 0; }
+  .copilot-header-brand, .copilot-title-group, .copilot-model-select-row { min-width: 0; }
+  .copilot-header-brand { flex: 1; }
+  .copilot-header-actions { flex-shrink: 0; }
+  .model-dropdown-mini { min-width: 0; max-width: 100%; width: 100%; text-overflow: ellipsis; }
+  .copilot-drawer-body { min-height: 0; }
+  .copilot-tools-container { flex: 0 1 auto; min-height: 60px; max-height: 35dvh; overflow-y: auto; }
+  .copilot-suggestions-strip { flex-shrink: 0; max-height: 22dvh; overflow-y: auto; }
+  .copilot-messages-list { min-height: 60px; overscroll-behavior: contain; }
+  .copilot-text-input { min-width: 0; }
+  .copilot-input-form { padding-bottom: max(12px, env(safe-area-inset-bottom)); }
+}
+@media (max-width: 768px) {
+  .explorer-page, .ingestion-page, .decision-brief { min-width: 0; }
+  .filters-toolbar { flex-wrap: wrap; }
+  .filters-toolbar > *, .filters-toolbar label { min-width: 0; max-width: 100%; }
+  .filters-toolbar select, .filters-toolbar input { width: 100%; min-width: 0; }
+  .view-mode-pill-toggle { display: flex; flex-wrap: wrap; max-width: 100%; }
+  .view-mode-pill-toggle .toggle-btn { flex: 1 1 auto; white-space: normal; }
+  .visual-cards-grid { grid-template-columns: minmax(0, 1fr); }
+  .visual-card, .card-visual-body, .chart-data-table { min-width: 0; max-width: 100%; }
+  .chart-data-table table { overflow-wrap: anywhere; }
+  .copilot-drawer-panel .header-ctrl-btn, .copilot-send-btn,
+  .presentation-modal-backdrop .btn-icon-close { min-width: 44px; min-height: 44px; }
+  .copilot-drawer-panel input, .copilot-drawer-panel select,
+  .filters-toolbar input, .filters-toolbar select,
+  .presentation-modal-backdrop input, .presentation-modal-backdrop select,
+  .presentation-modal-backdrop textarea { font-size: 16px; }
+  .copilot-drawer-panel .calculation-fields { grid-template-columns: minmax(0, 1fr); }
+  .copilot-drawer-panel .calculation-fields select { min-width: 0; max-width: 100%; }
+  .presentation-modal-backdrop .pres-config-footer { padding-bottom: max(12px, env(safe-area-inset-bottom)); }
+}
+@media (max-height: 500px) {
+  .copilot-drawer-panel .copilot-suggestions-strip { display: none; }
+  .copilot-drawer-panel .copilot-tools-container { max-height: 25dvh; }
+  .copilot-drawer-panel .copilot-drawer-header { padding-block: 6px; }
+}

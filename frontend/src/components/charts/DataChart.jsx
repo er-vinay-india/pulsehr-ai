@@ -1,0 +1,19 @@
+import React from 'react';
+import SafeReactECharts from './SafeReactECharts';
+import { cartesian, numeric, formatValue } from './chartOptions';
+export default function DataChart({ items = [], type = 'bar', metric = 'Value', unit = '', onSelect, baseline, height = 300 }) {
+  if (!items.length) return <p className="executive-chart-empty">No chart data available.</p>;
+  const pie = type === 'donut' || type === 'pie';
+  const option = pie ? {
+    tooltip: { trigger: 'item', valueFormatter: v => formatValue(v, unit) },
+    legend: { type: 'scroll', bottom: 0 },
+    series: [{ type: 'pie', name: metric, radius: type === 'donut' ? ['45%', '68%'] : '68%', center: ['50%', '44%'], label: { show: false },
+      data: items.filter(p => numeric(p.value) != null && Number(p.value) >= 0).map(p => ({ name: String(p.label), value: Number(p.value) })) }]
+  } : cartesian(items.map(p => String(p.label)), [{ name: metric, type: type === 'line' ? 'line' : 'bar', data: items.map(p => numeric(p.value)),
+    ...(numeric(baseline) != null ? { markLine: { symbol: 'none', label: { show: false }, data: [{ [type === 'line' ? 'yAxis' : 'xAxis']: Number(baseline) }] } } : {}) }], type !== 'line', unit);
+  return <div style={{ minWidth: 0 }}>
+    <SafeReactECharts option={option} style={{ height, width: '100%' }} onEvents={{ click: p => onSelect?.(items.find(i => String(i.label) === p.name)) }} />
+    {numeric(baseline) != null && <p style={{ fontSize: '0.8rem', color: '#cbd5e1', margin: '4px 0' }}>Dashed line: average {formatValue(baseline, unit)}</p>}
+    <details className="chart-data-table"><summary>View data{onSelect ? ' and investigate' : ''}</summary><div style={{ maxHeight: 240, overflow: 'auto' }}><table><thead><tr><th>Category</th><th>{metric}</th></tr></thead><tbody>{items.map((p,i) => <tr key={i}><td>{onSelect ? <button type="button" onClick={() => onSelect(p)}>{p.label}</button> : p.label}</td><td>{formatValue(p.value, unit)}</td></tr>)}</tbody></table></div></details>
+  </div>;
+}

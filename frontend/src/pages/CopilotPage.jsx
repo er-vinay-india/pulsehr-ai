@@ -39,6 +39,7 @@ export default function CopilotPage({ onSelectEmployee }) {
   const messagesEndRef = useRef(null);
   const abortControllerRef = useRef(null);
   const timerIntervalRef = useRef(null);
+  const priorContextRef = useRef(null);
 
   useEffect(() => {
     getCopilotSuggestions().then(res => setSuggestions(res.suggestions || [])).catch(() => {});
@@ -165,6 +166,9 @@ export default function CopilotPage({ onSelectEmployee }) {
             });
           },
           onDone: (doneData) => {
+            if (doneData.prior_context) {
+              priorContextRef.current = doneData.prior_context;
+            }
             setMessages(prev => {
               const updated = [...prev];
               const last = updated[updated.length - 1];
@@ -190,7 +194,20 @@ export default function CopilotPage({ onSelectEmployee }) {
             if (controller.signal.aborted) return;
             // Fallback to standard request
             try {
-              const res = await askCopilot(text, selectedModel, tool, null, null, controller.signal);
+              const res = await askCopilot(
+                text,
+                selectedModel,
+                tool,
+                null,
+                null,
+                controller.signal,
+                priorContextRef.current,
+                null,
+                "copilot"
+              );
+              if (res.prior_context) {
+                priorContextRef.current = res.prior_context;
+              }
               setMessages(prev => [
                 ...prev.filter(m => !m.isStreaming),
                 {
@@ -217,7 +234,10 @@ export default function CopilotPage({ onSelectEmployee }) {
             }
           }
         },
-        controller.signal
+        controller.signal,
+        priorContextRef.current,
+        null,
+        "copilot"
       );
     } catch (err) {
       if (!controller.signal.aborted) {

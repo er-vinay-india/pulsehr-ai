@@ -218,12 +218,15 @@ def compute_relational_story(conn, model: str | None = None) -> dict | None:
 
     narrative = ''
     try:
-        with httpx.Client(timeout=25) as client:
-            resp = client.post(f"{config.OLLAMA_BASE_URL}/api/generate", json={
-                'model': target_model, 'prompt': prompt, 'stream': False, 'options': {'temperature': 0.15}
-            })
-            if resp.status_code == 200:
-                narrative = clean_ai_markdown(resp.json().get('response', ''))
+        from ..gateway.model_gateway import ModelGateway
+        from ...core.models_config import ModelRole
+        res = ModelGateway.generate(
+            role=ModelRole.ANALYST,
+            prompt=prompt,
+            step_name="story_relational_synthesis"
+        )
+        if res.success and res.raw_text:
+            narrative = clean_ai_markdown(res.raw_text)
     except Exception:
         pass
 

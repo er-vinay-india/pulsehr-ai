@@ -23,9 +23,11 @@ Enforces strict statistical governance:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import hashlib
 import html
 import json
 import re
+import sqlite3
 from typing import Any, Literal
 
 import numpy as np
@@ -48,7 +50,12 @@ QueryIntent = Literal[
     'breakdown',
     'ambiguity_clarification',
     'correlation_causation',
-    'period_unavailable'
+    'period_unavailable',
+    'summary_positives',
+    'summary_concerns',
+    'summary_actions',
+    'followup_why',
+    'ranking_followup'
 ]
 SortDirection = Literal['lowest', 'highest', 'all']
 
@@ -71,10 +78,46 @@ class AnalyticalQueryPlan:
     filter_val: str | None = None
     dataset_id: int | None = None
     sheet_id: int | None = None
+    snapshot_id: str | None = None
+    prior_context: dict[str, Any] | None = None
     explanation: str = ''
     available_metrics: list[str] = field(default_factory=list)
     available_dimensions: list[str] = field(default_factory=list)
     clarification_question: str | None = None
+
+
+def resolve_metric_direction(metric_name: str | None, cols: list[str] | None = None, rows: list[dict] | None = None) -> str:
+    """Returns 'lower_is_worse', 'higher_is_worse', 'unresolved_definition', or 'neutral'."""
+    if not metric_name:
+        return 'neutral'
+    m_clean = str(metric_name).lower().replace('_', ' ').strip()
+    if 'final attendance' in m_clean or 'net attendance' in m_clean:
+        return 'unresolved_definition'
+    if any(k in m_clean for k in (
+        'attendance', 'attendance rate', 'weekly sales', 'sales', 'revenue',
+        'profit', 'rating', 'performance', 'punctuality', 'retention'
+    )):
+        return 'lower_is_worse'
+    if any(k in m_clean for k in (
+        'leave', 'leaves', 'absent', 'absence', 'overtime', 'turnover',
+        'attrition', 'churn', 'incident', 'defect', 'error', 'delay',
+        'strain', 'burnout', 'disruption', 'resolution time'
+    )):
+        return 'higher_is_worse'
+    if cols:
+        try:
+            from .semantic_mapping import infer_semantic_catalog
+            catalog = infer_semantic_catalog(cols, records=rows)
+            f_meta = catalog.get_field(metric_name)
+            if f_meta:
+                if f_meta.unresolved_definition:
+                    return 'unresolved_definition'
+                if f_meta.direction_of_concern != 'neutral':
+                    return f_meta.direction_of_concern
+        except Exception:
+            pass
+    return 'neutral'
+
 
 
 def _sanitize_untrusted_text(text: Any) -> str:
@@ -162,9 +205,110 @@ def plan_analytical_query(
     """
     q = query.strip().lower()
 
+    # 0. Context validation & dataset switch protection:
+    # Purge prior context if user switched dataset or sheet scope
+    active_prior = dict(prior_context) if prior_context else None
+    if active_prior:
+        p_ds = active_prior.get('dataset_id')
+        p_sh = active_prior.get('sheet_id')
+        if (p_ds is not None and dataset_id is not None and p_ds != dataset_id) or \
+           (p_sh is not None and sheet_id is not None and p_sh != sheet_id):
+            active_prior = None
+
+    # Check for follow-up "why?" queries
+    is_why_followup = q.strip('?!. ') in ('why', 'why is that', 'why did that happen', 'why is this', 'explain why', 'tell me why', 'can you explain why') or \
+                      (q.startswith('why') and len(q.split()) <= 4 and active_prior and (active_prior.get('last_finding') or active_prior.get('last_ranking') or active_prior.get('metric')))
+    if is_why_followup:
+        return AnalyticalQueryPlan(
+            intent='followup_why',
+            prior_context=active_prior,
+            dataset_id=dataset_id,
+            sheet_id=sheet_id,
+            explanation="Explains underlying factors for preceding finding or ranking with strict non-causal disclaimer."
+        )
+
     # Exclude definitional, general conversational, or calculation-only queries
-    if any(k in q for k in ('what does', 'explain', 'definition', 'policy', 'meaning', 'how do i', 'how many days was')):
+    if any(k in q for k in ('what does', 'definition', 'policy', 'meaning', 'how do i', 'how many days was')) or (q.startswith('explain') and not is_why_followup):
         return None
+
+    # Check Business Summary: Positives ("give me 3 good points", "positive points", "highlights", "strengths")
+    count_match_pos = re.search(r'\b(\d+|three|two|four|five|one)\s+(?:good|positive|strength|highlight)', q)
+    num_map = {'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5}
+    is_summary_pos = bool(count_match_pos) or any(k in q for k in (
+        '3 good points', 'three good points', 'good points', 'positive points', 'positive findings',
+        'what is going well', "what's going well", 'key strengths', 'highlights', 'positive highlights'
+    ))
+    if is_summary_pos:
+        req_count = 3
+        if count_match_pos:
+            token = count_match_pos.group(1).lower()
+            req_count = int(token) if token.isdigit() else num_map.get(token, 3)
+        return AnalyticalQueryPlan(
+            intent='summary_positives',
+            ranking_limit=req_count,
+            prior_context=active_prior,
+            dataset_id=dataset_id,
+            sheet_id=sheet_id,
+            explanation=f"Resolves up to {req_count} verified positive findings from the decision brief."
+        )
+
+    # Check Business Summary: Concerns / Problems ("main problems", "significant concerns", "key risks", "what's wrong?")
+    count_match_conc = re.search(r'\b(\d+|three|two|four|five|one)\s+(?:main\s+problems?|problems?|concerns?|significant\s+concerns?|key\s+risks?|issues?|risks?)', q)
+    is_summary_concerns = bool(count_match_conc) or any(k in q for k in (
+        'main problems', 'problems', 'concerns', 'significant concerns', 'key risks',
+        "what's wrong", 'what is wrong', 'biggest issues', 'areas of concern', 'red flags'
+    ))
+    if is_summary_concerns:
+        req_count = 3
+        if count_match_conc:
+            token = count_match_conc.group(1).lower()
+            req_count = int(token) if token.isdigit() else num_map.get(token, 3)
+        return AnalyticalQueryPlan(
+            intent='summary_concerns',
+            ranking_limit=req_count,
+            prior_context=active_prior,
+            dataset_id=dataset_id,
+            sheet_id=sheet_id,
+            explanation=f"Resolves up to {req_count} significant concerns and risk findings from the decision brief."
+        )
+
+    # Check Business Summary: Actions ("what should we do?", "recommended actions", "next steps")
+    is_summary_actions = any(k in q for k in (
+        'what should we do', 'what actions', 'recommended actions', 'recommendations',
+        'next steps', 'what do you recommend', 'action plan', 'what action should'
+    ))
+    if is_summary_actions:
+        return AnalyticalQueryPlan(
+            intent='summary_actions',
+            prior_context=active_prior,
+            dataset_id=dataset_id,
+            sheet_id=sheet_id,
+            explanation="Extracts proposed next steps and actions supported by verified findings."
+        )
+
+    # Check Ranking follow-up ("show the bottom three", "show the top 5", "show bottom 3")
+    ranking_followup_match = re.search(r'\b(?:show\s+(?:the\s+)?)?(top|bottom|worst|best)\s*(\d+|three|two|four|five)?\b', q)
+    if ranking_followup_match and active_prior and active_prior.get('metric'):
+        dir_word = ranking_followup_match.group(1)
+        cnt_word = ranking_followup_match.group(2)
+        count = int(cnt_word) if cnt_word and cnt_word.isdigit() else (num_map.get(cnt_word, 3) if cnt_word else 3)
+        metric = active_prior.get('metric')
+        m_dir = resolve_metric_direction(metric)
+        if dir_word in ('bottom', 'worst'):
+            direction = 'highest' if m_dir == 'higher_is_worse' else 'lowest'
+        else:
+            direction = 'lowest' if m_dir == 'higher_is_worse' else 'highest'
+        return AnalyticalQueryPlan(
+            intent='ranking',
+            metric=metric,
+            entity_dimension=active_prior.get('dimension') or 'Department',
+            direction=direction,
+            ranking_limit=count,
+            prior_context=active_prior,
+            dataset_id=dataset_id,
+            sheet_id=sheet_id,
+            explanation=f"Followup ranking query for {count} {dir_word} performers on {metric}."
+        )
 
     # Inspect candidate sheets schema in DB if available
     should_close = False
@@ -236,6 +380,7 @@ def plan_analytical_query(
                 secondary_metric=matched_measures[1],
                 dataset_id=dataset_id,
                 sheet_id=sheet_id,
+                prior_context=active_prior,
                 explanation=f"Evaluates association between {matched_measures[0]} and {matched_measures[1]} while strictly refusing causal claims."
             )
         elif len(matched_measures) == 1 and any(k in q for k in ('why', 'cause', 'reason')):
@@ -244,6 +389,7 @@ def plan_analytical_query(
                 metric=matched_measures[0],
                 dataset_id=dataset_id,
                 sheet_id=sheet_id,
+                prior_context=active_prior,
                 explanation=f"Evaluates statistical associations with {matched_measures[0]} and refuses unverified causal claims."
             )
 
@@ -310,19 +456,24 @@ def plan_analytical_query(
                 metric = m
                 break
 
-    # 4. AMBIGUOUS "WORST" / "BEST" HANDLING
-    is_worst = any(w in q for w in ('worst', 'lowest', 'least', 'bottom', 'lagging', 'poorest', 'underperforming'))
-    is_best = any(w in q for w in ('best', 'highest', 'most', 'top', 'leading', 'peak'))
+    # 4. AMBIGUOUS "WORST" / "BEST" & EXPLICIT SORTING HANDLING
+    is_subjective_worst = any(w in q for w in ('worst', 'poorest', 'lagging', 'underperforming'))
+    is_subjective_best = any(w in q for w in ('best', 'leading', 'outperforming', 'premier'))
+    is_explicit_lowest = any(w in q for w in ('lowest', 'least', 'bottom'))
+    is_explicit_highest = any(w in q for w in ('highest', 'most', 'top', 'peak'))
+
+    is_worst = is_subjective_worst or is_explicit_lowest
+    is_best = is_subjective_best or is_explicit_highest
     is_breakdown = any(w in q for w in ('breakdown', 'by department', 'across department', 'each department',
                                         'by store', 'across stores', 'by severity', 'breakdown by'))
 
-    if not (is_worst or is_best or is_breakdown) and not (prior_context and prior_context.get('metric')):
+    if not (is_worst or is_best or is_breakdown) and not (active_prior and active_prior.get('metric')):
         return None
 
     # Context inheritance: If metric is absent, check prior context
     if not metric:
-        if prior_context and prior_context.get('metric'):
-            metric = prior_context['metric']
+        if active_prior and active_prior.get('metric'):
+            metric = active_prior['metric']
         elif is_worst or is_best:
             # Ambiguous worst/best query with no metric in query or prior context:
             # DO NOT guess attendance! DO NOT invent a synthetic composite score!
@@ -334,7 +485,7 @@ def plan_analytical_query(
             elif not avail:
                 avail = ['Attendance', 'Approved Leaves']
 
-            label_dir = "lowest" if is_worst else "highest"
+            label_dir = "worst" if is_worst else "best"
             measures_str = ", ".join(f"**{m}**" for m in avail)
             clarification = (
                 f"To identify the {label_dir}-performing **{disp_dim}**, please specify which metric you would like to evaluate "
@@ -348,6 +499,7 @@ def plan_analytical_query(
                 direction='lowest' if is_worst else 'highest',
                 dataset_id=dataset_id,
                 sheet_id=sheet_id,
+                prior_context=active_prior,
                 explanation="Ambiguous performance query without metric specification; prompts for clarification.",
                 available_metrics=avail,
                 clarification_question=clarification
@@ -355,20 +507,31 @@ def plan_analytical_query(
         else:
             return None
 
-    # Determine direction / intent
+    # Determine direction / intent respecting metric direction of concern
     direction: SortDirection = 'all'
     intent: QueryIntent = 'ranking'
     ranking_limit = 1
 
-    if is_worst:
-        direction = 'lowest'
+    m_dir = resolve_metric_direction(metric, all_measures)
+    if is_subjective_worst:
+        direction = 'highest' if m_dir == 'higher_is_worse' else 'lowest'
         intent = 'ranking'
         m_limit = re.search(r'(?:top|bottom|worst)\s*(\d+)', q)
         ranking_limit = int(m_limit.group(1)) if m_limit else 1
-    elif is_best:
-        direction = 'highest'
+    elif is_subjective_best:
+        direction = 'lowest' if m_dir == 'higher_is_worse' else 'highest'
         intent = 'ranking'
         m_limit = re.search(r'(?:top|bottom|best|highest)\s*(\d+)', q)
+        ranking_limit = int(m_limit.group(1)) if m_limit else 1
+    elif is_explicit_lowest:
+        direction = 'lowest'
+        intent = 'ranking'
+        m_limit = re.search(r'(?:bottom|lowest|least)\s*(\d+)', q)
+        ranking_limit = int(m_limit.group(1)) if m_limit else 1
+    elif is_explicit_highest:
+        direction = 'highest'
+        intent = 'ranking'
+        m_limit = re.search(r'(?:top|highest|most)\s*(\d+)', q)
         ranking_limit = int(m_limit.group(1)) if m_limit else 1
     elif is_breakdown:
         direction = 'all'
@@ -384,6 +547,7 @@ def plan_analytical_query(
         ranking_limit=ranking_limit,
         dataset_id=dataset_id,
         sheet_id=sheet_id,
+        prior_context=active_prior,
         explanation=f"Evaluates full population across {entity_dimension}s for {metric} ({direction} ordering)."
     )
 
@@ -461,22 +625,515 @@ def execute_analytical_plan(plan: AnalyticalQueryPlan, conn=None) -> dict[str, A
         brief = build_decision_brief(conn, sheet_id=sid)
         snapshot_hash = brief.get("snapshot", "unversioned")
 
-        # 2. HANDLE CORRELATION / CAUSATION INTENT
+        # 2. HANDLE SUMMARY POSITIVES INTENT ("give me 3 good points")
+        if plan.intent == 'summary_positives':
+            return _execute_summary_positives_query(plan, candidate_sheets, cols, rows, brief, snapshot_hash)
+
+        # 3. HANDLE SUMMARY CONCERNS INTENT ("main problems", "key risks")
+        if plan.intent == 'summary_concerns':
+            return _execute_summary_concerns_query(plan, candidate_sheets, cols, rows, brief, snapshot_hash)
+
+        # 4. HANDLE SUMMARY ACTIONS INTENT ("what should we do?", "recommended actions")
+        if plan.intent == 'summary_actions':
+            return _execute_summary_actions_query(plan, candidate_sheets, cols, rows, brief, snapshot_hash)
+
+        # 5. HANDLE FOLLOWUP WHY INTENT ("why?", "explain why")
+        if plan.intent == 'followup_why':
+            return _execute_followup_why_query(plan, candidate_sheets, cols, rows, brief, snapshot_hash)
+
+        # 6. HANDLE CORRELATION / CAUSATION INTENT
         if plan.intent == 'correlation_causation':
             return _execute_correlation_causation_query(plan, sheet, cols, rows, brief, snapshot_hash)
 
-        # 3. ROUTE TO HR PERIOD/ATTENDANCE ANALYTICS IF APPLICABLE
+        # 7. ROUTE TO HR PERIOD/ATTENDANCE ANALYTICS IF APPLICABLE
         is_hr_attendance_metric = plan.metric in ('attendance', 'leaves', 'final_attendance', 'headcount')
         has_attendance_cols = any(re.search(r'attendance|attended|leave|absent', c, re.I) for c in cols)
         if (has_wide_periods or has_attendance_cols) and is_hr_attendance_metric:
             return _execute_hr_period_attendance_query(plan, sheet, cols, rows, conn, snapshot_hash)
 
-        # 4. GENERAL TABULAR ANALYTICAL EXECUTION (Sales, IT, Marketing, General HR)
+        # 8. GENERAL TABULAR ANALYTICAL EXECUTION (Sales, IT, Marketing, General HR)
         return _execute_general_tabular_query(plan, sheet, cols, rows, brief, snapshot_hash)
 
     finally:
         if should_close:
             conn.close()
+
+
+def _execute_summary_positives_query(
+    plan: AnalyticalQueryPlan,
+    candidate_sheets: list[sqlite3.Row],
+    cols: list[str],
+    rows: list[dict[str, Any]],
+    brief: dict[str, Any],
+    snapshot_hash: str
+) -> dict[str, Any]:
+    """Resolves up to N verified positive findings directly from the server's cryptographic decision brief."""
+    sheet = candidate_sheets[0]
+    findings = brief.get("findings", [])
+    profiles = brief.get("profiles", [])
+    req_limit = plan.ranking_limit or 3
+
+    positives = []
+    seen_keys = set()
+
+    for f in findings:
+        kind = f.get("kind")
+        metric = f.get("metric")
+        m_dir = resolve_metric_direction(metric)
+        detail = f.get("detail", {})
+
+        is_pos = False
+        if kind == "comparison":
+            fg_name = detail.get("focus_group")
+            groups = detail.get("groups", [])
+            fg = next((g for g in groups if g.get("group") == fg_name), None)
+            gap = fg.get("gap") if fg else None
+            if gap is not None:
+                if m_dir == "lower_is_worse" and gap > 0:
+                    is_pos = True
+                elif m_dir == "higher_is_worse" and gap < 0:
+                    is_pos = True
+        elif kind == "movement":
+            points = detail.get("points", [])
+            if len(points) >= 2:
+                change = points[-1]["value"] - points[-2]["value"]
+                if m_dir == "lower_is_worse" and change > 0:
+                    is_pos = True
+                elif m_dir == "higher_is_worse" and change < 0:
+                    is_pos = True
+
+        if is_pos:
+            key = (f.get("title"), f.get("observation"))
+            if key not in seen_keys:
+                seen_keys.add(key)
+                positives.append(f)
+                if len(positives) >= req_limit:
+                    break
+
+    # If brief headline findings didn't reach requested count, check all evaluated group comparisons
+    if len(positives) < req_limit:
+        for p in profiles:
+            for comp in p.get("comparisons", []):
+                metric = comp.get("metric")
+                m_dir = resolve_metric_direction(metric)
+                baseline = comp.get("baseline")
+                for g in comp.get("groups", []):
+                    if g.get("group") in ("(missing)", "All selected rows") or g.get("used_rows", 0) < 5:
+                        continue
+                    gap = g.get("gap")
+                    if gap is None:
+                        continue
+                    is_pos = (m_dir == "lower_is_worse" and gap > 0) or (m_dir == "higher_is_worse" and gap < 0)
+                    if is_pos:
+                        direction_str = "above" if gap > 0 else "below"
+                        title = f"{g['group']}: {label(metric)} is {direction_str} baseline"
+                        obs = f"{g['value']:,.2f} versus {baseline:,.2f} across this sheet ({abs(gap):,.2f} {direction_str}); {g['used_rows']} valid records in the group."
+                        key = (title, obs)
+                        if key not in seen_keys:
+                            seen_keys.add(key)
+                            positives.append({
+                                "id": hashlib.sha256(f"{sheet['id']}:comp:{metric}:{title}".encode()).hexdigest()[:12],
+                                "kind": "comparison",
+                                "title": title,
+                                "observation": obs,
+                                "implication": f"This segment demonstrates favorable relative performance compared to the {baseline:,.2f} sheet average.",
+                                "action": f"Review operating practices in {g['group']} with leadership to identify repeatable patterns.",
+                                "owner": "Department owner",
+                                "metric": metric,
+                                "source": {"sheet_id": sheet["id"], "sheet": sheet["name"], "file": sheet["original_name"]},
+                                "method": comp.get("method", "Unweighted group mean vs sheet baseline."),
+                                "detail": {**comp, "focus_group": g["group"]}
+                            })
+                            if len(positives) >= req_limit:
+                                break
+                if len(positives) >= req_limit:
+                    break
+            if len(positives) >= req_limit:
+                break
+
+    lines = []
+    lines.append("### Executive Overview: Verified Positive Findings")
+    lines.append(f"Evaluated against Decision Brief snapshot `{snapshot_hash}` using full-population data.\n")
+
+    if not positives:
+        lines.append(
+            "> **Evidentiary Notice**: Under verified statistical evaluation, **no segments currently exhibit positive variance** "
+            "meeting statistical criteria (all observed segments are either at baseline, display adverse gaps, have incomplete coverage, "
+            "or have unresolved definitions like leave accounting balances). PulseHR AI does not invent or assume positive findings."
+        )
+    else:
+        for idx, f in enumerate(positives, start=1):
+            lines.append(f"#### {idx}. {_sanitize_untrusted_text(f['title'])}")
+            lines.append(f"- **What happened**: {f['observation']}")
+            lines.append(f"- **Why it matters**: {f['implication']}")
+            lines.append(f"- **Proposed Action**: {f['action']} _({f.get('owner', 'Operations owner')})_")
+            lines.append("")
+
+        if len(positives) < req_limit:
+            lines.append(
+                f"> **Honest Limitation**: You requested {req_limit} points, but only **{len(positives)}** positive finding(s) "
+                f"are supported by the data without lowering statistical standards or inventing claims."
+            )
+
+    answer_text = "\n".join(lines).strip()
+    primary_finding = positives[0] if positives else None
+
+    updated_context = {
+        "dataset_id": sheet["dataset_id"],
+        "sheet_id": sheet["id"],
+        "snapshot_hash": snapshot_hash,
+        "last_intent": "summary_positives",
+        "last_finding": primary_finding,
+        "metric": primary_finding.get("metric") if primary_finding else None,
+        "dimension": "Department"
+    }
+
+    return {
+        "status": "success",
+        "query_plan": {
+            "intent": "summary_positives",
+            "ranking_limit": req_limit,
+            "source_sheet": sheet["name"],
+            "dataset_id": sheet["dataset_id"],
+            "sheet_id": sheet["id"]
+        },
+        "answer": answer_text,
+        "evidence": {
+            "source_ids": [sheet["id"]],
+            "snapshot_hash": snapshot_hash,
+            "findings_evaluated": len(findings),
+            "positives_returned": len(positives),
+            "calculation_method": "Extracted from server-side decision brief snapshot. Never client-derived.",
+            "caveats": ["Unweighted comparisons; differences in group exposure or record mix may explain variances."]
+        },
+        "prior_context": updated_context,
+        "citations": [
+            {
+                "source": f"{sheet['original_name']} / {sheet['name']}",
+                "text": f"Verified {len(positives)} positive finding(s) from cryptographic snapshot {snapshot_hash}.",
+                "type": "decision_brief_snapshot"
+            }
+        ],
+        "suggested_questions": [
+            "Why is this the case?",
+            "What are the main problems?",
+            "What should we do?"
+        ]
+    }
+
+
+def _execute_summary_concerns_query(
+    plan: AnalyticalQueryPlan,
+    candidate_sheets: list[sqlite3.Row],
+    cols: list[str],
+    rows: list[dict[str, Any]],
+    brief: dict[str, Any],
+    snapshot_hash: str
+) -> dict[str, Any]:
+    """Resolves up to N significant operational concerns from verified brief findings."""
+    sheet = candidate_sheets[0]
+    findings = brief.get("findings", [])
+    req_limit = plan.ranking_limit or 3
+
+    concerns = []
+    seen_keys = set()
+
+    for f in findings:
+        kind = f.get("kind")
+        metric = f.get("metric")
+        m_dir = resolve_metric_direction(metric)
+        detail = f.get("detail", {})
+
+        is_concern = False
+        if kind == "quality":
+            is_concern = True
+        elif kind == "comparison":
+            fg_name = detail.get("focus_group")
+            groups = detail.get("groups", [])
+            fg = next((g for g in groups if g.get("group") == fg_name), None)
+            gap = fg.get("gap") if fg else None
+            if gap is not None:
+                if m_dir == "lower_is_worse" and gap < 0:
+                    is_concern = True
+                elif m_dir == "higher_is_worse" and gap > 0:
+                    is_concern = True
+        elif kind == "movement":
+            points = detail.get("points", [])
+            if len(points) >= 2:
+                change = points[-1]["value"] - points[-2]["value"]
+                if m_dir == "lower_is_worse" and change < 0:
+                    is_concern = True
+                elif m_dir == "higher_is_worse" and change > 0:
+                    is_concern = True
+
+        if is_concern:
+            key = (f.get("title"), f.get("observation"))
+            if key not in seen_keys:
+                seen_keys.add(key)
+                concerns.append(f)
+                if len(concerns) >= req_limit:
+                    break
+
+    lines = []
+    lines.append("### Executive Overview: Significant Operational Concerns & Risks")
+    lines.append(f"Evaluated against Decision Brief snapshot `{snapshot_hash}` using full-population data.\n")
+
+    if not concerns:
+        lines.append(
+            "> Under verified statistical evaluation, **no significant operational concerns or data quality anomalies** "
+            "exceeded priority thresholds in this dataset."
+        )
+    else:
+        for idx, f in enumerate(concerns, start=1):
+            badge = "⚠️ Data Quality" if f.get("kind") == "quality" else "🔻 Operational Variance"
+            lines.append(f"#### {idx}. {_sanitize_untrusted_text(f['title'])} ({badge})")
+            lines.append(f"- **Finding**: {f['observation']}")
+            lines.append(f"- **Implication**: {f['implication']}")
+            lines.append(f"- **Recommended Action**: {f['action']} _({f.get('owner', 'Review team')})_")
+            lines.append("")
+
+        if len(concerns) < req_limit:
+            lines.append(
+                f"> **Honest Limitation**: You requested {req_limit} concerns, but only **{len(concerns)}** "
+                f"meet verified statistical significance thresholds."
+            )
+
+    answer_text = "\n".join(lines).strip()
+    primary_finding = concerns[0] if concerns else None
+
+    updated_context = {
+        "dataset_id": sheet["dataset_id"],
+        "sheet_id": sheet["id"],
+        "snapshot_hash": snapshot_hash,
+        "last_intent": "summary_concerns",
+        "last_finding": primary_finding,
+        "metric": primary_finding.get("metric") if primary_finding else None,
+        "dimension": "Department"
+    }
+
+    return {
+        "status": "success",
+        "query_plan": {
+            "intent": "summary_concerns",
+            "ranking_limit": req_limit,
+            "source_sheet": sheet["name"],
+            "dataset_id": sheet["dataset_id"],
+            "sheet_id": sheet["id"]
+        },
+        "answer": answer_text,
+        "evidence": {
+            "source_ids": [sheet["id"]],
+            "snapshot_hash": snapshot_hash,
+            "concerns_returned": len(concerns),
+            "calculation_method": "Extracted from server-side decision brief snapshot.",
+            "caveats": ["Missing records excluded without zero-substitution."]
+        },
+        "prior_context": updated_context,
+        "citations": [
+            {
+                "source": f"{sheet['original_name']} / {sheet['name']}",
+                "text": f"Identified {len(concerns)} verified concern(s) from cryptographic snapshot {snapshot_hash}.",
+                "type": "decision_brief_snapshot"
+            }
+        ],
+        "suggested_questions": [
+            "Why did this happen?",
+            "What should we do?",
+            "Which department is worst?"
+        ]
+    }
+
+
+def _execute_summary_actions_query(
+    plan: AnalyticalQueryPlan,
+    candidate_sheets: list[sqlite3.Row],
+    cols: list[str],
+    rows: list[dict[str, Any]],
+    brief: dict[str, Any],
+    snapshot_hash: str
+) -> dict[str, Any]:
+    """Resolves recommended actions backed by verified findings."""
+    sheet = candidate_sheets[0]
+    findings = brief.get("findings", [])
+
+    actions = []
+    seen_actions = set()
+
+    for f in findings:
+        action_text = f.get("action")
+        if action_text and action_text not in seen_actions:
+            seen_actions.add(action_text)
+            actions.append({
+                "action": action_text,
+                "title": f.get("title"),
+                "owner": f.get("owner", "Department leadership"),
+                "review": f.get("review", "Proposed: review at the next operating meeting"),
+                "metric": f.get("metric"),
+                "finding": f
+            })
+
+    lines = []
+    lines.append("### Recommended Actions Supported by Verified Evidence")
+    lines.append(f"Based on Decision Brief snapshot `{snapshot_hash}`.\n")
+
+    if not actions:
+        lines.append("No specific operational interventions are currently mandated by the data.")
+    else:
+        for idx, a in enumerate(actions[:5], start=1):
+            lines.append(f"#### {idx}. {_sanitize_untrusted_text(a['action'])}")
+            lines.append(f"- **Rationale**: Grounded in finding _{_sanitize_untrusted_text(a['title'])}_")
+            lines.append(f"- **Owner**: **{a['owner']}**")
+            lines.append(f"- **Review Timeline**: {a['review']}")
+            lines.append("")
+
+    answer_text = "\n".join(lines).strip()
+    primary_finding = actions[0]["finding"] if actions else None
+
+    updated_context = {
+        "dataset_id": sheet["dataset_id"],
+        "sheet_id": sheet["id"],
+        "snapshot_hash": snapshot_hash,
+        "last_intent": "summary_actions",
+        "last_finding": primary_finding,
+        "metric": primary_finding.get("metric") if primary_finding else None,
+        "dimension": "Department"
+    }
+
+    return {
+        "status": "success",
+        "query_plan": {
+            "intent": "summary_actions",
+            "source_sheet": sheet["name"],
+            "dataset_id": sheet["dataset_id"],
+            "sheet_id": sheet["id"]
+        },
+        "answer": answer_text,
+        "evidence": {
+            "source_ids": [sheet["id"]],
+            "snapshot_hash": snapshot_hash,
+            "actions_count": len(actions),
+            "calculation_method": "Actions derived deterministically from verified findings and owner assignments.",
+            "caveats": ["All actions require domain owner consultation before policy changes."]
+        },
+        "prior_context": updated_context,
+        "citations": [
+            {
+                "source": f"{sheet['original_name']} / {sheet['name']}",
+                "text": f"Grounded actions in findings from snapshot {snapshot_hash}.",
+                "type": "decision_brief_snapshot"
+            }
+        ],
+        "suggested_questions": [
+            "Why is this action recommended?",
+            "What are the main problems?",
+            "Give me 3 good points"
+        ]
+    }
+
+
+def _execute_followup_why_query(
+    plan: AnalyticalQueryPlan,
+    candidate_sheets: list[sqlite3.Row],
+    cols: list[str],
+    rows: list[dict[str, Any]],
+    brief: dict[str, Any],
+    snapshot_hash: str
+) -> dict[str, Any]:
+    """Explains underlying data factors for preceding finding/ranking with strict non-causal disclaimer."""
+    sheet = candidate_sheets[0]
+    p_ctx = plan.prior_context or {}
+    last_f = p_ctx.get("last_finding")
+    last_rank = p_ctx.get("last_ranking")
+
+    lines = []
+    lines.append("### Analytical Context & Non-Causal Explanation")
+
+    if last_f:
+        title = last_f.get("title", "")
+        detail = last_f.get("detail", {})
+        baseline = detail.get("baseline")
+        fg = detail.get("focus_group")
+        used_rows = detail.get("used_rows")
+        total_rows = detail.get("total_rows")
+        method = last_f.get("method", detail.get("method", ""))
+
+        lines.append(f"Regarding preceding finding: **{_sanitize_untrusted_text(title)}**\n")
+        lines.append("**Underlying Data Factors**:")
+        if fg and baseline is not None:
+            groups = detail.get("groups", [])
+            fg_obj = next((g for g in groups if g.get("group") == fg), None)
+            val = fg_obj.get("value") if fg_obj else None
+            gap = fg_obj.get("gap") if fg_obj else None
+            g_rows = fg_obj.get("used_rows") if fg_obj else None
+            if val is not None and gap is not None:
+                lines.append(
+                    f"- **Group Record Mean**: Recorded **{val:,.2f}** across **{g_rows} valid records** "
+                    f"versus the dataset baseline of **{baseline:,.2f}** ({gap:+,.2f} variance)."
+                )
+            if fg_obj and fg_obj.get("small_sample"):
+                lines.append(f"- **Sample Sensitivity**: Group size ({g_rows} records) is small (<5), meaning individual values exert high leverage on the group mean.")
+        elif used_rows and total_rows:
+            lines.append(f"- **Coverage**: Evaluated across {used_rows} valid records out of {total_rows} total rows.")
+
+        if method:
+            lines.append(f"- **Calculation Basis**: {method}")
+        lines.append(
+            "\n> **Refusal of Causal Inference**:\n"
+            "> PulseHR AI strictly refuses unverified causal claims. Observational data shows *what* occurred, "
+            "but cannot establish cause-and-effect (such as employee motivation, managerial competence, or external pressures). "
+            "Differences in workload, shift allocation, record completeness, or employee mix may account for this pattern."
+        )
+        if last_f.get("action"):
+            lines.append(f"\n- **Next Investigative Step**: {last_f.get('action')}")
+
+    elif last_rank:
+        lines.append("Regarding the preceding ranking evaluation:\n")
+        top_d = last_rank[0] if isinstance(last_rank, list) and last_rank else {}
+        d_name = top_d.get("department") or top_d.get("group") or "Top target"
+        lines.append("- **Ranking Composition**: Evaluated across all distinct segments using dense ranking for ties.")
+        lines.append(
+            f"\n> **Refusal of Causal Inference**:\n"
+            f"> Observational rankings show relative position across observed records, not causation. "
+            f"Do not assume {d_name}'s ranking stems from intrinsic underperformance without examining shift schedules, "
+            "operational exposure, and baseline comparability."
+        )
+    else:
+        lines.append(
+            "To explain *why* a particular variance occurred, please specify which metric or department you are investigating "
+            "(for example: 'Why is attendance lower in Engineering?' or 'Why did leaves increase in March?')."
+        )
+
+    answer_text = "\n".join(lines).strip()
+    return {
+        "status": "success",
+        "query_plan": {
+            "intent": "followup_why",
+            "source_sheet": sheet["name"],
+            "dataset_id": sheet["dataset_id"],
+            "sheet_id": sheet["id"]
+        },
+        "answer": answer_text,
+        "evidence": {
+            "source_ids": [sheet["id"]],
+            "snapshot_hash": snapshot_hash,
+            "preceding_finding_id": last_f.get("id") if last_f else None,
+            "calculation_method": "Descriptive variance decomposition. Causal attribution refused.",
+            "caveats": ["Descriptive correlation does not prove causation."]
+        },
+        "prior_context": p_ctx,
+        "citations": [
+            {
+                "source": f"{sheet['original_name']} / {sheet['name']}",
+                "text": "Evaluated underlying variance factors while refusing causal claims.",
+                "type": "non_causal_statistical_evidence"
+            }
+        ],
+        "suggested_questions": [
+            "What should we do?",
+            "Show the bottom three",
+            "What are the main problems?"
+        ]
+    }
 
 
 def _execute_correlation_causation_query(
@@ -736,6 +1393,35 @@ def _execute_hr_period_attendance_query(
     lines.append(f"> 2. **Denominators**: {res['denominator_notice']}")
 
     answer_text = "\n".join(lines)
+    primary_finding = None
+    if dense_ranked:
+        first_d = dense_ranked[0]
+        primary_finding = {
+            "title": f"{first_d['department']}: {metric_display_name} is {label_adjective}",
+            "observation": f"{first_d[metric_key]:.2f}{unit_suffix} vs benchmark {org_val:.2f}{unit_suffix}",
+            "implication": f"Identifies {first_d['department']} as having the {label_adjective} {metric_display_name}.",
+            "action": first_d.get('proposed_action') or f"Review {metric_display_name} with {first_d['department']} leadership.",
+            "detail": {
+                "groups": dense_ranked,
+                "baseline": org_val,
+                "focus_group": first_d['department'],
+                "used_rows": first_d['headcount'],
+                "total_rows": res["total_evaluated_records"]
+            }
+        }
+
+    updated_context = {
+        "dataset_id": sheet["dataset_id"],
+        "sheet_id": sheet["id"],
+        "snapshot_hash": snapshot_hash,
+        "last_intent": plan.intent,
+        "metric": plan.metric,
+        "dimension": plan.entity_dimension,
+        "last_ranking": dense_ranked,
+        "last_finding": primary_finding,
+        "time_window": period_lbl
+    }
+
     return {
         "status": "success",
         "query_plan": {
@@ -765,6 +1451,7 @@ def _execute_hr_period_attendance_query(
             "caveats": [res["historical_trend_notice"], res["denominator_notice"]]
         },
         "raw_analysis": res,
+        "prior_context": updated_context,
         "citations": [
             {
                 "source": f"{sheet['original_name']} / {sheet['name']}",
@@ -934,6 +1621,35 @@ def _execute_general_tabular_query(
     lines.append(f"> 2. **Calculation Method**: Unweighted mean of valid source records by group. No exposure adjustment or cross-sheet joins applied.")
 
     answer_text = "\n".join(lines)
+    primary_finding = None
+    if dense_groups:
+        first_g = dense_groups[0]
+        primary_finding = {
+            "title": f"{first_g['group']}: {metric_lbl} is {label_adjective}",
+            "observation": f"{first_g['value']:,.2f} vs benchmark {baseline:,.2f} ({first_g.get('gap', 0):+,.2f} gap)",
+            "implication": "Identifies an operational segment to investigate.",
+            "action": f"Review {metric_lbl} with {first_g['group']} leadership.",
+            "detail": {
+                "groups": dense_groups,
+                "baseline": baseline,
+                "focus_group": first_g['group'],
+                "used_rows": first_g['used_rows'],
+                "total_rows": len(df)
+            }
+        }
+
+    updated_context = {
+        "dataset_id": sheet["dataset_id"],
+        "sheet_id": sheet["id"],
+        "snapshot_hash": snapshot_hash,
+        "last_intent": plan.intent,
+        "metric": metric_col,
+        "dimension": dim_col,
+        "last_ranking": dense_groups,
+        "last_finding": primary_finding,
+        "time_window": plan.time_window
+    }
+
     return {
         "status": "success",
         "query_plan": {
@@ -965,6 +1681,8 @@ def _execute_general_tabular_query(
                 "Unweighted mean; differences in exposure or mix not adjusted."
             ]
         },
+        "raw_analysis": {"groups": dense_groups, "baseline": baseline, "metric": metric_col},
+        "prior_context": updated_context,
         "citations": [
             {
                 "source": f"{sheet['original_name']} / {sheet['name']}",

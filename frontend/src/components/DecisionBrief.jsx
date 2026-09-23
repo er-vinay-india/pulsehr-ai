@@ -129,7 +129,7 @@ function BriefPresentation({ data, onClose, onExplore }) {
   );
 }
 
-export default function DecisionBrief({ sheetId, onExplore }) {
+export default function DecisionBrief({ sheetId, onExplore, onSnapshotLoaded }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -159,7 +159,12 @@ export default function DecisionBrief({ sheetId, onExplore }) {
         return r.json();
       })
       .then((result) => {
-        if (id === request.current) setData(result);
+        if (id === request.current) {
+          setData(result);
+          if (onSnapshotLoaded && result?.snapshot) {
+            onSnapshotLoaded(result.snapshot, sheetId);
+          }
+        }
       })
       .catch((e) => {
         if (e.name !== 'AbortError' && id === request.current) setError(e.message);

@@ -5,6 +5,7 @@ import "./styles/index.scss";
 import "./styles/refinements.scss";
 import "./styles/executive-cockpit.scss";
 import "katex/dist/katex.min.css";
+import "./styles/mobile-layout.scss";
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>

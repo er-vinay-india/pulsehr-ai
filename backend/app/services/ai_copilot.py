@@ -194,7 +194,9 @@ def query_copilot(
     tool: ToolRequest | None = None,
     dataset_id: int | None = None,
     sheet_id: int | None = None,
-    prior_context: dict | None = None
+    prior_context: dict | None = None,
+    snapshot_id: str | None = None,
+    page: str | None = None
 ) -> dict:
     t_start = time.perf_counter()
     from .sheet_catalog import linked_evidence
@@ -202,7 +204,7 @@ def query_copilot(
     # 1. Deterministic Tool Execution
     requested_tool = tool or infer_tool(user_query, dataset_id=dataset_id, sheet_id=sheet_id, prior_context=prior_context)
     if requested_tool:
-        tool_res = execute_tool(user_query, requested_tool, dataset_id=dataset_id, sheet_id=sheet_id)
+        tool_res = execute_tool(user_query, requested_tool, dataset_id=dataset_id, sheet_id=sheet_id, prior_context=prior_context)
         duration_ms = (time.perf_counter() - t_start) * 1000
         tool_res["timings"] = {
             "total_ms": round(duration_ms, 1),
@@ -262,8 +264,17 @@ def query_copilot(
     prompt = _build_copilot_prompt(user_query, evidence, context, active_sheet_name, column_mapping, domain_guideline)
     context_ms = (time.perf_counter() - t_ctx0) * 1000
 
-    # 4. LLM Inference (Preserves user's selected model)
-    target_model = selected_model or config.OLLAMA_MODEL
+    # 4. LLM Inference (Preserves user's selected model or applies ModelRouter)
+    from .gateway.model_router import ModelRouter
+    from .gateway.model_manager import model_manager
+    from ..core.models_config import get_role_config
+
+    if not selected_model:
+        routed_role = ModelRouter.route_task("copilot", query=user_query, context=context)
+        target_model = get_role_config(routed_role).primary
+    else:
+        target_model = selected_model
+
     answer = ''
     t_llm0 = time.perf_counter()
     try:
@@ -282,6 +293,7 @@ def query_copilot(
     except (httpx.HTTPError, ValueError, TypeError):
         pass
     llm_ms = (time.perf_counter() - t_llm0) * 1000
+    model_manager.record_execution(target_model, llm_ms, bool(answer))
 
     if not answer:
         answer = ("The language model is currently unavailable or timed out. Here are relevant source records found in your sheets:\n\n" +
@@ -318,7 +330,9 @@ def stream_copilot_generator(
     tool: ToolRequest | None = None,
     dataset_id: int | None = None,
     sheet_id: int | None = None,
-    prior_context: dict | None = None
+    prior_context: dict | None = None,
+    snapshot_id: str | None = None,
+    page: str | None = None
 ) -> Generator[str, None, None]:
     """Streams Copilot responses as Server-Sent Events (SSE).
     Substantially lowers perceived latency by streaming tokens in real time.
@@ -331,7 +345,7 @@ def stream_copilot_generator(
     requested_tool = tool or infer_tool(user_query, dataset_id=dataset_id, sheet_id=sheet_id, prior_context=prior_context)
     if requested_tool:
         yield f"event: status\ndata: {json.dumps({'phase': 'tool', 'message': f'Executing exact calculation: {requested_tool.name}…'})}\n\n"
-        tool_res = execute_tool(user_query, requested_tool, dataset_id=dataset_id, sheet_id=sheet_id)
+        tool_res = execute_tool(user_query, requested_tool, dataset_id=dataset_id, sheet_id=sheet_id, prior_context=prior_context)
         duration_ms = (time.perf_counter() - t_start) * 1000
         tool_res["timings"] = {
             "total_ms": round(duration_ms, 1),
@@ -391,7 +405,15 @@ def stream_copilot_generator(
     prompt = _build_copilot_prompt(user_query, evidence, context, active_sheet_name, column_mapping, domain_guideline)
     context_ms = (time.perf_counter() - t_ctx0) * 1000
 
-    target_model = selected_model or config.OLLAMA_MODEL
+    from .gateway.model_router import ModelRouter
+    from ..core.models_config import get_role_config
+
+    if not selected_model:
+        routed_role = ModelRouter.route_task("copilot", query=user_query, context=context)
+        target_model = get_role_config(routed_role).primary
+    else:
+        target_model = selected_model
+
     yield f"event: status\ndata: {json.dumps({'phase': 'generating', 'message': f'Streaming response from {target_model}…'})}\n\n"
 
     # Stage 4: Stream Tokens from Ollama

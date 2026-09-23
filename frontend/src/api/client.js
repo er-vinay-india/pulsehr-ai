@@ -79,7 +79,17 @@ export async function getEmployeeDetail(id) {
   return res.json();
 }
 
-export async function askCopilot(query, model = null, tool = null, datasetId = null, sheetId = null, signal = null) {
+export async function askCopilot(
+  query,
+  model = null,
+  tool = null,
+  datasetId = null,
+  sheetId = null,
+  signal = null,
+  priorContext = null,
+  snapshotId = null,
+  page = null
+) {
   const res = await fetch(`${API_BASE}/copilot/query`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -88,7 +98,10 @@ export async function askCopilot(query, model = null, tool = null, datasetId = n
       model,
       tool,
       dataset_id: datasetId,
-      sheet_id: sheetId
+      sheet_id: sheetId,
+      prior_context: priorContext,
+      snapshot_id: snapshotId,
+      page
     }),
     signal
   });
@@ -106,7 +119,10 @@ export async function streamCopilotQuery(
   datasetId = null,
   sheetId = null,
   callbacks = {},
-  signal = null
+  signal = null,
+  priorContext = null,
+  snapshotId = null,
+  page = null
 ) {
   const { onStatus, onToken, onDone, onError } = callbacks;
   try {
@@ -118,7 +134,10 @@ export async function streamCopilotQuery(
         model,
         tool,
         dataset_id: datasetId,
-        sheet_id: sheetId
+        sheet_id: sheetId,
+        prior_context: priorContext,
+        snapshot_id: snapshotId,
+        page
       }),
       signal
     });

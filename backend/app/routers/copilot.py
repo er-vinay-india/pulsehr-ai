@@ -13,10 +13,21 @@ class CopilotQueryRequest(BaseModel):
     dataset_id: int | None = None
     sheet_id: int | None = None
     prior_context: dict | None = None
+    snapshot_id: str | None = None
+    page: str | None = None
 
 @router.post("/query")
 def ask_copilot(req: CopilotQueryRequest):
-    return query_copilot(req.query, req.model, req.tool, req.dataset_id, req.sheet_id, req.prior_context)
+    return query_copilot(
+        user_query=req.query,
+        selected_model=req.model,
+        tool=req.tool,
+        dataset_id=req.dataset_id,
+        sheet_id=req.sheet_id,
+        prior_context=req.prior_context,
+        snapshot_id=req.snapshot_id,
+        page=req.page
+    )
 
 @router.post("/query/stream")
 def ask_copilot_stream(req: CopilotQueryRequest):
@@ -28,7 +39,9 @@ def ask_copilot_stream(req: CopilotQueryRequest):
             tool=req.tool,
             dataset_id=req.dataset_id,
             sheet_id=req.sheet_id,
-            prior_context=req.prior_context
+            prior_context=req.prior_context,
+            snapshot_id=req.snapshot_id,
+            page=req.page
         ),
         media_type="text/event-stream",
         headers={

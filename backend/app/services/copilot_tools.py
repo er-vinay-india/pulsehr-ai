@@ -207,14 +207,15 @@ def execute_tool(
     query: str,
     request: ToolRequest,
     dataset_id: int | None = None,
-    sheet_id: int | None = None
+    sheet_id: int | None = None,
+    prior_context: dict[str, Any] | None = None
 ) -> dict:
     artifacts, result = [], None
     try:
         if request.name == 'analytical_plan':
             plan = request.analytical_plan
             if not plan:
-                plan = plan_analytical_query(query, dataset_id=dataset_id, sheet_id=sheet_id)
+                plan = plan_analytical_query(query, dataset_id=dataset_id, sheet_id=sheet_id, prior_context=prior_context)
             plan_res = execute_analytical_plan(plan)
             suggested = plan_res.get('suggested_questions') or [
                 "What is the attendance breakdown by department?",
@@ -229,6 +230,7 @@ def execute_tool(
                 'status': plan_res.get('status', 'success'),
                 'evidence': plan_res.get('evidence'),
                 'calculation': plan_res.get('raw_analysis'),
+                'prior_context': plan_res.get('prior_context'),
                 'artifacts': [],
                 'citations': plan_res.get('citations', []),
                 'exact_matches': [],

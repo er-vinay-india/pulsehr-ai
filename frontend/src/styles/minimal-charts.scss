@@ -1,0 +1,7 @@
+.minimal-chart { overflow: hidden; }
+.chart-data-table { margin-top: 8px; color: #cbd5e1; font-size: .8rem; }
+.chart-data-table summary { cursor: pointer; padding: 8px 0; }
+.chart-data-table table { width: 100%; border-collapse: collapse; text-align: left; }
+.chart-data-table th, .chart-data-table td { padding: 8px; border-bottom: 1px solid #ffffff18; }
+.chart-data-table button { background: transparent; color: #7dd3fc; border: 0; text-align: left; cursor: pointer; text-decoration: underline; }
+.chart-data-table :focus-visible { outline: 2px solid #7dd3fc; outline-offset: 3px; }

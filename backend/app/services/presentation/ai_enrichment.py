@@ -80,18 +80,17 @@ def _call_ai_presentation_enrichment(
     )
 
     try:
-        with httpx.Client(timeout=15) as client:
-            resp = client.post(f"{config.OLLAMA_BASE_URL}/api/generate", json={
-                "model": config.OLLAMA_MODEL,
-                "prompt": prompt,
-                "stream": False,
-                "options": {"temperature": 0.2}
-            })
-            if resp.status_code == 200:
-                text = resp.json().get("response", "").strip()
-                match = re.search(r'\[\s*\{[\s\S]*\}\s*\]', text)
-                if match:
-                    return json.loads(match.group(0))
+        from ..gateway.model_gateway import ModelGateway
+        from ...core.models_config import ModelRole
+        res = ModelGateway.generate(
+            role=ModelRole.WRITER,
+            prompt=prompt,
+            step_name="presentation_deck_enrichment"
+        )
+        if res.success and res.raw_text:
+            match = re.search(r'\[\s*\{[\s\S]*\}\s*\]', res.raw_text)
+            if match:
+                return json.loads(match.group(0))
     except Exception:
         pass
     return None
@@ -125,24 +124,23 @@ def regenerate_single_slide(
     )
 
     try:
-        with httpx.Client(timeout=15) as client:
-            resp = client.post(f"{config.OLLAMA_BASE_URL}/api/generate", json={
-                "model": config.OLLAMA_MODEL,
-                "prompt": prompt,
-                "stream": False,
-                "options": {"temperature": 0.2}
-            })
-            if resp.status_code == 200:
-                text = resp.json().get("response", "").strip()
-                match = re.search(r'\{[\s\S]*\}', text)
-                if match:
-                    data = json.loads(match.group(0))
-                    if data.get("title"):
-                        target_slide["title"] = format_display_label(data["title"])
-                    if data.get("subtitle"):
-                        target_slide["subtitle"] = data["subtitle"]
-                    if data.get("narrative"):
-                        target_slide["narrative"] = sanitize_llm_text(data["narrative"])
+        from ..gateway.model_gateway import ModelGateway
+        from ...core.models_config import ModelRole
+        res = ModelGateway.generate(
+            role=ModelRole.WRITER,
+            prompt=prompt,
+            step_name="regenerate_single_slide"
+        )
+        if res.success and res.raw_text:
+            match = re.search(r'\{[\s\S]*\}', res.raw_text)
+            if match:
+                data = json.loads(match.group(0))
+                if data.get("title"):
+                    target_slide["title"] = format_display_label(data["title"])
+                if data.get("subtitle"):
+                    target_slide["subtitle"] = data["subtitle"]
+                if data.get("narrative"):
+                    target_slide["narrative"] = sanitize_llm_text(data["narrative"])
                     if data.get("speaker_notes"):
                         target_slide["speaker_notes"] = data["speaker_notes"]
                     updated_deck["updated_at"] = datetime.datetime.now(datetime.timezone.utc).isoformat()

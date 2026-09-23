@@ -1,93 +1,53 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import * as echarts from 'echarts';
+import { palette } from './chartOptions';
+import '../../styles/minimal-charts.scss';
 
-/**
- * SafeReactECharts:
- * Ultra-robust Apache ECharts wrapper for React.
- * Prevents canvas 0x0 errors, catches option parse errors, and supports responsive resizing.
- */
-export default function SafeReactECharts({
-  option,
-  style = { height: '300px', width: '100%', minHeight: '180px' },
-  onEvents = null,
-  opts = { renderer: 'canvas' }
-}) {
-  const containerRef = useRef(null);
-  const chartInstanceRef = useRef(null);
-
+function minimalOptions(option) {
+  const axes = axis => (Array.isArray(axis) ? axis : [axis]).map(a => ({ ...a,
+    axisLabel: { ...a?.axisLabel, color: '#cbd5e1', fontSize: 12 },
+    axisLine: { ...a?.axisLine, lineStyle: { color: '#64748b' } },
+    splitLine: { show: a?.type === 'value', lineStyle: { color: '#ffffff12' } } }));
+  return { ...option, color: palette, backgroundColor: 'transparent', animation: false,
+    aria: { enabled: true }, textStyle: { color: '#e2e8f0', fontFamily: 'system-ui, sans-serif' },
+    tooltip: { ...option.tooltip, confine: true, backgroundColor: '#18212f', borderColor: '#64748b', textStyle: { color: '#f1f5f9', fontSize: 13 } },
+    legend: { ...option.legend, textStyle: { color: '#cbd5e1', fontSize: 12 }, pageTextStyle: { color: '#cbd5e1' } },
+    ...(option.xAxis ? { xAxis: axes(option.xAxis) } : {}), ...(option.yAxis ? { yAxis: axes(option.yAxis) } : {}),
+    series: (option.series || []).map((s, index) => ({ ...s, smooth: false,
+      itemStyle: { ...s.itemStyle, shadowBlur: 0, ...(s.type === 'bar' ? { color: palette[index % palette.length], borderRadius: 2 } : {}) },
+      lineStyle: { ...s.lineStyle, width: 2, shadowBlur: 0 },
+      ...(s.areaStyle ? { areaStyle: { opacity: 0.06, color: palette[0] } } : {}),
+      emphasis: { ...s.emphasis, scale: false, itemStyle: { shadowBlur: 0 } }
+    })) };
+}
+export default function SafeReactECharts({ option = {}, style, onEvents, opts = {} }) {
+  const container = useRef(null);
+  const instance = useRef(null);
+  const handlers = useRef(onEvents);
+  handlers.current = onEvents;
+  const [error, setError] = useState(false);
   useEffect(() => {
-    if (!containerRef.current) return;
-
-    let chart = null;
-    try {
-      chart = echarts.init(containerRef.current, null, opts);
-      chartInstanceRef.current = chart;
-
-      // Apply initial options immediately if available
-      if (option && typeof option === 'object' && Object.keys(option).length > 0) {
-        chart.setOption(option, true);
-      }
-
-      // Attach event listeners
-      if (onEvents) {
-        Object.entries(onEvents).forEach(([eventName, handler]) => {
-          if (typeof handler === 'function') {
-            chart.on(eventName, handler);
-          }
-        });
-      }
-    } catch (initErr) {
-      console.warn('SafeReactECharts: Initialization error:', initErr);
-    }
-
-    // Handle responsive container resize safely
-    let resizeObserver = null;
-    if (typeof ResizeObserver !== 'undefined' && containerRef.current) {
-      try {
-        resizeObserver = new ResizeObserver(() => {
-          if (chartInstanceRef.current && !chartInstanceRef.current.isDisposed()) {
-            chartInstanceRef.current.resize();
-          }
-        });
-        resizeObserver.observe(containerRef.current);
-      } catch (roErr) {
-        console.warn('SafeReactECharts: ResizeObserver warning:', roErr);
-      }
-    }
-
-    const handleWindowResize = () => {
-      if (chartInstanceRef.current && !chartInstanceRef.current.isDisposed()) {
-        chartInstanceRef.current.resize();
-      }
-    };
-    window.addEventListener('resize', handleWindowResize);
-
-    return () => {
-      window.removeEventListener('resize', handleWindowResize);
-      if (resizeObserver) {
-        resizeObserver.disconnect();
-      }
-      if (chartInstanceRef.current) {
-        try {
-          chartInstanceRef.current.dispose();
-        } catch (dErr) {
-          // ignore dispose error
-        }
-        chartInstanceRef.current = null;
-      }
-    };
+    const node = container.current;
+    const chart = echarts.init(node, null, { renderer: opts.renderer || 'canvas' });
+    instance.current = chart;
+    const observer = new ResizeObserver(() => { if (node.clientWidth && node.clientHeight) chart.resize(); });
+    observer.observe(node);
+    return () => { observer.disconnect(); chart.dispose(); instance.current = null; };
   }, []);
-
-  // Update chart options whenever `option` changes
   useEffect(() => {
-    if (chartInstanceRef.current && !chartInstanceRef.current.isDisposed() && option && typeof option === 'object' && Object.keys(option).length > 0) {
-      try {
-        chartInstanceRef.current.setOption(option, true);
-      } catch (optErr) {
-        console.warn('SafeReactECharts: Failed to apply options:', optErr);
-      }
-    }
+    try { instance.current?.setOption(minimalOptions(option), true); setError(false); }
+    catch (err) { console.warn('Chart rendering failed', err); setError(true); }
   }, [option]);
-
-  return <div ref={containerRef} style={{ minHeight: '180px', width: '100%', ...style }} />;
+  const eventNames = Object.keys(onEvents || {}).sort().join('|');
+  useEffect(() => {
+    const chart = instance.current;
+    const events = eventNames ? eventNames.split('|') : [];
+    const bindings = events.map(name => [name, params => handlers.current?.[name]?.(params)]);
+    bindings.forEach(([name, callback]) => chart.on(name, callback));
+    return () => bindings.forEach(([name, callback]) => chart.off(name, callback));
+  }, [eventNames]);
+  return <div className="minimal-chart" style={{ minWidth: 0, width: '100%' }}>
+    <div ref={container} style={{ height: 300, width: '100%', ...style }} />
+    {error && <p role="status">Chart unavailable. Open the data table to inspect the values.</p>}
+  </div>;
 }

@@ -307,7 +307,10 @@ def query_llm_sheet_naming(
     columns: list[str],
     sample_records: list[dict[str, Any]] | None = None
 ) -> dict[str, str] | None:
-    """Lightweight LLM call to synthesize an executive display title if Ollama is responsive."""
+    """Lightweight LLM call to synthesize an executive display title using ModelRole.FAST."""
+    from .gateway.model_gateway import ModelGateway
+    from ..core.models_config import ModelRole
+
     col_preview = columns[:15]
     prompt = (
         f"You are an enterprise data platform assistant. Given an uploaded dataset with:\n"
@@ -320,28 +323,22 @@ def query_llm_sheet_naming(
     )
 
     try:
-        with httpx.Client(timeout=4.0) as client:
-            resp = client.post(
-                f"{config.OLLAMA_BASE_URL}/api/generate",
-                json={
-                    "model": config.OLLAMA_MODEL,
-                    "prompt": prompt,
-                    "stream": False,
-                    "options": {"temperature": 0.1, "num_predict": 100}
-                }
-            )
-            if resp.status_code == 200:
-                raw_text = resp.json().get("response", "").strip()
-                match = re.search(r"\{[\s\S]*\}", raw_text)
-                if match:
-                    parsed = json.loads(match.group(0))
-                    if parsed.get("display_name"):
-                        return {
-                            "display_name": proper_title_case(parsed["display_name"]),
-                            "description": str(parsed.get("description", "")).strip()
-                        }
+        res = ModelGateway.generate(
+            role=ModelRole.FAST,
+            prompt=prompt,
+            step_name="sheet_naming"
+        )
+        if res.success and res.raw_text:
+            match = re.search(r"\{[\s\S]*\}", res.raw_text)
+            if match:
+                parsed = json.loads(match.group(0))
+                if parsed.get("display_name"):
+                    return {
+                        "display_name": proper_title_case(parsed["display_name"]),
+                        "description": str(parsed.get("description", "")).strip()
+                    }
     except Exception as e:
-        logger.debug(f"Ollama naming skipped or timed out: {e}")
+        logger.debug(f"Ollama naming skipped: {e}")
     return None
 
 

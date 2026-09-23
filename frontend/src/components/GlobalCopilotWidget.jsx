@@ -25,6 +25,8 @@ export default function GlobalCopilotWidget({
   onClose,
   activeDatasetId = null,
   activeSheetId = null,
+  activeSnapshotId = null,
+  activePage = 'overview',
   activeSheetName = '',
   onSelectEmployee
 }) {
@@ -51,6 +53,12 @@ export default function GlobalCopilotWidget({
   const launcherRef = useRef(null);
   const abortControllerRef = useRef(null);
   const timerIntervalRef = useRef(null);
+  const priorContextRef = useRef(null);
+
+  // Invalidate prior context on dataset or sheet scope switch
+  useEffect(() => {
+    priorContextRef.current = null;
+  }, [activeDatasetId, activeSheetId]);
 
   // Sync with prop isOpen
   useEffect(() => {
@@ -220,6 +228,9 @@ export default function GlobalCopilotWidget({
             });
           },
           onDone: (doneData) => {
+            if (doneData.prior_context) {
+              priorContextRef.current = doneData.prior_context;
+            }
             setMessages((prev) => {
               const updated = [...prev];
               const last = updated[updated.length - 1];
@@ -246,7 +257,20 @@ export default function GlobalCopilotWidget({
             if (controller.signal.aborted) return;
             // Fallback to standard non-streaming query
             try {
-              const res = await askCopilot(text, selectedModel, tool, activeDatasetId, activeSheetId, controller.signal);
+              const res = await askCopilot(
+                text,
+                selectedModel,
+                tool,
+                activeDatasetId,
+                activeSheetId,
+                controller.signal,
+                priorContextRef.current,
+                activeSnapshotId,
+                activePage
+              );
+              if (res.prior_context) {
+                priorContextRef.current = res.prior_context;
+              }
               setMessages((prev) => [
                 ...prev.filter((m) => !m.isStreaming),
                 {
@@ -274,7 +298,10 @@ export default function GlobalCopilotWidget({
             }
           }
         },
-        controller.signal
+        controller.signal,
+        priorContextRef.current,
+        activeSnapshotId,
+        activePage
       );
     } catch (err) {
       if (!controller.signal.aborted) {

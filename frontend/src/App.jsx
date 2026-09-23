@@ -23,6 +23,7 @@ export default function App() {
   const [presentationModalOpen, setPresentationModalOpen] = useState(false);
   const [activePresentationJob, setActivePresentationJob] = useState(null);
   const [activeDeck, setActiveDeck] = useState(null);
+  const [activeScope, setActiveScope] = useState({ datasetId: null, sheetId: null, snapshotId: null });
 
   useEffect(() => {
     const handleHashChange = () => {
@@ -71,6 +72,7 @@ export default function App() {
           <OverviewPage
             onSelectEmployee={setSelectedEmployeeId}
             onNavigateTab={handleSelectTab}
+            onScopeChange={setActiveScope}
           />
         )}
         {activeTab === "explorer" && (
@@ -108,6 +110,10 @@ export default function App() {
         onToggle={setCopilotOpen}
         onClose={() => setCopilotOpen(false)}
         onSelectEmployee={setSelectedEmployeeId}
+        activePage={activeTab}
+        activeDatasetId={activeScope.datasetId}
+        activeSheetId={activeScope.sheetId}
+        activeSnapshotId={activeScope.snapshotId}
       />
 
       {selectedEmployeeId !== null && (

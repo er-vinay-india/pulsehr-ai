@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import ReactECharts from './SafeReactECharts';
 
 export default function ExecutiveGaugeChart({
-  score = 78,
+  score = null,
   title = 'Health Index',
   subtitle = 'Operational Stability',
   height = 190,
@@ -50,6 +50,7 @@ export default function ExecutiveGaugeChart({
             width: 10
           },
           pointer: {
+            show: false,
             icon: 'path://M12.8,0.7l12,40.1H0.7L12.8,0.7z',
             length: '65%',
             width: 8,
@@ -62,10 +63,11 @@ export default function ExecutiveGaugeChart({
             roundCap: true,
             lineStyle: {
               width: 10,
-              color: colorStops
+              color: [[1, '#334155']]
             }
           },
           axisTick: {
+            show: false,
             distance: -18,
             splitNumber: 2,
             lineStyle: {
@@ -74,6 +76,7 @@ export default function ExecutiveGaugeChart({
             }
           },
           splitLine: {
+            show: false,
             distance: -22,
             length: 8,
             lineStyle: {
@@ -87,7 +90,7 @@ export default function ExecutiveGaugeChart({
             fontSize: 9
           },
           anchor: {
-            show: true,
+            show: false,
             showAbove: true,
             size: 14,
             itemStyle: {
@@ -120,6 +123,8 @@ export default function ExecutiveGaugeChart({
       ]
     };
   }, [score, title, subtitle, isInverted]);
+
+  if (score == null || !Number.isFinite(Number(score))) return <p>No score available.</p>;
 
   return (
     <div className="executive-gauge-card">
