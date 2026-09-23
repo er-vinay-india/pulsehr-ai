@@ -118,3 +118,49 @@ ollama list
 # llama3.1:8b       46e0c10c039e    4.9 GB
 ```
 Legacy model `qwen2.5:7b-instruct` has been removed.
+
+---
+
+## 7. Layered "Cheapest Path First" Execution & Central ModelRouter
+
+To maximize local inference speed and minimize memory thrashing across multi-gigabyte models on Apple Silicon, execution follows a layered pyramid:
+
+```mermaid
+flowchart TD
+    Req[Incoming Task / Analytical Query] --> L1[Layer 1: LRU Brief Cache < 5ms]
+    L1 -- Hit --> Done1[Return Cached Result]
+    L1 -- Miss --> L2[Layer 2: Pluggable DecisionEngine < 1ms]
+    
+    L2 -- "Deterministic Business Summaries & Rankings" --> L3[Layer 3: Deterministic Pandas & Math Engine < 15ms]
+    L3 --> Provenance[Tag with Cryptographic FACT-XXX ID]
+    Provenance --> Visuals[Deterministic Visual & Icon Selection < 1ms]
+    Visuals --> Done2[Return Instant Verified Result]
+    
+    L2 -- "Exploratory / Generative Synthesis" --> L4[Layer 4: Central ModelRouter]
+    L4 -- "Naming, Metadata, Title" --> FastRole[FAST: phi4-mini:latest ~250ms]
+    L4 -- "Presentation Slides, Executive Prose" --> WriterRole[WRITER: gemma4:12b ~1.8s]
+    L4 -- "Data Correlations, Statistical Patterns" --> AnalystRole[ANALYST: qwen3.5:9b ~1.5s]
+    L4 -- "Strategic Trade-offs, Deep CoT" --> ReasonerRole[REASONER: deepseek-r1:7b ~3.5s]
+    
+    FastRole --> ConfCheck{"Confidence < 0.65?"}
+    ConfCheck -- Yes --> AnalystRole
+    ConfCheck -- No --> Audit[Layer 5: Critic Audit & Evidence Store Validation]
+    AnalystRole --> Audit
+    WriterRole --> Audit
+    ReasonerRole --> Audit
+    Audit --> Done3[Final Output with Citations]
+```
+
+### Key Subsystems:
+1. **Central `ModelRouter` (`backend/app/services/gateway/model_router.py`)**:
+   - Inspects task type (`metadata`, `presentation`, `analysis`, `root_cause`), query complexity, and latency preferences.
+   - Enforces confidence-based escalation: lightweight models (`phi4-mini`) escalate to `ANALYST` if confidence < 0.65; `ANALYST` escalates to `REASONER` if confidence < 0.50.
+2. **Central `ModelManager` (`backend/app/services/gateway/model_manager.py`)**:
+   - Monitors model availability in Ollama (`/api/tags`) with 60s TTL caching.
+   - Measures and records moving-average execution latency and invocation counts per model.
+3. **Structured Fact Registry (`backend/app/services/insight_registry.py`)**:
+   - Assigns stable, verifiable `FACT-XXX` identifiers derived from dataset SHA-256 snapshots.
+   - Maintains in-memory brief caching so repeat executive overview visits execute in <1ms without re-running data aggregations.
+4. **Elimination of Direct Ollama Bypasses**:
+   - All modules (`sheet_naming_pipeline.py`, `ai_enrichment.py`, `story_relational.py`, `ai_copilot.py`) route inference strictly through `ModelGateway` and `ModelRouter`.
+

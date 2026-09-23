@@ -25,21 +25,28 @@ npm run dev -- --port 5175
 
 ## Core Capabilities & Architecture
 
-### 1. Role-Based AI Report Architecture & Offline Model Orchestration
-The reporting engine completely decouples business code from concrete model strings, routing requests via a central `ModelGateway` to specialized local models running on Ollama:
-- **`FAST` (`Phi-4 Mini 3.8B`)**: Real-time classification, schema labeling, instant UI suggestions.
-- **`ANALYST` (`Qwen 3.5 9.7B`)**: Materiality scoring, finding discovery, classifying operational gaps.
-- **`REASONER` (`DeepSeek-R1 7.6B`)**: Multi-step business logic, root cause analysis, strategic trade-offs (with `<think>` token stripping).
-- **`WRITER` (`Google Gemma 4 12B`)**: Executive narrative prose, slide bullet points, leadership-level synthesis.
-- **`CRITIC` (`DeepSeek-R1 7.6B`)**: Strict mathematical claim verification, hallucination detection, automated repair loop.
+### 1. Layered "Cheapest Path First" Local AI Architecture
+The system minimizes local compute by executing tasks through a tiered hierarchy:
+- **`Layer 1: LRU Brief Cache` (< 5ms)**: Instant retrieval of pre-computed decision briefs.
+- **`Layer 2: Pluggable DecisionEngine` (< 1ms)**: `RuleDecisionEngine` and `EmbeddingDecisionEngine` (`nomic-embed-text`) classify business intent, routing deterministic questions (positives, concerns, actions, rankings) directly to code with zero LLM tokens.
+- **`Layer 3: Deterministic Data Engine` (< 15ms)**: Pure Python/Pandas calculates rollups, distributions, and rankings, tagged with cryptographic `FACT-XXX` IDs.
+- **`Layer 4: Central ModelRouter & ModelManager`**: Directs exploratory/narrative tasks to specialized open-weights models running locally on Ollama:
+  - **`FAST` (`Phi-4 Mini 3.8B`)**: Real-time classification, schema naming, metadata extraction (~250ms).
+  - **`ANALYST` (`Qwen 3.5 9.7B`)**: Materiality scoring, finding discovery, classifying operational gaps (~1.5s).
+  - **`REASONER` (`DeepSeek-R1 7.6B`)**: Multi-step business logic, root cause analysis, strategic trade-offs (with `<think>` token stripping, ~3.5s).
+  - **`WRITER` (`Google Gemma 4 12B`)**: Executive narrative prose, slide bullet points, leadership-level synthesis (~1.8s).
+  - **`CRITIC` (`DeepSeek-R1 7.6B`)**: Strict mathematical claim verification, hallucination detection, automated repair loop.
+  - **Confidence-based Escalation**: Automatic escalation from `FAST` -> `ANALYST` -> `REASONER` if confidence drops below thresholds (< 0.65 / < 0.50).
 
-### 2. Deterministic Calculation Engine (Zero LLM Math)
+### 2. Deterministic Calculation Engine & Instant Visuals (Zero LLM Math)
 - **`DatasetValidator`**: Automated quality checks for empty files, duplicate column headers, boundary violations, and null ratios with structured `DataQualityReport`.
 - **`DatasetProfiler`**: Classifies columns into measures, dimensions, timelines, and identifiers with descriptive statistical distributions.
 - **`MetricEngine`**: Computes baseline aggregates, segment groupings, period-over-period differences, and candidate facts ranked by statistical significance (`abs(diff) * log(sample_size)`).
+- **`assign_deterministic_visuals`**: Maps chart types (`area_trend`, `heatmap`, `comparison_bar`, `donut`, `gauge`) and icons in <1ms without calling LLMs.
 - **LLMs are strictly forbidden from calculating metrics.**
 
-### 3. Canonical Evidence Store & Sentence Lineage
+### 3. Canonical Evidence Store & Cryptographic Fact Registry
+- **`InsightRegistry`**: Cryptographically registers verified findings under dataset SHA-256 snapshots with stable `FACT-XXX` identifiers and brief caching.
 - **`EvidenceStore`**: Canonical ledger indexing and storing structured `Finding` objects (`F-001`, `F-002`, ...).
 - **Sentence-Level Lineage**: Every claim in the executive narrative logs an audit record in `TraceRegistry` linking the exact sentence to its cited finding ID, backing metric, and underlying CSV source rows.
 - **Critic Verification & Repair**: The Critic audits every claim as `SUPPORTED`, `PARTIALLY_SUPPORTED`, `UNSUPPORTED`, or `CONTRADICTORY`. Unsupported claims automatically trigger a correction loop.
@@ -83,12 +90,14 @@ The reporting engine completely decouples business code from concrete model stri
 ## Verification
 
 ```bash
-# Backend unit & integration suite (212 tests)
+# Backend full test suite (230 tests)
 cd backend
 PYTHONPATH=. .venv/bin/pytest tests/ -v
 
-# Architecture-specific test suite
-PYTHONPATH=. .venv/bin/pytest tests/test_model_gateway_roles.py \
+# Layered architecture benchmarks & role verification
+PYTHONPATH=. .venv/bin/pytest tests/test_model_architecture_benchmarks.py \
+  tests/test_model_gateway_roles.py \
+  tests/test_copilot_contextual_business.py \
   tests/test_data_engine_deterministic.py \
   tests/test_evidence_store_traceability.py \
   tests/test_critic_claim_verification.py \

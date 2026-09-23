@@ -47,3 +47,32 @@ This is a descriptive analytical foundation, not a claim that arbitrary spreadsh
 - Integration tests cover overview/deck parity, changed signs and text, actual native chart values, and successful background job persistence.
 - Fixed presentation UI status normalization (`PASSED` versus `passed`), numeric discrepancy counts, zero-coverage display, and scope row totals.
 - A live workspace decision deck was generated successfully in the presentation studio. Automated tests inspect the exported native PPTX structure and chart values; no claim is made that it was opened in Microsoft PowerPoint.
+
+---
+
+## Decision Engine & Layered Architecture Updates (September 2026)
+
+### 1. Pluggable DecisionEngine (`backend/app/services/decision_engine/`)
+The decision evaluation layer now supports pluggable classification via an abstract `DecisionEngine` interface:
+- **`RuleDecisionEngine` (`rule_engine.py`)**: High-speed compiled regex patterns and semantic parsers that classify ordinary business questions into structured `DecisionResult` objects in **<1ms** with `confidence >= 0.90`. It recognizes:
+  - Positives / highlights ("give me 3 good points") -> `summary_positives`
+  - Critical problems / headwinds ("main problems") -> `summary_concerns`
+  - Action planning ("what should we do?") -> `summary_actions`
+  - Evaluative rankings ("which department is worst?") -> `ranking_lowest` (polarity-aware)
+  - Causal / correlation inquiries ("does X cause Y?") -> `correlation` (routes to `ANALYST`)
+  - Underlying explanations ("why did that happen?") -> `followup_why`
+- **`EmbeddingDecisionEngine` (`embedding_engine.py`)**: Vector similarity classification using local `nomic-embed-text:latest` prototypes with cosine similarity scoring, automatically falling back to `RuleDecisionEngine` if Ollama is offline or embeddings are unavailable.
+- **Factory Resolution (`factory.py`)**: Controlled dynamically via `DECISION_ENGINE=rules|embedding` (defaults to `"rules"`).
+
+### 2. Elimination of Blocking LLM Calls in Prioritization
+- Previously, `/api/analytics/decision-brief/prioritize` triggered a 25-second synchronous Ollama call just to assign visual types and icons.
+- Replaced with [`assign_deterministic_visuals`](file:///Users/vinayksharma/Developer/pulsehr-ai/backend/app/routers/decision_brief.py#L17-L61), which inspects finding kind, metric names, and observation semantics in **<1ms**:
+  - `movement` -> `area_trend`, `icon: trending-up`
+  - `association` -> `heatmap`, `icon: zap`
+  - `comparison` -> `comparison_bar` (or `donut` for distributions, `gauge` for 0-100 scores)
+  - Semantics -> `icon: users` (workforce), `icon: dollar-sign` (commercial), `icon: alert-triangle` (risks/reversals), `icon: award` (leaders).
+
+### 3. Structured Cryptographic Fact Registry (`backend/app/services/insight_registry.py`)
+- Findings are registered under dataset SHA-256 snapshot hashes with stable, verifiable identifiers (`FACT-001`, `FACT-002`, ...).
+- Implements an in-memory brief cache keyed by sheet scope and content digest, reducing repeat overview and brief page renders to **<1ms**.
+
