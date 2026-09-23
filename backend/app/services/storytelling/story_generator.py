@@ -48,20 +48,17 @@ def generate_ai_narrative(ground_truth: dict, sheet_name: str, original_file: st
         f"Be decisive, numerical, and ultra-concise."
     )
 
-    try:
-        with httpx.Client(timeout=30) as client:
-            resp = client.post(f"{config.OLLAMA_BASE_URL}/api/generate", json={
-                'model': target_model,
-                'prompt': prompt,
-                'stream': False,
-                'options': {'temperature': 0.15}
-            })
-            if resp.status_code == 200:
-                result = resp.json().get('response', '').strip()
-                if result:
-                    return clean_ai_markdown(result)
-    except Exception:
-        pass
+    from ..gateway.model_gateway import ModelGateway
+    from ...core.models_config import ModelRole
+
+    result = ModelGateway.generate(
+        role=ModelRole.WRITER,
+        prompt=prompt,
+        report_id=f"story-{sheet_name}",
+        step_name="executive_story_narrative"
+    )
+    if result.success and result.raw_text:
+        return clean_ai_markdown(result.raw_text)
 
     # Deterministic domain-aware fallback narrative
     facts_list = [f"- **{k.replace('_', ' ').title()}**: **{v}**" for k, v in list(ground_truth.items())[:5] if k not in ('total_records', 'business_domain')]

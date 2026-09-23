@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Volume2, Square } from 'lucide-react';
 
-export default function VoiceoverPlayer({ text, identity, onEnded, label = 'Listen to summary' }) {
+export default function VoiceoverPlayer({ text, identity, onEnded, onPlayingChange, label = 'Listen to summary' }) {
   const audio = useRef(null);
   const request = useRef(null);
   const url = useRef(null);
@@ -10,6 +10,7 @@ export default function VoiceoverPlayer({ text, identity, onEnded, label = 'List
   const [ready, setReady] = useState(false);
 
   const stop = () => {
+    onPlayingChange?.(false);
     request.current?.abort();
     request.current = null;
     audio.current?.pause();
@@ -53,8 +54,11 @@ export default function VoiceoverPlayer({ text, identity, onEnded, label = 'List
   return <div className="voiceover-player" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, maxWidth: '100%' }}>
     <button type="button" onClick={play} disabled={loading || !text?.trim()}><Volume2 size={16} /> {loading ? 'Preparing voiceover…' : ready ? 'Restart voiceover' : label}</button>
     {(loading || ready) && <button type="button" onClick={stop} aria-label="Stop voiceover"><Square size={14} /> Stop</button>}
-    <audio ref={audio} controls={ready} aria-label="Voiceover playback" onEnded={onEnded}
-      onError={() => setError('Audio could not be played. Retry voiceover.')}
+    <audio ref={audio} controls={ready} aria-label="Voiceover playback" onPlaying={() => onPlayingChange?.(true)}
+      onPause={() => onPlayingChange?.(false)}
+      onWaiting={() => onPlayingChange?.(false)}
+      onEnded={() => { onPlayingChange?.(false); onEnded?.(); }}
+      onError={() => { onPlayingChange?.(false); setError('Audio could not be played. Retry voiceover.'); }}
       style={{ display: ready ? 'block' : 'none', width: '100%', maxWidth: 360, height: 40 }} />
     {error && <p role="status" style={{ flexBasis: '100%', margin: 0, fontSize: '.8rem' }}>{error}</p>}
   </div>;

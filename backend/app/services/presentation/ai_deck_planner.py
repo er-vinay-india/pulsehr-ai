@@ -130,28 +130,23 @@ Return ONLY a JSON object matching this schema:
 }}
 """
 
+    from ..gateway.model_gateway import ModelGateway
+    from ...core.models_config import ModelRole
+
     try:
-        with httpx.Client(timeout=httpx.Timeout(12.0, connect=3.0)) as client:
-            resp = client.post(f"{config.OLLAMA_BASE_URL}/api/generate", json={
-                "model": config.OLLAMA_MODEL,
-                "prompt": prompt,
-                "format": "json",
-                "stream": False,
-                "options": {
-                    "temperature": 0.2,
-                    "num_ctx": 4096,
-                    "num_predict": 4096
-                }
-            })
-            if resp.status_code == 200:
-                body = resp.json()
-                text = body.get("response", "").strip()
-                match = re.search(r'\{[\s\S]*\}', text)
-                if match:
-                    parsed = json.loads(match.group(0))
-                    if parsed.get("slides") and len(parsed["slides"]) >= 8:
-                        logger.info(f"AI Deck Planner successfully generated {len(parsed['slides'])} slides via Ollama.")
-                        return parsed
+        result = ModelGateway.generate(
+            role=ModelRole.ANALYST,
+            prompt=prompt,
+            report_id=f"deck-{file_label}",
+            step_name="ai_deck_planner"
+        )
+        if result.success and result.raw_text:
+            match = re.search(r'\{[\s\S]*\}', result.raw_text)
+            if match:
+                parsed = json.loads(match.group(0))
+                if parsed.get("slides") and len(parsed["slides"]) >= 8:
+                    logger.info(f"AI Deck Planner successfully generated {len(parsed['slides'])} slides via ModelGateway ({result.model_used}).")
+                    return parsed
     except Exception as exc:
         logger.warning(f"AI Deck Planner fallback triggered due to exception: {exc}")
 
