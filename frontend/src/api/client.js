@@ -79,7 +79,7 @@ export async function getEmployeeDetail(id) {
   return res.json();
 }
 
-export async function askCopilot(query, model = null, tool = null, datasetId = null, sheetId = null) {
+export async function askCopilot(query, model = null, tool = null, datasetId = null, sheetId = null, signal = null) {
   const res = await fetch(`${API_BASE}/copilot/query`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -89,10 +89,95 @@ export async function askCopilot(query, model = null, tool = null, datasetId = n
       tool,
       dataset_id: datasetId,
       sheet_id: sheetId
-    })
+    }),
+    signal
   });
-  if (!res.ok) throw new Error("Failed to query AI copilot");
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}));
+    throw new Error(errData.detail || "Failed to query AI copilot");
+  }
   return res.json();
+}
+
+export async function streamCopilotQuery(
+  query,
+  model = null,
+  tool = null,
+  datasetId = null,
+  sheetId = null,
+  callbacks = {},
+  signal = null
+) {
+  const { onStatus, onToken, onDone, onError } = callbacks;
+  try {
+    const res = await fetch(`${API_BASE}/copilot/query/stream`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        query,
+        model,
+        tool,
+        dataset_id: datasetId,
+        sheet_id: sheetId
+      }),
+      signal
+    });
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.detail || "Failed to start copilot stream");
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      const parts = buffer.split("\n\n");
+      buffer = parts.pop() || "";
+
+      for (const part of parts) {
+        if (!part.trim()) continue;
+        const lines = part.split("\n");
+        let eventType = "message";
+        let dataStr = "";
+
+        for (const line of lines) {
+          if (line.startsWith("event: ")) {
+            eventType = line.slice(7).trim();
+          } else if (line.startsWith("data: ")) {
+            dataStr = line.slice(6).trim();
+          }
+        }
+
+        if (dataStr) {
+          try {
+            const data = JSON.parse(dataStr);
+            if (eventType === "status") {
+              onStatus?.(data);
+            } else if (eventType === "token") {
+              onToken?.(data.token);
+            } else if (eventType === "done") {
+              onDone?.(data);
+            } else if (eventType === "error") {
+              onError?.(new Error(data.message || "Streaming error"));
+            }
+          } catch (e) {
+            console.warn("Failed to parse SSE data:", dataStr, e);
+          }
+        }
+      }
+    }
+  } catch (err) {
+    if (err.name === "AbortError") {
+      return;
+    }
+    onError?.(err);
+  }
 }
 
 export async function getCopilotSuggestions() {

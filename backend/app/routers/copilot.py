@@ -1,7 +1,8 @@
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from ..services.copilot_tools import ToolRequest, CalculationRequest, load_frame
-from ..services.ai_copilot import query_copilot, get_available_models
+from ..services.ai_copilot import query_copilot, get_available_models, stream_copilot_generator
 
 router = APIRouter(prefix="/api/copilot", tags=["copilot"])
 
@@ -16,6 +17,26 @@ class CopilotQueryRequest(BaseModel):
 @router.post("/query")
 def ask_copilot(req: CopilotQueryRequest):
     return query_copilot(req.query, req.model, req.tool, req.dataset_id, req.sheet_id, req.prior_context)
+
+@router.post("/query/stream")
+def ask_copilot_stream(req: CopilotQueryRequest):
+    """Streams token chunks and status updates as Server-Sent Events."""
+    return StreamingResponse(
+        stream_copilot_generator(
+            user_query=req.query,
+            selected_model=req.model,
+            tool=req.tool,
+            dataset_id=req.dataset_id,
+            sheet_id=req.sheet_id,
+            prior_context=req.prior_context
+        ),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
+    )
 
 @router.get("/models")
 def list_models():

@@ -43,30 +43,185 @@ export default function CopilotTools({ loading, onRun }) {
       filter_column: filterColumn || null, filter_value: filterColumn ? filterValue : null }
   });
   const fields = (placeholder) => <><option value="">{placeholder}</option>{columns.map(c => <option key={c} value={c}>{c}</option>)}</>;
-  return <div className="copilot-tools">
-    <div className="chips-row">
-      <button className="chip-btn" onClick={() => setOpen(!open)} aria-expanded={open}>Calculate from data</button>
-      <button className="chip-btn" disabled={loading} onClick={() => onRun('Create a presentation', { name: 'presentation' })}>Create sheet PowerPoint</button>
+  return (
+    <div className="copilot-tools">
+      <div className="chips-row">
+        <button
+          type="button"
+          className="chip-btn"
+          onClick={() => setOpen(!open)}
+          aria-expanded={open}
+          aria-controls="copilot-verified-calculations"
+        >
+          {open ? 'Hide calculation builder' : 'Calculate from data'}
+        </button>
+        <button
+          type="button"
+          className="chip-btn"
+          disabled={loading}
+          onClick={() => onRun('Create a presentation', { name: 'presentation' })}
+        >
+          Create sheet PowerPoint
+        </button>
+      </div>
+      {open && (
+        <fieldset
+          id="copilot-verified-calculations"
+          disabled={loading}
+          className="copilot-tools-fieldset"
+          style={{
+            margin: '12px 0',
+            padding: 16,
+            border: '1px solid var(--border-strong, #473f38)',
+            borderRadius: 10,
+            background: 'rgba(23, 20, 17, 0.95)',
+            maxHeight: '40vh',
+            overflowY: 'auto'
+          }}
+        >
+          <legend style={{ fontWeight: 700, color: '#f8fafc', padding: '0 6px', fontSize: '0.85rem' }}>
+            Verified calculations
+          </legend>
+          <p style={{ color: 'var(--fg-secondary, #d7c5b5)', fontSize: '0.82rem', margin: '4px 0 14px 0', lineHeight: 1.5 }}>
+            Choose a full data source. Count counts rows; averages exclude missing values. Joined rows can repeat a source value, so choose the appropriate measure.
+          </p>
+          <div className="calculation-fields">
+            <label style={{ color: 'var(--fg-secondary, #d7c5b5)', fontWeight: 600 }}>
+              Source
+              <select
+                aria-label="Select data source"
+                value={dataset}
+                onChange={e => {
+                  setDataset(e.target.value);
+                  const chosen = datasets.find(d => String(d.id) === e.target.value);
+                  setSheet(chosen?.sheets?.length === 1 ? chosen.sheets[0].name : '');
+                  setRelationship('');
+                }}
+              >
+                <option value="">Choose a source</option>
+                {datasets.map(d => (
+                  <option key={d.id} value={d.id}>
+                    {d.original_name || d.filename}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {dataset && (
+              <label style={{ color: 'var(--fg-secondary, #d7c5b5)', fontWeight: 600 }}>
+                Sheet
+                <select
+                  aria-label="Select sheet"
+                  value={sheet}
+                  onChange={e => setSheet(e.target.value)}
+                >
+                  <option value="">Choose a sheet</option>
+                  {(datasets.find(d => String(d.id) === dataset)?.sheets || []).map(s => (
+                    <option key={s.id} value={s.name}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            <label style={{ color: 'var(--fg-secondary, #d7c5b5)', fontWeight: 600 }}>
+              Or connected view
+              <select
+                aria-label="Select connected view"
+                value={relationship}
+                onChange={e => {
+                  setRelationship(e.target.value);
+                  setDataset('');
+                  setSheet('');
+                }}
+              >
+                <option value="">No join</option>
+                {relationships.map(r => (
+                  <option key={r.id} value={r.id}>
+                    {r.left_file} [{r.left_column}] ↔ {r.right_file} [{r.right_column}]
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label style={{ color: 'var(--fg-secondary, #d7c5b5)', fontWeight: 600 }}>
+              Operation
+              <select
+                aria-label="Select operation"
+                value={operation}
+                onChange={e => setOperation(e.target.value)}
+              >
+                {['count', 'sum', 'mean', 'min', 'max', 'median'].map(o => (
+                  <option key={o}>{o}</option>
+                ))}
+              </select>
+            </label>
+            {operation !== 'count' && (
+              <label style={{ color: 'var(--fg-secondary, #d7c5b5)', fontWeight: 600 }}>
+                Column
+                <select
+                  aria-label="Select column"
+                  value={column}
+                  onChange={e => setColumn(e.target.value)}
+                >
+                  {fields('Choose column')}
+                </select>
+              </label>
+            )}
+            <label style={{ color: 'var(--fg-secondary, #d7c5b5)', fontWeight: 600 }}>
+              Group by
+              <select
+                aria-label="Group by column"
+                value={group}
+                onChange={e => setGroup(e.target.value)}
+              >
+                {fields('All rows')}
+              </select>
+            </label>
+            <label style={{ color: 'var(--fg-secondary, #d7c5b5)', fontWeight: 600 }}>
+              Filter column
+              <select
+                aria-label="Filter column"
+                value={filterColumn}
+                onChange={e => setFilterColumn(e.target.value)}
+              >
+                {fields('No filter')}
+              </select>
+            </label>
+            {filterColumn && (
+              <label style={{ color: 'var(--fg-secondary, #d7c5b5)', fontWeight: 600 }}>
+                Equals
+                <input
+                  aria-label="Filter equals value"
+                  value={filterValue}
+                  onChange={e => setFilterValue(e.target.value)}
+                  placeholder="Enter filter value..."
+                />
+              </label>
+            )}
+          </div>
+          {error && <p role="alert" style={{ color: '#f87171', fontSize: '0.82rem', marginTop: 10 }}>{error}</p>}
+          {fetching && <p role="status" style={{ color: '#38bdf8', fontSize: '0.82rem', marginTop: 10 }}>Reading source columns…</p>}
+          <div className="chips-row" style={{ marginTop: 14 }}>
+            <button
+              type="button"
+              className="chip-btn"
+              disabled={fetching || !!error || !columns.length || (operation !== 'count' && !column)}
+              onClick={() => run('calculate')}
+              style={{ fontWeight: 600, color: '#f8fafc' }}
+            >
+              Calculate
+            </button>
+            <button
+              type="button"
+              className="chip-btn"
+              disabled={fetching || !!error || !columns.length || (operation !== 'count' && !column)}
+              onClick={() => run('presentation')}
+              style={{ fontWeight: 600, color: '#f8fafc' }}
+            >
+              Download calculation as PowerPoint
+            </button>
+          </div>
+        </fieldset>
+      )}
     </div>
-    {open && <fieldset disabled={loading} style={{ margin: '12px 0', padding: 16, border: '1px solid var(--border)', borderRadius: 8 }}>
-      <legend>Verified calculations</legend>
-      <p>Choose a full data source. Count counts rows; averages exclude missing values. Joined rows can repeat a source value, so choose the appropriate measure.</p>
-      <div className="calculation-fields">
-        <label>Source <select value={dataset} onChange={e => { setDataset(e.target.value); const chosen = datasets.find(d => String(d.id) === e.target.value); setSheet(chosen?.sheets?.length === 1 ? chosen.sheets[0].name : ''); setRelationship(''); }}><option value="">Choose a source</option>{datasets.map(d => <option key={d.id} value={d.id}>{d.original_name || d.filename}</option>)}</select></label>
-        {dataset && <label>Sheet <select value={sheet} onChange={e => setSheet(e.target.value)}><option value="">Choose a sheet</option>{(datasets.find(d => String(d.id) === dataset)?.sheets || []).map(s => <option key={s.id} value={s.name}>{s.name}</option>)}</select></label>}
-        <label>Or connected view <select value={relationship} onChange={e => { setRelationship(e.target.value); setDataset(''); setSheet(''); }}><option value="">No join</option>{relationships.map(r => <option key={r.id} value={r.id}>{r.left_file} [{r.left_column}] ↔ {r.right_file} [{r.right_column}]</option>)}</select></label>
-        <label>Operation <select value={operation} onChange={e => setOperation(e.target.value)}>{['count', 'sum', 'mean', 'min', 'max', 'median'].map(o => <option key={o}>{o}</option>)}</select></label>
-        {operation !== 'count' && <label>Column <select value={column} onChange={e => setColumn(e.target.value)}>{fields('Choose column')}</select></label>}
-        <label>Group by <select value={group} onChange={e => setGroup(e.target.value)}>{fields('All rows')}</select></label>
-        <label>Filter column <select value={filterColumn} onChange={e => setFilterColumn(e.target.value)}>{fields('No filter')}</select></label>
-        {filterColumn && <label>Equals <input value={filterValue} onChange={e => setFilterValue(e.target.value)} /></label>}
-      </div>
-      {error && <p role="alert">{error}</p>}
-      {fetching && <p role="status">Reading source columns…</p>}
-      <div className="chips-row" style={{ marginTop: 12 }}>
-        <button className="chip-btn" disabled={fetching || !!error || !columns.length || (operation !== 'count' && !column)} onClick={() => run('calculate')}>Calculate</button>
-        <button className="chip-btn" disabled={fetching || !!error || !columns.length || (operation !== 'count' && !column)} onClick={() => run('presentation')}>Download calculation as PowerPoint</button>
-      </div>
-    </fieldset>}
-  </div>;
+  );
 }
