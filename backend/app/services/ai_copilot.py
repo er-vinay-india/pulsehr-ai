@@ -27,14 +27,23 @@ def get_available_models() -> list[dict]:
                     param_size = details.get("parameter_size", "")
                     
                     label = name
-                    if "llama3.1" in name.lower():
+                    lower_name = name.lower()
+                    if "qwen3.5" in lower_name or "qwen3" in lower_name:
+                        label = f"Qwen 3.5 ({param_size}) · Flagship Code, Reasoning & Multimodal"
+                    elif "coder" in lower_name:
+                        label = f"Qwen 2.5 Coder ({param_size}) · Dedicated Code & SQL Specialist"
+                    elif "deepseek" in lower_name or "r1" in lower_name:
+                        label = f"DeepSeek R1 ({param_size}) · Chain of Thought Reasoning & Decision Logic"
+                    elif "llama3.1" in lower_name or "llama" in lower_name:
                         label = f"Meta Llama 3.1 ({param_size}) · High Accuracy & Factual"
-                    elif "deepseek" in name.lower():
-                        label = f"DeepSeek R1 ({param_size}) · Chain of Thought Reasoning"
-                    elif "qwen" in name.lower():
-                        label = f"Qwen 2.5 ({param_size}) · Fast Generalist"
-                    elif "mistral" in name.lower():
+                    elif "phi" in lower_name:
+                        label = f"Phi-4 Mini ({param_size}) · Ultra-Fast Edge Reasoning"
+                    elif "gemma" in lower_name:
+                        label = f"Google Gemma 4 ({param_size}) · 128K Multimodal & High Accuracy"
+                    elif "ministral" in lower_name or "mistral" in lower_name:
                         label = f"Mistral ({param_size}) · Precise Instruction Following"
+                    elif "qwen" in lower_name:
+                        label = f"Qwen ({param_size}) · Fast Generalist"
 
                     models.append({
                         "id": name,
@@ -50,11 +59,25 @@ def get_available_models() -> list[dict]:
             "id": config.OLLAMA_MODEL,
             "name": f"Default Model ({config.OLLAMA_MODEL})",
             "size_bytes": 0,
-            "parameter_size": "7B"
+            "parameter_size": "9B"
         })
 
-    # Sort so Llama 3.1 or reasoning models appear first
-    models.sort(key=lambda x: (0 if "llama" in x["id"].lower() else (1 if "deepseek" in x["id"].lower() else 2)))
+    # Prioritize Qwen 3.5, Gemma 4, DeepSeek-R1 reasoning at top of selector
+    def model_rank(x):
+        mid = x["id"].lower()
+        if "qwen3.5" in mid or "qwen3" in mid:
+            return 0
+        if "gemma" in mid:
+            return 1
+        if "deepseek" in mid or "r1" in mid:
+            return 2
+        if "llama" in mid:
+            return 3
+        if "phi" in mid:
+            return 4
+        return 5
+
+    models.sort(key=model_rank)
     return models
 
 

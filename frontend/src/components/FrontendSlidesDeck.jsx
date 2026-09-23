@@ -215,6 +215,17 @@ export default function FrontendSlidesDeck({
   const currentSlide = slides[activeSlideIndex] || slides[0];
   const progressPct = slides.length > 1 ? ((activeSlideIndex + 1) / slides.length) * 100 : 100;
 
+  const presenter = (deckId || deckSpec?.id) && (
+        <AcousticOrbPresenter
+          deckId={deckId || deckSpec?.id}
+          deckSpec={deckSpec}
+          currentSlideOrder={activeSlideIndex + 1}
+          totalSlides={slides.length}
+          onAdvanceSlide={() => onSlideChange(Math.min(slides.length - 1, activeSlideIndex + 1))}
+          onPrevSlide={() => onSlideChange(Math.max(0, activeSlideIndex - 1))}
+        />
+      );
+
   // Render Mobile Reflow View
   if (showMobileView) {
     return (
@@ -275,6 +286,7 @@ export default function FrontendSlidesDeck({
             <ChevronRight size={16} />
           </button>
         </div>
+        {presenter}
       </div>
     );
   }
@@ -419,16 +431,7 @@ export default function FrontendSlidesDeck({
       />
 
       {/* Acoustic Executive AI Orb Presenter */}
-      {(deckId || deckSpec?.id) && (
-        <AcousticOrbPresenter
-          deckId={deckId || deckSpec?.id}
-          deckSpec={deckSpec}
-          currentSlideOrder={activeSlideIndex + 1}
-          totalSlides={slides.length}
-          onAdvanceSlide={() => onSlideChange(Math.min(slides.length - 1, activeSlideIndex + 1))}
-          onPrevSlide={() => onSlideChange(Math.max(0, activeSlideIndex - 1))}
-        />
-      )}
+      {presenter}
     </div>
   );
 }

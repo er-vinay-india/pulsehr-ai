@@ -28,9 +28,21 @@ def canonical(column):
     return ALIASES.get(key, key)
 
 
+NULL_STRINGS = {'', 'none', 'null', 'nan', 'na', 'n/a', '-', 'undefined', 'nil', '#n/a', '#null!', 'n.a.', 'n.a'}
+
+
+def is_null_value(value):
+    if value is None:
+        return True
+    s = str(value).strip().casefold()
+    return s in NULL_STRINGS
+
+
 def value_key(value):
     # Preserve punctuation and leading zeroes; do not turn 001 into 1.
-    return ' '.join(str(value).strip().casefold().split()) if value is not None else ''
+    if value is None or is_null_value(value):
+        return ''
+    return ' '.join(str(value).strip().casefold().split())
 
 
 def model_embeddings(texts):
@@ -74,11 +86,27 @@ def read_sheets(path):
             raise ValueError(f"Failed to parse Excel spreadsheet: {exc}")
     if sum(len(f) for f in frames.values()) > 20000:
         raise ValueError('Upload at most 20,000 rows per file. Split larger files before uploading.')
-    for frame in frames.values():
+
+    pruned_frames = {}
+    for sheet_name, frame in frames.items():
         frame.columns = [str(c).strip() for c in frame.columns]
-        if len(frame.columns) > 200 or frame.columns.duplicated().any() or any(not c for c in frame.columns):
+        # Prune completely empty columns and trailing unnamed blank columns
+        valid_cols = []
+        for col in frame.columns:
+            non_empty = sum(1 for val in frame[col] if not is_null_value(val))
+            is_unnamed_empty = str(col).lower().startswith('unnamed:') and non_empty == 0
+            if non_empty == 0 or is_unnamed_empty:
+                logger.info(f"Pruned completely null/empty column '{col}' from sheet '{sheet_name}'")
+                continue
+            valid_cols.append(col)
+
+        # If all columns were somehow empty, retain original columns to avoid empty DataFrame crash
+        retained_frame = frame[valid_cols] if valid_cols else frame
+        if len(retained_frame.columns) > 200 or retained_frame.columns.duplicated().any() or any(not c for c in retained_frame.columns):
             raise ValueError('Use unique, nonempty column names and at most 200 columns per sheet.')
-    return frames
+        pruned_frames[sheet_name] = retained_frame
+
+    return pruned_frames
 
 
 def numeric_values(raw, column):
@@ -96,6 +124,57 @@ def numeric_values(raw, column):
     return pd.to_numeric(values, errors='coerce'), unit
 
 
+def compute_decision_hints(profiles, records):
+    """Derives ingestion-time decision hints regarding optimal visual presentation."""
+    total_records = len(records)
+    total_cols = len(profiles)
+
+    # Clean numeric measures with < 40% missing
+    primary_metrics = [
+        p['column'] for p in profiles
+        if p.get('numeric') and p.get('null_percentage', 0) < 40 and not p.get('is_mostly_null')
+    ]
+
+    # Clean categorical dimensions with 2-50 unique values and < 40% missing
+    primary_dimensions = [
+        p['column'] for p in profiles
+        if not p.get('numeric') and 2 <= p.get('distinct', 0) <= 50 and p.get('null_percentage', 0) < 40
+    ]
+
+    # Timeline presence check
+    has_timeline = any(
+        re.search(r'(date|timestamp|datetime|month|year|period)', p['canonical'], re.I) and p.get('null_percentage', 0) < 50
+        for p in profiles
+    )
+
+    # Overall Data Quality Score (0 to 100)
+    avg_null_pct = sum(p.get('null_percentage', 0) for p in profiles) / max(1, total_cols)
+    data_quality_score = max(0, min(100, round(100 - avg_null_pct)))
+
+    # Recommended visual components based on empirical data shape
+    recommended_components = ['signal_card']
+    if data_quality_score >= 50:
+        recommended_components.append('gauge')
+    if primary_metrics and primary_dimensions:
+        recommended_components.append('comparison_bar')
+    if has_timeline and primary_metrics:
+        recommended_components.append('area_trend')
+    if primary_dimensions and any(p.get('distinct', 0) <= 6 for p in profiles if p['column'] in primary_dimensions):
+        recommended_components.append('donut_breakdown')
+    if len(primary_metrics) >= 2:
+        recommended_components.append('heatmap')
+
+    return {
+        'recommended_components': recommended_components,
+        'primary_metrics': primary_metrics[:6],
+        'primary_dimensions': primary_dimensions[:5],
+        'has_timeline': has_timeline,
+        'data_quality_score': data_quality_score,
+        'total_records': total_records,
+        'clean_column_count': len([p for p in profiles if not p.get('is_mostly_null')])
+    }
+
+
 def prepare_sheets(frames, source, embed=True):
     prepared = []
     for name, frame in frames.items():
@@ -104,8 +183,17 @@ def prepare_sheets(frames, source, embed=True):
         for column in frame.columns:
             values = [row[column] for row in records if value_key(row[column])]
             numeric, unit = numeric_values(pd.Series(values, dtype=object), column)
-            profile = {'column': column, 'canonical': canonical(column), 'display_name': format_display_label(column), 'nonempty': len(values),
-                       'missing': len(records) - len(values), 'distinct': len({value_key(v) for v in values})}
+            null_pct = round(((len(records) - len(values)) / max(1, len(records))) * 100, 1)
+            profile = {
+                'column': column,
+                'canonical': canonical(column),
+                'display_name': format_display_label(column),
+                'nonempty': len(values),
+                'missing': len(records) - len(values),
+                'null_percentage': null_pct,
+                'distinct': len({value_key(v) for v in values}),
+                'is_mostly_null': null_pct >= 85.0
+            }
             # IDs, booleans and numeric-looking codes are not measures.
             identifier = canonical(column).endswith('id') or canonical(column).endswith('_id') or 'code' in canonical(column)
             if len(values) and not identifier and numeric.notna().all() and np.isfinite(numeric.astype(float)).all():
@@ -114,6 +202,9 @@ def prepare_sheets(frames, source, embed=True):
                 if unit or any(term in canonical(column) for term in ('rate', 'rating', 'percent')):
                     profile['numeric'].pop('sum', None)
             profiles.append(profile)
+
+        hints = compute_decision_hints(profiles, records)
+
         vectors = model_embeddings([f"Column {p['column']} ({p['canonical']})" for p in profiles]) if embed else []
         for profile, vector in zip(profiles, vectors):
             profile['vector'] = vector
@@ -126,7 +217,15 @@ def prepare_sheets(frames, source, embed=True):
                 if not batch:
                     break
                 row_vectors.extend(batch)
-        prepared.append({'name': name, 'columns': list(frame.columns), 'profiles': profiles, 'records': records, 'chunks': chunks, 'vectors': row_vectors})
+        prepared.append({
+            'name': name,
+            'columns': list(frame.columns),
+            'profiles': profiles,
+            'records': records,
+            'chunks': chunks,
+            'vectors': row_vectors,
+            'decision_hints': hints
+        })
     return prepared
 
 

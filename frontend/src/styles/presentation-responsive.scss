@@ -1,0 +1,79 @@
+// Keep the modal above global assistants and size its scroll area to the viewport.
+.presentation-modal-backdrop {
+  z-index: 1400;
+  padding: 12px;
+  overflow: hidden;
+
+  .presentation-modal-shell {
+    min-width: 0;
+    width: 100% !important;
+    max-width: 1440px !important;
+    max-height: calc(100dvh - 24px) !important;
+    box-sizing: border-box;
+  }
+
+  .pres-config-body, .pres-studio-body {
+    min-height: 0;
+    min-width: 0;
+  }
+
+  .pres-config-body { overscroll-behavior: contain; }
+  .config-form-grid { grid-template-columns: minmax(0, 1.15fr) minmax(0, .85fr); }
+  .config-col, .form-group, .header-title-wrap, .header-title-wrap > div { min-width: 0; }
+  .form-input, .form-select, .form-textarea { min-width: 0; max-width: 100%; box-sizing: border-box; }
+  .header-title-wrap { overflow-wrap: anywhere; }
+  .header-title-wrap .icon-badge, .btn-icon-close { flex-shrink: 0; }
+  .header-actions-row { flex-wrap: wrap; justify-content: flex-end; }
+  .pres-config-footer { gap: 16px; flex-wrap: wrap; }
+  .preflight-header, .preflight-row { flex-wrap: wrap; gap: 8px; }
+  .preflight-val { overflow-wrap: anywhere; }
+}
+
+// Background chat must not cover or receive clicks through the modal.
+body:has(.presentation-modal-backdrop) {
+  overflow: hidden;
+  .global-copilot-launcher, .copilot-drawer-panel { visibility: hidden; }
+}
+
+@media (max-width: 900px) {
+  .presentation-modal-backdrop {
+    .config-form-grid { grid-template-columns: minmax(0, 1fr); }
+    .pres-modal-header { position: relative; padding: 14px 52px 14px 16px; flex-wrap: wrap; gap: 10px; }
+    .btn-icon-close { position: absolute; right: 10px; top: 10px; min-height: 36px; min-width: 36px; }
+    .header-actions-row { justify-content: flex-start; gap: 6px; }
+    .pres-config-body { padding: 16px; }
+    .studio-sub-toolbar, .studio-sub-toolbar .toolbar-left, .studio-sub-toolbar .toolbar-right { flex-wrap: wrap; gap: 8px; }
+  }
+}
+
+@media (max-width: 600px) {
+  .presentation-modal-backdrop {
+    padding: 0;
+    .presentation-modal-shell {
+      height: 100dvh !important;
+      max-height: 100dvh !important;
+      border-radius: 0 !important;
+    }
+    .config-col .form-row-2, .scope-selection-grid { grid-template-columns: minmax(0, 1fr); }
+    .pres-config-footer > button { width: 100%; }
+    .pres-config-footer { padding-bottom: env(safe-area-inset-bottom); }
+    .pres-modal-header .sub-hint { font-size: .72rem; }
+  }
+}
+
+@media (max-width: 768px) {
+  .presentation-modal-backdrop {
+    .pres-studio-body { overflow-y: auto; }
+    .studio-main-grid { display: block; flex: none; overflow: visible; }
+    .acoustic-orb-presenter {
+      position: relative;
+      bottom: auto;
+      right: auto;
+      margin: 12px auto;
+      width: fit-content;
+      max-width: 100%;
+    }
+    .orb-hud-card { max-width: 100%; }
+    .orb-controls-section .playback-row { flex-wrap: wrap; gap: 12px; }
+  }
+}

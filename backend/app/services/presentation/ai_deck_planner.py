@@ -40,7 +40,7 @@ def plan_deck_with_ai(
     is_hr: bool = False,
     **kwargs: Any
 ) -> dict[str, Any] | None:
-    """Uses Ollama qwen2.5:7b-instruct to dynamically plan the full presentation deck in JSON format.
+    """Uses Ollama (defaulting to qwen3.5:9b) to dynamically plan the full presentation deck in JSON format.
 
     The model generates a structured JSON slide specification governed by the system guidelines,
     dynamically expanding into 12 to 20+ slides reflecting all available evidence and industrial models.

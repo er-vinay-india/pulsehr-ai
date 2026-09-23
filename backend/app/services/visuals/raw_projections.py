@@ -95,9 +95,9 @@ def get_sheet_raw_projections(conn, sheet_id: int) -> dict:
 
             grp = grp.sort_values(by=clean_c, ascending=False)
             bars = [
-                {'label': str(r[primary_cat]), 'value': round(clean_float(r[clean_c]), 2)}
+                {'label': str(r[primary_cat]).strip(), 'value': round(clean_float(r[clean_c]), 2)}
                 for _, r in grp.iterrows()
-                if pd.notna(r[primary_cat])
+                if pd.notna(r[primary_cat]) and str(r[primary_cat]).strip().lower() not in ('', 'none', 'nan', 'null', 'n/a', 'na', '-')
             ]
             if bars:
                 title, _ = generate_analytical_title(
@@ -118,7 +118,9 @@ def get_sheet_raw_projections(conn, sheet_id: int) -> dict:
 
     # Build categorical distribution donuts
     for cat_col in categorical_cols:
-        vc = df[cat_col].value_counts().head(8)
+        clean_s = df[cat_col].dropna().astype(str).str.strip()
+        clean_s = clean_s[~clean_s.str.lower().isin({'', 'none', 'nan', 'null', 'n/a', 'na', '-'})]
+        vc = clean_s.value_counts().head(8)
         tot = max(1, int(vc.sum()))
         slices = [
             {

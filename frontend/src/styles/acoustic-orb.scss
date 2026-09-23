@@ -3,7 +3,7 @@
 .acoustic-orb-presenter {
   position: fixed;
   bottom: 24px;
-  right: 28px;
+  right: max(16px, env(safe-area-inset-right));
   z-index: 1050;
   font-family: inherit;
   user-select: none;
@@ -78,14 +78,18 @@
   // Expanded Executive Presenter HUD Panel
   &.expanded {
     .orb-hud-card {
-      width: 380px;
+      width: min(380px, calc(100vw - 32px));
+      max-height: calc(100dvh - 100px);
+      overflow-y: auto;
+      box-sizing: border-box;
       background: rgba(11, 15, 25, 0.92);
       border: 1px solid rgba(255, 255, 255, 0.14);
       border-radius: 20px;
       backdrop-filter: blur(24px);
       -webkit-backdrop-filter: blur(24px);
       box-shadow: 0 24px 60px rgba(0, 0, 0, 0.8), 0 0 35px rgba(56, 189, 248, 0.12);
-      overflow: hidden;
+      overflow-x: hidden;
+      overflow-y: auto;
       display: flex;
       flex-direction: column;
       animation: hud-appear 0.25s cubic-bezier(0.16, 1, 0.3, 1);

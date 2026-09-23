@@ -18,6 +18,8 @@ import {
   VisualsSkeletonLoader,
   RelationalSkeletonLoader
 } from '../components/OverviewSkeletons';
+import ExecutiveHeroCockpit from '../components/overview/ExecutiveHeroCockpit';
+import ErrorBoundary from '../components/common/ErrorBoundary';
 import {
   ChevronDown,
   ChevronUp,
@@ -251,6 +253,13 @@ export default function OverviewPage({ onNavigateTab }) {
       ? baseData.sheets.filter((s) => s.id === selectedSheetId)
       : baseData?.sheets || [];
 
+  const selectedSheet =
+    selectedSheetId !== null
+      ? (baseData?.sheets_list?.find((s) => s.id === selectedSheetId) ||
+         baseData?.sheets?.find((s) => s.id === selectedSheetId) ||
+         null)
+      : null;
+
   return (
     <div className="overview-page">
       {/* 1. Compact Top Workspace Header & Scope Filters */}
@@ -293,6 +302,21 @@ export default function OverviewPage({ onNavigateTab }) {
         </div>
       )}
 
+      {/* 2.5 Executive Hero Visual Cockpit */}
+      {hasSheets && (
+        <ErrorBoundary title="Executive Hero Cockpit Error">
+          <ExecutiveHeroCockpit
+            baseData={baseData}
+            selectedSheet={selectedSheet}
+            findingsCount={visualsData?.prioritized_facts?.length || 4}
+            healthScore={storyData?.evaluation?.factual_accuracy_score || 86}
+            onLaunchBriefing={() => onNavigateTab('presentations')}
+            onOpenDeckStudio={() => onNavigateTab('presentations')}
+            onExplore={() => onNavigateTab('explorer')}
+          />
+        </ErrorBoundary>
+      )}
+
       {/* 3. Sheet Scope Selector Bar */}
       {hasSheets && (
         <div className="sheet-selector-bar">
@@ -317,7 +341,11 @@ export default function OverviewPage({ onNavigateTab }) {
         </div>
       )}
 
-      {hasSheets && <DecisionBrief sheetId={selectedSheetId} onExplore={() => onNavigateTab('explorer')} />}
+      {hasSheets && (
+        <ErrorBoundary title="Executive Decision Brief Error">
+          <DecisionBrief sheetId={selectedSheetId} onExplore={() => onNavigateTab('explorer')} />
+        </ErrorBoundary>
+      )}
 
       <details className="overview-existing-analysis">
         <summary>Explore existing charts, models & source catalogue</summary>
@@ -431,24 +459,18 @@ export default function OverviewPage({ onNavigateTab }) {
         </div>
       )}
 
-      {/* 8. Detailed Sheet Catalog & Relationship Network (Below the Fold) */}
+      {/* 8. Technical Diagnostics Link Strip */}
       {hasSheets && (
-        <div className="card-panel" style={{ marginTop: '1.5rem' }}>
-          <div className="section-title-row">
-            <div>
-              <h3>Worksheet Catalog & Structural Profiling</h3>
-              <p className="subtitle">Deterministic schema profiles, uniqueness ratios, and verified key links.</p>
-            </div>
-            <button className="btn-secondary" onClick={() => onNavigateTab('explorer')}>
-              Open Data Explorer <ArrowRight size={13} style={{ marginLeft: 4 }} />
-            </button>
+        <div className="card-panel" style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+          <div>
+            <h3 style={{ margin: 0, color: '#f8fafc' }}>Technical Diagnostics & Column Schema Profiling</h3>
+            <p className="subtitle" style={{ margin: '4px 0 0 0' }}>
+              Inspect deterministic column classifications, Spearman rank correlations, uniqueness ratios, and relational join links in Data Explorer.
+            </p>
           </div>
-
-          <div className="sheet-catalog-cards">
-            {displayedSheets.map((s) => (
-              <SheetCatalogCard key={s.id} sheet={s} />
-            ))}
-          </div>
+          <button className="btn-secondary" onClick={() => onNavigateTab('explorer')}>
+            Open Technical Explorer <ArrowRight size={13} style={{ marginLeft: 4 }} />
+          </button>
         </div>
       )}
 

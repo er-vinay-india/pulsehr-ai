@@ -140,10 +140,13 @@ def generate_pptx_presentation() -> Path:
         ['Source rows', data['stats']['rows']], ['Exact key relationships', data['stats']['linked_relationships']],
     ], stamp)
     for sheet in data['sheets']:
-        metrics = [[p['column'] + (f" ({p['unit']})" if p.get('unit') else ''), p['nonempty'], p['missing'], _number(p.get('numeric', {}).get('mean'))] for p in sheet['profiles']]
+        valid_profiles = [p for p in sheet['profiles'] if p.get('nonempty', 0) > 0]
+        metrics = [[p['column'] + (f" ({p['unit']})" if p.get('unit') else ''), p['nonempty'], p['missing'], _number(p.get('numeric', {}).get('mean'))] for p in valid_profiles]
+        if not metrics:
+            metrics = [['No complete columns available', 0, sheet['row_count'], '—']]
         for start in range(0, max(1, len(metrics)), 8):
             _table_slide(prs, sheet['name'][:65], ['Column', 'Present', 'Missing', 'Mean'], metrics[start:start+8],
-                         f"Source: {sheet['original_name']} / {sheet['name']}. {sheet['row_count']} rows. Means use numeric, nonmissing cells only.")
+                         f"Source: {sheet['original_name']} / {sheet['name']}. {sheet['row_count']} rows. Excludes 100% null columns.")
     return _save_deck(prs)
 
 
@@ -166,6 +169,7 @@ def generate_html_executive_report() -> str:
     data = overview()
     sections = []
     for sheet in data['sheets']:
-        rows = ''.join(f"<tr><td>{escape(p['column'])}</td><td>{p['nonempty']}</td><td>{p['missing']}</td><td>{_number(p.get('numeric', {}).get('mean'))}</td></tr>" for p in sheet['profiles'])
-        sections.append(f"<h2>{escape(sheet['original_name'])} / {escape(sheet['name'])}</h2><p>{sheet['row_count']} source rows</p><table><tr><th>Column</th><th>Present</th><th>Missing</th><th>Mean</th></tr>{rows}</table>")
+        valid_profiles = [p for p in sheet['profiles'] if p.get('nonempty', 0) > 0]
+        rows = ''.join(f"<tr><td>{escape(p['column'])}</td><td>{p['nonempty']}</td><td>{p['missing']}</td><td>{_number(p.get('numeric', {}).get('mean'))}</td></tr>" for p in valid_profiles)
+        sections.append(f"<h2>{escape(sheet['original_name'])} / {escape(sheet['name'])}</h2><p>{sheet['row_count']} source rows (excludes 100% null columns)</p><table><tr><th>Column</th><th>Present</th><th>Missing</th><th>Mean</th></tr>{rows or '<tr><td colspan=\"4\">No non-empty columns found.</td></tr>'}</table>")
     return '<!doctype html><html><head><title>PulseHR AI Report</title><style>body{font-family:Arial;padding:32px}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ccc;padding:8px;text-align:left}</style></head><body><h1>PulseHR AI · Uploaded data report</h1><p>' + escape(data['note']) + '</p>' + (''.join(sections) or '<p>No sheets uploaded.</p>') + '</body></html>'

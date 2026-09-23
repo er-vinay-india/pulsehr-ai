@@ -11,7 +11,7 @@ EXPORTS_DIR = DATA_DIR / "exports"
 SCHEMA_PATH = BASE_DIR / "app" / "db" / "schema.sql"
 
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:7b-instruct")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3.5:9b")
 OLLAMA_EMBED_MODEL = os.getenv("OLLAMA_EMBED_MODEL", "nomic-embed-text:latest")
 EMBEDDING_DIM = 768
 
