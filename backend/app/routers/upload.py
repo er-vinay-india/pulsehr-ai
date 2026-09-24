@@ -5,7 +5,7 @@ from pathlib import Path
 import threading
 from uuid import uuid4
 
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 
@@ -20,7 +20,11 @@ _upload_lock = threading.Lock()
 
 
 @router.post('/file')
-def upload_file(file: UploadFile = File(...)):
+def upload_file(
+    file: UploadFile = File(...),
+    user_objective: str = Form(default=""),
+    business_context: str | None = Form(default=None)
+):
     with _upload_lock:
         original = Path((file.filename or 'uploaded.csv').replace('\\', '/')).name
         suffix = Path(original).suffix.lower()
@@ -54,12 +58,38 @@ def upload_file(file: UploadFile = File(...)):
                 rebuild_relationships(conn)
                 industrial_res = run_ingestion_industrial_pipeline(conn, dataset_id)
                 linked = conn.execute("SELECT COUNT(*) FROM sheet_relationships WHERE status='linked' AND (left_sheet IN (SELECT id FROM sheets WHERE dataset_id=?) OR right_sheet IN (SELECT id FROM sheets WHERE dataset_id=?))", (dataset_id, dataset_id)).fetchone()[0]
+
+                # Immediate User Intent Reconciliation during Data Ingestion
+                analysis_ctx_dict = None
+                if user_objective and user_objective.strip():
+                    import pandas as pd
+                    from ..services.data_engine.semantic_classifier import SemanticClassifier
+                    from ..services.data_engine.analysis_context import IntentDataReconciler
+
+                    sheet_row = conn.execute('SELECT id, display_name, name FROM sheets WHERE dataset_id=? ORDER BY id ASC LIMIT 1', (dataset_id,)).fetchone()
+                    sheet_id = sheet_row['id'] if sheet_row else None
+                    df_first = pd.DataFrame(first['records'])
+                    profile = SemanticClassifier.profile_dataset(df_first, dataset_name=display_name)
+                    ctx = IntentDataReconciler.parse_and_reconcile(
+                        raw_text=user_objective.strip(),
+                        profile=profile,
+                        dataset_id=dataset_id,
+                        sheet_id=sheet_id,
+                        business_context=business_context
+                    )
+                    ctx_json = ctx.model_dump_json()
+                    conn.execute('UPDATE dataset_uploads SET analysis_context_json=? WHERE id=?', (ctx_json, dataset_id))
+                    conn.execute('UPDATE sheets SET analysis_context_json=? WHERE dataset_id=?', (ctx_json, dataset_id))
+                    analysis_ctx_dict = ctx.model_dump()
+
             return {'status': 'success', 'dataset_id': dataset_id, 'filename': original,
                     'display_name': display_name, 'domain': naming['domain'], 'description': naming['description'],
                     'sheets': list(frames), 'total_rows': total, 'columns': first['columns'], 'sample_preview': first['records'][:5],
                     'indexed_chunks': total, 'vector_chunks': sum(len(s['vectors']) for s in prepared), 'linked_relationships': linked,
                     'industrial_analytics': industrial_res,
-                    'message': f'Indexed all {total} rows. Found {linked} exact key relationships and computed industrial analytics pipeline.'}
+                    'analysis_context': analysis_ctx_dict,
+                    'user_objective': user_objective.strip() if user_objective else "",
+                    'message': f'Indexed all {total} rows. Reconciled user intent into analytical evidence pipeline.' if analysis_ctx_dict else f'Indexed all {total} rows. Found {linked} exact key relationships and computed industrial analytics pipeline.'}
         except (ValueError, OSError, ImportError) as exc:
             path.unlink(missing_ok=True)
             raise HTTPException(400, str(exc)) from exc

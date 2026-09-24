@@ -189,7 +189,8 @@ class IntentDataReconciler:
         structured_rules: list[dict] | None = None,
         important_dimensions: list[str] | None = None,
         important_metrics: list[str] | None = None,
-        preferred_output: str = "Executive report"
+        preferred_output: str = "Executive report",
+        business_context: str | None = None
     ) -> AnalysisContext:
         """Parses user brief, establishes concept reconciliation, and constructs AnalysisContext."""
         cleaned_text = (raw_text or "").strip()
@@ -285,6 +286,7 @@ class IntentDataReconciler:
             dataset_id=dataset_id,
             sheet_id=sheet_id,
             user_objective=cleaned_text if cleaned_text else "Intent-driven analysis",
+            business_context=business_context,
             questions_to_answer=questions,
             business_rules=business_rules,
             important_dimensions=list(dict.fromkeys(reconciled_dims)),

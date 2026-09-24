@@ -205,9 +205,12 @@ export async function getCopilotSuggestions() {
   return res.json();
 }
 
-export async function uploadDatasetFile(file) {
+export async function uploadDatasetFile(file, userObjective = "") {
   const formData = new FormData();
   formData.append("file", file);
+  if (userObjective && typeof userObjective === "string" && userObjective.trim()) {
+    formData.append("user_objective", userObjective.trim());
+  }
   const res = await fetch(`${API_BASE}/upload/file`, {
     method: "POST",
     body: formData

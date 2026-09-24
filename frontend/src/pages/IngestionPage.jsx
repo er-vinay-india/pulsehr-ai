@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { UploadCloud, FileSpreadsheet } from "lucide-react";
+import { UploadCloud, FileSpreadsheet, Sparkles } from "lucide-react";
 import { uploadDatasetFile, listDatasets, deleteDataset } from "../api/client";
 import UploadProgressCard from "../components/ingestion/UploadProgressCard";
 import UploadResultCard from "../components/ingestion/UploadResultCard";
@@ -15,6 +15,7 @@ export default function IngestionPage() {
   const [isDragging, setIsDragging] = useState(false);
   const [uploadResult, setUploadResult] = useState(null);
   const [error, setError] = useState(null);
+  const [userIntent, setUserIntent] = useState("");
 
   // Consent modal state
   const [datasetToDelete, setDatasetToDelete] = useState(null);
@@ -81,7 +82,7 @@ export default function IngestionPage() {
     setUploadResult(null);
 
     try {
-      const res = await uploadDatasetFile(file);
+      const res = await uploadDatasetFile(file, userIntent);
       setUploadStep(5);
       setUploadResult(res);
       loadData();
@@ -160,6 +161,66 @@ export default function IngestionPage() {
             Add a CSV or Excel workbook. Analyse every sheet, discover shared keys, and connect related records in one workspace.
           </p>
         </div>
+      </div>
+
+      {/* Upfront Analysis Expectations & Business Intent */}
+      <div
+        style={{
+          marginBottom: "1.25rem",
+          padding: "1.25rem",
+          background: "rgba(22, 18, 16, 0.8)",
+          border: "1px solid var(--border)",
+          borderRadius: "10px",
+          boxShadow: "0 4px 16px rgba(0, 0, 0, 0.2)"
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.5rem" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <Sparkles size={18} color="var(--brand-400)" />
+            <h3 style={{ margin: 0, fontSize: "1.05rem", color: "var(--fg-primary)", fontWeight: 700 }}>
+              What do you expect from this report? (Optional)
+            </h3>
+          </div>
+          <span
+            style={{
+              fontSize: "0.72rem",
+              padding: "2px 8px",
+              borderRadius: "12px",
+              background: userIntent.trim() ? "rgba(46, 213, 115, 0.15)" : "rgba(255, 255, 255, 0.08)",
+              color: userIntent.trim() ? "var(--emerald-tier)" : "var(--fg-muted)",
+              border: `1px solid ${userIntent.trim() ? "rgba(46, 213, 115, 0.3)" : "rgba(255, 255, 255, 0.1)"}`
+            }}
+          >
+            {userIntent.trim() ? "Intent Active" : "Discovery Mode"}
+          </span>
+        </div>
+        <p style={{ fontSize: "0.83rem", color: "var(--fg-secondary)", marginTop: 0, marginBottom: "0.75rem", lineHeight: 1.45 }}>
+          Specify what you want this analysis to answer, corporate targets, or mandatory rules. Data ingestion will prioritize your intent from the very start. If left blank, the system will explore patterns automatically.
+        </p>
+        <textarea
+          rows={3}
+          value={userIntent}
+          onChange={(e) => setUserIntent(e.target.value)}
+          disabled={uploading}
+          placeholder="e.g. Employees must work from office at least 3 days per week. Compare departments by compliance and identify departments with unusually high leave rate."
+          style={{
+            width: "100%",
+            background: "rgba(0, 0, 0, 0.4)",
+            border: "1px solid var(--border-subtle)",
+            borderRadius: "8px",
+            padding: "0.75rem",
+            color: "var(--fg-primary)",
+            fontSize: "0.85rem",
+            lineHeight: 1.5,
+            resize: "vertical",
+            boxSizing: "border-box"
+          }}
+        />
+        {userIntent.trim() && (
+          <div style={{ marginTop: "6px", fontSize: "0.75rem", color: "var(--brand-400)", display: "flex", alignItems: "center", gap: "5px" }}>
+            <span>✓ Ingestion will process the uploaded dataset with this intent as first priority.</span>
+          </div>
+        )}
       </div>
 
       {/* Upload Drop Zone / Progress Container */}
