@@ -32,14 +32,18 @@ def init_db(conn: sqlite3.Connection | None = None) -> None:
     try:
         conn.executescript(config.SCHEMA_PATH.read_text())
 
-        # Ensure display_name column exists in dataset_uploads and sheets
+        # Ensure display_name and analysis_context_json columns exist in dataset_uploads and sheets
         du_cols = [r[1] for r in conn.execute("PRAGMA table_info(dataset_uploads)").fetchall()]
         if "display_name" not in du_cols:
             conn.execute("ALTER TABLE dataset_uploads ADD COLUMN display_name TEXT")
+        if "analysis_context_json" not in du_cols:
+            conn.execute("ALTER TABLE dataset_uploads ADD COLUMN analysis_context_json TEXT")
 
         s_cols = [r[1] for r in conn.execute("PRAGMA table_info(sheets)").fetchall()]
         if "display_name" not in s_cols:
             conn.execute("ALTER TABLE sheets ADD COLUMN display_name TEXT")
+        if "analysis_context_json" not in s_cols:
+            conn.execute("ALTER TABLE sheets ADD COLUMN analysis_context_json TEXT")
 
         # Backfill display names for existing datasets
         try:

@@ -79,6 +79,8 @@ def list_datasets():
             item = dict(row)
             item['columns'] = json.loads(item.pop('columns_json') or '[]')
             item.pop('sample_preview_json', None)
+            ctx_str = item.pop('analysis_context_json', None)
+            item['analysis_context'] = json.loads(ctx_str) if ctx_str else None
             item['sheets'] = [dict(s) for s in conn.execute('SELECT id,name,display_name,row_count FROM sheets WHERE dataset_id=?', (row['id'],))]
             datasets.append(item)
         return {'datasets': datasets}
@@ -198,6 +200,76 @@ def delete_all_datasets():
             if path.is_relative_to(config.UPLOADS_DIR.resolve()):
                 path.unlink(missing_ok=True)
         return {'message': 'All datasets, sheets, rows, search entries, cached narratives and relationships completely cleared.'}
+    finally:
+        conn.close()
+
+
+class DatasetAnalysisBriefRequest(BaseModel):
+    user_objective: str = ""
+    business_context: str | None = None
+    questions_to_answer: list[str] = []
+    business_rules: list[dict] = []
+    important_dimensions: list[str] = []
+    important_metrics: list[str] = []
+    preferred_output: str = "Executive report"
+
+
+@router.post('/datasets/{dataset_id}/brief')
+def submit_dataset_brief(dataset_id: int, req: DatasetAnalysisBriefRequest):
+    """Submits or updates the user analysis brief and reconciles business intent."""
+    import pandas as pd
+    from ..services.data_engine.semantic_classifier import SemanticClassifier
+    from ..services.data_engine.analysis_context import IntentDataReconciler, AnalysisContext
+
+    conn = get_connection()
+    try:
+        row = conn.execute('SELECT * FROM dataset_uploads WHERE id=?', (dataset_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, 'Dataset not found')
+
+        sheet = conn.execute('SELECT * FROM sheets WHERE dataset_id=? ORDER BY id ASC LIMIT 1', (dataset_id,)).fetchone()
+        if not sheet:
+            raise HTTPException(404, 'No sheets found for dataset')
+
+        rows = conn.execute('SELECT data_json FROM sheet_rows WHERE sheet_id=? ORDER BY row_index', (sheet['id'],)).fetchall()
+        records = [json.loads(r['data_json']) for r in rows]
+        df = pd.DataFrame(records)
+        display_name = sheet['display_name'] or sheet['name']
+
+        profile = SemanticClassifier.profile_dataset(df, dataset_name=display_name)
+        ctx = IntentDataReconciler.parse_and_reconcile(
+            raw_text=req.user_objective,
+            profile=profile,
+            dataset_id=dataset_id,
+            sheet_id=sheet['id'],
+            structured_rules=req.business_rules,
+            important_dimensions=req.important_dimensions,
+            important_metrics=req.important_metrics,
+            preferred_output=req.preferred_output
+        )
+
+        ctx_json = ctx.model_dump_json()
+        with conn:
+            conn.execute('UPDATE dataset_uploads SET analysis_context_json=? WHERE id=?', (ctx_json, dataset_id))
+            conn.execute('UPDATE sheets SET analysis_context_json=? WHERE dataset_id=?', (ctx_json, dataset_id))
+
+        return ctx.model_dump()
+    finally:
+        conn.close()
+
+
+@router.get('/datasets/{dataset_id}/brief')
+def get_dataset_brief(dataset_id: int):
+    """Retrieves the reconciled analysis context for a dataset."""
+    conn = get_connection()
+    try:
+        row = conn.execute('SELECT analysis_context_json FROM dataset_uploads WHERE id=?', (dataset_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, 'Dataset not found')
+        ctx_json = row['analysis_context_json']
+        if not ctx_json:
+            return {'mode': 'DISCOVERY', 'provenance': 'SYSTEM_DEFAULT', 'user_objective': ''}
+        return json.loads(ctx_json)
     finally:
         conn.close()
 

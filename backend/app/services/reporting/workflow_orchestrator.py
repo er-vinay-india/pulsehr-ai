@@ -38,6 +38,7 @@ class WorkflowExecutionResult(BaseModel):
     audit_result: InterpretationAuditResult | None = None
     visual_charts: list[VisualChartSpec] = Field(default_factory=list)
     deck_spec: dict[str, Any] = Field(default_factory=dict)
+    analysis_context: Any | None = None
     error_message: str | None = None
 
     # Backwards compatibility accessors
@@ -61,13 +62,16 @@ class WorkflowOrchestrator:
         objective: str = "Executive Leadership Briefing",
         on_progress: Callable[[str, int], None] | None = None,
         report_id: str | None = None,
-        use_cache: bool = True
+        use_cache: bool = True,
+        context: Any | None = None
     ) -> WorkflowExecutionResult:
         rid = report_id or f"report-{uuid4().hex[:8]}"
 
+        effective_objective = (context.user_objective if (context and getattr(context, "user_objective", None)) else objective) or "Executive Leadership Briefing"
+
         # Compute dataset fingerprint for single-source-of-truth artifact reuse
         cache_key = hashlib.sha256(
-            f"{dataset_name}_{objective}_{df.shape}_{list(df.columns)}_{df.iloc[:5].to_dict() if len(df) else ''}".encode()
+            f"{dataset_name}_{effective_objective}_{df.shape}_{list(df.columns)}_{df.iloc[:5].to_dict() if len(df) else ''}".encode()
         ).hexdigest()
         if use_cache and cache_key in _GENERIC_WORKFLOW_CACHE:
             logger.info(f"Reusing cached workflow execution result for key {cache_key[:12]}")
@@ -96,8 +100,8 @@ class WorkflowOrchestrator:
             semantic_profile = SemanticClassifier.profile_dataset(df, dataset_name=dataset_name)
 
             # 3. GENERATE ANALYSIS OPPORTUNITY MAP
-            _progress("Mapping mathematical analysis opportunities", 40)
-            opp_map = OpportunityMapGenerator.generate(semantic_profile)
+            _progress("Mapping mathematical analysis opportunities (User Priorities & Discovery)", 40)
+            opp_map = OpportunityMapGenerator.generate(semantic_profile, context=context)
 
             # 4. DISCOVER DETERMINISTIC CANDIDATE FACTS
             _progress("Discovering mathematically defensible candidate facts", 55)
@@ -106,8 +110,8 @@ class WorkflowOrchestrator:
             )
             facts_lookup = {f.fact_id: f for f in reliable_facts}
 
-            # 5. RANK FACTS BY MULTI-SIGNAL INTERESTINGNESS
-            _progress("Ranking verified findings by surprise and effect magnitude", 65)
+            # 5. RANK FACTS BY MULTI-SIGNAL INTERESTINGNESS (User Priorities First)
+            _progress("Ranking verified findings by user priority and surprise magnitude", 65)
             ranked_facts = FactInterestingnessRanker.rank_interesting_facts(reliable_facts, limit=8)
 
             # 6. EVIDENCE-GROUNDED AI INTERPRETATION (AnalystAgent Qwen 3.5)
@@ -132,7 +136,7 @@ class WorkflowOrchestrator:
             # 9. MATERIALIZE EVIDENCE-GOVERNED SLIDE SPECIFICATION
             _progress("Materializing presentation deck specification", 96)
             deck_spec = cls._materialize_deck_spec(
-                semantic_profile, interpretation, ranked_facts, facts_lookup, charts, chart_by_fact_id, objective
+                semantic_profile, interpretation, ranked_facts, facts_lookup, charts, chart_by_fact_id, effective_objective, context=context
             )
 
             _progress("Generic reporting workflow completed successfully", 100)
@@ -146,7 +150,8 @@ class WorkflowOrchestrator:
                 interpretation=interpretation,
                 audit_result=audit_result,
                 visual_charts=charts,
-                deck_spec=deck_spec
+                deck_spec=deck_spec,
+                analysis_context=context.model_dump() if (context and hasattr(context, "model_dump")) else context
             )
             if use_cache:
                 _GENERIC_WORKFLOW_CACHE[cache_key] = res
@@ -169,27 +174,48 @@ class WorkflowOrchestrator:
         facts_lookup: dict[str, CandidateFact],
         charts: list[VisualChartSpec],
         chart_by_fact_id: dict[str, VisualChartSpec],
-        objective: str
+        objective: str,
+        context: Any | None = None
     ) -> dict[str, Any]:
         """Translates generic insights, verified facts, and charts into a presentation deck specification."""
         slides = []
 
+        has_intent = context and getattr(context, "has_user_intent", False)
+        hero_subtitle = f"Targeted Analysis Brief: {context.user_objective}" if (has_intent and context.user_objective) else f"Empirical findings across {profile.row_count:,} records (Grain: {profile.inferred_grain})"
+
         # Slide 1: Hero Executive Summary
         slides.append({
             "order": 1,
-            "category": "EXECUTIVE SUMMARY",
+            "category": "USER OBJECTIVE" if has_intent else "EXECUTIVE SUMMARY",
             "layout": "title_hero",
             "title": f"Executive Intelligence: {profile.dataset_name}",
-            "subtitle": f"Empirical findings across {profile.row_count:,} records (Grain: {profile.inferred_grain})",
+            "subtitle": hero_subtitle,
             "narrative": interpretation.executive_synthesis,
             "visual_hook": "none",
             "finding_ids": [ins.supporting_fact_ids[0] for ins in interpretation.insights if ins.supporting_fact_ids]
         })
 
+        # Sort insights: user-priority insights first, then discovery insights
+        def _ins_priority(ins):
+            for fid in ins.supporting_fact_ids:
+                f = facts_lookup.get(fid)
+                if f and getattr(f, "priority_type", "") == "USER_PRIORITY":
+                    return 0
+            return 1
+
+        sorted_insights = sorted(interpretation.insights, key=_ins_priority)
+
         # Slides 2+: Individual Analytical Insight Slides with Linked Charts
-        for idx, ins in enumerate(interpretation.insights, start=2):
+        for idx, ins in enumerate(sorted_insights, start=2):
             primary_fid = ins.supporting_fact_ids[0] if ins.supporting_fact_ids else None
             chart = chart_by_fact_id.get(primary_fid)
+
+            is_priority = False
+            for fid in ins.supporting_fact_ids:
+                fact = facts_lookup.get(fid)
+                if fact and getattr(fact, "priority_type", "") == "USER_PRIORITY":
+                    is_priority = True
+                    break
 
             slide_metrics = []
             for fid in ins.supporting_fact_ids:
@@ -200,12 +226,13 @@ class WorkflowOrchestrator:
                         "label": fact.metric.replace('_', ' ').title(),
                         "value": f"{fact.value:,.2f}",
                         "change": diff_str,
-                        "evidence_id": fid
+                        "evidence_id": fid,
+                        "provenance": getattr(fact, "provenance", "DATA_INFERRED")
                     })
 
             slide_dict = {
                 "order": idx,
-                "category": "EMPIRICAL FINDING",
+                "category": "USER PRIORITY FINDING" if is_priority else "ADDITIONAL DISCOVERY",
                 "layout": "chart_narrative" if chart else "kpi_summary",
                 "title": ins.title[:78],
                 "subtitle": ins.observation,
@@ -215,7 +242,8 @@ class WorkflowOrchestrator:
                 "visual_hook": chart.chart_type if chart else "none",
                 "metrics": slide_metrics,
                 "finding_ids": ins.supporting_fact_ids,
-                "evidence_id": primary_fid
+                "evidence_id": primary_fid,
+                "is_user_priority": is_priority
             }
             if chart:
                 slide_dict["chart"] = chart.model_dump()

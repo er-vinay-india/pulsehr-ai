@@ -57,6 +57,10 @@ class GenericCopilotEngine:
         if any(w in q_lower for w in ["why", "causes", "reason for", "explain why", "driver of"]):
             return "INTERPRETATION"
 
+        # 0. User Business Context / Rule Inquiries
+        if any(w in q_lower for w in ["policy", "rule", "compulsory", "mandatory", "target", "objective", "requirement", "expected days", "expected wfo"]):
+            return "BUSINESS_CONTEXT"
+
         # 7. Default to drilldown / entity inspection
         return "ENTITY_DRILLDOWN"
 
@@ -116,20 +120,67 @@ class GenericCopilotEngine:
         cls,
         df: pd.DataFrame,
         profile: SemanticDatasetProfile,
-        user_query: str,
+        user_query: str = "",
         facts: list[CandidateFact] | None = None,
         existing_ranked_facts: list[RankedFact] | None = None,
-        existing_interpretation: Any | None = None
+        existing_interpretation: Any | None = None,
+        context: Any | None = None,
+        query: str = "",
+        ranked_facts: list[RankedFact] | None = None
     ) -> GroundedAnswer:
         """Processes and answers a user query strictly grounded in evidence with zero duplicate analytical work."""
-        intent = cls._classify_intent(user_query, profile)
+        effective_query = user_query or query
+        effective_ranked_facts = existing_ranked_facts or ranked_facts
+        intent = cls._classify_intent(effective_query, profile)
+
+        # Check if query references concepts flagged as unsupported
+        if context and getattr(context, "unsupported_requests", None):
+            for u in context.unsupported_requests:
+                words = [w for w in re.findall(r'\b\w+\b', u.lower()) if len(w) > 3]
+                if any(w in effective_query.lower() for w in words):
+                    return GroundedAnswer(
+                        query=effective_query,
+                        intent="UNSUPPORTED_METRIC",
+                        answer_markdown=f"The requested concept ('{u}') is not present in the uploaded dataset columns. The system cannot compute or hallucinate metrics for columns that do not exist.",
+                        cited_facts=[],
+                        metadata={"llm_calls": 0, "provenance": "USER_EXPLICIT", "intent": "UNSUPPORTED_METRIC"}
+                    )
 
         # Ensure facts are available
         if facts is None:
-            opp_map = OpportunityMapGenerator.generate(profile)
+            opp_map = OpportunityMapGenerator.generate(profile, context=context)
             facts, _ = CandidateFactDiscoveryEngine.discover_facts(df, profile, opp_map)
 
         facts_lookup = {f.fact_id: f for f in facts}
+
+        # ---------------------------------------------------------------------
+        # INTENT 0: USER BUSINESS CONTEXT / POLICY RULES (0 LLM Calls)
+        # ---------------------------------------------------------------------
+        if intent == "BUSINESS_CONTEXT" or any(w in effective_query.lower() for w in ["compulsory", "mandatory", "what is the rule", "policy", "expected wfo"]):
+            if context and (getattr(context, "business_rules", None) or getattr(context, "user_objective", None)):
+                rule_lines = []
+                for br in getattr(context, "business_rules", []):
+                    rule_lines.append(f"- **{br.metric}**: {br.operator} {br.threshold:g} ({br.description or 'Mandatory policy'}) [USER_EXPLICIT]")
+
+                comp_facts = [f for f in facts if f.fact_type == "target_compliance"]
+                comp_summary = ""
+                if comp_facts:
+                    comp_summary = "\n\n**Measured Compliance from Data Evidence**:\n" + "\n".join(f"- {f.statement}" for f in comp_facts[:4])
+
+                ans_text = (
+                    f"### Stated Business Policy & Rules\n"
+                    f"**Objective**: {context.user_objective}\n\n"
+                    f"**Operating Rules**:\n" + ("\n".join(rule_lines) if rule_lines else "None specified") +
+                    comp_summary
+                )
+                return GroundedAnswer(
+                    query=effective_query,
+                    intent="BUSINESS_CONTEXT",
+                    answer_markdown=ans_text,
+                    cited_facts=comp_facts[:4],
+                    followup_questions=["Which departments have the lowest compliance?", "Would you like to examine trends over time?"],
+                    metadata={"llm_calls": 0, "provenance": "USER_EXPLICIT", "intent": "BUSINESS_CONTEXT"}
+                )
 
         # ---------------------------------------------------------------------
         # INTENT 1: AMBIGUITY / COLUMN MEANING (0 LLM Calls)
@@ -261,8 +312,8 @@ class GenericCopilotEngine:
         # INTENT 5: SURPRISE ME / TOP FINDINGS (0 LLM Calls if Ranked/Interpreted)
         # ---------------------------------------------------------------------
         if intent == "SURPRISE_ME":
-            if existing_ranked_facts:
-                top_facts = [rf.fact for rf in existing_ranked_facts[:3]]
+            if effective_ranked_facts:
+                top_facts = [rf.fact for rf in effective_ranked_facts[:3]]
             else:
                 ranked = FactInterestingnessRanker.rank_interesting_facts(facts, limit=5)
                 top_facts = [rf.fact for rf in ranked[:3]]

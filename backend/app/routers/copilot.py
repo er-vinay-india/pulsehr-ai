@@ -12,6 +12,7 @@ from ..services.copilot_tools import ToolRequest, CalculationRequest, load_frame
 from ..services.ai_copilot import query_copilot, get_available_models, stream_copilot_generator
 from ..services.data_engine.semantic_classifier import SemanticClassifier
 from ..services.copilot.generic_copilot_engine import GenericCopilotEngine
+from ..services.data_engine.analysis_context import AnalysisContext
 from ..services.reporting.workflow_orchestrator import _GENERIC_WORKFLOW_CACHE
 
 router = APIRouter(prefix="/api/copilot", tags=["copilot"])
@@ -29,34 +30,45 @@ class CopilotQueryRequest(BaseModel):
     engine: Literal["generic", "legacy", "auto"] = "auto"
 
 
-def _load_active_sheet_dataframe(sheet_id: int | None = None, dataset_id: int | None = None) -> tuple[pd.DataFrame | None, str | None]:
-    """Loads active or requested tabular sheet as DataFrame from database."""
+def _load_active_sheet_dataframe(sheet_id: int | None = None, dataset_id: int | None = None) -> tuple[pd.DataFrame | None, str | None, AnalysisContext | None]:
+    """Loads active or requested tabular sheet as DataFrame and associated AnalysisContext from database."""
     with get_connection() as conn:
         sheet = None
         if sheet_id is not None:
             sheet = conn.execute(
-                'SELECT s.*, d.original_name FROM sheets s JOIN dataset_uploads d ON d.id=s.dataset_id WHERE s.id=?',
+                'SELECT s.*, d.original_name, d.analysis_context_json as d_ctx FROM sheets s JOIN dataset_uploads d ON d.id=s.dataset_id WHERE s.id=?',
                 (sheet_id,)
             ).fetchone()
         elif dataset_id is not None:
             sheet = conn.execute(
-                'SELECT s.*, d.original_name FROM sheets s JOIN dataset_uploads d ON d.id=s.dataset_id WHERE s.dataset_id=? ORDER BY s.id ASC LIMIT 1',
+                'SELECT s.*, d.original_name, d.analysis_context_json as d_ctx FROM sheets s JOIN dataset_uploads d ON d.id=s.dataset_id WHERE s.dataset_id=? ORDER BY s.id ASC LIMIT 1',
                 (dataset_id,)
             ).fetchone()
         else:
             sheet = conn.execute(
-                'SELECT s.*, d.original_name FROM sheets s JOIN dataset_uploads d ON d.id=s.dataset_id ORDER BY s.id DESC LIMIT 1'
+                'SELECT s.*, d.original_name, d.analysis_context_json as d_ctx FROM sheets s JOIN dataset_uploads d ON d.id=s.dataset_id ORDER BY s.id DESC LIMIT 1'
             ).fetchone()
 
         if sheet:
             rows = conn.execute('SELECT data_json FROM sheet_rows WHERE sheet_id=? ORDER BY row_index', (sheet['id'],)).fetchall()
             records = [json.loads(r['data_json']) for r in rows]
             if records:
-                return pd.DataFrame(records), sheet['display_name'] or sheet['name']
-    return None, None
+                ctx = None
+                ctx_raw = None
+                try:
+                    ctx_raw = sheet['analysis_context_json'] or sheet['d_ctx']
+                except Exception:
+                    pass
+                if ctx_raw:
+                    try:
+                        ctx = AnalysisContext.model_validate_json(ctx_raw)
+                    except Exception:
+                        pass
+                return pd.DataFrame(records), sheet['display_name'] or sheet['name'], ctx
+    return None, None, None
 
 
-def _execute_generic_copilot(req: CopilotQueryRequest, df: pd.DataFrame, dataset_name: str) -> dict:
+def _execute_generic_copilot(req: CopilotQueryRequest, df: pd.DataFrame, dataset_name: str, context: AnalysisContext | None = None) -> dict:
     """Executes query strictly via GenericCopilotEngine with 0 legacy code invocation."""
     t_start = time.perf_counter()
     profile = SemanticClassifier.profile_dataset(df, dataset_name=dataset_name)
@@ -72,7 +84,8 @@ def _execute_generic_copilot(req: CopilotQueryRequest, df: pd.DataFrame, dataset
         df=df,
         profile=profile,
         user_query=req.query,
-        existing_interpretation=existing_interp
+        existing_interpretation=existing_interp,
+        context=context
     )
     duration_ms = (time.perf_counter() - t_start) * 1000
 
@@ -111,10 +124,10 @@ def _is_explicit_legacy_hr_request(req: CopilotQueryRequest) -> bool:
 @router.post("/generic")
 def ask_generic_copilot(req: CopilotQueryRequest):
     """GENERIC route: strictly executes via GenericCopilotEngine."""
-    df, name = _load_active_sheet_dataframe(req.sheet_id, req.dataset_id)
+    df, name, ctx = _load_active_sheet_dataframe(req.sheet_id, req.dataset_id)
     if df is None or df.empty:
         raise HTTPException(400, "No active tabular dataset found. Please upload a dataset first.")
-    return _execute_generic_copilot(req, df, name or "Uploaded Dataset")
+    return _execute_generic_copilot(req, df, name or "Uploaded Dataset", context=ctx)
 
 
 @router.post("/query")
@@ -126,15 +139,15 @@ def ask_copilot(req: CopilotQueryRequest):
     - If engine == 'auto': deterministically checks for legacy HR terms vs active tabular sheet.
     """
     if req.engine == "generic":
-        df, name = _load_active_sheet_dataframe(req.sheet_id, req.dataset_id)
+        df, name, ctx = _load_active_sheet_dataframe(req.sheet_id, req.dataset_id)
         if df is not None and not df.empty:
-            return _execute_generic_copilot(req, df, name or "Uploaded Dataset")
+            return _execute_generic_copilot(req, df, name or "Uploaded Dataset", context=ctx)
         raise HTTPException(400, "No active tabular dataset found. Please upload a dataset first.")
 
     if req.engine == "auto" and not _is_explicit_legacy_hr_request(req):
-        df, name = _load_active_sheet_dataframe(req.sheet_id, req.dataset_id)
+        df, name, ctx = _load_active_sheet_dataframe(req.sheet_id, req.dataset_id)
         if df is not None and not df.empty:
-            return _execute_generic_copilot(req, df, name or "Uploaded Dataset")
+            return _execute_generic_copilot(req, df, name or "Uploaded Dataset", context=ctx)
 
     # Explicit legacy HR route or fallback
     return query_copilot(
@@ -156,9 +169,9 @@ def ask_copilot_stream(req: CopilotQueryRequest):
     Uses GenericCopilotEngine if targeting generic tabular data, otherwise legacy stream generator.
     """
     if req.engine == "generic" or (req.engine == "auto" and not _is_explicit_legacy_hr_request(req)):
-        df, name = _load_active_sheet_dataframe(req.sheet_id, req.dataset_id)
+        df, name, ctx = _load_active_sheet_dataframe(req.sheet_id, req.dataset_id)
         if df is not None and not df.empty:
-            result = _execute_generic_copilot(req, df, name or "Uploaded Dataset")
+            result = _execute_generic_copilot(req, df, name or "Uploaded Dataset", context=ctx)
             def _generic_stream():
                 yield f"event: status\ndata: {json.dumps({'status': 'Grounded in verified candidate facts', 'step': 'ready'})}\n\n"
                 # Stream the markdown answer in small chunks

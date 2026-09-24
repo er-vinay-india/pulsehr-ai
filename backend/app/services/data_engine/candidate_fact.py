@@ -40,6 +40,10 @@ class CandidateFact(BaseModel):
     statement: str = ""
     reliability_status: ReliabilityStatus = ReliabilityStatus.RELIABLE
     reliability_reason: str | None = None
+    priority_type: str = "DISCOVERY"  # "USER_PRIORITY" or "DISCOVERY"
+    provenance: str = "DATA_INFERRED"  # "USER_EXPLICIT", "USER_INFERRED", "DATA_INFERRED", "SYSTEM_DEFAULT"
+    target_rule_description: str | None = None
+    matching_user_question: str | None = None
 
     @model_validator(mode="before")
     @classmethod

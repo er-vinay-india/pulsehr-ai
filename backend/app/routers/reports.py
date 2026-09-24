@@ -133,11 +133,13 @@ def orchestrate_evidence_report(req: WorkflowReportRequest):
     import pandas as pd
     from ..db.database import get_connection
     from ..services.reporting.workflow_orchestrator import WorkflowOrchestrator
+    from ..services.data_engine.analysis_context import AnalysisContext
 
+    ctx = None
     with get_connection() as conn:
         if req.sheet_id is not None:
             sheet = conn.execute(
-                'SELECT s.*, d.original_name FROM sheets s JOIN dataset_uploads d ON d.id=s.dataset_id WHERE s.id=?',
+                'SELECT s.*, d.original_name, d.analysis_context_json as d_ctx FROM sheets s JOIN dataset_uploads d ON d.id=s.dataset_id WHERE s.id=?',
                 (req.sheet_id,)
             ).fetchone()
             if not sheet:
@@ -145,21 +147,42 @@ def orchestrate_evidence_report(req: WorkflowReportRequest):
             rows = conn.execute('SELECT data_json FROM sheet_rows WHERE sheet_id=? ORDER BY row_index', (req.sheet_id,)).fetchall()
             records = [json.loads(r['data_json']) for r in rows]
             dataset_name = sheet['display_name'] or sheet['name']
+            ctx_raw = None
+            try:
+                ctx_raw = sheet['analysis_context_json'] or sheet['d_ctx']
+            except Exception:
+                pass
+            if ctx_raw:
+                try:
+                    ctx = AnalysisContext.model_validate_json(ctx_raw)
+                except Exception:
+                    pass
         else:
             # Workspace global view: load first active sheet
             sheet = conn.execute(
-                'SELECT s.*, d.original_name FROM sheets s JOIN dataset_uploads d ON d.id=s.dataset_id ORDER BY s.id ASC LIMIT 1'
+                'SELECT s.*, d.original_name, d.analysis_context_json as d_ctx FROM sheets s JOIN dataset_uploads d ON d.id=s.dataset_id ORDER BY s.id ASC LIMIT 1'
             ).fetchone()
             if not sheet:
                 raise HTTPException(400, "No active datasets available in workspace")
             rows = conn.execute('SELECT data_json FROM sheet_rows WHERE sheet_id=? ORDER BY row_index', (sheet['id'],)).fetchall()
             records = [json.loads(r['data_json']) for r in rows]
             dataset_name = sheet['display_name'] or sheet['name']
+            ctx_raw = None
+            try:
+                ctx_raw = sheet['analysis_context_json'] or sheet['d_ctx']
+            except Exception:
+                pass
+            if ctx_raw:
+                try:
+                    ctx = AnalysisContext.model_validate_json(ctx_raw)
+                except Exception:
+                    pass
 
     df = pd.DataFrame(records)
     result = WorkflowOrchestrator.execute(
         df=df,
         dataset_name=dataset_name,
-        objective=req.objective
+        objective=req.objective,
+        context=ctx
     )
     return result.model_dump()

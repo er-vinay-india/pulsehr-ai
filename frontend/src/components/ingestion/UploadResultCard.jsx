@@ -1,6 +1,7 @@
 import React from "react";
 import { CheckCircle2, Download, Link2, Table } from "lucide-react";
 import { getDatasetDownloadUrl } from "../../api/client";
+import AnalysisBriefCard from "./AnalysisBriefCard";
 
 export default function UploadResultCard({ uploadResult }) {
   if (!uploadResult) return null;
@@ -9,7 +10,7 @@ export default function UploadResultCard({ uploadResult }) {
     <div className="alert-box alert-success" style={{ flexDirection: "column" }}>
       <div style={{ display: "flex", gap: "0.85rem", alignItems: "flex-start" }}>
         <CheckCircle2 size={24} color="var(--emerald-tier)" style={{ flexShrink: 0, marginTop: "2px" }} />
-        <div>
+        <div style={{ flex: 1 }}>
           <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
             <strong style={{ fontSize: "1.1rem", color: "var(--brand-400)" }}>
               {uploadResult.display_name || uploadResult.filename}
@@ -57,6 +58,9 @@ export default function UploadResultCard({ uploadResult }) {
           </div>
         </div>
       </div>
+
+      {/* Analysis Brief & Business Intent Section */}
+      <AnalysisBriefCard uploadResult={uploadResult} />
 
       {/* Optional Collapsible Sample Preview */}
       {uploadResult.sample_preview && uploadResult.sample_preview.length > 0 && (() => {

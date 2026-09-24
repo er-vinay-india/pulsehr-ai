@@ -1,32 +1,55 @@
-import React from "react";
-import { FileSpreadsheet, Layers, Download, Trash2 } from "lucide-react";
+import React, { useState } from "react";
+import { FileSpreadsheet, Layers, Download, Trash2, Sparkles, ChevronDown, ChevronUp } from "lucide-react";
 import { getDatasetDownloadUrl, getSheetDownloadUrl } from "../../api/client";
+import AnalysisBriefCard from "./AnalysisBriefCard";
 
 export default function DatasetListCard({ dataset, onPromptDelete }) {
   const ds = dataset;
+  const [showBriefEditor, setShowBriefEditor] = useState(false);
 
   return (
-    <div className="dataset-card">
-      <div className="dataset-icon">
-        <FileSpreadsheet size={24} color="var(--accent-500)" />
-      </div>
-      <div className="dataset-details">
-        <div className="dataset-title-row">
-          <h4>{ds.display_name || ds.original_name}</h4>
-          <span className="filetype-badge">{ds.file_type.toUpperCase()}</span>
+    <div className="dataset-card" style={{ flexDirection: "column" }}>
+      <div style={{ display: "flex", width: "100%", alignItems: "flex-start", gap: "1rem" }}>
+        <div className="dataset-icon">
+          <FileSpreadsheet size={24} color="var(--accent-500)" />
         </div>
-        {ds.display_name && ds.original_name && ds.display_name !== ds.original_name && (
-          <div style={{ fontSize: "0.74rem", color: "var(--fg-muted)", marginTop: "2px", marginBottom: "4px" }}>
-            Source file: <span style={{ fontFamily: "monospace" }}>{ds.original_name}</span>
+        <div className="dataset-details" style={{ flex: 1 }}>
+          <div className="dataset-title-row">
+            <h4>{ds.display_name || ds.original_name}</h4>
+            <span className="filetype-badge">{ds.file_type.toUpperCase()}</span>
+            {ds.analysis_context?.mode === "USER_DIRECTED" && (
+              <span
+                style={{
+                  fontSize: "0.7rem",
+                  padding: "2px 8px",
+                  borderRadius: "12px",
+                  background: "rgba(46, 213, 115, 0.15)",
+                  color: "var(--emerald-tier)",
+                  border: "1px solid rgba(46, 213, 115, 0.3)"
+                }}
+              >
+                Brief Applied
+              </span>
+            )}
           </div>
-        )}
-        <p className="dataset-summary">{ds.summary_insights}</p>
-        <div className="dataset-stats">
-          <span><strong>{ds.row_count}</strong> Rows</span> · 
-          <span><strong>{ds.col_count}</strong> Columns</span> · 
-          <span><strong>{ds.sheet_count}</strong> Sheet(s)</span> · 
-          <span>Ingested {new Date(ds.uploaded_at).toLocaleDateString()}</span>
-        </div>
+          {ds.display_name && ds.original_name && ds.display_name !== ds.original_name && (
+            <div style={{ fontSize: "0.74rem", color: "var(--fg-muted)", marginTop: "2px", marginBottom: "4px" }}>
+              Source file: <span style={{ fontFamily: "monospace" }}>{ds.original_name}</span>
+            </div>
+          )}
+          <p className="dataset-summary">{ds.summary_insights}</p>
+          <div className="dataset-stats">
+            <span><strong>{ds.row_count}</strong> Rows</span> · 
+            <span><strong>{ds.col_count}</strong> Columns</span> · 
+            <span><strong>{ds.sheet_count}</strong> Sheet(s)</span> · 
+            <span>Ingested {new Date(ds.uploaded_at).toLocaleDateString()}</span>
+          </div>
+
+          {ds.analysis_context?.user_objective && (
+            <div style={{ marginTop: "6px", fontSize: "0.78rem", color: "var(--brand-400)", background: "rgba(224, 86, 36, 0.08)", padding: "4px 8px", borderRadius: "4px", border: "1px solid rgba(224, 86, 36, 0.2)" }}>
+              <strong>Active Brief:</strong> &ldquo;{ds.analysis_context.user_objective}&rdquo;
+            </div>
+          )}
 
         {ds.sheets && ds.sheets.length > 0 && (
           <div style={{ marginTop: "0.85rem" }}>
@@ -114,6 +137,28 @@ export default function DatasetListCard({ dataset, onPromptDelete }) {
 
         <button
           type="button"
+          onClick={() => setShowBriefEditor(!showBriefEditor)}
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "5px",
+            color: "var(--brand-400)",
+            background: "rgba(224, 86, 36, 0.08)",
+            border: "1px solid rgba(224, 86, 36, 0.25)",
+            borderRadius: "6px",
+            padding: "0.4rem 0.65rem",
+            cursor: "pointer",
+            fontSize: "0.775rem",
+            transition: "all 0.15s ease"
+          }}
+          title="Set or view Analysis Brief"
+        >
+          <Sparkles size={13} color="var(--brand-400)" />
+          <span>{ds.analysis_context?.mode === "USER_DIRECTED" ? "Edit Brief" : "Add Brief"}</span>
+        </button>
+
+        <button
+          type="button"
           onClick={() => onPromptDelete(ds)}
           style={{
             display: "inline-flex",
@@ -134,6 +179,20 @@ export default function DatasetListCard({ dataset, onPromptDelete }) {
           <span>Delete</span>
         </button>
       </div>
+      </div>
+
+      {showBriefEditor && (
+        <div style={{ width: "100%" }}>
+          <AnalysisBriefCard
+            uploadResult={{
+              dataset_id: ds.id,
+              columns: ds.columns || [],
+              display_name: ds.display_name || ds.original_name,
+              filename: ds.original_name
+            }}
+          />
+        </div>
+      )}
     </div>
   );
 }

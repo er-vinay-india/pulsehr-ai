@@ -58,22 +58,125 @@ class CandidateFactDiscoveryEngine:
         """Dispatches an opportunity to its specialized mathematical evaluator."""
         opp_type = opp.opportunity_type
 
-        if opp_type == OpportunityType.PERIOD_TREND:
-            return cls._evaluate_period_trend(df, profile, opp, start_idx, max_facts)
+        facts: list[CandidateFact] = []
+        if opp_type == OpportunityType.TARGET_COMPLIANCE:
+            facts = cls._evaluate_target_compliance(df, profile, opp, start_idx, max_facts)
+        elif opp_type == OpportunityType.PERIOD_TREND:
+            facts = cls._evaluate_period_trend(df, profile, opp, start_idx, max_facts)
         elif opp_type == OpportunityType.SEGMENT_COMPARISON:
-            return cls._evaluate_segment_comparison(df, profile, opp, start_idx, max_facts)
+            facts = cls._evaluate_segment_comparison(df, profile, opp, start_idx, max_facts)
         elif opp_type == OpportunityType.ENTITY_CONCENTRATION:
-            return cls._evaluate_entity_concentration(df, profile, opp, start_idx, max_facts)
+            facts = cls._evaluate_entity_concentration(df, profile, opp, start_idx, max_facts)
         elif opp_type == OpportunityType.MEASURE_RELATIONSHIP:
-            return cls._evaluate_measure_relationship(df, profile, opp, start_idx, max_facts)
+            facts = cls._evaluate_measure_relationship(df, profile, opp, start_idx, max_facts)
         elif opp_type == OpportunityType.SUBGROUP_RATE_DISPARITY:
-            return cls._evaluate_subgroup_rate_disparity(df, profile, opp, start_idx, max_facts)
+            facts = cls._evaluate_subgroup_rate_disparity(df, profile, opp, start_idx, max_facts)
         elif opp_type == OpportunityType.CATEGORICAL_CROSS_TAB:
-            return cls._evaluate_categorical_cross_tab(df, profile, opp, start_idx, max_facts)
+            facts = cls._evaluate_categorical_cross_tab(df, profile, opp, start_idx, max_facts)
         elif opp_type == OpportunityType.TARGET_ASSOCIATION:
-            return cls._evaluate_target_association(df, profile, opp, start_idx, max_facts)
+            facts = cls._evaluate_target_association(df, profile, opp, start_idx, max_facts)
 
-        return []
+        if opp.is_user_priority:
+            for f in facts:
+                f.priority_type = "USER_PRIORITY"
+                f.provenance = "USER_EXPLICIT"
+                if opp.priority_reason:
+                    f.target_rule_description = opp.priority_reason
+
+        return facts
+
+    # -------------------------------------------------------------------------
+    # 0. TARGET_COMPLIANCE (Business Rule / Target Adherence)
+    # -------------------------------------------------------------------------
+
+    @classmethod
+    def _evaluate_target_compliance(
+        cls,
+        df: pd.DataFrame,
+        profile: SemanticDatasetProfile,
+        opp: AnalysisOpportunity,
+        start_idx: int,
+        max_facts: int
+    ) -> list[CandidateFact]:
+        dim_col = opp.primary_column
+        metric_col = opp.secondary_column
+        target_rule = opp.target_rule or {}
+        threshold = float(target_rule.get("threshold", 0))
+        operator = target_rule.get("operator", ">=")
+
+        if not metric_col or metric_col not in df.columns or dim_col not in df.columns:
+            return []
+
+        clean_metric = cls._coerce_numeric(df[metric_col])
+        clean_dim = df[dim_col].astype(str).str.strip()
+        work_df = pd.DataFrame({"dim": clean_dim, "val": clean_metric}).dropna()
+
+        if len(work_df) < 4:
+            return []
+
+        if operator == ">=":
+            work_df["compliant"] = work_df["val"] >= threshold
+        elif operator == "<=":
+            work_df["compliant"] = work_df["val"] <= threshold
+        elif operator == ">":
+            work_df["compliant"] = work_df["val"] > threshold
+        elif operator == "<":
+            work_df["compliant"] = work_df["val"] < threshold
+        else:
+            work_df["compliant"] = work_df["val"] == threshold
+
+        total_records = len(work_df)
+        overall_compliant_count = int(work_df["compliant"].sum())
+        overall_compliance_pct = round((overall_compliant_count / total_records) * 100.0, 2)
+
+        facts: list[CandidateFact] = []
+        grouped = work_df.groupby("dim")
+        group_stats = []
+        for g_name, g_df in grouped:
+            g_total = len(g_df)
+            if g_total >= 1:
+                g_comp = int(g_df["compliant"].sum())
+                g_pct = round((g_comp / g_total) * 100.0, 2)
+                group_stats.append((g_name, g_total, g_comp, g_pct))
+
+        group_stats.sort(key=lambda x: x[3], reverse=True)
+
+        rule_desc = f"{metric_col} {operator} {threshold:g}"
+        for idx, (g_name, g_total, g_comp, g_pct) in enumerate(group_stats[:max_facts]):
+            abs_diff = round(g_pct - overall_compliance_pct, 2)
+            stmt = (
+                f"Segment '{g_name}' achieved {g_pct:.1f}% compliance with explicit business rule "
+                f"'{rule_desc}' ({g_comp}/{g_total} records compliant; overall dataset baseline is {overall_compliance_pct:.1f}%)."
+            )
+            fact = CandidateFact(
+                fact_id=f"FACT-{start_idx + idx:03d}",
+                fact_type=OpportunityType.TARGET_COMPLIANCE.value,
+                metric=f"{metric_col}_compliance_pct",
+                dimensions={dim_col: g_name},
+                value=g_pct,
+                baseline_value=overall_compliance_pct,
+                absolute_difference=abs_diff,
+                relative_difference=round((abs_diff / overall_compliance_pct) * 100.0, 2) if overall_compliance_pct > 0 else 0.0,
+                sample_size=g_total,
+                statistical_info={
+                    "compliant_records": g_comp,
+                    "total_records": g_total,
+                    "target_threshold": threshold,
+                    "target_operator": operator,
+                    "overall_compliance_pct": overall_compliance_pct
+                },
+                source_columns=[dim_col, metric_col],
+                polarity=MetricPolarity.HIGHER_IS_BETTER if g_pct >= overall_compliance_pct else MetricPolarity.LOWER_IS_BETTER,
+                calculation_method="threshold_compliance_rate_by_segment",
+                statement=stmt,
+                reliability_status=ReliabilityStatus.RELIABLE,
+                priority_type="USER_PRIORITY",
+                provenance="USER_EXPLICIT",
+                target_rule_description=rule_desc
+            )
+            facts.append(fact)
+
+        return facts
 
     # -------------------------------------------------------------------------
     # Helper utilities: Data cleaning and pure statistics

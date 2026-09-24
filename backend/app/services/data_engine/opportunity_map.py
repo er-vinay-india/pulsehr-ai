@@ -26,6 +26,7 @@ class OpportunityType(str, Enum):
     SUBGROUP_RATE_DISPARITY = "subgroup_rate"         # Dimension + Percentage Rate
     CATEGORICAL_CROSS_TAB = "categorical_cross_tab"   # Dimension + Dimension
     TARGET_ASSOCIATION = "target_association"         # Possible Target + Dimension / Measure
+    TARGET_COMPLIANCE = "target_compliance"           # Explicit Business Rule / Threshold Compliance
 
 
 class AnalysisOpportunity(BaseModel):
@@ -38,7 +39,15 @@ class AnalysisOpportunity(BaseModel):
     rationale: str
     mathematical_method: str
     feasibility_score: float = 1.0  # 0.0 to 1.0 based on null rates, cardinality, and signal quality
+    is_user_priority: bool = False
+    priority_reason: str | None = None
+    priority_question: str | None = None
+    target_rule: dict[str, Any] | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+    @property
+    def type(self) -> OpportunityType:
+        return self.opportunity_type
 
 
 class AnalysisOpportunityMap(BaseModel):
@@ -53,7 +62,12 @@ class OpportunityMapGenerator:
     """Discovers mathematically viable analytical paths from a SemanticDatasetProfile."""
 
     @classmethod
-    def generate(cls, profile: SemanticDatasetProfile, max_opportunities: int = 25) -> AnalysisOpportunityMap:
+    def generate(
+        cls,
+        profile: SemanticDatasetProfile,
+        max_opportunities: int = 25,
+        context: Any | None = None
+    ) -> AnalysisOpportunityMap:
         opportunities: list[AnalysisOpportunity] = []
         opp_idx = 1
 
@@ -63,6 +77,26 @@ class OpportunityMapGenerator:
         rates = profile.percentage_rates
         targets = profile.possible_targets or profile.boolean_flags
         identifiers = profile.identifiers
+
+        # 0. User-Explicit Business Rule Compliance Opportunities
+        if context and getattr(context, "business_rules", None):
+            for rule in context.business_rules:
+                dims = getattr(context, "important_dimensions", []) or categories[:2]
+                for dim in dims[:2]:
+                    opportunities.append(AnalysisOpportunity(
+                        opportunity_id=f"OPP-{opp_idx:03d}",
+                        opportunity_type=OpportunityType.TARGET_COMPLIANCE,
+                        primary_column=dim,
+                        secondary_column=rule.metric,
+                        title=f"Target Compliance: {dim} adherence to {rule.description or (rule.metric + ' ' + rule.operator + ' ' + str(rule.threshold))}",
+                        rationale=f"Evaluates compliance percentage against explicit user business rule ({rule.source}).",
+                        mathematical_method="threshold_compliance_rate_by_group",
+                        feasibility_score=1.0,
+                        is_user_priority=True,
+                        priority_reason=f"Directly addresses user rule '{rule.metric} {rule.operator} {rule.threshold}'",
+                        target_rule=rule.model_dump()
+                    ))
+                    opp_idx += 1
 
         # 1. Period Trend Opportunities (Date x Measure)
         for dt_col in dates[:2]:
@@ -181,6 +215,29 @@ class OpportunityMapGenerator:
                 feasibility_score=0.85
             ))
             opp_idx += 1
+
+        # 8. User-Priority Tagging & Reordering
+        if context and getattr(context, "has_user_intent", False):
+            user_questions_text = " ".join(getattr(context, "questions_to_answer", [])).lower()
+            user_obj_text = (getattr(context, "user_objective", "") or "").lower()
+            user_terms = user_questions_text + " " + user_obj_text
+            imp_dims = [d.lower() for d in getattr(context, "important_dimensions", [])]
+            imp_metrics = [m.lower() for m in getattr(context, "important_metrics", [])]
+
+            for opp in opportunities:
+                p_lower = opp.primary_column.lower()
+                s_lower = (opp.secondary_column or "").lower()
+                matched_reason = []
+                if p_lower in imp_dims or (p_lower in user_terms and len(p_lower) >= 3):
+                    matched_reason.append(f"dimension '{opp.primary_column}'")
+                if s_lower and (s_lower in imp_metrics or (s_lower in user_terms and len(s_lower) >= 3)):
+                    matched_reason.append(f"metric '{opp.secondary_column}'")
+                if matched_reason:
+                    opp.is_user_priority = True
+                    opp.priority_reason = f"Directly addresses user-requested {', '.join(matched_reason)}"
+
+            # Re-order: user-priority opportunities strictly first
+            opportunities.sort(key=lambda o: 0 if o.is_user_priority else 1)
 
         # Group counts by type
         by_type: dict[str, int] = {}

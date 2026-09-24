@@ -268,6 +268,28 @@ export async function deleteDataset(id) {
   return res.json();
 }
 
+export async function submitDatasetBrief(datasetId, brief) {
+  const res = await fetch(`${API_BASE}/upload/datasets/${datasetId}/brief`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(typeof brief === "string" ? { user_objective: brief } : brief)
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Failed to submit analysis brief");
+  }
+  return res.json();
+}
+
+export async function getDatasetBrief(datasetId) {
+  const res = await fetch(`${API_BASE}/upload/datasets/${datasetId}/brief`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Failed to fetch analysis brief");
+  }
+  return res.json();
+}
+
 export async function getAvailableModels() {
   const res = await fetch(`${API_BASE}/copilot/models`);
   if (!res.ok) return { models: [] };

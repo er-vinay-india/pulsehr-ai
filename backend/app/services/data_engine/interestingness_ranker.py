@@ -35,10 +35,12 @@ class RankedFact(BaseModel):
     insight_category: InsightCategory
     fact: CandidateFact
     scoring_components: dict[str, float] = Field(default_factory=dict)
-    ranking_reason: str
+    ranking_reason: str = ""
     obviousness_score: float = 0.0
     obviousness_reason: str | None = None
     unstable_relative_change: bool = False
+    priority_type: str = "DISCOVERY"  # "USER_PRIORITY" or "DISCOVERY"
+    provenance: str = "DATA_INFERRED"  # "USER_EXPLICIT", "USER_INFERRED", "DATA_INFERRED", "SYSTEM_DEFAULT"
 
 
 class FactInterestingnessRanker:
@@ -95,8 +97,9 @@ class FactInterestingnessRanker:
                 t_penalty = 0.10 * type_counts.get(fact.fact_type, 0)
 
                 total_penalty = min(0.55, m_penalty + d_penalty + t_penalty)
-                # Adjusted score balances raw interestingness and penalty
-                adjusted_score = round(base_score - (1.0 - diversity_lambda) * total_penalty, 3)
+                # User-priority facts receive a top-tier boost so user questions rank first
+                priority_boost = 10.0 if fact.priority_type == "USER_PRIORITY" else 0.0
+                adjusted_score = round(base_score + priority_boost - (1.0 - diversity_lambda) * total_penalty, 3)
 
                 if adjusted_score > best_adjusted_score:
                     best_adjusted_score = adjusted_score
@@ -128,7 +131,9 @@ class FactInterestingnessRanker:
                 ranking_reason=reason,
                 obviousness_score=round(obv_score, 3),
                 obviousness_reason=obv_reason,
-                unstable_relative_change=unstable_rel
+                unstable_relative_change=unstable_rel,
+                priority_type=fact.priority_type,
+                provenance=fact.provenance
             ))
 
         return selected_ranked
@@ -145,7 +150,9 @@ class FactInterestingnessRanker:
         """Dispatches fact to specialized scoring function by fact type."""
         ft = fact.fact_type
 
-        if ft == OpportunityType.PERIOD_TREND.value:
+        if ft in (OpportunityType.TARGET_COMPLIANCE.value, "target_compliance"):
+            return cls._score_target_compliance(fact)
+        elif ft == OpportunityType.PERIOD_TREND.value:
             return cls._score_period_trend(fact)
         elif ft == OpportunityType.SEGMENT_COMPARISON.value:
             return cls._score_segment_comparison(fact)
@@ -162,6 +169,19 @@ class FactInterestingnessRanker:
 
         # Fallback generic baseline
         return 0.30, InsightCategory.STABLE_OR_NO_DIFFERENCE, {"generic_score": 0.30}, "Baseline observation.", 0.0, None, False
+
+    # 0. TARGET_COMPLIANCE
+    @classmethod
+    def _score_target_compliance(
+        cls,
+        fact: CandidateFact
+    ) -> tuple[float, InsightCategory, dict[str, float], str, float, str | None, bool]:
+        abs_diff = abs(fact.absolute_difference or 0.0)
+        score = 0.5 + min(0.5, (abs_diff / 50.0) * 0.5)
+        cat = InsightCategory.MATERIAL_SEGMENT_GAP
+        reason = f"Target compliance variance ({fact.value:.1f}% vs baseline {fact.baseline_value:.1f}%)"
+        components = {"compliance_deviation": abs_diff, "sample_size": float(fact.sample_size)}
+        return score, cat, components, reason, 0.0, None, False
 
     # 1. PERIOD_TREND
     @classmethod
