@@ -1,0 +1,58 @@
+{
+  "total_cases": 50,
+  "ground_truth_errors": 30,
+  "ground_truth_sound": 20,
+  "deterministic": {
+    "metrics": {
+      "TP": 23,
+      "FP": 1,
+      "FN": 7,
+      "TN": 19,
+      "precision": 0.9583,
+      "recall": 0.7667,
+      "f1": 0.8519,
+      "accuracy": 0.84,
+      "specificity": 0.95
+    },
+    "mean_latency_ms": 0.0351916765794158,
+    "p50_latency_ms": 0.015979516319930553,
+    "p95_latency_ms": 0.07345434860326347,
+    "llm_bypass_rate": 100.0
+  },
+  "legacy_deepseek": {
+    "metrics": {
+      "TP": 2,
+      "FP": 0,
+      "FN": 28,
+      "TN": 20,
+      "precision": 1.0,
+      "recall": 0.0667,
+      "f1": 0.125,
+      "accuracy": 0.44,
+      "specificity": 1.0
+    },
+    "mean_latency_ms": 5710.4289367445745,
+    "p50_latency_ms": 3441.268167051021,
+    "p95_latency_ms": 14862.384285742874,
+    "llm_calls": 50,
+    "llm_bypass_rate": 0.0
+  },
+  "hybrid_two_tier": {
+    "metrics": {
+      "TP": 28,
+      "FP": 1,
+      "FN": 2,
+      "TN": 19,
+      "precision": 0.9655,
+      "recall": 0.9333,
+      "f1": 0.9492,
+      "accuracy": 0.94,
+      "specificity": 0.95
+    },
+    "mean_latency_ms": 252.65258493600413,
+    "p50_latency_ms": 0.05404202966019511,
+    "p95_latency_ms": 1935.5915560852734,
+    "llm_calls": 6,
+    "llm_bypass_rate": 88.0
+  }
+}

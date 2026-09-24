@@ -3,12 +3,83 @@ from pydantic import BaseModel
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse
 from ..core import config
-from ..services.report_generator import generate_pptx_presentation, generate_html_executive_report
+from typing import Literal
+from ..services.report_generator import generate_pptx_presentation, generate_html_executive_report, export_spec_to_pptx
 
 router = APIRouter(prefix="/api/reports", tags=["reports"])
 
+
+class PresentationRequest(BaseModel):
+    sheet_id: int | None = None
+    engine: Literal["generic", "legacy", "auto"] = "auto"
+    objective: str = "Quarterly Operational Review & Performance Architecture"
+
+
 @router.post("/presentation")
-def create_presentation():
+def create_presentation(req: PresentationRequest | None = None):
+    """
+    SHARED route:
+    - LEGACY HR: if engine == 'legacy', executes generate_pptx_presentation().
+    - GENERIC: if engine == 'generic', executes WorkflowOrchestrator and exports spec to PPTX.
+    - AUTO: if active tabular sheet exists and not explicit HR, routes through WorkflowOrchestrator.
+    """
+    selected_engine = req.engine if req else "auto"
+    sheet_id = req.sheet_id if req else None
+    objective = req.objective if req else "Quarterly Operational Review & Performance Architecture"
+
+    if selected_engine == "legacy":
+        try:
+            pptx_path = generate_pptx_presentation()
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return FileResponse(
+            path=str(pptx_path),
+            filename=pptx_path.name,
+            media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation"
+        )
+
+    # Check for available uploaded sheet
+    import json
+    import pandas as pd
+    from ..db.database import get_connection
+    from ..services.reporting.workflow_orchestrator import WorkflowOrchestrator
+
+    df = None
+    dataset_name = "Uploaded Dataset"
+    with get_connection() as conn:
+        sheet = None
+        if sheet_id is not None:
+            sheet = conn.execute(
+                'SELECT s.*, d.original_name FROM sheets s JOIN dataset_uploads d ON d.id=s.dataset_id WHERE s.id=?',
+                (sheet_id,)
+            ).fetchone()
+        elif selected_engine in ("generic", "auto"):
+            sheet = conn.execute(
+                'SELECT s.*, d.original_name FROM sheets s JOIN dataset_uploads d ON d.id=s.dataset_id ORDER BY s.id DESC LIMIT 1'
+            ).fetchone()
+
+        if sheet:
+            rows = conn.execute('SELECT data_json FROM sheet_rows WHERE sheet_id=? ORDER BY row_index', (sheet['id'],)).fetchall()
+            records = [json.loads(r['data_json']) for r in rows]
+            if records:
+                df = pd.DataFrame(records)
+                dataset_name = sheet['display_name'] or sheet['name']
+
+    if df is not None and not df.empty and (selected_engine == "generic" or selected_engine == "auto"):
+        workflow_res = WorkflowOrchestrator.execute(
+            df=df,
+            dataset_name=dataset_name,
+            objective=objective
+        )
+        if workflow_res.deck_spec:
+            pptx_path = export_spec_to_pptx(workflow_res.deck_spec)
+            return FileResponse(
+                path=str(pptx_path),
+                filename=pptx_path.name,
+                media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation"
+            )
+
+    # Fallback to legacy presentation generator
     try:
         pptx_path = generate_pptx_presentation()
     except ValueError as exc:

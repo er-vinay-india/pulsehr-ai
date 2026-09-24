@@ -36,8 +36,8 @@ DEFAULT_ROLE_CONFIGS: dict[ModelRole, RoleModelConfig] = {
         primary=os.getenv("MODEL_ROLE_ANALYST_PRIMARY", "qwen3.5:9b"),
         fallback=os.getenv("MODEL_ROLE_ANALYST_FALLBACK", "gemma4:12b"),
         temperature=0.15,
-        max_tokens=4096,
-        timeout_seconds=45.0
+        max_tokens=2048,
+        timeout_seconds=float(os.getenv("MODEL_ROLE_ANALYST_TIMEOUT", "120.0"))
     ),
     ModelRole.REASONER: RoleModelConfig(
         primary=os.getenv("MODEL_ROLE_REASONER_PRIMARY", "deepseek-r1:7b"),

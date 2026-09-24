@@ -44,19 +44,7 @@ class PeriodTrend(BaseModel):
     percentage_change: float | None = None
 
 
-class CandidateFact(BaseModel):
-    """Deterministic candidate observation surfaced for the Analyst model."""
-    fact_id: str
-    fact_type: str  # "segment_gap", "outlier", "trend", "overall_baseline", "concentration"
-    metric: str
-    segment: str | None = None
-    observed_value: float
-    baseline_value: float | None = None
-    difference: float | None = None
-    percentage_gap: float | None = None
-    sample_size: int
-    significance_score: float = 0.0  # Normalized 0.0 - 1.0 based on variance/dispersion
-    raw_proof: dict[str, Any] = Field(default_factory=dict)
+from .candidate_fact import CandidateFact, ReliabilityStatus
 
 
 class MetricEngine:

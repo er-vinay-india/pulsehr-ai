@@ -230,3 +230,79 @@ def test_deterministic_visual_assignment_latency():
     assert processed[0]["icon"] in ("trending-up", "dollar-sign")
     assert processed[50]["recommended_chart"] == "comparison_bar"
     assert processed[50]["icon"] in ("alert-triangle", "users")
+
+
+def test_deterministic_report_planner_latency_and_schema():
+    """Verifies that ReportPlanner.plan executes deterministically in <5ms without LLMs."""
+    from app.services.data_engine.profiler import DatasetProfile
+    from app.services.evidence.evidence_store import EvidenceStore
+    from app.services.evidence.evidence_models import Finding, FindingType, Importance
+    from app.services.reporting.report_planner import ReportPlanner, ReportPlan
+
+    store = EvidenceStore()
+    store.add_finding(Finding(
+        finding_id="F-001",
+        type=FindingType.OUTPERFORMER,
+        metric="Revenue",
+        segment="North",
+        segment_value=120000.0,
+        overall_value=100000.0,
+        difference=20000.0,
+        difference_percentage_points=20.0,
+        importance=Importance.HIGH,
+        headline="North segment outperforms baseline by 20%",
+        business_implication="Share regional best practices"
+    ))
+    store.add_finding(Finding(
+        finding_id="F-002",
+        type=FindingType.HEADWIND,
+        metric="Revenue",
+        segment="South",
+        segment_value=75000.0,
+        overall_value=100000.0,
+        difference=-25000.0,
+        difference_percentage_points=-25.0,
+        importance=Importance.HIGH,
+        headline="South segment trails baseline by 25%",
+        business_implication="Urgent pricing and sales review needed"
+    ))
+    store.add_finding(Finding(
+        finding_id="F-003",
+        type=FindingType.TREND_SHIFT,
+        metric="Revenue",
+        difference=5000.0,
+        importance=Importance.MEDIUM,
+        headline="Revenue momentum shifted upward in Q3",
+        business_implication="Positive trajectory"
+    ))
+
+    profile = DatasetProfile(
+        dataset_name="Regional Revenue Logs",
+        business_domain="Sales & Commercial",
+        row_count=1500,
+        column_count=8
+    )
+
+    t0 = time.perf_counter()
+    plan = ReportPlanner.plan(store, profile, objective="Q3 Strategic Review")
+    elapsed_ms = (time.perf_counter() - t0) * 1000
+
+    assert elapsed_ms < 5.0, f"Deterministic planning took {elapsed_ms}ms, expected < 5ms"
+    assert isinstance(plan, ReportPlan)
+    assert plan.report_title == "Executive Review: Regional Revenue Logs"
+    assert plan.objective == "Q3 Strategic Review"
+    assert plan.executive_summary_finding_ids == ["F-001", "F-002"]
+    assert len(plan.sections) >= 3
+
+    categories = [s.category for s in plan.sections]
+    assert "EXECUTIVE" in categories
+    assert "STRENGTHS" in categories
+    assert "HEADWINDS" in categories
+    assert "RECOMMENDATIONS" in categories
+
+    # Verify 100% valid finding IDs
+    valid_ids = {"F-001", "F-002", "F-003"}
+    for sec in plan.sections:
+        assert all(fid in valid_ids for fid in sec.finding_ids)
+        assert len(sec.finding_ids) >= 1
+

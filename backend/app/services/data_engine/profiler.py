@@ -1,4 +1,12 @@
-"""Deterministic dataset profiling engine categorizing measures, dimensions, and timeline context."""
+"""Deterministic dataset profiling engine categorizing measures, dimensions, and timeline context.
+
+Integrates with the generic SemanticClassifier and OpportunityMapGenerator:
+- Provides universal multi-signal semantic column classification
+- Dynamic dataset row grain discovery
+- Conservative metric polarity tracking with confidence and detection rationale
+- Admissible Analysis Opportunity Mapping
+- Full backward-compatibility with downstream analytical workflows
+"""
 
 import re
 from typing import Any
@@ -6,6 +14,19 @@ import pandas as pd
 from pydantic import BaseModel, Field
 
 from ..display_formatters import format_display_label
+from .semantic_classifier import (
+    SemanticClassifier,
+    SemanticDatasetProfile,
+    ColumnSemanticProfile,
+    SemanticRole,
+    MetricPolarity
+)
+from .opportunity_map import (
+    OpportunityMapGenerator,
+    AnalysisOpportunityMap,
+    AnalysisOpportunity,
+    OpportunityType
+)
 
 
 class ColumnProfile(BaseModel):
@@ -17,10 +38,15 @@ class ColumnProfile(BaseModel):
     distinct_count: int
     unit: str = ""
     summary: dict[str, Any] = Field(default_factory=dict)
+    semantic_role: SemanticRole = SemanticRole.CATEGORICAL_DIMENSION
+    metric_polarity: MetricPolarity = MetricPolarity.UNKNOWN
+    polarity_confidence: float = 0.0
+    polarity_reason: str = ""
+    detection_reasons: list[str] = Field(default_factory=list)
 
 
 class DatasetProfile(BaseModel):
-    """Holistic profile of the dataset consumed by analyst models."""
+    """Holistic profile of the dataset consumed by analyst and writer models."""
     dataset_name: str
     business_domain: str
     row_count: int
@@ -31,6 +57,13 @@ class DatasetProfile(BaseModel):
     identifier_columns: list[str] = Field(default_factory=list)
     profiles: list[ColumnProfile] = Field(default_factory=list)
     observation_window: str = "Cross-sectional snapshot"
+    
+    # Generic Phase 1 enhancements
+    inferred_grain: str = "record"
+    grain_confidence: float = 0.5
+    grain_key_columns: list[str] = Field(default_factory=list)
+    semantic_profile: SemanticDatasetProfile | None = None
+    opportunity_map: AnalysisOpportunityMap | None = None
 
 
 def is_id_column(col_name: str) -> bool:
@@ -42,7 +75,6 @@ def is_date_column(col_name: str, series: pd.Series) -> bool:
     c = col_name.lower()
     if any(k in c for k in ("date", "time", "timestamp", "month", "year", "quarter", "period", "week")):
         return True
-    # Test date conversion on non-empty sample
     sample = series.dropna().astype(str).head(10)
     if len(sample) >= 3:
         try:
@@ -55,7 +87,7 @@ def is_date_column(col_name: str, series: pd.Series) -> bool:
 
 def infer_domain(columns: list[str], dataset_name: str = "") -> str:
     combined = " ".join([c.lower() for c in columns] + [dataset_name.lower()])
-    if any(k in combined for k in ("sales", "revenue", "store", "product", "retail", "price", "order", "inventory")):
+    if any(k in combined for k in ("sales", "revenue", "store", "product", "retail", "price", "order", "inventory", "discount", "margin")):
         return "Commercial Sales & Retail"
     if any(k in combined for k in ("employee", "attendance", "performance", "rating", "salary", "turnover", "attrition", "department", "hr", "leave", "staff")):
         return "Workforce Health & Talent Analytics"
@@ -63,122 +95,90 @@ def infer_domain(columns: list[str], dataset_name: str = "") -> str:
         return "Logistics & Supply Chain"
     if any(k in combined for k in ("patient", "clinical", "hospital", "diagnosis", "health", "doctor")):
         return "Clinical Operations & Healthcare"
-    if any(k in combined for k in ("cost", "budget", "pnl", "margin", "ebitda", "financial", "expenditure")):
+    if any(k in combined for k in ("cost", "budget", "pnl", "ebitda", "financial", "expenditure", "accounting", "ledger")):
         return "Financial Planning & Analysis"
+    if any(k in combined for k in ("machine", "defect", "scrap", "cycle_time", "batch", "operator", "factory", "plant", "manufacturing")):
+        return "Industrial Manufacturing & Operations"
+    if any(k in combined for k in ("session", "page", "bounce", "event", "user", "web", "browser", "traffic", "visitor")):
+        return "Web & Product Analytics"
     return "Enterprise Operations"
 
 
 class DatasetProfiler:
-    """Profiles tabular datasets deterministically."""
+    """Profiles tabular datasets using multi-signal generic semantic detection."""
 
     @classmethod
     def profile(cls, df: pd.DataFrame, dataset_name: str = "Dataset") -> DatasetProfile:
-        row_count = len(df)
-        column_count = len(df.columns)
+        # 1. Execute deep semantic classification
+        sem_profile = SemanticClassifier.profile_dataset(df, dataset_name=dataset_name)
+
+        # 2. Generate analysis opportunity map
+        opp_map = OpportunityMapGenerator.generate(sem_profile)
+
+        # 3. Domain context
         domain = infer_domain(list(df.columns), dataset_name)
 
-        numeric_measures = []
-        categorical_dims = []
-        timeline_cols = []
-        identifier_cols = []
-        profiles = []
-        observation_window = "Cross-sectional snapshot"
-
-        for col in df.columns:
-            series = df[col]
-            clean_series = series.astype(str).str.strip()
-            missing = (series.isna() | clean_series.isin(['', 'none', 'nan', 'null', 'n/a', '-'])).sum()
-            null_pct = round((missing / max(1, row_count)) * 100, 1)
-            distinct_count = series.dropna().nunique()
-            display_name = format_display_label(str(col))
-
-            # 1. Identifier check
-            if is_id_column(str(col)):
-                identifier_cols.append(str(col))
-                profiles.append(ColumnProfile(
-                    name=str(col),
-                    display_name=display_name,
-                    inferred_type="identifier",
-                    null_percentage=null_pct,
-                    distinct_count=distinct_count
-                ))
+        # 4. Construct legacy-compatible column profiles while attaching semantic details
+        legacy_profiles: list[ColumnProfile] = []
+        for col_name in df.columns:
+            sp = sem_profile.columns.get(str(col_name))
+            if not sp:
                 continue
 
-            # 2. Datetime check
-            if is_date_column(str(col), series):
-                timeline_cols.append(str(col))
-                try:
-                    dt_series = pd.to_datetime(series.dropna(), errors='coerce').dropna()
-                    if len(dt_series) > 0:
-                        min_dt = dt_series.min().strftime('%Y-%m-%d')
-                        max_dt = dt_series.max().strftime('%Y-%m-%d')
-                        observation_window = f"{min_dt} to {max_dt}"
-                except Exception:
-                    pass
-
-                profiles.append(ColumnProfile(
-                    name=str(col),
-                    display_name=display_name,
-                    inferred_type="datetime",
-                    null_percentage=null_pct,
-                    distinct_count=distinct_count
-                ))
-                continue
-
-            # 3. Numeric measure check
-            s_stripped = clean_series.str.rstrip('%').str.replace(',', '', regex=False)
-            num_series = pd.to_numeric(s_stripped, errors='coerce')
-            valid_nums = num_series.dropna()
-
-            if len(valid_nums) >= max(2, int(row_count * 0.4)):
-                unit = "%" if clean_series.str.endswith('%').any() else ("$" if clean_series.str.startswith('$').any() else "")
-                numeric_measures.append(str(col))
-                profiles.append(ColumnProfile(
-                    name=str(col),
-                    display_name=display_name,
-                    inferred_type="numeric_measure",
-                    null_percentage=null_pct,
-                    distinct_count=distinct_count,
-                    unit=unit,
-                    summary={
-                        "min": round(float(valid_nums.min()), 2),
-                        "max": round(float(valid_nums.max()), 2),
-                        "mean": round(float(valid_nums.mean()), 2),
-                        "median": round(float(valid_nums.median()), 2)
-                    }
-                ))
-                continue
-
-            # 4. Otherwise categorical dimension
-            if 2 <= distinct_count <= 200:
-                categorical_dims.append(str(col))
-                top_cats = series.value_counts().head(5).to_dict()
-                profiles.append(ColumnProfile(
-                    name=str(col),
-                    display_name=display_name,
-                    inferred_type="categorical_dimension",
-                    null_percentage=null_pct,
-                    distinct_count=distinct_count,
-                    summary={"top_categories": {str(k): int(v) for k, v in top_cats.items()}}
-                ))
+            # Map semantic role to legacy inferred type
+            if sp.semantic_role == SemanticRole.IDENTIFIER:
+                inf_type = "identifier"
+            elif sp.semantic_role == SemanticRole.DATETIME:
+                inf_type = "datetime"
+            elif sp.semantic_role in (SemanticRole.NUMERIC_MEASURE, SemanticRole.CURRENCY_MONETARY, SemanticRole.PERCENTAGE_RATE):
+                inf_type = "numeric_measure"
+            elif sp.semantic_role in (SemanticRole.CATEGORICAL_DIMENSION, SemanticRole.GEOGRAPHIC, SemanticRole.BOOLEAN, SemanticRole.POSSIBLE_TARGET):
+                inf_type = "categorical_dimension"
             else:
-                profiles.append(ColumnProfile(
-                    name=str(col),
-                    display_name=display_name,
-                    inferred_type="text_or_sparse",
-                    null_percentage=null_pct,
-                    distinct_count=distinct_count
-                ))
+                inf_type = "text_or_sparse"
+
+            summary: dict[str, Any] = {}
+            if sp.semantic_role in (SemanticRole.NUMERIC_MEASURE, SemanticRole.CURRENCY_MONETARY, SemanticRole.PERCENTAGE_RATE, SemanticRole.ORDINAL):
+                if sp.min_value is not None:
+                    summary["min"] = sp.min_value
+                if sp.max_value is not None:
+                    summary["max"] = sp.max_value
+                if sp.mean is not None:
+                    summary["mean"] = sp.mean
+                if sp.median is not None:
+                    summary["median"] = sp.median
+            elif sp.top_categories:
+                summary["top_categories"] = {k: v for k, v in sp.top_categories}
+
+            legacy_profiles.append(ColumnProfile(
+                name=sp.name,
+                display_name=sp.display_name,
+                inferred_type=inf_type,
+                null_percentage=sp.null_percentage,
+                distinct_count=sp.unique_count,
+                unit=sp.unit or "",
+                summary=summary,
+                semantic_role=sp.semantic_role,
+                metric_polarity=sp.metric_polarity,
+                polarity_confidence=sp.polarity_confidence,
+                polarity_reason=sp.polarity_reason,
+                detection_reasons=sp.detection_reasons
+            ))
 
         return DatasetProfile(
             dataset_name=dataset_name,
             business_domain=domain,
-            row_count=row_count,
-            column_count=column_count,
-            numeric_measures=numeric_measures,
-            categorical_dimensions=categorical_dims,
-            timeline_columns=timeline_cols,
-            identifier_columns=identifier_cols,
-            profiles=profiles,
-            observation_window=observation_window
+            row_count=sem_profile.row_count,
+            column_count=sem_profile.column_count,
+            numeric_measures=sem_profile.numeric_measures,
+            categorical_dimensions=sem_profile.categorical_dimensions,
+            timeline_columns=sem_profile.temporal_dimensions,
+            identifier_columns=sem_profile.identifiers,
+            profiles=legacy_profiles,
+            observation_window=sem_profile.observation_window or "Cross-sectional snapshot",
+            inferred_grain=sem_profile.inferred_grain,
+            grain_confidence=sem_profile.grain_confidence,
+            grain_key_columns=sem_profile.grain_key_columns,
+            semantic_profile=sem_profile,
+            opportunity_map=opp_map
         )

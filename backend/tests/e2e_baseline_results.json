@@ -1,0 +1,239 @@
+{
+  "timestamp": "2026-09-23 23:08:23",
+  "flows": {
+    "flow_a": {
+      "flow": "A: Deterministic simple query",
+      "p50_ms": 0.117,
+      "p95_ms": 0.685,
+      "mean_ms": 0.264,
+      "llm_calls": 0,
+      "distinct_models": 0,
+      "model_switches": 0,
+      "bypass_count": 1,
+      "breakdown": {
+        "parsing": 0.005,
+        "data_loading": 0.018,
+        "computation": 0.236,
+        "serialization": 0.005
+      }
+    },
+    "flow_b": {
+      "flow": "B: Simple conversational query (Phi-4 Mini)",
+      "p50_ms": 860.53,
+      "p95_ms": 2271.48,
+      "mean_ms": 1378.29,
+      "model": "phi4-mini:latest",
+      "llm_calls": 1,
+      "distinct_models": 1,
+      "model_switches": 0,
+      "model_load_ms": 441.89,
+      "model_inference_ms": 923.99,
+      "tokens_generated": 39
+    },
+    "flow_c": {
+      "flow": "C: Analytical CSV query (deterministic)",
+      "p50_ms": 6.95,
+      "p95_ms": 12.31,
+      "mean_ms": 8.17,
+      "llm_calls": 0,
+      "distinct_models": 0,
+      "model_switches": 0,
+      "bypass_count": 1
+    },
+    "flow_d": {
+      "flow": "D: Analytical request (Qwen 3.5 9B)",
+      "p50_ms": 7882.83,
+      "p95_ms": 13774.6,
+      "mean_ms": 8747.79,
+      "model": "qwen3.5:9b",
+      "llm_calls": 1,
+      "distinct_models": 1,
+      "model_switches": 0,
+      "model_load_ms": 1216.46,
+      "model_inference_ms": 7517.47,
+      "tokens_generated": 151
+    },
+    "flow_e": {
+      "flow": "E: Complex reasoning request (DeepSeek-R1)",
+      "p50_ms": 39388.54,
+      "p95_ms": 41724.93,
+      "mean_ms": 36961.08,
+      "model": "deepseek-r1:7b",
+      "llm_calls": 1,
+      "distinct_models": 1,
+      "model_switches": 0,
+      "model_load_ms": 629.8,
+      "model_inference_ms": 36321.47,
+      "tokens_generated": 927
+    },
+    "flow_g": {
+      "flow": "G: Full PPT generation (export_spec_to_pptx)",
+      "p50_ms": 12.44,
+      "p95_ms": 36.94,
+      "mean_ms": 19.57,
+      "file_size_kb": 46.7,
+      "slide_count": 5,
+      "llm_calls": 0,
+      "distinct_models": 0,
+      "model_switches": 0
+    }
+  },
+  "report_pipeline": {
+    "current_warm": {
+      "pipeline": "Current (Optimized)",
+      "condition": "Warm",
+      "total_p50_ms": 98705.93,
+      "total_p95_ms": 102633.12,
+      "total_mean_ms": 98705.93,
+      "llm_calls": 5,
+      "distinct_models": 2,
+      "model_switches": 1,
+      "stage_breakdown": {
+        "DatasetValidator": {
+          "duration_ms": 2.91,
+          "percentage": 0.0
+        },
+        "DatasetProfiler": {
+          "duration_ms": 5.51,
+          "percentage": 0.0
+        },
+        "MetricEngine": {
+          "duration_ms": 6.91,
+          "percentage": 0.0
+        },
+        "Qwen Analyst": {
+          "duration_ms": 48701.29,
+          "percentage": 49.3
+        },
+        "ReportPlanner": {
+          "duration_ms": 0.15,
+          "percentage": 0.0
+        },
+        "Gemma Writer": {
+          "duration_ms": 49987.96,
+          "percentage": 50.6
+        },
+        "DeterministicClaimValidator": {
+          "duration_ms": 0.71,
+          "percentage": 0.0
+        },
+        "Phi Semantic Critic": {
+          "duration_ms": 0.0,
+          "percentage": 0.0
+        },
+        "Targeted Repair": {
+          "duration_ms": 0.35,
+          "percentage": 0.0
+        },
+        "PresentationService (DeckSpec)": {
+          "duration_ms": 0.13,
+          "percentage": 0.0
+        }
+      }
+    },
+    "current_cold": {
+      "pipeline": "Current (Optimized)",
+      "condition": "Cold",
+      "total_p50_ms": 110230.32,
+      "total_p95_ms": 110230.32,
+      "total_mean_ms": 110230.32,
+      "llm_calls": 5,
+      "distinct_models": 2,
+      "model_switches": 1,
+      "stage_breakdown": {
+        "DatasetValidator": {
+          "duration_ms": 3.7,
+          "percentage": 0.0
+        },
+        "DatasetProfiler": {
+          "duration_ms": 4.89,
+          "percentage": 0.0
+        },
+        "MetricEngine": {
+          "duration_ms": 8.58,
+          "percentage": 0.0
+        },
+        "Qwen Analyst": {
+          "duration_ms": 56314.31,
+          "percentage": 51.1
+        },
+        "ReportPlanner": {
+          "duration_ms": 0.18,
+          "percentage": 0.0
+        },
+        "Gemma Writer": {
+          "duration_ms": 53897.7,
+          "percentage": 48.9
+        },
+        "DeterministicClaimValidator": {
+          "duration_ms": 0.44,
+          "percentage": 0.0
+        },
+        "Phi Semantic Critic": {
+          "duration_ms": 0.0,
+          "percentage": 0.0
+        },
+        "Targeted Repair": {
+          "duration_ms": 0.41,
+          "percentage": 0.0
+        },
+        "PresentationService (DeckSpec)": {
+          "duration_ms": 0.09,
+          "percentage": 0.0
+        }
+      }
+    },
+    "legacy_warm": {
+      "pipeline": "Legacy (Original)",
+      "condition": "Warm",
+      "total_p50_ms": 172322.35,
+      "total_p95_ms": 172322.35,
+      "total_mean_ms": 172322.35,
+      "llm_calls": 10,
+      "distinct_models": 3,
+      "model_switches": 3,
+      "stage_breakdown": {
+        "DatasetValidator": {
+          "duration_ms": 3.7,
+          "percentage": 0.0
+        },
+        "DatasetProfiler": {
+          "duration_ms": 4.9,
+          "percentage": 0.0
+        },
+        "MetricEngine": {
+          "duration_ms": 8.3,
+          "percentage": 0.0
+        },
+        "Qwen Analyst": {
+          "duration_ms": 49185.84,
+          "percentage": 28.5
+        },
+        "ReportPlanner": {
+          "duration_ms": 40281.05,
+          "percentage": 23.4
+        },
+        "Gemma Writer": {
+          "duration_ms": 52755.28,
+          "percentage": 30.6
+        },
+        "DeterministicClaimValidator": {
+          "duration_ms": 0.0,
+          "percentage": 0.0
+        },
+        "Phi Semantic Critic": {
+          "duration_ms": 30083.17,
+          "percentage": 17.5
+        },
+        "Targeted Repair": {
+          "duration_ms": 0.0,
+          "percentage": 0.0
+        },
+        "PresentationService (DeckSpec)": {
+          "duration_ms": 0.1,
+          "percentage": 0.0
+        }
+      }
+    }
+  }
+}

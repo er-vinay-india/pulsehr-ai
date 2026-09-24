@@ -25,7 +25,7 @@ class SemanticField:
     business_label: str
     aliases: list[str] = field(default_factory=list)
     units: str | None = None
-    grain: str = 'employee'
+    grain: str = 'record'
     valid_range: tuple[float | None, float | None] | None = None
     aggregation_rule: AggregationRule = 'mean'
     direction_of_concern: DirectionOfConcern = 'neutral'
@@ -157,6 +157,9 @@ def infer_semantic_catalog(
     df = pd.DataFrame(records) if records else pd.DataFrame(columns=columns)
     total_rows = len(df)
 
+    is_hr = any(any(k in c.lower() for k in ('employee', 'staff', 'worker', 'leave', 'attendance', 'candidate', 'applicant')) for c in columns)
+    detected_grain = 'employee' if is_hr else 'record'
+
     for col in columns:
         col_clean = str(col).strip()
         c_lower = col_clean.lower()
@@ -175,12 +178,16 @@ def infer_semantic_catalog(
                         anomalies.append(f"Header '{col_clean}' contains numeric entries. Identity semantic preserved; arithmetic aggregation forbidden.")
                     catalog.anomalies.extend(anomalies)
 
+            aliases = [c_norm]
+            if is_hr:
+                aliases.append(f"Employee {col_clean}")
+
             catalog.fields[col_clean] = SemanticField(
                 name=col_clean,
                 field_role='identity',
                 business_label=col_clean,
-                aliases=[c_norm],
-                grain='employee',
+                aliases=aliases,
+                grain=detected_grain,
                 aggregation_rule='do_not_aggregate',
                 direction_of_concern='neutral',
                 confidence=1.0,
@@ -269,12 +276,15 @@ def infer_semantic_catalog(
         # 4. Explicit Categorical Dimension check (Department, Team, Status, Stage, Role, Location)
         is_dim = any(k in c_norm for k in ('department', 'dept', 'team', 'division', 'business unit', 'unit', 'location', 'status', 'stage', 'role', 'designation', 'category', 'band', 'grade'))
         if is_dim:
+            aliases = [c_norm]
+            if is_hr:
+                aliases.append(f"Employee {col_clean}")
             catalog.fields[col_clean] = SemanticField(
                 name=col_clean,
                 field_role='dimension',
                 business_label=col_clean,
-                aliases=[c_norm, f"Employee {col_clean}"],
-                grain='employee',
+                aliases=aliases,
+                grain=detected_grain,
                 aggregation_rule='distinct_count',
                 direction_of_concern='neutral',
                 confidence=0.95
@@ -291,7 +301,7 @@ def infer_semantic_catalog(
                     business_label=col_clean,
                     aliases=[c_norm],
                     units=None,
-                    grain='employee',
+                    grain=detected_grain,
                     valid_range=None,
                     aggregation_rule='mean',
                     direction_of_concern='neutral',
@@ -305,7 +315,7 @@ def infer_semantic_catalog(
             field_role='dimension',
             business_label=col_clean,
             aliases=[c_norm],
-            grain='employee',
+            grain=detected_grain,
             aggregation_rule='distinct_count',
             direction_of_concern='neutral',
             confidence=0.5,

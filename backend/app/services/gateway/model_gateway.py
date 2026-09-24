@@ -71,7 +71,14 @@ def extract_json_payload(text: str) -> str:
     # Check for outermost JSON array [ ... ]
     arr_match = re.search(r'\[[\s\S]*\]', cleaned)
     if arr_match:
-        return arr_match.group(0).strip()
+        candidate = arr_match.group(0).strip()
+        # Ensure it is a real JSON array and not an evidence citation tag like [FACT-014]
+        if not re.match(r'^\[(?:FACT|F)-\d+(?:,\s*(?:FACT|F)-\d+)*\]$', candidate, re.IGNORECASE):
+            try:
+                json.loads(candidate)
+                return candidate
+            except Exception:
+                pass
 
     return cleaned
 
@@ -90,7 +97,8 @@ class ModelGateway:
         step_name: str = "ai_generation",
         finding_ids: list[str] | None = None,
         temperature_override: float | None = None,
-        max_retries: int = 0
+        max_retries: int = 0,
+        model_override: str | None = None
     ) -> GatewayResult[T]:
         """Dispatches an inference request to the configured model for the given role with automatic fallback."""
         if isinstance(role, str):
@@ -102,10 +110,13 @@ class ModelGateway:
         cfg = get_role_config(role)
         temp = temperature_override if temperature_override is not None else cfg.temperature
 
-        models_to_try = [
+        models_to_try = []
+        if model_override:
+            models_to_try.append((model_override, False))
+        models_to_try.extend([
             (cfg.primary, False),
             (cfg.fallback, True)
-        ]
+        ])
         # Append default system model if distinct from both primary and fallback
         if config.OLLAMA_MODEL not in (cfg.primary, cfg.fallback):
             models_to_try.append((config.OLLAMA_MODEL, True))
@@ -118,9 +129,14 @@ class ModelGateway:
                 trace_id = f"trace-{uuid4().hex[:10]}"
                 start_time = time.perf_counter()
                 try:
+                    messages = []
+                    if system_prompt:
+                        messages.append({"role": "system", "content": system_prompt})
+                    messages.append({"role": "user", "content": prompt})
+
                     payload: dict[str, Any] = {
                         "model": model_candidate,
-                        "prompt": prompt,
+                        "messages": messages,
                         "stream": False,
                         "options": {
                             "temperature": temp,
@@ -128,18 +144,23 @@ class ModelGateway:
                             "num_ctx": 8192
                         }
                     }
-                    if system_prompt:
-                        payload["system"] = system_prompt
+                    # Disable Ollama internal thinking mode for non-REASONER roles (ANALYST, WRITER, FAST)
+                    # to prevent unbounded chain-of-thought token generation and latency timeouts.
+                    if role != ModelRole.REASONER and not any(k in model_candidate.lower() for k in ("deepseek-r1", "r1")):
+                        payload["think"] = False
+
+                    # Request structured json format when schema requested
                     if response_schema is not None:
                         payload["format"] = "json"
 
                     timeout = httpx.Timeout(cfg.timeout_seconds, connect=5.0)
                     with httpx.Client(timeout=timeout) as client:
-                        resp = client.post(f"{config.OLLAMA_BASE_URL}/api/generate", json=payload)
+                        resp = client.post(f"{config.OLLAMA_BASE_URL}/api/chat", json=payload)
                         resp.raise_for_status()
                         body = resp.json()
 
-                    raw_response = body.get("response", "")
+                    msg_obj = body.get("message", {})
+                    raw_response = msg_obj.get("content", "") or body.get("response", "") or msg_obj.get("thinking", "")
                     cleaned_response = clean_cot_reasoning(raw_response)
                     duration_ms = (time.perf_counter() - start_time) * 1000
 
