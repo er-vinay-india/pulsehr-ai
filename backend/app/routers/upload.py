@@ -7,6 +7,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from fastapi.responses import FileResponse, Response
+from pydantic import BaseModel
 
 from ..core import config
 from ..db.database import get_connection
