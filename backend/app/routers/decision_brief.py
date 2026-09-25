@@ -169,3 +169,27 @@ def local_voiceover(req: VoiceoverRequest):
     except Exception:
         raise HTTPException(503, 'Local voiceover is unavailable. Check the server speech engine and retry.')
     return Response(audio, media_type='audio/wav', headers={'Cache-Control': 'no-store'})
+
+
+class LeadershipReportRequest(BaseModel):
+    sheet_id: int | None = None
+    snapshot: str
+    audience: str = Field(default='CEO', max_length=80)
+    intent: str = Field(default='What needs attention and what should we do next?', max_length=1000)
+
+
+@router.post('/report-plan')
+def leadership_report_plan(req: LeadershipReportRequest):
+    from ..services.leadership_report import plan_report
+    brief = decision_brief(req.sheet_id)
+    if brief['snapshot'] != req.snapshot:
+        raise HTTPException(409, 'Source changed. Refresh the report.')
+    return {**plan_report(brief, req.audience, req.intent), 'snapshot': brief['snapshot']}
+
+
+@router.get('/report-evidence')
+def leadership_report_evidence(sheet_id: int | None = None, audience: str = 'CEO'):
+    from ..services.leadership_report import order_findings
+    brief = decision_brief(sheet_id)
+    # Copy the envelope so report ordering never mutates the reference cache.
+    return {**brief, 'findings': order_findings(brief.get('findings') or [], audience)}
