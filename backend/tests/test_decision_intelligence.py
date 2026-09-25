@@ -15,8 +15,13 @@ def test_scope_and_production_snapshot():
     conn.execute('INSERT INTO dataset_uploads VALUES(1,?)',('fixture.csv',))
     for sid in (1,2):
         conn.execute('INSERT INTO sheets VALUES(?,?,?,?)',(sid,1,f'Sheet{sid}',json.dumps(['Region','Revenue'])))
-        conn.executemany('INSERT INTO sheet_rows VALUES(?,?,?)',[(sid,i,json.dumps({'Region':'A','Revenue':i*sid})) for i in range(10)])
+        conn.executemany('INSERT INTO sheet_rows VALUES(?,?,?)',[(sid,i,json.dumps({'Region':'A' if i < 5 else 'B','Revenue':i*sid})) for i in range(10)])
+    conn.execute("ALTER TABLE sheets ADD COLUMN profile_json TEXT DEFAULT '[]'")
+    conn.execute('UPDATE sheets SET profile_json=?', (json.dumps([{'column': 'Revenue', 'display_name': 'Recognized revenue'}]),))
     before=build_decision_brief(conn,1)
+    assert before['profiles'][0]['display_columns']['Revenue'] == 'Recognized revenue'
+    assert all(c['metric_label'] == 'Recognized revenue' for c in before['profiles'][0]['comparisons'])
+    assert before['profiles'][0]['comparisons'][0]['metric'] == 'Revenue'
     assert len(before['profiles'])==1
     conn.execute('UPDATE sheet_rows SET data_json=? WHERE sheet_id=2 AND row_index=0',(json.dumps({'Region':'B','Revenue':99999999}),))
     assert build_decision_brief(conn,1)['snapshot']==before['snapshot']

@@ -283,7 +283,7 @@ def _sheet_brief(records, columns, source):
 
 
 def build_decision_brief(conn, sheet_id=None, sheet_ids=None):
-    sql = 'SELECT s.id,s.name,s.columns_json,d.original_name FROM sheets s JOIN dataset_uploads d ON d.id=s.dataset_id'
+    sql = 'SELECT s.id,s.name,s.columns_json,s.profile_json,d.original_name FROM sheets s JOIN dataset_uploads d ON d.id=s.dataset_id'
     args = ()
     if sheet_ids is not None:
         ids = sorted(set(int(i) for i in sheet_ids))
@@ -300,7 +300,27 @@ def build_decision_brief(conn, sheet_id=None, sheet_ids=None):
         cols = json.loads(sheet['columns_json'])
         digest.update(json.dumps([sheet['id'], sheet['name'], cols, records], sort_keys=True, ensure_ascii=False).encode())
         source = {'sheet_id': sheet['id'], 'sheet': sheet['name'], 'file': sheet['original_name']}
-        profiles.append(_sheet_brief(records, cols, source))
+        from .display_formatters import format_display_label, category_display_labels
+        stored_fields = json.loads(sheet['profile_json'] or '[]')
+        display_columns = {c: format_display_label(c) for c in cols}
+        display_columns.update({f['column']: f['display_name'] for f in stored_fields
+                                if f.get('column') and f.get('display_name')})
+        profile = _sheet_brief(records, cols, source)
+        profile['display_columns'] = display_columns
+        for item in profile['findings'] + profile['comparisons'] + profile['trends']:
+            metric = item.get('metric', '')
+            item['metric_label'] = display_columns.get(metric, format_display_label(metric))
+            detail = item.get('detail', item)
+            dimension = detail.get('dimension')
+            if dimension:
+                detail['dimension_label'] = display_columns.get(dimension, format_display_label(dimension))
+                aliases = category_display_labels(dimension, [g['group'] for g in detail.get('groups', [])])
+                stored_aliases = next((f.get('category_labels', {}) for f in stored_fields if f.get('column') == dimension), {})
+                aliases.update(stored_aliases)
+                for group in detail.get('groups', []):
+                    group['display_label'] = aliases.get(str(group['group']), str(group['group']))
+                detail['groups'] = sorted(detail.get('groups', []), key=lambda g: str(g['group']).casefold())
+        profiles.append(profile)
     findings = sorted([f for p in profiles for f in p['findings']], key=lambda f: (-f['priority_score'], f['id']))
     # One initial finding per sheet before further ranked findings, so large sheets do not crowd out others.
     first = [p['findings'][0] for p in profiles if p['findings']]

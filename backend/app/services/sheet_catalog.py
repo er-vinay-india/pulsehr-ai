@@ -11,7 +11,7 @@ import pandas as pd
 
 from ..core import config
 from ..db.database import get_connection
-from .display_formatters import format_display_label
+from .display_formatters import format_display_label, category_display_labels
 
 logger = logging.getLogger(__name__)
 ALIASES = {
@@ -188,6 +188,7 @@ def prepare_sheets(frames, source, embed=True):
                 'column': column,
                 'canonical': canonical(column),
                 'display_name': format_display_label(column),
+                'category_labels': category_display_labels(column, values) if len(set(map(str, values))) <= 100 else {},
                 'nonempty': len(values),
                 'missing': len(records) - len(values),
                 'null_percentage': null_pct,

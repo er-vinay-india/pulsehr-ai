@@ -217,3 +217,16 @@ def sanitize_llm_text(text: str, column_mapping: dict[str, str] | None = None) -
             result_parts.append(clean_part)
 
     return ''.join(result_parts)
+
+
+def category_display_labels(column, values):
+    """Presentation-only aliases; preserve source values and avoid label collisions."""
+    heading = format_display_label(column)
+    raw = list(dict.fromkeys(str(v) for v in values))
+    labels = {}
+    for value in raw:
+        clean = re.sub(rf'^(?:{re.escape(heading)})\s+|\s+(?:{re.escape(heading)})$', '', value, flags=re.I).strip()
+        labels[value] = clean or value
+    if len(set(labels.values())) != len(raw):
+        return {v: v for v in raw}
+    return labels
