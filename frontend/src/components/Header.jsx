@@ -7,13 +7,16 @@ import {
   FileText,
   Sparkles,
   RotateCw,
-  Presentation
+  Presentation,
+  Activity
 } from "lucide-react";
 import { openExecutivePrintReport } from "../api/client";
 
 export default function Header({ activeTab, onSelectTab, onOpenPresentationModal, activeJob }) {
   const tabs = [
-    { id: "overview", label: "Executive Overview", short: "Overview", icon: LayoutDashboard },
+    { id: "adaptive", label: "Adaptive Dashboard", short: "Adaptive", icon: Activity },
+    { id: "report", label: "Leadership Report", short: "Report", icon: Sparkles },
+    { id: "overview", label: "Reference Overview", short: "Reference", icon: LayoutDashboard },
     { id: "explorer", label: "Data Explorer", short: "Explore", icon: Table },
     { id: "ingestion", label: "Ingestion Studio", short: "Upload", icon: UploadCloud }
   ];
