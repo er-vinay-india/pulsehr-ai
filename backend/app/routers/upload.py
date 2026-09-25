@@ -56,6 +56,8 @@ def upload_file(
                     conn.execute('UPDATE sheets SET profile_json=? WHERE id=?', (json.dumps(profiles), sid))
                 insert_sheets(conn, dataset_id, prepared, display_name=display_name)
                 rebuild_relationships(conn)
+                from ..services.eda import run_eda_pipeline
+                eda_res = run_eda_pipeline(conn=conn)
                 industrial_res = run_ingestion_industrial_pipeline(conn, dataset_id)
                 linked = conn.execute("SELECT COUNT(*) FROM sheet_relationships WHERE status='linked' AND (left_sheet IN (SELECT id FROM sheets WHERE dataset_id=?) OR right_sheet IN (SELECT id FROM sheets WHERE dataset_id=?))", (dataset_id, dataset_id)).fetchone()[0]
 

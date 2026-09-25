@@ -44,19 +44,74 @@ def joined_rows(relationship_id: int, page: int = Query(1, ge=1), limit: int = Q
 
 
 @router.get('/{sheet_id}/rows')
-def sheet_rows(sheet_id: int, page: int = Query(1, ge=1), limit: int = Query(25, ge=1, le=100), search: str = Query('', max_length=200)):
+def sheet_rows(
+    sheet_id: int,
+    page: int = Query(1, ge=1),
+    limit: int = Query(25, ge=1, le=100),
+    search: str = Query('', max_length=200),
+    version: str = Query('curated', pattern='^(raw|curated)$')
+):
     conn = get_connection()
     try:
         sheet = conn.execute('SELECT * FROM sheets WHERE id=?', (sheet_id,)).fetchone()
         if sheet is None:
             raise HTTPException(404, 'Sheet not found')
+
+        target_table = 'sheet_curated_rows' if version == 'curated' else 'sheet_rows'
+        if target_table == 'sheet_curated_rows':
+            has_curated = conn.execute('SELECT 1 FROM sheet_curated_rows WHERE sheet_id=? LIMIT 1', (sheet_id,)).fetchone()
+            if not has_curated:
+                target_table = 'sheet_rows'
+
         clause, args = 'sheet_id=?', [sheet_id]
         if search:
-            clause += ' AND EXISTS (SELECT 1 FROM json_each(sheet_rows.data_json) WHERE instr(lower(CAST(value AS TEXT)),lower(?)) > 0)'
+            clause += f' AND EXISTS (SELECT 1 FROM json_each({target_table}.data_json) WHERE instr(lower(CAST(value AS TEXT)),lower(?)) > 0)'
             args.append(search)
-        total = conn.execute('SELECT COUNT(*) FROM sheet_rows WHERE ' + clause, args).fetchone()[0]
-        rows = conn.execute('SELECT row_index,data_json FROM sheet_rows WHERE ' + clause + ' ORDER BY row_index LIMIT ? OFFSET ?', (*args, limit, (page-1)*limit)).fetchall()
-        return {'sheet_id': sheet_id, 'columns': json.loads(sheet['columns_json']), 'rows': [{'row_number': r['row_index']+1, 'values': json.loads(r['data_json'])} for r in rows], 'total': total, 'page': page, 'pages': max(1, math.ceil(total/limit))}
+
+        total = conn.execute(f'SELECT COUNT(*) FROM {target_table} WHERE ' + clause, args).fetchone()[0]
+
+        if target_table == 'sheet_curated_rows':
+            rows = conn.execute(
+                f'SELECT row_index, data_json, anomalies_json FROM {target_table} WHERE ' + clause + ' ORDER BY row_index LIMIT ? OFFSET ?',
+                (*args, limit, (page-1)*limit)
+            ).fetchall()
+            return {
+                'sheet_id': sheet_id,
+                'version': 'curated',
+                'columns': json.loads(sheet['columns_json']),
+                'rows': [
+                    {
+                        'row_number': r['row_index'] + 1,
+                        'values': json.loads(r['data_json']),
+                        'anomalies': json.loads(r['anomalies_json'] or '[]')
+                    }
+                    for r in rows
+                ],
+                'total': total,
+                'page': page,
+                'pages': max(1, math.ceil(total / limit))
+            }
+        else:
+            rows = conn.execute(
+                f'SELECT row_index, data_json FROM {target_table} WHERE ' + clause + ' ORDER BY row_index LIMIT ? OFFSET ?',
+                (*args, limit, (page-1)*limit)
+            ).fetchall()
+            return {
+                'sheet_id': sheet_id,
+                'version': 'raw',
+                'columns': json.loads(sheet['columns_json']),
+                'rows': [
+                    {
+                        'row_number': r['row_index'] + 1,
+                        'values': json.loads(r['data_json']),
+                        'anomalies': []
+                    }
+                    for r in rows
+                ],
+                'total': total,
+                'page': page,
+                'pages': max(1, math.ceil(total / limit))
+            }
     finally:
         conn.close()
 

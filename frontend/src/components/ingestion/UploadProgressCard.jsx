@@ -29,65 +29,75 @@ export default function UploadProgressCard({ uploadingFile, uploadElapsed, uploa
 
       {/* Pipeline Stage Checklist */}
       <div className="pipeline-steps-list">
-        <div className={`pipeline-step ${uploadStep >= 1 ? (uploadStep > 1 ? "completed" : "active") : "pending"}`}>
-          <div className="step-icon">
-            {uploadStep > 1 ? <CheckCircle2 size={16} color="var(--emerald-tier)" /> : (uploadStep === 1 ? <Loader2 size={16} className="spin-animation" color="var(--brand-400)" /> : <div className="step-bullet" />)}
-          </div>
-          <div className="step-text">
-            <span className="step-title">1. Uploading file & inspecting spreadsheet structure</span>
-            <span className="step-sub">Validating file format (.csv, .xlsx, .xls) and extracting raw tabular frames</span>
-          </div>
-        </div>
+        {[
+          {
+            step: 1,
+            title: "1. Raw Ingestion & Schema Extraction",
+            sub: "Validating file format (.csv, .xlsx, .xls), byte boundaries, and capturing raw immutable records",
+          },
+          {
+            step: 2,
+            title: "2. AI Sheet Naming & Semantic Structural Profiling",
+            sub: "Decontaminating filenames, removing noise/hashes, classifying business domain, and inferring column roles",
+          },
+          {
+            step: 3,
+            title: "3. Data Cleansing & Syntactic Sanitization",
+            sub: "Normalizing whitespace, stripping invisible control characters, and standardizing sentinel nulls (NaN, N/A, -)",
+          },
+          {
+            step: 4,
+            title: "4. Metric & Unit Normalization",
+            sub: "Parsing money ($/€/£), temperatures (°C/°F), areas (sqft/m²), percentages (%), and time intervals",
+          },
+          {
+            step: 5,
+            title: "5. Missing Value Diagnostics & Smart Imputation",
+            sub: "Computing distribution-aware targets (median for skewed metrics, mode for categories) while preserving raw flags",
+          },
+          {
+            step: 6,
+            title: "6. Statistical Exploratory Data Analysis (EDA) & Outlier Profiling",
+            sub: "Running Tukey IQR fences & Z-score diagnostics, generating column profiles, and computing 0–100 Data Health Score",
+          },
+          {
+            step: 7,
+            title: "7. Multi-Sheet Key Discovery & Cross-Correlation Matrix (N-Sheet EDA)",
+            sub: "Discovering entity linkages across sheets, synthesizing derived tables, and mining empirical Pearson/Spearman matrix",
+          },
+          {
+            step: 8,
+            title: "8. Semantic Vectorization & BM25 Hybrid Retrieval Indexing",
+            sub: "Batching normalized tokens through local embedding model and building inverted index for hybrid RAG search",
+          },
+          {
+            step: 9,
+            title: "9. Analytical Evidence Catalog & Dashboard Readiness",
+            sub: "Materializing Post-EDA curated views, linking cross-sheet intelligence, and routing into projection pipelines",
+          },
+        ].map(({ step, title, sub }) => {
+          const isCompleted = uploadStep > step;
+          const isActive = uploadStep === step;
+          const statusClass = isCompleted ? "completed" : isActive ? "active" : "pending";
 
-        <div className={`pipeline-step ${uploadStep >= 2 ? (uploadStep > 2 ? "completed" : "active") : "pending"}`}>
-          <div className="step-icon">
-            {uploadStep > 2 ? <CheckCircle2 size={16} color="var(--emerald-tier)" /> : (uploadStep === 2 ? <Loader2 size={16} className="spin-animation" color="var(--brand-400)" /> : <div className="step-bullet" />)}
-          </div>
-          <div className="step-text">
-            <span className="step-title">2. AI Sheet Naming & Semantic Classification</span>
-            <span className="step-sub">Cleansing filenames, filtering noise/hashes, analyzing column architecture, and synthesizing executive title</span>
-          </div>
-        </div>
-
-        <div className={`pipeline-step ${uploadStep >= 3 ? (uploadStep > 3 ? "completed" : "active") : "pending"}`}>
-          <div className="step-icon">
-            {uploadStep > 3 ? <CheckCircle2 size={16} color="var(--emerald-tier)" /> : (uploadStep === 3 ? <Loader2 size={16} className="spin-animation" color="var(--brand-400)" /> : <div className="step-bullet" />)}
-          </div>
-          <div className="step-text">
-            <span className="step-title">3. Extracting worksheets & normalizing rows</span>
-            <span className="step-sub">Sanitizing empty cells, detecting data types, and retaining 100% of source records</span>
-          </div>
-        </div>
-
-        <div className={`pipeline-step ${uploadStep >= 4 ? (uploadStep > 4 ? "completed" : "active") : "pending"}`}>
-          <div className="step-icon">
-            {uploadStep > 4 ? <CheckCircle2 size={16} color="var(--emerald-tier)" /> : (uploadStep === 4 ? <Loader2 size={16} className="spin-animation" color="var(--brand-400)" /> : <div className="step-bullet" />)}
-          </div>
-          <div className="step-text">
-            <span className="step-title">4. Profiling columns & statistical summaries</span>
-            <span className="step-sub">Computing min/max/mean metrics and detecting unique identifiers</span>
-          </div>
-        </div>
-
-        <div className={`pipeline-step ${uploadStep >= 5 ? (uploadStep > 5 ? "completed" : "active") : "pending"}`}>
-          <div className="step-icon">
-            {uploadStep > 5 ? <CheckCircle2 size={16} color="var(--emerald-tier)" /> : (uploadStep === 5 ? <Loader2 size={16} className="spin-animation" color="var(--brand-400)" /> : <div className="step-bullet" />)}
-          </div>
-          <div className="step-text">
-            <span className="step-title">5. Generating vector embeddings & BM25 search indices</span>
-            <span className="step-sub">Batching rows through local embedding model for high-precision retrieval</span>
-          </div>
-        </div>
-
-        <div className={`pipeline-step ${uploadStep >= 6 ? "active" : "pending"}`}>
-          <div className="step-icon">
-            {uploadStep >= 6 ? <Loader2 size={16} className="spin-animation" color="var(--brand-400)" /> : <div className="step-bullet" />}
-          </div>
-          <div className="step-text">
-            <span className="step-title">6. Discovering cross-sheet key joins & updating catalog</span>
-            <span className="step-sub">Connecting foreign keys and updating the real-time overview</span>
-          </div>
-        </div>
+          return (
+            <div key={step} className={`pipeline-step ${statusClass}`}>
+              <div className="step-icon">
+                {isCompleted ? (
+                  <CheckCircle2 size={16} color="var(--emerald-tier)" />
+                ) : isActive ? (
+                  <Loader2 size={16} className="spin-animation" color="var(--brand-400)" />
+                ) : (
+                  <div className="step-bullet" />
+                )}
+              </div>
+              <div className="step-text">
+                <span className="step-title">{title}</span>
+                <span className="step-sub">{sub}</span>
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       <div className="progress-safety-footer">

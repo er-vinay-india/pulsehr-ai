@@ -318,9 +318,21 @@ async function readSheetApi(url) {
   return data;
 }
 export const getSheets = () => readSheetApi('/api/sheets');
-export const getSheetRows = (id, page, search) => readSheetApi(`/api/sheets/${id}/rows?${new URLSearchParams({page, search})}`);
+export const getSheetRows = (id, page, search = '', version = 'curated') =>
+  readSheetApi(`/api/sheets/${id}/rows?${new URLSearchParams({ page, search, version })}`);
 export const getJoinedRows = (id, page) => readSheetApi(`/api/sheets/relationships/${id}/rows?page=${page}`);
 export const getSheetProjections = (id) => readSheetApi(`/api/sheets/${id}/projections`);
+export const getSheetEdaReport = (id) => readSheetApi(`/api/eda/reports/${id}`);
+export const getDerivedTables = () => readSheetApi('/api/eda/derived-tables');
+export const getDerivedTableRows = (id, page, search = '') =>
+  readSheetApi(`/api/eda/derived-tables/${id}/rows?${new URLSearchParams({ page, search })}`);
+export const getCrossSheetCorrelations = () => readSheetApi('/api/eda/cross-sheet-correlations');
+export const runEdaPipeline = (sheetIds = null) =>
+  fetch('/api/eda/run', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(sheetIds)
+  }).then((r) => r.json());
 
 export async function investigateEvidence(rawTarget = {}) {
   const entityType = rawTarget.entityType || rawTarget.entity_type || rawTarget.type || "department";

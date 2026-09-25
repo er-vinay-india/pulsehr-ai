@@ -3,7 +3,12 @@ import {
   getSheets,
   getSheetRows,
   getJoinedRows,
-  getSheetProjections
+  getSheetProjections,
+  getSheetEdaReport,
+  getDerivedTables,
+  getDerivedTableRows,
+  getCrossSheetCorrelations,
+  runEdaPipeline
 } from '../api/client';
 import { formatDisplayLabel } from '../utils/displayFormatters';
 import DataTable from '../components/DataTable';
@@ -16,7 +21,15 @@ import {
   Search,
   Layers,
   Info,
-  ChevronRight
+  ChevronRight,
+  Sparkles,
+  RefreshCw,
+  GitMerge,
+  AlertTriangle,
+  CheckCircle2,
+  TrendingDown,
+  TrendingUp,
+  ArrowRight
 } from 'lucide-react';
 import ExecutiveHeatmapChart from '../components/charts/ExecutiveHeatmapChart';
 
@@ -32,8 +45,22 @@ export default function DataExplorerPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // View Modes: 'table' | 'projections' | 'diagnostics'
-  const [viewMode, setViewMode] = useState('table');
+  // Data Version State: 'curated' (Post-EDA normalized) | 'raw' (Original values)
+  const [dataVersion, setDataVersion] = useState('curated');
+
+  // Derived Tables State
+  const [derivedTables, setDerivedTables] = useState([]);
+  const [selectedDerivedId, setSelectedDerivedId] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('derived_id') || '';
+  });
+
+  // View Modes: 'table' | 'eda' | 'projections' | 'diagnostics'
+  const [viewMode, setViewMode] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    const v = params.get('view');
+    return ['table', 'eda', 'projections', 'diagnostics'].includes(v) ? v : 'table';
+  });
   const [projectionsData, setProjectionsData] = useState(null);
   const [loadingProjections, setLoadingProjections] = useState(false);
   const [hoveredSlice, setHoveredSlice] = useState(null);
@@ -43,7 +70,13 @@ export default function DataExplorerPage() {
   const [loadingDiagnostics, setLoadingDiagnostics] = useState(false);
   const [selectedMatrixCell, setSelectedMatrixCell] = useState(null);
 
-  const refresh = () =>
+  // EDA State
+  const [edaReport, setEdaReport] = useState(null);
+  const [loadingEda, setLoadingEda] = useState(false);
+  const [isRerunningEda, setIsRerunningEda] = useState(false);
+  const [crossCorrelations, setCrossCorrelations] = useState([]);
+
+  const refresh = () => {
     getSheets()
       .then((r) => {
         setCatalog(r);
@@ -57,13 +90,26 @@ export default function DataExplorerPage() {
       })
       .catch((e) => setError(e.message));
 
+    getDerivedTables()
+      .then((res) => {
+        setDerivedTables(res.derived_tables || []);
+      })
+      .catch(() => {});
+
+    getCrossSheetCorrelations()
+      .then((res) => {
+        setCrossCorrelations(res.correlations || []);
+      })
+      .catch(() => {});
+  };
+
   useEffect(() => {
     refresh();
   }, []);
 
-  // Fetch Table Rows
+  // Fetch Table Rows (Supports Curated, Raw, Joined, or Derived)
   useEffect(() => {
-    if (!selected) {
+    if (!selected && !selectedDerivedId) {
       setData(null);
       return;
     }
@@ -73,7 +119,13 @@ export default function DataExplorerPage() {
     setLoading(true);
     setError('');
 
-    (relation ? getJoinedRows(relation, page) : getSheetRows(selected, page, search))
+    const fetchPromise = selectedDerivedId
+      ? getDerivedTableRows(selectedDerivedId, page, search)
+      : relation
+      ? getJoinedRows(relation, page)
+      : getSheetRows(selected, page, search, dataVersion);
+
+    fetchPromise
       .then((r) => {
         if (active) setData(r);
       })
@@ -90,7 +142,7 @@ export default function DataExplorerPage() {
     return () => {
       active = false;
     };
-  }, [selected, relation, page, search, viewMode]);
+  }, [selected, selectedDerivedId, relation, page, search, viewMode, dataVersion]);
 
   // Fetch Projections when in 'projections' mode
   useEffect(() => {
@@ -140,16 +192,58 @@ export default function DataExplorerPage() {
     };
   }, [selected, viewMode]);
 
+  // Fetch EDA Report when in 'eda' mode or when selected sheet changes
+  useEffect(() => {
+    if (!selected) return;
+
+    let active = true;
+    if (viewMode === 'eda') setLoadingEda(true);
+
+    getSheetEdaReport(selected)
+      .then((rep) => {
+        if (active) setEdaReport(rep);
+      })
+      .catch((err) => {
+        if (active) console.error('Error loading EDA report:', err);
+      })
+      .finally(() => {
+        if (active) setLoadingEda(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [selected, viewMode]);
+
+  const handleRerunEda = () => {
+    setIsRerunningEda(true);
+    runEdaPipeline()
+      .then(() => {
+        refresh();
+        if (selected) {
+          return getSheetEdaReport(selected).then((rep) => setEdaReport(rep));
+        }
+      })
+      .catch((err) => console.error('Failed to rerun EDA:', err))
+      .finally(() => setIsRerunningEda(false));
+  };
+
   const selectedSheet = catalog.sheets.find((s) => String(s.id) === String(selected));
   const link = catalog.relationships.find((r) => String(r.id) === relation);
   const left = catalog.sheets.find((s) => s.id === link?.left_sheet);
   const right = catalog.sheets.find((s) => s.id === link?.right_sheet);
-  const columns = relation
+
+  const activeDerivedTable = derivedTables.find((dt) => String(dt.id) === String(selectedDerivedId));
+
+  const columns = selectedDerivedId
+    ? activeDerivedTable?.columns || data?.columns || []
+    : relation
     ? [
         ...(left?.columns || []).map((c) => `left.${c}`),
         ...(right?.columns || []).map((c) => `right.${c}`)
       ]
     : data?.columns || [];
+
   const rows = (data?.rows || []).map((row) =>
     relation
       ? {
@@ -159,7 +253,11 @@ export default function DataExplorerPage() {
             ...Object.entries(row.right).map(([k, v]) => [`right.${k}`, v])
           ])
         }
-      : { number: row.row_number, values: row.values }
+      : {
+          number: row.row_number,
+          values: row.values,
+          anomalies: row.anomalies || []
+        }
   );
 
   const diagProfile = diagnosticsData?.profiles?.[0];
@@ -180,7 +278,7 @@ export default function DataExplorerPage() {
         <div>
           <h2>Data Explorer & Technical Workbench</h2>
           <p className="subtitle">
-            Deep tabular investigation, statistical correlation matrices, and column schema profiling.
+            Dual-version tabular inspection (Raw vs. Post-EDA Curated), cross-sheet correlation discovery, and deep schema profiling.
           </p>
         </div>
 
@@ -193,6 +291,12 @@ export default function DataExplorerPage() {
             📋 Data Table
           </button>
           <button
+            className={`toggle-btn ${viewMode === 'eda' ? 'active' : ''}`}
+            onClick={() => setViewMode('eda')}
+          >
+            🔬 Exploratory Data Analysis (EDA)
+          </button>
+          <button
             className={`toggle-btn ${viewMode === 'projections' ? 'active' : ''}`}
             onClick={() => setViewMode('projections')}
           >
@@ -202,7 +306,7 @@ export default function DataExplorerPage() {
             className={`toggle-btn ${viewMode === 'diagnostics' ? 'active' : ''}`}
             onClick={() => setViewMode('diagnostics')}
           >
-            🔬 Statistical Diagnostics & Schema
+            📐 Statistical Diagnostics
           </button>
         </div>
       </div>
@@ -213,8 +317,10 @@ export default function DataExplorerPage() {
           Sheet{' '}
           <select
             value={selected}
+            disabled={!!selectedDerivedId}
             onChange={(e) => {
               setSelected(e.target.value);
+              setSelectedDerivedId('');
               setRelation('');
               setPage(1);
               setSearch('');
@@ -230,7 +336,7 @@ export default function DataExplorerPage() {
           </select>
         </label>
 
-        {viewMode === 'table' && (
+        {viewMode === 'table' && !selectedDerivedId && (
           <>
             <label>
               Related view{' '}
@@ -277,7 +383,7 @@ export default function DataExplorerPage() {
         </button>
       </div>
 
-      {link && viewMode === 'table' && (
+      {link && viewMode === 'table' && !selectedDerivedId && (
         <p style={{ fontSize: '0.85rem', color: 'var(--fg-secondary)', margin: '0.5rem 0' }}>
           Inner join: left = {left?.display_name || left?.original_name}; right ={' '}
           {right?.display_name || right?.original_name}. {link.cardinality}. Values match after
@@ -292,9 +398,91 @@ export default function DataExplorerPage() {
       )}
       {!catalog.sheets.length && <p>No sheets available. Upload a CSV or Excel workbook.</p>}
 
-      {/* VIEW 1: INTERACTIVE DATA TABLE VIEW */}
+      {/* VIEW 1: INTERACTIVE DATA TABLE VIEW (WITH DUAL VERSION TOGGLE) */}
       {viewMode === 'table' && (
         <>
+          {/* Dual Version & Derived Views Toggle Bar */}
+          <div className="table-version-toggle-bar">
+            <div className="version-pills">
+              <button
+                className={`version-pill ${dataVersion === 'curated' && !selectedDerivedId ? 'active' : ''}`}
+                onClick={() => {
+                  setSelectedDerivedId('');
+                  setDataVersion('curated');
+                  setPage(1);
+                }}
+              >
+                ✨ Post-EDA (Normalized & Curated)
+              </button>
+              <button
+                className={`version-pill ${dataVersion === 'raw' && !selectedDerivedId ? 'active' : ''}`}
+                onClick={() => {
+                  setSelectedDerivedId('');
+                  setDataVersion('raw');
+                  setPage(1);
+                }}
+              >
+                📋 Raw Ingested Data
+              </button>
+            </div>
+
+            {/* Derived Views Dropdown */}
+            {derivedTables.length > 0 && (
+              <div className="derived-views-picker">
+                <span>Synthesized View:</span>
+                <select
+                  value={selectedDerivedId}
+                  onChange={(e) => {
+                    setSelectedDerivedId(e.target.value);
+                    setRelation('');
+                    setPage(1);
+                  }}
+                >
+                  <option value="">Single Sheet View</option>
+                  {derivedTables.map((dt) => (
+                    <option key={dt.id} value={dt.id}>
+                      🔗 {dt.display_name} ({dt.row_count} rows)
+                    </option>
+                  ))}
+                </select>
+                {selectedDerivedId && (
+                  <button
+                    className="btn-secondary"
+                    style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem' }}
+                    onClick={() => {
+                      setSelectedDerivedId('');
+                      setPage(1);
+                    }}
+                  >
+                    Reset
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
+          {selectedDerivedId && activeDerivedTable && (
+            <div
+              style={{
+                background: 'rgba(255, 176, 137, 0.1)',
+                border: '1px solid rgba(255, 176, 137, 0.3)',
+                borderRadius: '6px',
+                padding: '0.6rem 0.9rem',
+                marginBottom: '0.75rem',
+                fontSize: '0.85rem',
+                color: '#fff9f2',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem'
+              }}
+            >
+              <GitMerge size={16} color="#ffb089" />
+              <span>
+                <strong>Synthesized Cross-Sheet View:</strong> {activeDerivedTable.description}
+              </span>
+            </div>
+          )}
+
           {data ? (
             <DataTable
               columns={columns}
@@ -305,9 +493,11 @@ export default function DataExplorerPage() {
               onPageChange={(newPage) => setPage(newPage)}
               loading={loading}
               sourceLabel={
-                relation
+                selectedDerivedId
+                  ? activeDerivedTable?.display_name || 'derived_view'
+                  : relation
                   ? 'relational_join'
-                  : selectedSheet?.display_name || selectedSheet?.original_name || 'table'
+                  : `${selectedSheet?.display_name || selectedSheet?.original_name || 'table'} [${dataVersion.toUpperCase()}]`
               }
             />
           ) : loading ? (
@@ -316,162 +506,461 @@ export default function DataExplorerPage() {
         </>
       )}
 
-      {/* VIEW 2: VISUAL PROJECTIONS VIEW */}
-      {viewMode === 'projections' && (
-        <div className="projections-container" style={{ marginTop: '1.5rem' }}>
-          {loadingProjections ? (
-            <p>Computing statistical projections and column profiles...</p>
-          ) : projectionsData ? (
+      {/* VIEW 2: EXPLORATORY DATA ANALYSIS (EDA) REPORT VIEW */}
+      {viewMode === 'eda' && (
+        <div className="eda-dashboard">
+          {loadingEda ? (
+            <p>Generating and loading Exploratory Data Analysis report...</p>
+          ) : edaReport ? (
             <>
-              {projectionsData.summary_kpis && projectionsData.summary_kpis.length > 0 && (
-                <div className="kpi-grid" style={{ marginBottom: '1.5rem' }}>
-                  {projectionsData.summary_kpis.map((kpi, idx) => (
-                    <div key={idx} className="kpi-card">
-                      <div className="kpi-label">{kpi.label}</div>
-                      <div className="kpi-value">{kpi.value}</div>
-                      {kpi.sub && <div className="kpi-sub">{kpi.sub}</div>}
-                    </div>
-                  ))}
+              {/* Card 1: Data Health & Cleanliness Score */}
+              <div className="eda-hero-card">
+                <div className="eda-score-box">
+                  <div
+                    className={`score-circle ${
+                      edaReport.health_score >= 90
+                        ? 'score-excellent'
+                        : edaReport.health_score >= 70
+                        ? 'score-good'
+                        : 'score-attention'
+                    }`}
+                  >
+                    <span>{edaReport.health_score}%</span>
+                    <span className="score-label">Health</span>
+                  </div>
+                  <div className="score-text">
+                    <h3>{edaReport.sheet_name}</h3>
+                    <p>Cleanliness score derived from missingness, outliers, and normalization hygiene.</p>
+                    <span
+                      className={`status-badge ${
+                        edaReport.health_score >= 90
+                          ? 'status-excellent'
+                          : edaReport.health_score >= 70
+                          ? 'status-good'
+                          : 'status-attention'
+                      }`}
+                    >
+                      {edaReport.health_status}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="eda-summary-chips">
+                  <div className="summary-chip">
+                    <div className="chip-label">Rows Ingested</div>
+                    <div className="chip-val">{edaReport.summary.total_rows}</div>
+                  </div>
+                  <div className="summary-chip">
+                    <div className="chip-label">Columns</div>
+                    <div className="chip-val">{edaReport.summary.total_columns}</div>
+                  </div>
+                  <div className="summary-chip">
+                    <div className="chip-label">Normalized Cells</div>
+                    <div className="chip-val val-accent">{edaReport.summary.total_normalized_cells}</div>
+                  </div>
+                  <div className="summary-chip">
+                    <div className="chip-label">Null Cells</div>
+                    <div className="chip-val">{edaReport.summary.total_null_cells}</div>
+                  </div>
+                  <div className="summary-chip">
+                    <div className="chip-label">Anomalies</div>
+                    <div className="chip-val val-warning">{edaReport.summary.total_anomalies}</div>
+                  </div>
+                </div>
+
+                <button
+                  className="btn-rerun-eda"
+                  onClick={handleRerunEda}
+                  disabled={isRerunningEda}
+                >
+                  {isRerunningEda ? 'Recomputing...' : 'Re-run EDA Pipeline'}
+                </button>
+              </div>
+
+              {/* Card 2: Recommendations Banner */}
+              {edaReport.recommendations && edaReport.recommendations.length > 0 && (
+                <div className="eda-recs-card">
+                  <h4>
+                    <Sparkles size={16} />
+                    EDA Analytical Insights & Next Steps
+                  </h4>
+                  <ul>
+                    {edaReport.recommendations.map((rec, idx) => (
+                      <li key={idx}>{rec}</li>
+                    ))}
+                  </ul>
                 </div>
               )}
 
-              <div className="visual-cards-grid">
-                {projectionsData.visualizations?.map((proj) => {
-                  if (proj.type === 'bar') {
-                    const bars = proj.data || [];
-                    const maxVal = Math.max(...bars.map((b) => b.value), 1);
-                    return (
-                      <div key={proj.id} className="visual-card">
-                        <div className="card-title-group">
-                          <h4>{proj.title}</h4>
-                          <p className="card-sub">{proj.subtitle || 'Category distribution'}</p>
-                        </div>
-                        <div className="card-visual-body">
-                          <div className="bar-chart-list">
-                            {bars.map((bar, idx) => {
-                              const pct = Math.min(100, Math.max(0, (bar.value / maxVal) * 100));
-                              return (
-                                <div key={idx} className="bar-row">
-                                  <span className="bar-label" title={bar.label}>
-                                    {bar.label}
-                                  </span>
-                                  <div className="bar-track">
-                                    <div className="bar-fill" style={{ width: `${pct}%` }}>
-                                      <span className="bar-val">{bar.value}</span>
-                                    </div>
-                                  </div>
-                                </div>
-                              );
-                            })}
+              {/* Card 3: Multi-Sheet Cross-Table Intelligence */}
+              <div className="eda-section-card">
+                <div className="section-header">
+                  <h3>
+                    <GitBranch size={18} color="#ffb089" />
+                    Multi-Sheet Cross-Table Intelligence & Correlations
+                  </h3>
+                  <p>
+                    Automatic entity matching, foreign key integrity checks, and inter-sheet metric correlations.
+                  </p>
+                </div>
+
+                {/* Entity Links */}
+                {edaReport.cross_sheet_intelligence.entity_links.length > 0 ? (
+                  <>
+                    <h4 style={{ color: '#c9bdb0', fontSize: '0.85rem', marginBottom: '0.6rem' }}>
+                      Discovered Entity Linkages
+                    </h4>
+                    <div className="eda-links-grid">
+                      {edaReport.cross_sheet_intelligence.entity_links.map((link, idx) => (
+                        <div key={idx} className="link-tile">
+                          <div className="link-title">
+                            <span>{link.left_sheet_name}</span>
+                            <ArrowRight size={14} color="#a89f94" />
+                            <span>{link.right_sheet_name}</span>
+                          </div>
+                          <div className="link-meta">
+                            <span className="badge-pill">
+                              {link.left_column} ↔ {link.right_column}
+                            </span>
+                            <span className="badge-cardinality">{link.cardinality} cardinality</span>
+                            <span className="badge-cardinality">{link.matching_keys} matches ({link.coverage_pct}%)</span>
                           </div>
                         </div>
-                      </div>
-                    );
-                  }
-                  return null;
-                })}
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <p style={{ color: '#a89f94', fontSize: '0.85rem' }}>
+                    No cross-sheet links detected for this sheet yet. Upload complementary sheets to activate multi-sheet discovery.
+                  </p>
+                )}
+
+                {/* Cross-Sheet Correlations */}
+                {edaReport.cross_sheet_intelligence.correlations.length > 0 && (
+                  <>
+                    <h4 style={{ color: '#c9bdb0', fontSize: '0.85rem', marginBottom: '0.6rem', marginTop: '1rem' }}>
+                      Cross-Sheet Statistical Correlations ($p &lt; 0.05$)
+                    </h4>
+                    <div className="eda-correlations-grid">
+                      {edaReport.cross_sheet_intelligence.correlations.map((corr, idx) => (
+                        <div key={idx} className="correlation-tile">
+                          <div className="corr-top-row">
+                            <div className="corr-metrics">
+                              {corr.left_metric} ↔ {corr.right_metric}
+                            </div>
+                            <span
+                              className={`corr-badge ${
+                                corr.direction === 'negative' ? 'negative' : 'positive'
+                              }`}
+                            >
+                              {corr.strength.toUpperCase()} {corr.direction.toUpperCase()} (r = {corr.pearson_r})
+                            </span>
+                          </div>
+                          <div className="corr-sheets-label">
+                            {corr.left_sheet_name} vs. {corr.right_sheet_name} · N = {corr.sample_size} entities
+                          </div>
+                          <div className="corr-narrative">{corr.narrative}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+
+                {/* Derived Tables Shortcut */}
+                {edaReport.cross_sheet_intelligence.derived_tables.length > 0 && (
+                  <div
+                    style={{
+                      marginTop: '1.25rem',
+                      background: 'rgba(255, 176, 137, 0.08)',
+                      border: '1px solid rgba(255, 176, 137, 0.25)',
+                      borderRadius: '8px',
+                      padding: '0.85rem 1.1rem',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      flexWrap: 'wrap',
+                      gap: '0.75rem'
+                    }}
+                  >
+                    <div>
+                      <strong style={{ color: '#ffb089' }}>Synthesized Derived Tables Available:</strong>
+                      <p style={{ margin: '3px 0 0 0', fontSize: '0.82rem', color: '#e5dacd' }}>
+                        {edaReport.cross_sheet_intelligence.derived_tables.map((d) => d.display_name).join(', ')}
+                      </p>
+                    </div>
+                    <button
+                      className="btn-secondary"
+                      onClick={() => {
+                        const firstDerived = edaReport.cross_sheet_intelligence.derived_tables[0];
+                        if (firstDerived) {
+                          setSelectedDerivedId(firstDerived.id);
+                          setViewMode('table');
+                        }
+                      }}
+                    >
+                      Explore Synthesized Table →
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Card 4: Transformation Audit Trail */}
+              <div className="eda-section-card">
+                <div className="section-header">
+                  <h3>
+                    <ShieldCheck size={18} color="#2ed573" />
+                    Data Cleaning & Normalization Audit Trail
+                  </h3>
+                  <p>
+                    Source-preserving transformations performed during the EDA phase prior to downstream projection pipelines.
+                  </p>
+                </div>
+
+                <div className="eda-table-container">
+                  <table className="eda-data-grid">
+                    <thead>
+                      <tr>
+                        <th>Target Column</th>
+                        <th>Inferred Semantic Type</th>
+                        <th>Standardized Format / Unit</th>
+                        <th>Cells Coerced</th>
+                        <th>Transformation Rule Applied</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {edaReport.transformations_log && edaReport.transformations_log.length > 0 ? (
+                        edaReport.transformations_log.map((t, idx) => {
+                          const diag = edaReport.column_diagnostics[t.column] || {};
+                          return (
+                            <tr key={idx}>
+                              <td>
+                                <strong>{t.column}</strong>
+                              </td>
+                              <td className="type-cell">{t.inferred_type}</td>
+                              <td>{diag.unit ? `Unit: ${diag.unit}` : 'Standard numeric / string'}</td>
+                              <td className="stat-cell">{t.cells_transformed} cells</td>
+                              <td>{t.transformation}</td>
+                            </tr>
+                          );
+                        })
+                      ) : (
+                        <tr>
+                          <td colSpan={5} style={{ textAlign: 'center', color: '#a89f94', padding: '1rem' }}>
+                            All column values in this sheet are already in canonical format; no type coercions required.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Card 5: Column Diagnostics & Outlier Inspector */}
+              <div className="eda-section-card">
+                <div className="section-header">
+                  <h3>
+                    <Table size={18} color="#ffb089" />
+                    Column Diagnostics & Statistical Distributions
+                  </h3>
+                  <p>
+                    Null distribution, unique cardinality, interquartile range (IQR) bounds, and outlier detection.
+                  </p>
+                </div>
+
+                <div className="eda-table-container">
+                  <table className="eda-data-grid">
+                    <thead>
+                      <tr>
+                        <th>Column Name</th>
+                        <th>Type</th>
+                        <th>Missing Values</th>
+                        <th>Imputation Strategy</th>
+                        <th>Distinct Values</th>
+                        <th>Distribution (Min / Max / Mean / Median)</th>
+                        <th>Outliers Flagged</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {Object.values(edaReport.column_diagnostics || {}).map((col, idx) => (
+                        <tr key={idx}>
+                          <td>
+                            <strong>{col.column}</strong>
+                          </td>
+                          <td className="type-cell">{col.inferred_type}</td>
+                          <td className="stat-cell">
+                            {col.null_count} ({col.null_percentage}%)
+                          </td>
+                          <td className="stat-cell">
+                            {col.imputation ? (
+                              <div style={{ fontSize: "0.82rem", color: "var(--brand-300)" }}>
+                                <span style={{ padding: "2px 6px", background: "rgba(99, 102, 241, 0.15)", borderRadius: "4px", fontWeight: 600 }}>
+                                  {col.imputation.strategy.toUpperCase()} → {String(col.imputation.recommended_value)}
+                                </span>
+                                <div style={{ fontSize: "0.74rem", opacity: 0.8, marginTop: "4px", maxWidth: "250px", lineHeight: 1.25 }}>
+                                  {col.imputation.rationale}
+                                </div>
+                              </div>
+                            ) : (
+                              <span style={{ color: "#2ed573", fontSize: "0.82rem" }}>✓ Complete</span>
+                            )}
+                          </td>
+                          <td className="stat-cell">{col.distinct_count}</td>
+                          <td className="stat-cell">
+                            {col.min != null
+                              ? `${col.min} / ${col.max} · μ: ${col.mean} (med: ${col.median})`
+                              : '—'}
+                          </td>
+                          <td>
+                            {col.outlier_count > 0 ? (
+                              <span style={{ color: '#ff6b81', fontWeight: 600 }}>
+                                ⚠️ {col.outlier_count} outliers (e.g. {col.outliers.map((o) => o.value).join(', ')})
+                              </span>
+                            ) : (
+                              <span style={{ color: '#2ed573' }}>✓ Normal</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </>
           ) : (
-            <p>Select a sheet to view its visual projections and column statistics.</p>
+            <p>Select a sheet to inspect its Exploratory Data Analysis report.</p>
           )}
         </div>
       )}
 
-      {/* VIEW 3: STATISTICAL DIAGNOSTICS & SCHEMA MATRIX (Deep Technical Engine) */}
-      {viewMode === 'diagnostics' && (
-        <div className="diagnostics-workbench" style={{ marginTop: '1.5rem' }}>
-          {loadingDiagnostics ? (
-            <p>Loading statistical matrices and schema definitions...</p>
-          ) : diagnosticsData && diagProfile ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-              {/* Section A: Spearman Correlation Matrix */}
-              <div className="card-panel">
-                <div className="section-title-row" style={{ marginBottom: '1rem' }}>
-                  <div>
-                    <h3 style={{ margin: 0, color: '#f8fafc' }}>
-                      Spearman Rank Correlation Matrix
-                    </h3>
-                    <p className="subtitle" style={{ margin: '4px 0 0 0' }}>
-                      Pairwise monotonic correlation coefficients (\(\rho\)), sample pair counts,
-                      and within-group variations.
-                    </p>
+      {/* VIEW 3: VISUAL PROJECTIONS VIEW */}
+      {viewMode === 'projections' && (
+        <div className="projections-container">
+          {loadingProjections ? (
+            <p>Analyzing column projections...</p>
+          ) : projectionsData?.projections ? (
+            <div className="projections-grid">
+              {projectionsData.projections.map((p, idx) => (
+                <div key={idx} className="projection-card">
+                  <div className="projection-header">
+                    <h4>{formatDisplayLabel(p.column)}</h4>
+                    <span className="type-badge">{p.type}</span>
                   </div>
-                  <span className="source-file-badge">
-                    {diagProfile.measures_analyzed} Numeric Measures
-                  </span>
-                </div>
 
-                {matrix && matrix.metrics.length >= 2 ? (
-                  <>
-                    <ExecutiveHeatmapChart
-                      matrix={matrix}
-                      height={320}
-                      onSelectPair={(pair) => {
-                        const found = matrix.pairs.find(
-                          (p) =>
-                            (p.x === pair.x && p.y === pair.y) ||
-                            (p.x === pair.y && p.y === pair.x)
-                        );
-                        setSelectedMatrixCell(found || pair);
-                      }}
-                    />
-
-                    {selectedMatrixCell && (
-                      <div
-                        className="decision-matrix-detail"
-                        style={{
-                          marginTop: '1rem',
-                          padding: '1.25rem',
-                          background: 'rgba(15, 23, 42, 0.7)',
-                          borderRadius: '8px',
-                          border: '1px solid rgba(255, 255, 255, 0.1)'
-                        }}
-                      >
-                        <h4 style={{ margin: '0 0 0.5rem 0', color: '#38bdf8' }}>
-                          Pair Detail: {selectedMatrixCell.x} × {selectedMatrixCell.y}
-                        </h4>
-                        <p style={{ margin: '0 0 0.5rem 0', color: '#e2e8f0', fontSize: '0.9rem' }}>
-                          {selectedMatrixCell.excluded_reason ||
-                            `Spearman Rank Correlation \u03C1 = ${fmt(selectedMatrixCell.coefficient)} across ${selectedMatrixCell.paired_rows} paired records.`}
-                        </p>
-                        <small style={{ color: '#94a3b8' }}>
-                          Statistical note: Observational correlation does not establish causation.
-                          Check group mix and sample balance.
-                        </small>
-                        {selectedMatrixCell.within_groups?.length > 0 && (
-                          <div style={{ marginTop: '0.75rem' }}>
-                            <strong style={{ fontSize: '0.8rem', color: '#cbd5e1' }}>
-                              Within-group variation:
-                            </strong>
-                            <ul style={{ margin: '0.35rem 0 0 1.25rem', fontSize: '0.8rem', color: '#94a3b8' }}>
-                              {selectedMatrixCell.within_groups.map((g) => (
-                                <li key={g.group}>
-                                  {g.group}: \u03C1 = {fmt(g.coefficient)} ({g.paired_rows} pairs)
-                                </li>
-                              ))}
-                            </ul>
+                  {p.type === 'categorical' && (
+                    <div className="bar-breakdown">
+                      {p.categories?.map((c, cIdx) => (
+                        <div key={cIdx} className="bar-row">
+                          <span className="bar-label">{c.value}</span>
+                          <div className="bar-track">
+                            <div className="bar-fill" style={{ width: `${c.percentage}%` }} />
                           </div>
-                        )}
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <p className="decision-empty">
-                    A relationship matrix requires at least two numeric measures.
-                  </p>
-                )}
-              </div>
+                          <span className="bar-count">
+                            {c.count} ({c.percentage}%)
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
 
-              {/* Section B: Column Structural Profiling */}
-              <div className="card-panel">
+                  {p.type === 'numeric' && (
+                    <div className="numeric-stats">
+                      <div className="stat-row">
+                        <span>Min:</span> <strong>{fmt(p.min)}</strong>
+                      </div>
+                      <div className="stat-row">
+                        <span>Max:</span> <strong>{fmt(p.max)}</strong>
+                      </div>
+                      <div className="stat-row">
+                        <span>Mean:</span> <strong>{fmt(p.mean)}</strong>
+                      </div>
+                      <div className="stat-row">
+                        <span>Median:</span> <strong>{fmt(p.median)}</strong>
+                      </div>
+                      <div className="stat-row">
+                        <span>Std Dev:</span> <strong>{fmt(p.std)}</strong>
+                      </div>
+                    </div>
+                  )}
+
+                  {p.type === 'timeline' && (
+                    <div className="timeline-stats">
+                      <div className="stat-row">
+                        <span>From:</span> <strong>{p.min_date}</strong>
+                      </div>
+                      <div className="stat-row">
+                        <span>To:</span> <strong>{p.max_date}</strong>
+                      </div>
+                      <div className="stat-row">
+                        <span>Observations:</span> <strong>{p.observations}</strong>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p>Select a sheet to view projections.</p>
+          )}
+        </div>
+      )}
+
+      {/* VIEW 4: STATISTICAL DIAGNOSTICS & SCHEMA VIEW */}
+      {viewMode === 'diagnostics' && (
+        <div className="diagnostics-container">
+          {loadingDiagnostics ? (
+            <p>Loading statistical diagnostics...</p>
+          ) : diagnosticsData ? (
+            <div className="diagnostics-content">
+              {/* Section A: Statistical Heatmap Matrix */}
+              {matrix?.matrix?.length > 0 && (
+                <div className="card-panel" style={{ marginBottom: '1.5rem' }}>
+                  <div className="section-title-row">
+                    <div>
+                      <h3 style={{ margin: 0, color: '#f8fafc' }}>
+                        Statistical Correlation & Association Matrix
+                      </h3>
+                      <p className="subtitle" style={{ margin: '4px 0 0 0' }}>
+                        Pearson correlation for numeric metrics; Cramér's V for categorical dimensions.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div style={{ marginTop: '1rem' }}>
+                    <ExecutiveHeatmapChart
+                      matrix={matrix.matrix}
+                      columns={matrix.columns}
+                      onCellClick={(cell) => setSelectedMatrixCell(cell)}
+                    />
+                  </div>
+
+                  {selectedMatrixCell && (
+                    <div
+                      style={{
+                        marginTop: '1rem',
+                        padding: '0.85rem',
+                        borderRadius: '6px',
+                        background: 'rgba(255, 255, 255, 0.05)',
+                        border: '1px solid var(--border)'
+                      }}
+                    >
+                      <h4 style={{ margin: '0 0 0.5rem 0', color: 'var(--accent)' }}>
+                        Association Insight: {selectedMatrixCell.x} ↔ {selectedMatrixCell.y}
+                      </h4>
+                      <p style={{ margin: 0, fontSize: '0.9rem' }}>
+                        Coefficient value: <strong>{selectedMatrixCell.value}</strong> ({selectedMatrixCell.metric_type}).
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Section B: Column Profiles & Missing Values */}
+              <div className="card-panel" style={{ marginBottom: '1.5rem' }}>
                 <div className="section-title-row" style={{ marginBottom: '1rem' }}>
                   <div>
-                    <h3 style={{ margin: 0, color: '#f8fafc' }}>
-                      Column Profiling & Semantic Roles
-                    </h3>
+                    <h3 style={{ margin: 0, color: '#f8fafc' }}>Column Profiles & Schema Attributes</h3>
                     <p className="subtitle" style={{ margin: '4px 0 0 0' }}>
-                      Deterministic schema classifications and missing value ratios.
+                      Detailed missingness counts, cardinality, and data types.
                     </p>
                   </div>
                 </div>
@@ -481,22 +970,30 @@ export default function DataExplorerPage() {
                     <thead>
                       <tr>
                         <th>Column Name</th>
-                        <th>Classified Role</th>
-                        <th>Source Sheet</th>
+                        <th>Inferred Type</th>
+                        <th>Missingness</th>
+                        <th>Distinct Values</th>
+                        <th>Summary Stats</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {diagProfile.fields.map((f) => (
-                        <tr key={f.column}>
+                      {diagProfile?.column_details?.map((c, idx) => (
+                        <tr key={idx}>
                           <td>
-                            <strong>{f.column}</strong>
+                            <strong>{c.column_name}</strong>
                           </td>
                           <td>
-                            <span className="col-chip" style={{ textTransform: 'capitalize' }}>
-                              {f.role.replaceAll('_', ' ')}
-                            </span>
+                            <span className="type-badge">{c.inferred_type}</span>
                           </td>
-                          <td>{diagProfile.source?.sheet}</td>
+                          <td>
+                            {c.missing_count} ({c.missing_percentage}%)
+                          </td>
+                          <td>{c.distinct_count}</td>
+                          <td>
+                            {c.min != null
+                              ? `Min: ${c.min}, Max: ${c.max}, Mean: ${c.mean}`
+                              : 'Categorical / ID'}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
