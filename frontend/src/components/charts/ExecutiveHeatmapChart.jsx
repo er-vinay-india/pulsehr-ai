@@ -32,15 +32,15 @@ export default function ExecutiveHeatmapChart({
       backgroundColor: 'transparent',
       tooltip: {
         position: 'top',
-        backgroundColor: 'rgba(15, 23, 42, 0.95)',
-        borderColor: 'rgba(255, 255, 255, 0.1)',
-        textStyle: { color: '#f8fafc', fontSize: 12 },
+        backgroundColor: '#1c1815',
+        borderColor: '#524940',
+        textStyle: { color: '#fff9f2', fontSize: 12 },
         formatter: (params) => {
           const [colIdx, rowIdx, val, reason] = params.data;
           const xName = metrics[colIdx];
           const yName = metrics[rowIdx];
           if (xName === yName) return `<b>${xName}</b> (Self)`;
-          if (val == null) return `<b>${xName} × ${yName}</b><br/><span style="color:#94a3b8;">${reason || 'Insufficient data'}</span>`;
+          if (val == null) return `<b>${xName} × ${yName}</b><br/><span style="color:#ded5cb;">${reason || 'Insufficient data'}</span>`;
 
           let strength = 'Weak';
           if (Math.abs(val) >= 0.7) strength = 'Strong';
@@ -49,11 +49,11 @@ export default function ExecutiveHeatmapChart({
           const direction = val > 0 ? 'Positive Relationship' : 'Negative Relationship';
 
           return `
-            <div style="font-weight:600;margin-bottom:4px;color:#cbd5e1;">${xName} × ${yName}</div>
-            <div style="font-size:13px;font-weight:700;color:${val >= 0 ? '#34d399' : '#f472b6'};">
+            <div style="font-weight:600;margin-bottom:4px;color:#ded5cb;">${xName} × ${yName}</div>
+            <div style="font-size:13px;font-weight:700;color:${val >= 0 ? '#34d399' : '#fb7185'};">
               ${strength} ${direction} (${val > 0 ? '+' : ''}${val})
             </div>
-            <div style="font-size:10px;color:#94a3b8;margin-top:4px;">Click to inspect deep diagnostics in Data Explorer</div>
+            <div style="font-size:10px;color:#ded5cb;margin-top:4px;">Click to inspect deep diagnostics in Data Explorer</div>
           `;
         }
       },
@@ -68,7 +68,7 @@ export default function ExecutiveHeatmapChart({
         data: metrics,
         splitArea: { show: true },
         axisLabel: {
-          color: '#cbd5e1',
+          color: '#ded5cb',
           fontSize: 10,
           interval: 0,
           rotate: 25,
@@ -80,7 +80,7 @@ export default function ExecutiveHeatmapChart({
         data: metrics,
         splitArea: { show: true },
         axisLabel: {
-          color: '#cbd5e1',
+          color: '#ded5cb',
           fontSize: 10,
           formatter: (v) => (v.length > 12 ? `${v.slice(0, 10)}…` : v)
         }
@@ -93,9 +93,9 @@ export default function ExecutiveHeatmapChart({
         left: 'center',
         bottom: '0%',
         text: ['Positive (+1)', 'Negative (-1)'],
-        textStyle: { color: '#94a3b8', fontSize: 10 },
+        textStyle: { color: '#ded5cb', fontSize: 10 },
         inRange: {
-          color: ['#f43f5e', '#1e293b', '#10b981']
+          color: ['#fb7185', '#1c1815', '#34d399']
         }
       },
       series: [

@@ -80,26 +80,26 @@ export default function ForwardOutlookCard({
       backgroundColor: "transparent",
       tooltip: {
         trigger: "axis",
-        backgroundColor: "#1c1917",
-        borderColor: "#44403c",
-        textStyle: { color: "#f5f5f4", fontSize: 12 },
+        backgroundColor: "#1c1815",
+        borderColor: "#524940",
+        textStyle: { color: "#fff9f2", fontSize: 12 },
         formatter: (params) => {
           if (!params || params.length === 0) return "";
           const pIdx = params[0].dataIndex;
           const pt = points[pIdx];
           if (!pt) return "";
           const isForecast = pt.forecast_value != null;
-          let html = `<div style="font-weight:600;margin-bottom:4px;">${pt.period_label || pt.period}</div>`;
+          let html = `<div style="font-weight:600;margin-bottom:4px;color:#fff9f2;">${pt.period_label || pt.period}</div>`;
           if (isForecast) {
-            html += `<div style="color:#f59e0b;">Forecast: <strong>${pt.forecast_value} ${unit}</strong></div>`;
+            html += `<div style="color:#fbbb27;">Forecast: <strong>${pt.forecast_value} ${unit}</strong></div>`;
             if (pt.lower_bound != null && pt.upper_bound != null) {
-              html += `<div style="color:#a8a29e;font-size:11px;">Empirical range: ${pt.lower_bound}–${pt.upper_bound} ${unit}</div>`;
+              html += `<div style="color:#ded5cb;font-size:11px;">Empirical range: ${pt.lower_bound}–${pt.upper_bound} ${unit}</div>`;
             }
-            html += `<div style="color:#78716c;font-size:11px;margin-top:2px;">Model: ${validation?.model_label || "Validated Model"}</div>`;
+            html += `<div style="color:#ded5cb;font-size:11px;margin-top:2px;">Model: ${validation?.model_label || "Validated Model"}</div>`;
           } else if (pt.actual_value != null) {
             html += `<div style="color:#38bdf8;">Observed actual: <strong>${pt.actual_value} ${unit}</strong></div>`;
             if (pt.is_partial) {
-              html += `<div style="color:#fbbf24;font-size:11px;">Partial period (excluded from training)</div>`;
+              html += `<div style="color:#fbbb27;font-size:11px;">Partial period (excluded from training)</div>`;
             }
           }
           return html;
@@ -108,7 +108,7 @@ export default function ForwardOutlookCard({
       legend: {
         show: true,
         bottom: 0,
-        textStyle: { color: "#a8a29e", fontSize: 11 },
+        textStyle: { color: "#ded5cb", fontSize: 11 },
         data: ["Historical actuals", "Statistical forecast", "Forecast range"],
       },
       grid: {
@@ -121,8 +121,8 @@ export default function ForwardOutlookCard({
       xAxis: {
         type: "category",
         data: periods,
-        axisLine: { lineStyle: { color: "#44403c" } },
-        axisLabel: { color: "#a8a29e", fontSize: 11, rotate: periods.length > 10 ? 30 : 0 },
+        axisLine: { lineStyle: { color: "#3d362f" } },
+        axisLabel: { color: "#ded5cb", fontSize: 11, rotate: periods.length > 10 ? 30 : 0 },
         splitLine: { show: false },
       },
       yAxis: {
@@ -130,10 +130,10 @@ export default function ForwardOutlookCard({
         min: yMin,
         max: yMax,
         name: unit,
-        nameTextStyle: { color: "#a8a29e", fontSize: 11, align: "left" },
+        nameTextStyle: { color: "#ded5cb", fontSize: 11, align: "left" },
         axisLine: { show: false },
-        axisLabel: { color: "#a8a29e", fontSize: 11 },
-        splitLine: { lineStyle: { color: "#292524", type: "dashed" } },
+        axisLabel: { color: "#ded5cb", fontSize: 11 },
+        splitLine: { lineStyle: { color: "#524940", type: "dashed" } },
       },
       series: [
         {
@@ -167,8 +167,8 @@ export default function ForwardOutlookCard({
           showSymbol: true,
           symbol: "diamond",
           symbolSize: 8,
-          itemStyle: { color: "#f59e0b" },
-          lineStyle: { width: 2.5, color: "#f59e0b", type: "dashed" },
+          itemStyle: { color: "#fbbb27" },
+          lineStyle: { width: 2.5, color: "#fbbb27", type: "dashed" },
         },
         {
           name: "Forecast range",
@@ -183,7 +183,7 @@ export default function ForwardOutlookCard({
           type: "line",
           data: lowerSeries.map((low, i) => (upperSeries[i] != null && low != null ? upperSeries[i] - low : null)),
           lineStyle: { opacity: 0 },
-          areaStyle: { color: "rgba(245, 158, 11, 0.18)" },
+          areaStyle: { color: "rgba(251, 187, 39, 0.18)" },
           stack: "confidence-band",
           symbol: "none",
         },

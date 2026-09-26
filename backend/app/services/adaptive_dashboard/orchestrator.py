@@ -582,26 +582,79 @@ def _generate_finding_id(recipe_id: str, seed: str) -> str:
 
 
 def _build_echarts_bar_option(title: str, categories: list[str], values: list[float], unit: str) -> dict[str, Any]:
-    """Generates accessible, responsive ECharts bar specification."""
+    """Generates WCAG 2.1 Level AAA accessible, responsive ECharts bar specification.
+    Follows data visualization rule: Categorical comparison with N > 4 must render as a horizontal ranked bar
+    to avoid label rotation, truncated text collisions, and cognitive load."""
+    if len(categories) > 4:
+        rev_cats = list(reversed(categories))
+        rev_vals = list(reversed(values))
+        return {
+            "tooltip": {
+                "trigger": "axis",
+                "axisPointer": {"type": "shadow"},
+                "backgroundColor": "#1c1815",
+                "borderColor": "#524940",
+                "textStyle": {"color": "#fff9f2", "fontSize": 12},
+                "formatter": "{b}: <strong>{c} " + unit + "</strong>",
+            },
+            "grid": {"left": "4%", "right": "10%", "bottom": "6%", "top": "6%", "containLabel": True},
+            "xAxis": {
+                "type": "value",
+                "splitNumber": 3,
+                "axisLabel": {"formatter": "{value}", "color": "#ded5cb", "fontSize": 10},
+                "splitLine": {"lineStyle": {"color": "#524940", "type": "dashed"}},
+            },
+            "yAxis": {
+                "type": "category",
+                "data": rev_cats,
+                "axisLine": {"lineStyle": {"color": "#3d362f"}},
+                "axisTick": {"alignWithLabel": True, "lineStyle": {"color": "#3d362f"}},
+                "axisLabel": {
+                    "color": "#ded5cb",
+                    "fontSize": 10,
+                    "width": 130,
+                    "overflow": "truncate",
+                    "ellipsis": "…",
+                },
+            },
+            "series": [
+                {
+                    "name": title,
+                    "type": "bar",
+                    "data": rev_vals,
+                    "itemStyle": {"color": "#ff8a62", "borderRadius": [0, 4, 4, 0], "borderColor": "#171412", "borderWidth": 1},
+                    "barMaxWidth": 18,
+                    "label": {
+                        "show": True,
+                        "position": "right",
+                        "distance": 6,
+                        "color": "#ded5cb",
+                        "fontSize": 10,
+                        "formatter": f"{{c}} {unit}".strip(),
+                    },
+                }
+            ],
+        }
+
     return {
-        "tooltip": {"trigger": "axis", "axisPointer": {"type": "shadow"}},
+        "tooltip": {"trigger": "axis", "axisPointer": {"type": "shadow"}, "backgroundColor": "#1c1815", "borderColor": "#524940", "textStyle": {"color": "#fff9f2", "fontSize": 12}},
         "grid": {"left": "3%", "right": "4%", "bottom": "12%", "top": "15%", "containLabel": True},
         "xAxis": {
             "type": "category",
             "data": categories,
-            "axisLabel": {"interval": 0, "rotate": 20 if len(categories) > 4 else 0, "color": "#c9bdb0", "fontSize": 11},
+            "axisLabel": {"interval": 0, "color": "#ded5cb", "fontSize": 11},
         },
         "yAxis": {
             "type": "value",
-            "axisLabel": {"formatter": f"{{value}} {unit}".strip(), "color": "#c9bdb0", "fontSize": 11},
-            "splitLine": {"lineStyle": {"color": "#2c2722"}},
+            "axisLabel": {"formatter": f"{{value}} {unit}".strip(), "color": "#ded5cb", "fontSize": 11},
+            "splitLine": {"lineStyle": {"color": "#524940", "type": "dashed"}},
         },
         "series": [
             {
                 "name": title,
                 "type": "bar",
                 "data": values,
-                "itemStyle": {"color": "#ff8a62", "borderRadius": [4, 4, 0, 0]},
+                "itemStyle": {"color": "#ff8a62", "borderRadius": [4, 4, 0, 0], "borderColor": "#171412", "borderWidth": 1},
                 "barMaxWidth": 40,
             }
         ],
@@ -609,19 +662,19 @@ def _build_echarts_bar_option(title: str, categories: list[str], values: list[fl
 
 
 def _build_echarts_line_option(title: str, periods: list[str], values: list[float], unit: str) -> dict[str, Any]:
-    """Generates accessible, responsive ECharts line specification."""
+    """Generates WCAG 2.1 Level AAA accessible, responsive ECharts line specification."""
     return {
-        "tooltip": {"trigger": "axis"},
+        "tooltip": {"trigger": "axis", "backgroundColor": "#1c1815", "borderColor": "#524940", "textStyle": {"color": "#fff9f2", "fontSize": 12}},
         "grid": {"left": "3%", "right": "4%", "bottom": "12%", "top": "15%", "containLabel": True},
         "xAxis": {
             "type": "category",
             "data": periods,
-            "axisLabel": {"interval": 0, "rotate": 20 if len(periods) > 4 else 0, "color": "#c9bdb0", "fontSize": 11},
+            "axisLabel": {"interval": 0, "rotate": 20 if len(periods) > 4 else 0, "color": "#ded5cb", "fontSize": 11},
         },
         "yAxis": {
             "type": "value",
-            "axisLabel": {"formatter": f"{{value}} {unit}".strip(), "color": "#c9bdb0", "fontSize": 11},
-            "splitLine": {"lineStyle": {"color": "#2c2722"}},
+            "axisLabel": {"formatter": f"{{value}} {unit}".strip(), "color": "#ded5cb", "fontSize": 11},
+            "splitLine": {"lineStyle": {"color": "#524940", "type": "dashed"}},
         },
         "series": [
             {
@@ -631,7 +684,7 @@ def _build_echarts_line_option(title: str, periods: list[str], values: list[floa
                 "smooth": True,
                 "symbol": "circle",
                 "symbolSize": 6,
-                "itemStyle": {"color": "#ff8a62"},
+                "itemStyle": {"color": "#ff8a62", "borderColor": "#fff9f2", "borderWidth": 1.5},
                 "lineStyle": {"width": 2.5, "color": "#ff8a62"},
             }
         ],

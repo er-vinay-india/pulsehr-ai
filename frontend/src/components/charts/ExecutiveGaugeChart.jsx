@@ -15,14 +15,14 @@ export default function ExecutiveGaugeChart({
     // Inverted: Green < 30, Yellow 30-60, Red > 60
     const colorStops = isInverted
       ? [
-          [0.3, '#10b981'],
-          [0.6, '#f59e0b'],
-          [1.0, '#f43f5e']
+          [0.3, '#34d399'],
+          [0.6, '#fbbb27'],
+          [1.0, '#fb7185']
         ]
       : [
-          [0.4, '#f43f5e'],
-          [0.7, '#f59e0b'],
-          [1.0, '#10b981']
+          [0.4, '#fb7185'],
+          [0.7, '#fbbb27'],
+          [1.0, '#34d399']
         ];
 
     return {
@@ -37,8 +37,8 @@ export default function ExecutiveGaugeChart({
           splitNumber: 5,
           itemStyle: {
             color: isInverted
-              ? (value > 60 ? '#f43f5e' : value > 30 ? '#f59e0b' : '#10b981')
-              : (value >= 70 ? '#10b981' : value >= 40 ? '#f59e0b' : '#f43f5e'),
+              ? (value > 60 ? '#fb7185' : value > 30 ? '#fbbb27' : '#34d399')
+              : (value >= 70 ? '#34d399' : value >= 40 ? '#fbbb27' : '#fb7185'),
             shadowColor: 'rgba(0, 0, 0, 0.4)',
             shadowBlur: 10,
             shadowOffsetX: 2,
@@ -72,7 +72,7 @@ export default function ExecutiveGaugeChart({
             splitNumber: 2,
             lineStyle: {
               width: 1,
-              color: '#64748b'
+              color: '#524940'
             }
           },
           splitLine: {
@@ -81,12 +81,12 @@ export default function ExecutiveGaugeChart({
             length: 8,
             lineStyle: {
               width: 2,
-              color: '#94a3b8'
+              color: '#ded5cb'
             }
           },
           axisLabel: {
             distance: -14,
-            color: '#64748b',
+            color: '#ded5cb',
             fontSize: 9
           },
           anchor: {
@@ -102,7 +102,7 @@ export default function ExecutiveGaugeChart({
             show: true,
             offsetCenter: [0, '72%'],
             fontSize: 11,
-            color: '#94a3b8',
+            color: '#ded5cb',
             fontWeight: 500
           },
           detail: {

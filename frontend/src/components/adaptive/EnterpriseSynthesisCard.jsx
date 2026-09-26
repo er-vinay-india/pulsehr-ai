@@ -67,25 +67,25 @@ export default function EnterpriseSynthesisCard({
         tooltip: {
           trigger: "axis",
           axisPointer: { type: "shadow" },
-          backgroundColor: "#1c1917",
-          borderColor: "#44403c",
-          textStyle: { color: "#f5f5f4", fontSize: 12 },
+          backgroundColor: "#1c1815",
+          borderColor: "#524940",
+          textStyle: { color: "#fff9f2", fontSize: 12 },
           formatter: (params) => {
             if (!params || params.length === 0) return "";
             const idx = params[0].dataIndex;
             const pt = points[idx];
             if (!pt) return "";
             return `
-              <div style="font-weight:600;margin-bottom:4px;">${pt.label}</div>
+              <div style="font-weight:600;margin-bottom:4px;color:#fff9f2;">${pt.label}</div>
               <div style="color:#38bdf8;">${metricNames[0]}: <strong>${pt.formatted_x || pt.x}</strong></div>
-              <div style="color:#a78bfa;">${metricNames[1] || "Metric 2"}: <strong>${pt.formatted_y || pt.y}</strong></div>
-              ${pt.sample_size ? `<div style="color:#a8a29e;font-size:11px;margin-top:2px;">Matched sample: ${pt.sample_size} entities</div>` : ""}
+              <div style="color:#c084fc;">${metricNames[1] || "Metric 2"}: <strong>${pt.formatted_y || pt.y}</strong></div>
+              ${pt.sample_size ? `<div style="color:#ded5cb;font-size:11px;margin-top:2px;">Matched sample: ${pt.sample_size} entities</div>` : ""}
             `;
           },
         },
         legend: {
           data: [metricNames[0] || "Primary Metric", metricNames[1] || "Secondary Metric"],
-          textStyle: { color: "#a8a29e", fontSize: 11 },
+          textStyle: { color: "#ded5cb", fontSize: 11 },
           top: 0,
           right: 12,
         },
@@ -98,15 +98,15 @@ export default function EnterpriseSynthesisCard({
         },
         xAxis: {
           type: "value",
-          splitLine: { lineStyle: { color: "rgba(255,255,255,0.06)" } },
-          axisLabel: { color: "#78716c", fontSize: 11 },
+          splitLine: { lineStyle: { color: "#524940", type: "dashed" } },
+          axisLabel: { color: "#ded5cb", fontSize: 11 },
         },
         yAxis: {
           type: "category",
           data: categories,
-          axisLine: { lineStyle: { color: "#44403c" } },
+          axisLine: { lineStyle: { color: "#3d362f" } },
           axisLabel: {
-            color: "#d6d3d1",
+            color: "#ded5cb",
             fontSize: 11,
             formatter: (val) => (val.length > 22 ? `${val.substring(0, 20)}…` : val),
           },
@@ -124,7 +124,7 @@ export default function EnterpriseSynthesisCard({
             type: "scatter",
             symbolSize: 12,
             data: yVals.map((value, index) => [value, index]),
-            itemStyle: { color: "#a78bfa" },
+            itemStyle: { color: "#c084fc" },
           },
         ],
       };
@@ -141,16 +141,16 @@ export default function EnterpriseSynthesisCard({
         backgroundColor: "transparent",
         tooltip: {
           trigger: "item",
-          backgroundColor: "#1c1917",
-          borderColor: "#44403c",
-          textStyle: { color: "#f5f5f4", fontSize: 12 },
+          backgroundColor: "#1c1815",
+          borderColor: "#524940",
+          textStyle: { color: "#fff9f2", fontSize: 12 },
           formatter: (param) => {
             const [x, y, label, n] = param.value || [];
             return `
-              <div style="font-weight:600;margin-bottom:4px;">${label || "Aggregated Bin"}</div>
+              <div style="font-weight:600;margin-bottom:4px;color:#fff9f2;">${label || "Aggregated Bin"}</div>
               <div style="color:#38bdf8;">${visual.x_axis_title || "X"}: <strong>${x}</strong></div>
-              <div style="color:#a78bfa;">${visual.y_axis_title || "Y"}: <strong>${y}</strong></div>
-              ${n ? `<div style="color:#a8a29e;font-size:11px;margin-top:2px;">Sample size: ${n} records</div>` : ""}
+              <div style="color:#c084fc;">${visual.y_axis_title || "Y"}: <strong>${y}</strong></div>
+              ${n ? `<div style="color:#ded5cb;font-size:11px;margin-top:2px;">Sample size: ${n} records</div>` : ""}
             `;
           },
         },
@@ -166,16 +166,16 @@ export default function EnterpriseSynthesisCard({
           name: visual.x_axis_title || "Measure X",
           nameLocation: "middle",
           nameGap: 24,
-          nameTextStyle: { color: "#78716c", fontSize: 11 },
-          splitLine: { lineStyle: { color: "rgba(255,255,255,0.06)" } },
-          axisLabel: { color: "#78716c", fontSize: 11 },
+          nameTextStyle: { color: "#ded5cb", fontSize: 11 },
+          splitLine: { lineStyle: { color: "#524940", type: "dashed" } },
+          axisLabel: { color: "#ded5cb", fontSize: 11 },
         },
         yAxis: {
           type: "value",
           name: visual.y_axis_title || "Measure Y",
-          nameTextStyle: { color: "#78716c", fontSize: 11 },
-          splitLine: { lineStyle: { color: "rgba(255,255,255,0.06)" } },
-          axisLabel: { color: "#78716c", fontSize: 11 },
+          nameTextStyle: { color: "#ded5cb", fontSize: 11 },
+          splitLine: { lineStyle: { color: "#524940", type: "dashed" } },
+          axisLabel: { color: "#ded5cb", fontSize: 11 },
         },
         series: [
           {
@@ -198,9 +198,9 @@ export default function EnterpriseSynthesisCard({
         tooltip: {
           trigger: "axis",
           axisPointer: { type: "shadow" },
-          backgroundColor: "#1c1917",
-          borderColor: "#44403c",
-          textStyle: { color: "#f5f5f4", fontSize: 12 },
+          backgroundColor: "#1c1815",
+          borderColor: "#524940",
+          textStyle: { color: "#fff9f2", fontSize: 12 },
         },
         grid: {
           left: "4%",
@@ -212,13 +212,13 @@ export default function EnterpriseSynthesisCard({
         xAxis: {
           type: "category",
           data: stages,
-          axisLine: { lineStyle: { color: "#44403c" } },
-          axisLabel: { color: "#d6d3d1", fontSize: 11 },
+          axisLine: { lineStyle: { color: "#3d362f" } },
+          axisLabel: { color: "#ded5cb", fontSize: 11 },
         },
         yAxis: {
           type: "value",
-          splitLine: { lineStyle: { color: "rgba(255,255,255,0.06)" } },
-          axisLabel: { color: "#78716c", fontSize: 11 },
+          splitLine: { lineStyle: { color: "#524940", type: "dashed" } },
+          axisLabel: { color: "#ded5cb", fontSize: 11 },
         },
         series: [
           {
@@ -226,7 +226,7 @@ export default function EnterpriseSynthesisCard({
             data: counts,
             barWidth: "40%",
             itemStyle: {
-              color: (params) => (params.dataIndex === 0 ? "#38bdf8" : "#10b981"),
+              color: (params) => (params.dataIndex === 0 ? "#38bdf8" : "#34d399"),
               borderRadius: [4, 4, 0, 0],
             },
           },

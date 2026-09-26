@@ -82,22 +82,22 @@ export default function ExceptionWatchCard({
         xAxis: {
           type: "value",
           scale: true,
-          axisLine: { lineStyle: { color: "#94a3b8" } },
+          axisLine: { lineStyle: { color: "#3d362f" } },
           axisLabel: {
-            color: "#64748b",
+            color: "#ded5cb",
             fontSize: 11,
             formatter: (v) => `${v} ${lead.unit || ""}`.trim()
           },
-          splitLine: { lineStyle: { color: "#f1f5f9", type: "dashed" } }
+          splitLine: { lineStyle: { color: "#524940", type: "dashed" } }
         },
         yAxis: {
           type: "category",
           data: labels,
           inverse: true,
-          axisLine: { lineStyle: { color: "#cbd5e1" } },
+          axisLine: { lineStyle: { color: "#3d362f" } },
           axisTick: { show: false },
           axisLabel: {
-            color: "#334155",
+            color: "#ded5cb",
             fontSize: 11,
             width: 125,
             overflow: "truncate",
@@ -112,9 +112,9 @@ export default function ExceptionWatchCard({
             markArea: (expLower != null && expUpper != null) ? {
               silent: true,
               itemStyle: {
-                color: "rgba(59, 130, 246, 0.08)",
+                color: "rgba(96, 165, 250, 0.12)",
                 borderWidth: 1,
-                borderColor: "rgba(59, 130, 246, 0.25)",
+                borderColor: "#60a5fa",
                 borderType: "dashed"
               },
               data: [
@@ -138,8 +138,8 @@ export default function ExceptionWatchCard({
         isException: p.is_exception,
         isPartial: p.is_partial,
         itemStyle: {
-          color: p.is_exception ? "#d97706" : "#2563eb",
-          borderColor: p.is_exception ? "#b45309" : "#1d4ed8",
+          color: p.is_exception ? "#fbbb27" : "#60a5fa",
+          borderColor: p.is_exception ? "#ff8a62" : "#93c5fd",
           borderWidth: p.is_exception ? 2 : 1
         },
         symbol: p.is_exception ? "diamond" : "circle",
@@ -173,15 +173,15 @@ export default function ExceptionWatchCard({
         xAxis: {
           type: "category",
           data: labels,
-          axisLine: { lineStyle: { color: "#cbd5e1" } },
-          axisLabel: { color: "#64748b", fontSize: 11 }
+          axisLine: { lineStyle: { color: "#3d362f" } },
+          axisLabel: { color: "#ded5cb", fontSize: 11 }
         },
         yAxis: {
           type: "value",
           scale: true,
-          axisLine: { lineStyle: { color: "#94a3b8" } },
-          axisLabel: { color: "#64748b", fontSize: 11 },
-          splitLine: { lineStyle: { color: "#f1f5f9" } }
+          axisLine: { lineStyle: { color: "#3d362f" } },
+          axisLabel: { color: "#ded5cb", fontSize: 11 },
+          splitLine: { lineStyle: { color: "#524940", type: "dashed" } }
         },
         series: [
           {
@@ -189,13 +189,13 @@ export default function ExceptionWatchCard({
             type: "line",
             smooth: false,
             data: obsValues,
-            lineStyle: { color: "#2563eb", width: 2 },
+            lineStyle: { color: "#60a5fa", width: 2 },
             markArea: (expLower != null && expUpper != null) ? {
               silent: true,
               itemStyle: {
-                color: "rgba(59, 130, 246, 0.08)",
+                color: "rgba(96, 165, 250, 0.12)",
                 borderWidth: 1,
-                borderColor: "rgba(59, 130, 246, 0.2)",
+                borderColor: "#60a5fa",
                 borderType: "dashed"
               },
               data: [

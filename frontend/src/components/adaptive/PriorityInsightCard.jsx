@@ -22,12 +22,16 @@ function buildDonutOption(baseOption, heroValue, unitSuffix, title) {
   if (!baseOption) return null;
   const categories = baseOption?.xAxis?.data || [];
   const rawValues = baseOption?.series?.[0]?.data || [];
-  const palette = ["#ff8a62", "#34d399", "#60a5fa", "#f59e0b", "#a78bfa", "#f472b6"];
+  const palette = ["#ff8a62", "#34d399", "#60a5fa", "#fbbb27", "#c084fc", "#fb7185", "#38bdf8"];
 
   const pieData = categories.map((cat, i) => ({
     name: String(cat),
     value: typeof rawValues[i] === "number" ? rawValues[i] : Number(rawValues[i]) || 0,
-    itemStyle: { color: palette[i % palette.length] },
+    itemStyle: {
+      color: palette[i % palette.length],
+      borderColor: "#171412",
+      borderWidth: 2,
+    },
   }));
 
   const numericVal = parseFloat(String(heroValue).replace(/[^0-9.-]/g, ""));
@@ -35,7 +39,11 @@ function buildDonutOption(baseOption, heroValue, unitSuffix, title) {
     pieData.push({
       name: "Other / Remaining",
       value: Math.max(0, +(100 - numericVal).toFixed(1)),
-      itemStyle: { color: "#3a342f" },
+      itemStyle: {
+        color: "#524940",
+        borderColor: "#171412",
+        borderWidth: 2,
+      },
     });
   }
 
@@ -46,7 +54,7 @@ function buildDonutOption(baseOption, heroValue, unitSuffix, title) {
       trigger: "item",
       confine: true,
       backgroundColor: "#1c1815",
-      borderColor: "#5a5148",
+      borderColor: "#524940",
       borderWidth: 1,
       padding: [8, 12],
       textStyle: { color: "#fff9f2", fontSize: 12, fontFamily: "system-ui, sans-serif" },
@@ -56,7 +64,7 @@ function buildDonutOption(baseOption, heroValue, unitSuffix, title) {
       orient: "horizontal",
       bottom: 0,
       left: "center",
-      textStyle: { color: "#c9bdb0", fontSize: 11 },
+      textStyle: { color: "#ded5cb", fontSize: 11 },
       itemWidth: 10,
       itemHeight: 10,
       itemGap: 14,
@@ -70,7 +78,7 @@ function buildDonutOption(baseOption, heroValue, unitSuffix, title) {
         avoidLabelOverlap: false,
         itemStyle: {
           borderRadius: 4,
-          borderColor: "#181411",
+          borderColor: "#171412",
           borderWidth: 2,
         },
         label: {
@@ -79,9 +87,10 @@ function buildDonutOption(baseOption, heroValue, unitSuffix, title) {
           formatter: () => `${heroValue}${unitSuffix}\n{sub|Split}`,
           rich: {
             sub: {
-              fontSize: 10,
-              color: "#9e8e81",
+              fontSize: 11,
+              color: "#ded5cb",
               lineHeight: 16,
+              fontWeight: 500,
             },
           },
           fontSize: 18,
@@ -411,11 +420,25 @@ export default function PriorityInsightCard({
                   />
                 </div>
               ) : (
-                <div className="adaptive-priority-chart-container">
+                <div
+                  className="adaptive-priority-chart-container"
+                  style={{
+                    height:
+                      echarts_option?.yAxis?.type === "category"
+                        ? Math.max(260, (echarts_option.yAxis.data?.length || 0) * 25 + 24)
+                        : undefined,
+                  }}
+                >
                   <SafeReactECharts
                     option={echarts_option}
                     opts={{ renderer: "svg" }}
-                    style={{ height: "100%", width: "100%" }}
+                    style={{
+                      height:
+                        echarts_option?.yAxis?.type === "category"
+                          ? Math.max(260, (echarts_option.yAxis.data?.length || 0) * 25 + 24)
+                          : "100%",
+                      width: "100%",
+                    }}
                   />
                 </div>
               )}

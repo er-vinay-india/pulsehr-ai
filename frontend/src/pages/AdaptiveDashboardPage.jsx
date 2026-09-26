@@ -462,7 +462,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
           },
         },
         backgroundColor: "#1c1815",
-        borderColor: "#5a5148",
+        borderColor: "#524940",
         borderWidth: 1,
         padding: [10, 14],
         textStyle: {
@@ -482,7 +482,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
           if (!pt || pt.average_hours === null) {
             return `
               <div style="font-weight:600;margin-bottom:4px;color:#fff9f2">${periodHeader}</div>
-              <div style="color:#a89f94">No recorded intervals in this period</div>
+              <div style="color:#ded5cb">No recorded intervals in this period</div>
             `;
           }
           const displayAvg = secondaryElement.glance?.unit === "$"
@@ -493,28 +493,28 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
           return `
             <div style="font-weight:600;margin-bottom:6px;color:#fff9f2">${periodHeader}</div>
             <div style="display:flex;justify-content:space-between;gap:16px;margin-bottom:4px">
-              <span style="color:#c9bdb0">${secondaryElement.title || "Average"}:</span>
+              <span style="color:#ded5cb">${secondaryElement.title || "Average"}:</span>
               <strong style="color:#ffb089">${displayAvg}</strong>
             </div>
             ${
               pt.has_band
                 ? `<div style="display:flex;justify-content:space-between;gap:16px;margin-bottom:4px">
-                    <span style="color:#c9bdb0">${secondaryElement.band_name || "Middle 80% range"}:</span>
+                    <span style="color:#ded5cb">${secondaryElement.band_name || "Middle 80% range"}:</span>
                     <span style="color:#fff9f2">${pt.formatted_p10} – ${pt.formatted_p90}</span>
                   </div>`
                 : ""
             }
             <div style="display:flex;justify-content:space-between;gap:16px;margin-bottom:2px">
-              <span style="color:#a89f94">Observations:</span>
+              <span style="color:#ded5cb">Observations:</span>
               <span style="color:#fff9f2">${pt.valid_entries.toLocaleString()}</span>
             </div>
             <div style="display:flex;justify-content:space-between;gap:16px;margin-bottom:2px">
-              <span style="color:#a89f94">${secondaryElement.temporal_grain === "weekly" ? "Week date:" : "Observed dates:"}</span>
+              <span style="color:#ded5cb">${secondaryElement.temporal_grain === "weekly" ? "Week date:" : "Observed dates:"}</span>
               <span style="color:#fff9f2">${secondaryElement.temporal_grain === "weekly" ? pt.first_observed_date : pt.observed_dates}</span>
             </div>
             ${
               pt.excluded_entries > 0
-                ? `<div style="display:flex;justify-content:space-between;gap:16px;color:#a89f94">
+                ? `<div style="display:flex;justify-content:space-between;gap:16px;color:#ded5cb">
                     <span>Excluded entries:</span>
                     <span>${pt.excluded_entries.toLocaleString()}</span>
                   </div>`
@@ -522,7 +522,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
             }
             ${
               pt.is_partial
-                ? `<div style="margin-top:6px;font-size:11px;color:#f3d19a;border-top:1px solid #3d362f;padding-top:4px">
+                ? `<div style="margin-top:6px;font-size:11px;color:#fbbb27;border-top:1px solid #524940;padding-top:4px">
                     ⚠️ ${pt.partial_reason || "Partial period"}
                   </div>`
                 : ""
@@ -541,7 +541,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
         nameLocation: "middle",
         nameGap: isMobile ? 72 : 32,
         nameTextStyle: {
-          color: "#c9bdb0",
+          color: "#ded5cb",
           fontSize: 12,
           fontWeight: 500,
         },
@@ -553,7 +553,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
           lineStyle: { color: "#3d362f" },
         },
         axisLabel: {
-          color: "#c9bdb0",
+          color: "#ded5cb",
           fontSize: isMobile ? 10 : 11,
           rotate: isMobile ? 35 : 0,
           align: isMobile ? "right" : "center",
@@ -604,7 +604,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
         nameRotate: 90,
         nameGap: isMobile ? 56 : 52,
         nameTextStyle: {
-          color: "#c9bdb0",
+          color: "#ded5cb",
           fontSize: 12,
           fontWeight: 500,
         },
@@ -614,7 +614,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
           lineStyle: { color: "#3d362f" },
         },
         axisLabel: {
-          color: "#c9bdb0",
+          color: "#ded5cb",
           fontSize: 11,
           formatter: (val) => {
             const key = val.toFixed(2);
@@ -633,8 +633,8 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
         splitLine: {
           show: true,
           lineStyle: {
-            color: "#2c2722",
-            type: "solid",
+            color: "#524940",
+            type: "dashed",
           },
         },
       },
@@ -755,7 +755,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
         trigger: "item",
         confine: true,
         backgroundColor: "#1c1815",
-        borderColor: "#5a5148",
+        borderColor: "#524940",
         borderWidth: 1,
         padding: [10, 14],
         textStyle: {
@@ -773,17 +773,17 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
           return `
             <div style="font-weight:600;margin-bottom:6px;color:#fff9f2">${header}</div>
             <div style="display:flex;justify-content:space-between;gap:16px;margin-bottom:4px">
-              <span style="color:#c9bdb0">${tertiaryElement.metric_name || "Headcount"}:</span>
+              <span style="color:#ded5cb">${tertiaryElement.metric_name || "Headcount"}:</span>
               <strong style="color:#ffb089">${d.formattedValue}</strong>
             </div>
             <div style="display:flex;justify-content:space-between;gap:16px;margin-bottom:4px">
-              <span style="color:#c9bdb0">Share of Total:</span>
+              <span style="color:#ded5cb">Share of Total:</span>
               <strong style="color:#f3d19a">${d.sharePct}%</strong>
             </div>
             ${
               d.formattedSecondary && !isOther
-                ? `<div style="display:flex;justify-content:space-between;gap:16px;border-top:1px solid #3d362f;padding-top:4px;margin-top:4px">
-                    <span style="color:#a89f94">Average / Metric:</span>
+                ? `<div style="display:flex;justify-content:space-between;gap:16px;border-top:1px solid #524940;padding-top:4px;margin-top:4px">
+                    <span style="color:#ded5cb">Average / Metric:</span>
                     <span style="color:#fff9f2">${d.formattedSecondary}</span>
                   </div>`
                 : ""
@@ -821,15 +821,15 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
         splitLine: {
           show: true,
           lineStyle: {
-            color: "#2c2722",
-            type: "solid",
+            color: "#524940",
+            type: "dashed",
           },
         },
         axisLine: {
           lineStyle: { color: "#3d362f" },
         },
         axisLabel: {
-          color: "#a89f94",
+          color: "#ded5cb",
           fontSize: 11,
           formatter: (val) => {
             const absVal = Math.abs(val);
@@ -864,7 +864,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
           lineStyle: { color: "#3d362f" },
         },
         axisLabel: {
-          color: "#c9bdb0",
+          color: "#ded5cb",
           fontSize: isMobile ? 11 : 12,
           width: isMobile ? 110 : 200,
           overflow: "truncate",
@@ -893,7 +893,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
             show: true,
             position: (params) => (params.data?.sharePct > 20 ? "insideRight" : "right"),
             distance: 8,
-            color: (params) => (params.data?.sharePct > 20 ? "#1c1815" : "#c9bdb0"),
+            color: (params) => (params.data?.sharePct > 20 ? "#1c1815" : "#ded5cb"),
             fontWeight: (params) => (params.data?.sharePct > 20 ? 700 : 400),
             fontSize: 11,
             formatter: (params) => `${params.data?.sharePct ?? 0}%`,
@@ -920,7 +920,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
       isBaseline: it.is_baseline,
       cohort: it.cohort,
       itemStyle: {
-        color: it.is_baseline ? "#7a7065" : "#ffb089",
+        color: it.is_baseline ? "#968b7e" : "#ffb089",
         borderRadius: [0, 4, 4, 0],
       },
     }));
@@ -939,7 +939,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
         trigger: "item",
         confine: true,
         backgroundColor: "#1c1815",
-        borderColor: "#5a5148",
+        borderColor: "#524940",
         borderWidth: 1,
         padding: [10, 14],
         textStyle: {
@@ -952,20 +952,20 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
           if (!d) return "";
           return `
             <div style="font-weight:600;margin-bottom:6px;color:#fff9f2">
-              ${d.cohort} ${d.isBaseline ? '<span style="font-size:10px;color:#a89f94">(Baseline)</span>' : ''}
+              ${d.cohort} ${d.isBaseline ? '<span style="font-size:10px;color:#ded5cb">(Baseline)</span>' : ''}
             </div>
             <div style="display:flex;justify-content:space-between;gap:16px;margin-bottom:4px">
-              <span style="color:#c9bdb0">${quaternaryElement.metric_name || "Metric"}:</span>
+              <span style="color:#ded5cb">${quaternaryElement.metric_name || "Metric"}:</span>
               <strong style="color:#ffb089">${d.formattedValue}</strong>
             </div>
             <div style="display:flex;justify-content:space-between;gap:16px;margin-bottom:4px">
-              <span style="color:#c9bdb0">Sample:</span>
+              <span style="color:#ded5cb">Sample:</span>
               <span style="color:#fff9f2">${d.sampleLabel}</span>
             </div>
             ${
               d.sharePct !== null && d.sharePct !== undefined
                 ? `<div style="display:flex;justify-content:space-between;gap:16px">
-                    <span style="color:#c9bdb0">Share of Total:</span>
+                    <span style="color:#ded5cb">Share of Total:</span>
                     <strong style="color:#f3d19a">${d.sharePct}%</strong>
                   </div>`
                 : ""
@@ -995,15 +995,15 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
         splitLine: {
           show: true,
           lineStyle: {
-            color: "#2c2722",
-            type: "solid",
+            color: "#524940",
+            type: "dashed",
           },
         },
         axisLine: {
           lineStyle: { color: "#3d362f" },
         },
         axisLabel: {
-          color: "#a89f94",
+          color: "#ded5cb",
           fontSize: 11,
           formatter: (val) => {
             const absVal = Math.abs(val);
@@ -1032,7 +1032,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
           lineStyle: { color: "#3d362f" },
         },
         axisLabel: {
-          color: "#c9bdb0",
+          color: "#ded5cb",
           fontSize: isMobile ? 11 : 12,
           width: isMobile ? 115 : 150,
           overflow: "truncate",
