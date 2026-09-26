@@ -7,6 +7,7 @@ import AdaptiveDashboardPage from "./pages/AdaptiveDashboardPage.jsx";
 import DataExplorerPage from "./pages/DataExplorerPage.jsx";
 import PresentationPage from "./pages/PresentationPage.jsx";
 import UploadModal from "./components/ingestion/UploadModal.jsx";
+import { CheckCircle2, X, Table } from "lucide-react";
 
 function parseHash() {
   const hash = window.location.hash.replace("#", "").trim();
@@ -32,10 +33,17 @@ export default function App() {
     return raw === "upload" || raw === "ingestion";
   });
 
+  // Background Ingestion State & Notification Toast
+  const [isUploadingBackground, setIsUploadingBackground] = useState(false);
+  const [bgNotification, setBgNotification] = useState(null);
+
   // Presentation Pipeline Job & Deck State
   const [activePresentationJob, setActivePresentationJob] = useState(null);
   const [activeDeck, setActiveDeck] = useState(null);
   const [activeScope, setActiveScope] = useState({ datasetId: null, sheetId: null, snapshotId: null });
+
+  // Key to force refresh DataExplorerPage when an upload finishes
+  const [explorerRefreshKey, setExplorerRefreshKey] = useState(0);
 
   useEffect(() => {
     const handleHashChange = () => {
@@ -56,6 +64,13 @@ export default function App() {
 
   useEffect(() => { window.scrollTo(0, 0); }, [activeTab]);
 
+  // Auto-dismiss notification after 8 seconds
+  useEffect(() => {
+    if (!bgNotification) return;
+    const t = setTimeout(() => setBgNotification(null), 8000);
+    return () => clearTimeout(t);
+  }, [bgNotification]);
+
   const handleSelectTab = tab => {
     if (tab === "copilot") {
       setCopilotOpen(true);
@@ -69,6 +84,26 @@ export default function App() {
     setActiveTab(tab);
   };
 
+  const handleUploadStart = () => {
+    // If modal is closed or gets closed during upload, Header can show progress
+    setIsUploadingBackground(true);
+  };
+
+  const handleUploadEnd = () => {
+    setIsUploadingBackground(false);
+  };
+
+  const handleUploadSuccess = (res, meta = {}) => {
+    setExplorerRefreshKey(prev => prev + 1);
+    if (meta.wasBackground) {
+      setBgNotification({
+        fileName: res.display_name || res.filename || "Spreadsheet",
+        sheetsCount: res.sheets?.length || 1,
+        totalRows: res.total_rows || 0
+      });
+    }
+  };
+
   return (
     <div className="app">
       <a className="skip-link" href="#main-content" onClick={e => { e.preventDefault(); document.getElementById("main-content")?.focus(); }}>Skip to content</a>
@@ -77,12 +112,84 @@ export default function App() {
         onSelectTab={handleSelectTab}
         onOpenUploadModal={() => setUploadModalOpen(true)}
         activeJob={activePresentationJob}
+        isUploadingBackground={isUploadingBackground}
       />
+
+      {/* Floating Background Notification Toast */}
+      {bgNotification && (
+        <div
+          className="bg-notification-toast"
+          role="status"
+          aria-live="polite"
+          style={{
+            position: "fixed",
+            top: "80px",
+            right: "24px",
+            zIndex: 1100,
+            display: "flex",
+            alignItems: "center",
+            gap: "12px",
+            padding: "12px 18px",
+            background: "#1c1815",
+            border: "1px solid rgba(46, 213, 115, 0.4)",
+            borderRadius: "12px",
+            boxShadow: "0 8px 32px rgba(0, 0, 0, 0.5), 0 0 12px rgba(46, 213, 115, 0.15)",
+            color: "#fff9f2",
+            fontSize: "0.88rem",
+            animation: "slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1)"
+          }}
+        >
+          <CheckCircle2 size={20} color="#2ed573" style={{ flexShrink: 0 }} />
+          <div style={{ marginRight: "6px" }}>
+            <strong style={{ color: "#2ed573" }}>Ingestion Complete:</strong>{" "}
+            <span>{bgNotification.fileName} ({bgNotification.sheetsCount} sheets, {bgNotification.totalRows} rows)</span>
+          </div>
+
+          <button
+            type="button"
+            className="btn-primary"
+            onClick={() => {
+              setActiveTab("explorer");
+              window.location.hash = "explorer";
+              setBgNotification(null);
+            }}
+            style={{
+              padding: "5px 12px",
+              fontSize: "0.78rem",
+              minHeight: "30px",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "5px"
+            }}
+          >
+            <Table size={13} />
+            <span>View</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setBgNotification(null)}
+            style={{
+              background: "none",
+              border: "none",
+              color: "var(--fg-muted)",
+              cursor: "pointer",
+              padding: "4px",
+              display: "flex",
+              alignItems: "center"
+            }}
+            aria-label="Dismiss notification"
+          >
+            <X size={16} />
+          </button>
+        </div>
+      )}
 
       <main id="main-content" className="app-main" tabIndex={-1}>
         {activeTab === "adaptive" && <AdaptiveDashboardPage onNavigateTab={handleSelectTab} />}
         {activeTab === "explorer" && (
           <DataExplorerPage
+            key={explorerRefreshKey}
             onSelectEmployee={setSelectedEmployeeId}
           />
         )}
@@ -109,9 +216,9 @@ export default function App() {
       <UploadModal
         isOpen={uploadModalOpen}
         onClose={() => setUploadModalOpen(false)}
-        onUploadSuccess={() => {
-          // If on explorer or adaptive, components reload seamlessly
-        }}
+        onUploadStart={handleUploadStart}
+        onUploadEnd={handleUploadEnd}
+        onUploadSuccess={handleUploadSuccess}
       />
 
       {/* Global Right-Side Floating Copilot Widget */}

@@ -3,7 +3,6 @@ import {
   getSheets,
   getSheetRows,
   getJoinedRows,
-  getSheetProjections,
   getSheetEdaReport,
   getDerivedTables,
   getDerivedTableRows,
@@ -11,38 +10,20 @@ import {
   runEdaPipeline,
   listDatasets,
   deleteDataset,
-  bulkDeleteDatasets,
-  deleteAllDatasets
+  getDatasetDownloadUrl
 } from '../api/client';
-import { formatDisplayLabel } from '../utils/displayFormatters';
 import DataTable from '../components/DataTable';
-import DatasetListCard from '../components/ingestion/DatasetListCard';
 import DeleteConsentModal from '../components/ingestion/DeleteConsentModal';
 import {
   FileSpreadsheet,
-  Table,
-  BarChart2,
-  GitBranch,
-  ShieldCheck,
+  Download,
+  Trash2,
+  GitMerge,
   Search,
   Layers,
-  Info,
-  ChevronRight,
-  Sparkles,
-  RefreshCw,
-  GitMerge,
-  AlertTriangle,
-  CheckCircle2,
-  TrendingDown,
-  TrendingUp,
-  ArrowRight,
-  Trash2,
-  CheckSquare,
-  Square
+  ChevronDown
 } from 'lucide-react';
 import VisualEdaDashboard from '../components/eda/VisualEdaDashboard';
-
-const fmt = (n) => (n == null ? 'Unavailable' : Number(n).toLocaleString(undefined, { maximumFractionDigits: 2 }));
 
 export default function DataExplorerPage() {
   const [catalog, setCatalog] = useState({ sheets: [], relationships: [] });
@@ -67,7 +48,7 @@ export default function DataExplorerPage() {
     return params.get('derived_id') || '';
   });
 
-  // View Modes: 'table' | 'eda' (Column Projections and Diagnostics unified into EDA)
+  // View Modes: 'table' | 'eda'
   const [viewMode, setViewMode] = useState(() => {
     const params = new URLSearchParams(window.location.search);
     const v = params.get('view');
@@ -80,13 +61,12 @@ export default function DataExplorerPage() {
   const [isRerunningEda, setIsRerunningEda] = useState(false);
   const [crossCorrelations, setCrossCorrelations] = useState([]);
 
-  // Workspace Datasets & Deletion State
+  // Minimal Workspace Datasets & Deletion State
   const [datasets, setDatasets] = useState([]);
-  const [selectedDatasetIds, setSelectedDatasetIds] = useState([]);
   const [datasetToDelete, setDatasetToDelete] = useState(null);
   const [deleteConsent, setDeleteConsent] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [showDatasetManager, setShowDatasetManager] = useState(true);
+  const [showWorkspaceDrawer, setShowWorkspaceDrawer] = useState(false);
 
   const refresh = () => {
     getSheets()
@@ -126,35 +106,9 @@ export default function DataExplorerPage() {
       .catch(() => {});
   };
 
-  const handleToggleSelectDataset = (id) => {
-    setSelectedDatasetIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
-    );
-  };
-
-  const handleToggleSelectAll = () => {
-    if (selectedDatasetIds.length === datasets.length) {
-      setSelectedDatasetIds([]);
-    } else {
-      setSelectedDatasetIds(datasets.map((d) => d.id));
-    }
-  };
-
   const handlePromptSingleDelete = (dataset) => {
+    if (!dataset) return;
     setDatasetToDelete(dataset);
-    setDeleteConsent(false);
-  };
-
-  const handlePromptBulkDelete = () => {
-    const targets = datasets.filter((d) => selectedDatasetIds.includes(d.id));
-    if (!targets.length) return;
-    setDatasetToDelete({ isBulk: true, isAll: false, datasets: targets });
-    setDeleteConsent(false);
-  };
-
-  const handlePromptDeleteAll = () => {
-    if (!datasets.length) return;
-    setDatasetToDelete({ isBulk: true, isAll: true, datasets });
     setDeleteConsent(false);
   };
 
@@ -162,26 +116,13 @@ export default function DataExplorerPage() {
     if (!datasetToDelete || !deleteConsent || deleting) return;
     setDeleting(true);
     try {
-      if (datasetToDelete.isBulk) {
-        if (datasetToDelete.isAll) {
-          await deleteAllDatasets();
-        } else {
-          await bulkDeleteDatasets(datasetToDelete.datasets.map((d) => d.id));
-        }
-      } else {
-        await deleteDataset(datasetToDelete.id);
-      }
-
-      const deletedIds = datasetToDelete.isBulk
-        ? datasetToDelete.datasets.map((d) => d.id)
-        : [datasetToDelete.id];
-
-      setSelectedDatasetIds((prev) => prev.filter((id) => !deletedIds.includes(id)));
+      await deleteDataset(datasetToDelete.id);
+      const deletedDatasetId = datasetToDelete.id;
       setDatasetToDelete(null);
       setDeleteConsent(false);
       refresh();
 
-      if (deletedIds.includes(Number(selectedSheet?.dataset_id))) {
+      if (selectedSheet && Number(selectedSheet.dataset_id) === Number(deletedDatasetId)) {
         setSelected('');
       }
     } catch (err) {
@@ -269,6 +210,7 @@ export default function DataExplorerPage() {
   };
 
   const selectedSheet = catalog.sheets.find((s) => String(s.id) === String(selected));
+  const activeDataset = datasets.find((d) => d.id === selectedSheet?.dataset_id);
   const link = catalog.relationships.find((r) => String(r.id) === relation);
   const left = catalog.sheets.find((s) => s.id === link?.left_sheet);
   const right = catalog.sheets.find((s) => s.id === link?.right_sheet);
@@ -302,20 +244,22 @@ export default function DataExplorerPage() {
 
   return (
     <div className="explorer-page">
+      {/* 1. Header & Primary View Mode Pill Switcher */}
       <div
+        className="explorer-hero-bar"
         style={{
           display: 'flex',
           justifyContent: 'space-between',
-          alignItems: 'flex-start',
+          alignItems: 'center',
           flexWrap: 'wrap',
           gap: '1rem',
           marginBottom: '1rem'
         }}
       >
         <div>
-          <h2>Data Explorer & Technical Workbench</h2>
-          <p className="subtitle">
-            Dual-version tabular inspection (Raw vs. Post-EDA Curated), cross-sheet correlation discovery, and deep schema profiling.
+          <h2 style={{ fontSize: '1.5rem', margin: 0, letterSpacing: '-0.025em' }}>Data Explorer & Workbench</h2>
+          <p className="subtitle" style={{ margin: '4px 0 0', fontSize: '0.85rem' }}>
+            Dual-version tabular inspection (Raw vs. Post-EDA Curated), correlation discovery, and predictive analytics.
           </p>
         </div>
 
@@ -336,325 +280,376 @@ export default function DataExplorerPage() {
         </div>
       </div>
 
-      {/* Workspace Datasets Registry & Management Panel */}
-      <div className="card-panel datasets-workspace-manager" style={{ marginTop: '0.75rem', marginBottom: '1.25rem' }}>
-        <div
-          className="panel-header"
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            flexWrap: 'wrap',
-            gap: '0.75rem'
-          }}
-        >
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Layers size={18} color="var(--brand-400)" />
-              <h3 style={{ margin: 0, fontSize: '1.05rem', color: 'var(--fg-primary)' }}>
-                Workspace Datasets ({datasets.length})
-              </h3>
-            </div>
-            <p className="panel-sub" style={{ margin: '2px 0 0', fontSize: '0.8rem', color: 'var(--fg-secondary)' }}>
-              Manage uploaded CSV & Excel workbooks, download sources, and execute single or bulk dataset deletion.
-            </p>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-            {selectedDatasetIds.length > 0 && (
-              <button
-                type="button"
-                className="btn-danger-confirm"
-                style={{
-                  padding: '0.4rem 0.8rem',
-                  fontSize: '0.8rem',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px'
-                }}
-                onClick={handlePromptBulkDelete}
-              >
-                <Trash2 size={14} />
-                <span>Delete Selected ({selectedDatasetIds.length})</span>
-              </button>
-            )}
-
-            {datasets.length > 0 && (
-              <button
-                type="button"
-                className="btn-secondary"
-                style={{
-                  padding: '0.4rem 0.8rem',
-                  fontSize: '0.8rem',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  color: 'var(--rose-tier)',
-                  borderColor: 'rgba(255, 180, 190, 0.3)'
-                }}
-                onClick={handlePromptDeleteAll}
-              >
-                <Trash2 size={14} />
-                <span>Delete All</span>
-              </button>
-            )}
-
-            <button
-              type="button"
-              className="btn-secondary"
-              style={{ padding: '0.4rem 0.75rem', fontSize: '0.8rem' }}
-              onClick={() => setShowDatasetManager((prev) => !prev)}
-            >
-              {showDatasetManager ? 'Collapse Files ▲' : `View Files (${datasets.length}) ▼`}
-            </button>
-          </div>
-        </div>
-
-        {showDatasetManager && (
-          <div style={{ marginTop: '1rem' }}>
-            {datasets.length > 1 && (
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  padding: '0.5rem 0.75rem',
-                  background: 'rgba(255, 255, 255, 0.02)',
-                  border: '1px solid var(--border-subtle)',
-                  borderRadius: '6px',
-                  marginBottom: '0.75rem',
-                  fontSize: '0.8rem'
-                }}
-              >
-                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', userSelect: 'none' }}>
-                  <input
-                    type="checkbox"
-                    checked={datasets.length > 0 && selectedDatasetIds.length === datasets.length}
-                    onChange={handleToggleSelectAll}
-                    style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: '#f43f5e' }}
-                  />
-                  <span>Select All ({datasets.length} files)</span>
-                </label>
-                {selectedDatasetIds.length > 0 && (
-                  <span style={{ color: 'var(--fg-muted)' }}>
-                    {selectedDatasetIds.length} of {datasets.length} selected
-                  </span>
-                )}
-              </div>
-            )}
-
-            {datasets.length === 0 ? (
-              <p style={{ color: 'var(--fg-muted)', fontSize: '0.85rem', margin: '0.5rem 0' }}>
-                No datasets currently in workspace. Use the &ldquo;Upload Data&rdquo; button in the top right to upload a CSV or Excel spreadsheet.
-              </p>
-            ) : (
-              <div className="dataset-list">
-                {datasets.map((ds) => (
-                  <DatasetListCard
-                    key={ds.id}
-                    dataset={ds}
-                    onPromptDelete={handlePromptSingleDelete}
-                    isSelected={selectedDatasetIds.includes(ds.id)}
-                    onToggleSelect={handleToggleSelectDataset}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Filters Toolbar */}
-      <div className="filters-toolbar" style={{ marginTop: '0.5rem' }}>
-        <label>
-          Sheet{' '}
-          <select
-            value={selected}
-            disabled={!!selectedDerivedId}
-            onChange={(e) => {
-              setSelected(e.target.value);
-              setSelectedDerivedId('');
-              setRelation('');
-              setPage(1);
-              setSearch('');
-            }}
-          >
-            <option value="">Choose a sheet</option>
-            {catalog.sheets.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.display_name || s.original_name}{' '}
-                {s.name && s.name !== 'Sheet1' ? `· ${s.name}` : ''} ({s.row_count} rows)
-              </option>
-            ))}
-          </select>
-        </label>
-
-        {selectedSheet && !selectedDerivedId && (
-          <button
-            type="button"
-            className="btn-secondary"
+      {/* 2. Unified, Compact Command & Filter Bar */}
+      <div
+        className="explorer-compact-toolbar"
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: '0.75rem',
+          background: 'var(--surface-card)',
+          border: '1px solid var(--border)',
+          borderRadius: '12px',
+          padding: '0.65rem 1rem',
+          marginBottom: '1.25rem'
+        }}
+      >
+        {/* Left Controls: Sheet, Derived View, Table Version, Search */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', flexWrap: 'wrap', flex: 1, minWidth: 0 }}>
+          {/* Sheet Selector */}
+          <div
             style={{
               display: 'inline-flex',
               alignItems: 'center',
               gap: '6px',
-              color: 'var(--rose-tier)',
-              borderColor: 'rgba(255, 180, 190, 0.3)',
-              background: 'rgba(255, 180, 190, 0.08)',
-              padding: '0.4rem 0.75rem',
-              cursor: 'pointer'
+              background: 'var(--surface-inset)',
+              border: '1px solid var(--border-subtle)',
+              borderRadius: '8px',
+              padding: '0 8px',
+              minHeight: '38px'
             }}
-            onClick={() => {
-              const ds = datasets.find((d) => d.id === selectedSheet.dataset_id);
-              if (ds) {
-                handlePromptSingleDelete(ds);
-              } else {
-                handlePromptSingleDelete({
-                  id: selectedSheet.dataset_id,
-                  original_name: selectedSheet.original_name || selectedSheet.display_name || 'Selected Dataset',
-                  row_count: selectedSheet.row_count,
-                  file_type: 'csv',
-                  sheet_count: 1
-                });
-              }
-            }}
-            title={`Delete dataset for '${selectedSheet.display_name || selectedSheet.name}'`}
           >
-            <Trash2 size={14} color="var(--rose-tier)" />
-            <span>Delete Sheet</span>
-          </button>
-        )}
+            <FileSpreadsheet size={16} color="var(--brand-400)" style={{ flexShrink: 0 }} />
+            <select
+              value={selected}
+              disabled={!!selectedDerivedId}
+              onChange={(e) => {
+                setSelected(e.target.value);
+                setSelectedDerivedId('');
+                setRelation('');
+                setPage(1);
+                setSearch('');
+              }}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: 'var(--fg-primary)',
+                fontSize: '0.85rem',
+                minHeight: '36px',
+                padding: '0 4px',
+                cursor: 'pointer'
+              }}
+            >
+              <option value="">Select a sheet...</option>
+              {catalog.sheets.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.display_name || s.original_name}{' '}
+                  {s.name && s.name !== 'Sheet1' ? `· ${s.name}` : ''} ({s.row_count} rows)
+                </option>
+              ))}
+            </select>
+          </div>
 
-        {viewMode === 'table' && !selectedDerivedId && (
-          <>
-            <label>
-              Related view{' '}
+          {/* Derived Views Dropdown (if present) */}
+          {derivedTables.length > 0 && (
+            <div
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                background: 'var(--surface-inset)',
+                border: '1px solid var(--border-subtle)',
+                borderRadius: '8px',
+                padding: '0 8px',
+                minHeight: '38px'
+              }}
+            >
+              <GitMerge size={14} color="#ffb089" style={{ flexShrink: 0 }} />
               <select
-                value={relation}
+                value={selectedDerivedId}
                 onChange={(e) => {
-                  setRelation(e.target.value);
+                  setSelectedDerivedId(e.target.value);
+                  setRelation('');
                   setPage(1);
-                  setSearch('');
+                }}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'var(--fg-primary)',
+                  fontSize: '0.82rem',
+                  minHeight: '36px',
+                  padding: '0 4px',
+                  cursor: 'pointer'
                 }}
               >
-                <option value="">Original sheet</option>
-                {catalog.relationships
-                  .filter(
-                    (r) =>
-                      r.status === 'linked' &&
-                      [r.left_sheet, r.right_sheet].includes(Number(selected))
-                  )
-                  .map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {r.left_file} [{r.left_column}] ↔ {r.right_file} [{r.right_column}]
-                    </option>
-                  ))}
+                <option value="">Single Sheet</option>
+                {derivedTables.map((dt) => (
+                  <option key={dt.id} value={dt.id}>
+                    🔗 {dt.display_name} ({dt.row_count} rows)
+                  </option>
+                ))}
               </select>
-            </label>
-            {!relation && (
-              <label>
-                Server Search{' '}
+            </div>
+          )}
+
+          {/* Table-specific Mode Controls: Version Pill + Search */}
+          {viewMode === 'table' && !selectedDerivedId && (
+            <>
+              <div
+                className="version-pill-group"
+                style={{
+                  display: 'inline-flex',
+                  background: 'rgba(0, 0, 0, 0.25)',
+                  border: '1px solid var(--border-subtle)',
+                  borderRadius: '7px',
+                  padding: '2px',
+                  gap: '2px'
+                }}
+              >
+                <button
+                  type="button"
+                  className={`version-pill ${dataVersion === 'curated' ? 'active' : ''}`}
+                  onClick={() => {
+                    setDataVersion('curated');
+                    setPage(1);
+                  }}
+                  style={{
+                    padding: '4px 10px',
+                    fontSize: '0.78rem',
+                    border: 'none',
+                    borderRadius: '5px',
+                    background: dataVersion === 'curated' ? 'var(--brand-500)' : 'transparent',
+                    color: dataVersion === 'curated' ? '#100e0c' : 'var(--fg-secondary)',
+                    fontWeight: 600,
+                    cursor: 'pointer'
+                  }}
+                >
+                  ✨ Curated
+                </button>
+                <button
+                  type="button"
+                  className={`version-pill ${dataVersion === 'raw' ? 'active' : ''}`}
+                  onClick={() => {
+                    setDataVersion('raw');
+                    setPage(1);
+                  }}
+                  style={{
+                    padding: '4px 10px',
+                    fontSize: '0.78rem',
+                    border: 'none',
+                    borderRadius: '5px',
+                    background: dataVersion === 'raw' ? 'var(--brand-500)' : 'transparent',
+                    color: dataVersion === 'raw' ? '#100e0c' : 'var(--fg-secondary)',
+                    fontWeight: 600,
+                    cursor: 'pointer'
+                  }}
+                >
+                  📋 Raw
+                </button>
+              </div>
+
+              {/* Table Search Input */}
+              <div
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  background: 'var(--surface-inset)',
+                  border: '1px solid var(--border-subtle)',
+                  borderRadius: '8px',
+                  padding: '0 8px',
+                  minHeight: '38px',
+                  flex: '1 1 140px',
+                  maxWidth: '220px'
+                }}
+              >
+                <Search size={14} color="var(--fg-muted)" />
                 <input
+                  type="text"
+                  placeholder="Filter rows..."
                   value={search}
                   onChange={(e) => {
                     setSearch(e.target.value);
                     setPage(1);
                   }}
-                  placeholder="Search all rows in DB"
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'var(--fg-primary)',
+                    fontSize: '0.82rem',
+                    padding: '0',
+                    minHeight: 'auto',
+                    width: '100%'
+                  }}
                 />
-              </label>
-            )}
-          </>
-        )}
+              </div>
+            </>
+          )}
+        </div>
 
-        <button className="btn-secondary" onClick={refresh}>
-          Refresh
-        </button>
-      </div>
-
-      {link && viewMode === 'table' && !selectedDerivedId && (
-        <p style={{ fontSize: '0.85rem', color: 'var(--fg-secondary)', margin: '0.5rem 0' }}>
-          Inner join: left = {left?.display_name || left?.original_name}; right ={' '}
-          {right?.display_name || right?.original_name}. {link.cardinality}. Values match after
-          trimming whitespace and ignoring case.
-        </p>
-      )}
-
-      {error && (
-        <p role="alert" className="error-banner">
-          {error}
-        </p>
-      )}
-      {!catalog.sheets.length && <p>No sheets available. Upload a CSV or Excel workbook.</p>}
-
-      {/* VIEW 1: INTERACTIVE DATA TABLE VIEW (WITH DUAL VERSION TOGGLE) */}
-      {viewMode === 'table' && (
-        <>
-          {/* Dual Version & Derived Views Toggle Bar */}
-          <div className="table-version-toggle-bar">
-            <div className="version-pills">
+        {/* Right Actions: Minimal Workspace Overview, Download, Minimal Delete */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
+          {/* Minimal Workspace Files Indicator / Popover Toggle */}
+          {datasets.length > 0 && (
+            <div style={{ position: 'relative' }}>
               <button
-                className={`version-pill ${dataVersion === 'curated' && !selectedDerivedId ? 'active' : ''}`}
-                onClick={() => {
-                  setSelectedDerivedId('');
-                  setDataVersion('curated');
-                  setPage(1);
+                type="button"
+                className="btn-secondary"
+                onClick={() => setShowWorkspaceDrawer((prev) => !prev)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  padding: '0.35rem 0.65rem',
+                  fontSize: '0.78rem',
+                  minHeight: '34px',
+                  borderRadius: '8px'
                 }}
+                title="View workbooks currently in workspace"
               >
-                ✨ Post-EDA (Normalized & Curated)
+                <Layers size={13} color="var(--brand-400)" />
+                <span>{datasets.length} Workbook{datasets.length > 1 ? 's' : ''}</span>
+                <ChevronDown size={12} style={{ transform: showWorkspaceDrawer ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
               </button>
-              <button
-                className={`version-pill ${dataVersion === 'raw' && !selectedDerivedId ? 'active' : ''}`}
-                onClick={() => {
-                  setSelectedDerivedId('');
-                  setDataVersion('raw');
-                  setPage(1);
-                }}
-              >
-                📋 Raw Ingested Data
-              </button>
-            </div>
 
-            {/* Derived Views Dropdown */}
-            {derivedTables.length > 0 && (
-              <div className="derived-views-picker">
-                <span>Synthesized View:</span>
-                <select
-                  value={selectedDerivedId}
-                  onChange={(e) => {
-                    setSelectedDerivedId(e.target.value);
-                    setRelation('');
-                    setPage(1);
+              {/* Compact Workspace Dropdown Menu */}
+              {showWorkspaceDrawer && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: 'calc(100% + 6px)',
+                    right: 0,
+                    zIndex: 100,
+                    width: '320px',
+                    background: '#1c1815',
+                    border: '1px solid var(--border)',
+                    borderRadius: '10px',
+                    padding: '0.75rem',
+                    boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+                    fontSize: '0.82rem'
                   }}
                 >
-                  <option value="">Single Sheet View</option>
-                  {derivedTables.map((dt) => (
-                    <option key={dt.id} value={dt.id}>
-                      🔗 {dt.display_name} ({dt.row_count} rows)
-                    </option>
-                  ))}
-                </select>
-                {selectedDerivedId && (
-                  <button
-                    className="btn-secondary"
-                    style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem' }}
-                    onClick={() => {
-                      setSelectedDerivedId('');
-                      setPage(1);
-                    }}
-                  >
-                    Reset
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', paddingBottom: '6px', borderBottom: '1px solid var(--border-subtle)' }}>
+                    <strong style={{ color: '#fff9f2', fontSize: '0.8rem' }}>Workspace Workbooks</strong>
+                    <span style={{ fontSize: '0.72rem', color: 'var(--fg-muted)' }}>{datasets.length} file(s)</span>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '200px', overflowY: 'auto' }}>
+                    {datasets.map((d) => (
+                      <div
+                        key={d.id}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: '8px',
+                          padding: '6px 8px',
+                          borderRadius: '6px',
+                          background: d.id === selectedSheet?.dataset_id ? 'rgba(255, 176, 137, 0.08)' : 'transparent',
+                          border: d.id === selectedSheet?.dataset_id ? '1px solid rgba(255, 176, 137, 0.25)' : '1px solid transparent'
+                        }}
+                      >
+                        <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          <div style={{ fontWeight: 600, color: '#fff9f2', fontSize: '0.8rem' }}>{d.original_name}</div>
+                          <div style={{ fontSize: '0.72rem', color: 'var(--fg-muted)' }}>{d.row_count} rows · {d.sheet_count} sheet(s)</div>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
+                          <a
+                            href={getDatasetDownloadUrl(d.id)}
+                            download={d.original_name}
+                            className="btn-icon-subtle"
+                            title="Download workbook"
+                            style={{ color: 'var(--fg-secondary)', padding: '4px', display: 'flex' }}
+                          >
+                            <Download size={13} />
+                          </a>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowWorkspaceDrawer(false);
+                              handlePromptSingleDelete(d);
+                            }}
+                            className="btn-icon-subtle"
+                            title="Delete this workbook"
+                            style={{ color: 'var(--rose-tier)', padding: '4px', display: 'flex', background: 'none', border: 'none', cursor: 'pointer' }}
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
+          {/* Download Active Workbook */}
+          {activeDataset && (
+            <a
+              href={getDatasetDownloadUrl(activeDataset.id)}
+              download={activeDataset.original_name}
+              className="btn-secondary"
+              title="Download active spreadsheet file"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                padding: '0.35rem 0.65rem',
+                fontSize: '0.78rem',
+                minHeight: '34px',
+                borderRadius: '8px',
+                textDecoration: 'none'
+              }}
+            >
+              <Download size={13} />
+              <span>Download</span>
+            </a>
+          )}
+
+          {/* Minimal Delete Button: Discrete & Non-Intrusive */}
+          {selectedSheet && (
+            <button
+              type="button"
+              className="btn-minimal-delete"
+              onClick={() => {
+                const target = activeDataset || {
+                  id: selectedSheet.dataset_id,
+                  original_name: selectedSheet.original_name || selectedSheet.display_name || 'Selected Dataset',
+                  row_count: selectedSheet.row_count,
+                  sheet_count: 1
+                };
+                handlePromptSingleDelete(target);
+              }}
+              title="Delete active dataset from workspace"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                padding: '0.35rem 0.65rem',
+                fontSize: '0.78rem',
+                minHeight: '34px',
+                borderRadius: '8px',
+                background: 'rgba(255, 107, 129, 0.08)',
+                border: '1px solid rgba(255, 107, 129, 0.25)',
+                color: 'var(--rose-tier)',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
+              }}
+            >
+              <Trash2 size={13} />
+              <span>Delete</span>
+            </button>
+          )}
+        </div>
+      </div>
+
+      {error && (
+        <div className="alert-box alert-error" style={{ marginBottom: '1rem' }}>
+          <span>{error}</span>
+        </div>
+      )}
+
+      {/* VIEW 1: DATA TABLE INSPECTION */}
+      {viewMode === 'table' && (
+        <>
           {selectedDerivedId && activeDerivedTable && (
             <div
               style={{
                 background: 'rgba(255, 176, 137, 0.1)',
                 border: '1px solid rgba(255, 176, 137, 0.3)',
-                borderRadius: '6px',
+                borderRadius: '8px',
                 padding: '0.6rem 0.9rem',
                 marginBottom: '0.75rem',
                 fontSize: '0.85rem',
@@ -708,7 +703,7 @@ export default function DataExplorerPage() {
         />
       )}
 
-      {/* Consent Check Modal for Single or Bulk Deletion */}
+      {/* Safe Consent Check Modal for Dataset Deletion */}
       <DeleteConsentModal
         datasetToDelete={datasetToDelete}
         deleteConsent={deleteConsent}

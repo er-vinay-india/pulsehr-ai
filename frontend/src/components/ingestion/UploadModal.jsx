@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import {
   UploadCloud,
   FileSpreadsheet,
@@ -8,14 +8,19 @@ import {
   ArrowLeft,
   CheckCircle2,
   Table,
-  LayoutDashboard,
-  RotateCcw
+  RotateCcw,
+  Minimize2
 } from "lucide-react";
 import { uploadDatasetFile } from "../../api/client";
 import UploadProgressCard from "./UploadProgressCard";
-import UploadResultCard from "./UploadResultCard";
 
-export default function UploadModal({ isOpen, onClose, onUploadSuccess }) {
+export default function UploadModal({
+  isOpen,
+  onClose,
+  onUploadSuccess,
+  onUploadStart,
+  onUploadEnd
+}) {
   const [step, setStep] = useState(1); // 1: Select file, 2: Expectation intent, 3: Ingestion & results
   const [selectedFile, setSelectedFile] = useState(null);
   const [userIntent, setUserIntent] = useState("");
@@ -27,31 +32,33 @@ export default function UploadModal({ isOpen, onClose, onUploadSuccess }) {
   const [uploadResult, setUploadResult] = useState(null);
   const [error, setError] = useState(null);
 
-  // Reset state when modal opens or closes
+  // Track if upload was minimized to background
+  const isBackgroundRef = useRef(false);
+
+  // Reset state when modal is closed AND not uploading
   useEffect(() => {
-    if (!isOpen) {
+    if (!isOpen && !uploading) {
       setStep(1);
       setSelectedFile(null);
       setUserIntent("");
-      setUploading(false);
-      setUploadingFile(null);
       setUploadElapsed(0);
       setUploadResult(null);
       setError(null);
+      isBackgroundRef.current = false;
     }
-  }, [isOpen]);
+  }, [isOpen, uploading]);
 
-  // Handle ESC key to dismiss if not currently uploading
+  // Handle ESC key to dismiss (even while uploading, minimizes to background)
   useEffect(() => {
     if (!isOpen) return;
     const handleKeyDown = (e) => {
-      if (e.key === "Escape" && !uploading) {
-        onClose();
+      if (e.key === "Escape") {
+        handleDismiss();
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, uploading, onClose]);
+  }, [isOpen, uploading]);
 
   // Upload timer & step progression
   useEffect(() => {
@@ -78,8 +85,6 @@ export default function UploadModal({ isOpen, onClose, onUploadSuccess }) {
       if (timer) clearInterval(timer);
     };
   }, [uploading]);
-
-  if (!isOpen) return null;
 
   const formatFileSize = (bytes) => {
     if (!bytes && bytes !== 0) return "";
@@ -124,26 +129,42 @@ export default function UploadModal({ isOpen, onClose, onUploadSuccess }) {
 
     setStep(3);
     setUploading(true);
-    setUploadingFile({
+    const fileInfo = {
       name: selectedFile.name,
-      size: formatFileSize(selectedFile.size),
-    });
+      size: formatFileSize(selectedFile.size)
+    };
+    setUploadingFile(fileInfo);
     setError(null);
     setUploadResult(null);
+
+    if (onUploadStart) {
+      onUploadStart(fileInfo);
+    }
 
     try {
       const res = await uploadDatasetFile(selectedFile, intentToUse);
       setUploadStep(9);
       setUploadResult(res);
+
       if (onUploadSuccess) {
-        onUploadSuccess(res);
+        onUploadSuccess(res, { wasBackground: isBackgroundRef.current });
       }
     } catch (err) {
       setError(err.message || "Failed to process spreadsheet");
     } finally {
       setUploading(false);
       setUploadingFile(null);
+      if (onUploadEnd) {
+        onUploadEnd();
+      }
     }
+  };
+
+  const handleDismiss = () => {
+    if (uploading) {
+      isBackgroundRef.current = true;
+    }
+    onClose();
   };
 
   const handleReset = () => {
@@ -152,14 +173,16 @@ export default function UploadModal({ isOpen, onClose, onUploadSuccess }) {
     setUserIntent("");
     setUploadResult(null);
     setError(null);
+    isBackgroundRef.current = false;
   };
+
+  // If closed and not uploading, do not render overlay
+  if (!isOpen) return null;
 
   return (
     <div
       className="upload-modal-overlay"
-      onClick={() => {
-        if (!uploading) onClose();
-      }}
+      onClick={handleDismiss}
       role="dialog"
       aria-modal="true"
       aria-labelledby="upload-modal-title"
@@ -191,16 +214,16 @@ export default function UploadModal({ isOpen, onClose, onUploadSuccess }) {
               </div>
             </div>
           </div>
-          {!uploading && (
-            <button
-              type="button"
-              className="upload-modal-close-btn"
-              onClick={onClose}
-              aria-label="Close upload modal"
-            >
-              <X size={20} />
-            </button>
-          )}
+
+          <button
+            type="button"
+            className="upload-modal-close-btn"
+            onClick={handleDismiss}
+            aria-label={uploading ? "Run in background" : "Close modal"}
+            title={uploading ? "Minimize & run in background" : "Close"}
+          >
+            <X size={20} />
+          </button>
         </div>
 
         {/* Modal Body */}
@@ -242,7 +265,6 @@ export default function UploadModal({ isOpen, onClose, onUploadSuccess }) {
           {/* STEP 2: Expectations from the Sheet (Mandatory Step, Optional to Fill with Skip Option) */}
           {step === 2 && (
             <div className="upload-step-pane upload-step-expectations">
-              {/* Selected File Summary Banner */}
               <div className="selected-file-banner">
                 <div className="selected-file-info">
                   <FileSpreadsheet size={18} color="var(--brand-400)" />
@@ -263,7 +285,6 @@ export default function UploadModal({ isOpen, onClose, onUploadSuccess }) {
                 </button>
               </div>
 
-              {/* Business Intent Question Prompt */}
               <div className="expectations-prompt-card">
                 <div className="expectations-header">
                   <div className="expectations-title-wrap">
@@ -293,7 +314,6 @@ export default function UploadModal({ isOpen, onClose, onUploadSuccess }) {
                 )}
               </div>
 
-              {/* Action Buttons */}
               <div className="upload-step-actions">
                 <button
                   type="button"
@@ -327,15 +347,38 @@ export default function UploadModal({ isOpen, onClose, onUploadSuccess }) {
             </div>
           )}
 
-          {/* STEP 3: Progress & Ingestion Results */}
+          {/* STEP 3: Progress & Pure Minimal Success Message */}
           {step === 3 && (
             <div className="upload-step-pane upload-step-progress">
               {uploading && (
-                <UploadProgressCard
-                  uploadingFile={uploadingFile}
-                  uploadElapsed={uploadElapsed}
-                  uploadStep={uploadStep}
-                />
+                <div>
+                  <UploadProgressCard
+                    uploadingFile={uploadingFile}
+                    uploadElapsed={uploadElapsed}
+                    uploadStep={uploadStep}
+                  />
+
+                  {/* Option to run in background */}
+                  <div style={{ marginTop: "1rem", textAlign: "center" }}>
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      onClick={handleDismiss}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        fontSize: "0.82rem",
+                        padding: "0.45rem 1rem",
+                        borderRadius: "8px"
+                      }}
+                      title="Continue work while spreadsheet processes in the background"
+                    >
+                      <Minimize2 size={14} />
+                      <span>Run in Background</span>
+                    </button>
+                  </div>
+                </div>
               )}
 
               {error && (
@@ -357,11 +400,50 @@ export default function UploadModal({ isOpen, onClose, onUploadSuccess }) {
                 </div>
               )}
 
+              {/* Minimal Success Card: Pure Confirmation without technical noise */}
               {uploadResult && (
-                <div className="upload-success-container">
-                  <UploadResultCard uploadResult={uploadResult} />
+                <div
+                  className="upload-minimal-success"
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    textAlign: "center",
+                    padding: "2.5rem 1.5rem",
+                    background: "rgba(46, 213, 115, 0.04)",
+                    border: "1px solid rgba(46, 213, 115, 0.25)",
+                    borderRadius: "14px"
+                  }}
+                >
+                  <div
+                    style={{
+                      width: "60px",
+                      height: "60px",
+                      borderRadius: "50%",
+                      background: "rgba(46, 213, 115, 0.15)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      marginBottom: "1rem",
+                      border: "1px solid rgba(46, 213, 115, 0.4)"
+                    }}
+                  >
+                    <CheckCircle2 size={32} color="#2ed573" />
+                  </div>
 
-                  <div className="upload-success-actions">
+                  <h3 style={{ fontSize: "1.3rem", color: "#fff9f2", marginBottom: "0.4rem" }}>
+                    Spreadsheet Ingested Successfully
+                  </h3>
+
+                  <p style={{ fontSize: "0.92rem", color: "var(--fg-secondary)", maxWidth: "420px", marginBottom: "0.25rem" }}>
+                    <strong>{uploadResult.display_name || uploadResult.filename}</strong> is fully processed.
+                  </p>
+
+                  <p style={{ fontSize: "0.82rem", color: "var(--fg-muted)", maxWidth: "420px", marginBottom: "1.75rem" }}>
+                    {uploadResult.sheets?.length || 1} sheet(s) · {uploadResult.total_rows || 0} rows indexed and normalized for exploratory analytics.
+                  </p>
+
+                  <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", justifyContent: "center" }}>
                     <button
                       type="button"
                       className="btn-primary"
@@ -369,30 +451,19 @@ export default function UploadModal({ isOpen, onClose, onUploadSuccess }) {
                         onClose();
                         window.location.hash = "explorer";
                       }}
+                      style={{ display: "inline-flex", alignItems: "center", gap: "8px", padding: "0.6rem 1.25rem" }}
                     >
-                      <Table size={15} />
+                      <Table size={16} />
                       <span>Explore in Data Explorer</span>
                     </button>
 
                     <button
                       type="button"
                       className="btn-secondary"
-                      onClick={() => {
-                        onClose();
-                        window.location.hash = "adaptive";
-                      }}
+                      onClick={onClose}
+                      style={{ padding: "0.6rem 1.25rem" }}
                     >
-                      <LayoutDashboard size={15} />
-                      <span>View Executive Dashboard</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      className="btn-secondary"
-                      onClick={handleReset}
-                    >
-                      <UploadCloud size={15} />
-                      <span>Upload Another</span>
+                      <span>Done</span>
                     </button>
                   </div>
                 </div>

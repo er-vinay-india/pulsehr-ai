@@ -4,15 +4,11 @@ import {
   Table,
   BrainCircuit,
   UploadCloud,
-  FileText,
-  Sparkles,
-  RotateCw,
-  Presentation,
-  Activity
+  Loader2,
+  Presentation
 } from "lucide-react";
-import { openExecutivePrintReport } from "../api/client";
 
-export default function Header({ activeTab, onSelectTab, onOpenUploadModal, activeJob }) {
+export default function Header({ activeTab, onSelectTab, onOpenUploadModal, activeJob, isUploadingBackground }) {
   const tabs = [
     { id: "adaptive", label: "Executive Dashboard", short: "Dashboard", icon: LayoutDashboard },
     { id: "explorer", label: "Data Explorer", short: "Explorer", icon: Table },
@@ -52,24 +48,22 @@ export default function Header({ activeTab, onSelectTab, onOpenUploadModal, acti
         <div className="header-actions">
           <button
             type="button"
-            className="btn-secondary"
-            onClick={openExecutivePrintReport}
-            title="Open Printable Executive Report"
-            aria-label="Open printable report"
-          >
-            <FileText size={15} />
-            <span>PDF Report</span>
-          </button>
-
-          <button
-            type="button"
-            className="btn-primary"
+            className={`btn-header-upload ${isUploadingBackground ? "is-processing" : ""}`}
             onClick={onOpenUploadModal}
-            title="Upload and ingest a new spreadsheet"
+            title={isUploadingBackground ? "Spreadsheet ingestion running in background - click to view" : "Upload and ingest a new spreadsheet"}
             aria-label="Upload spreadsheet"
           >
-            <UploadCloud size={15} />
-            <span>Upload Data</span>
+            {isUploadingBackground ? (
+              <>
+                <Loader2 size={16} className="spin-icon" />
+                <span>Ingesting...</span>
+              </>
+            ) : (
+              <>
+                <UploadCloud size={16} />
+                <span>Upload Data</span>
+              </>
+            )}
           </button>
         </div>
       </div>
