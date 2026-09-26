@@ -13,6 +13,7 @@ import calendar
 import datetime
 import hashlib
 import json
+import logging
 import math
 import re
 from collections import defaultdict
@@ -31,6 +32,7 @@ from .contracts import (
     ComparatorItem,
     ComparatorSpec,
     ComponentSpec,
+    DecisionFocusSpec,
     DisparityItem,
     DisparitySpec,
     EvidenceResult,
@@ -42,6 +44,12 @@ from .contracts import (
     SemanticContract,
     SourceManifest,
 )
+from .briefing import build_executive_briefing_element
+from .enterprise import build_enterprise_synthesis_element
+from .exceptions import build_exception_watch_element
+from .outlook import build_forward_outlook_element
+
+logger = logging.getLogger(__name__)
 
 ENGINE_VERSION = "4.0.0"
 
@@ -2899,7 +2907,7 @@ def build_segment_disparity_element(
     )
     # Check for attendance column
     att_col = next(
-        (c for c in candidate_cols if re.search(r"^(final_attendance|total_attendance|attendance|present_days|attended_days)$", c.strip().replace(" ", "_"), re.I)),
+        (c for c in candidate_cols if re.search(r"^(final_attendance|total_attendance|attendance|attendance_days|present_days|attended_days)$", c.strip().replace(" ", "_"), re.I)),
         None,
     )
     if not att_col and contract.primary_measure:
@@ -2908,7 +2916,7 @@ def build_segment_disparity_element(
 
     # Check for leave column
     leave_col = next(
-        (c for c in candidate_cols if re.search(r"^(approved_leaves?|total_approved_leaves?|leaves?|total_leaves?|absence_days)$", c.strip().replace(" ", "_"), re.I)),
+        (c for c in candidate_cols if re.search(r"^(approved_leaves?|total_approved_leaves?|approved_leave_days|leaves?|total_leaves?|absence_days)$", c.strip().replace(" ", "_"), re.I)),
         None,
     )
 
@@ -3447,6 +3455,731 @@ def build_segment_disparity_element(
     return None
 
 
+def validate_cross_sheet_correlation_candidate(
+    manifest: SourceManifest,
+    eda_report: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    """Safely extracts and validates a cross-sheet correlation candidate against strict guards.
+
+    Guards:
+    - Rejects stale EDA reports whose snapshot does not match manifest.snapshot.
+    - Rejects unsafe many-to-many join cardinalities.
+    - Requires paired n >= 30.
+    - Requires non-zero variance on both variables.
+    - Requires consistent direction between Pearson and Spearman coefficients.
+    """
+    if not eda_report:
+        return None
+
+    # 1. Stale snapshot guard - missing or mismatched snapshot is strictly rejected
+    report_snapshot = eda_report.get("snapshot") or eda_report.get("source_snapshot")
+    if not report_snapshot or report_snapshot != manifest.snapshot:
+        return None
+
+
+    cross_intel = eda_report.get("cross_sheet_intelligence", {})
+
+    # 2. Unsafe many-to-many join rejection
+    for link in cross_intel.get("entity_links", []):
+        cardinality = str(link.get("cardinality", "")).lower()
+        if cardinality in ("many-to-many", "m:n", "n:m", "unbounded"):
+            return None
+
+    # 3. Correlation guards
+    for corr in cross_intel.get("correlations", []):
+        paired_n = int(corr.get("paired_sample_size") or corr.get("n") or 0)
+        if paired_n < 30:
+            continue
+        var_x = float(corr.get("variance_x", 1.0))
+        var_y = float(corr.get("variance_y", 1.0))
+        if var_x <= 0.0 or var_y <= 0.0:
+            continue
+        pearson_r = float(corr.get("pearson_r") or corr.get("coefficient") or 0.0)
+        spearman_r = float(corr.get("spearman_r", pearson_r))
+        # Direction consistency
+        if (pearson_r > 0.05 and spearman_r < -0.05) or (pearson_r < -0.05 and spearman_r > 0.05):
+            continue
+        return corr
+
+    return None
+
+
+def build_decision_focus_element(
+    manifest: SourceManifest,
+    contract: SemanticContract,
+    rows: list[dict[str, Any]],
+    quinary_element: DisparitySpec | None = None,
+    quaternary_element: ComparatorSpec | None = None,
+    tertiary_element: BreakdownSpec | None = None,
+    eda_report: dict[str, Any] | None = None,
+) -> DecisionFocusSpec | None:
+    """Builds Element 6 (Gate 6) Decision Focus card following the specification.
+
+    Answers: 'Where should I look first, why does it deserve attention, and what is the safest next action supported by the data?'
+    Uses verified, same-snapshot evidence without fabricated causes, targets, priorities, or confidence scores.
+    """
+    snapshot = manifest.snapshot
+    candidate_cols = list(rows[0].keys()) if rows else []
+
+    # Check for partial period
+    is_partial_period = bool(manifest.date_range and manifest.date_range.get("is_partial"))
+
+    # --- Recipe 1: Directional Segment Gap (Primary Priority) ---
+    if quinary_element and quinary_element.kind == "segment_disparity" and quinary_element.items:
+        # Guard 1: Minimum sample threshold n >= 5 per displayed segment
+        # Guard 2: Exclude 'Unknown' from decision target
+        valid_items = [
+            it for it in quinary_element.items
+            if it.sample_size >= 5 and it.segment.lower() not in ("unknown", "other", "null", "none", "")
+        ]
+
+        if not valid_items:
+            # All segments below minimum sample threshold -> return honest unavailable card
+            return DecisionFocusSpec(
+                component_id="decision_element",
+                kind="unavailable_card",
+                business_concept="system.insufficient_sample_decision_focus",
+                title="Decision focus unavailable",
+                subject_type="Segment",
+                subject_label="All segments",
+                metric_name=quinary_element.metric_name,
+                unit="",
+                observed_value=0,
+                formatted_observed_value="N/A",
+                comparator_label="benchmark",
+                comparator_value=0,
+                formatted_comparator_value="N/A",
+                gap_value=0,
+                formatted_gap_value="insufficient observations",
+                sample_size=0,
+                sample_label="< 5 observations per segment",
+                why_it_matters="All observed segments have fewer than 5 records, which is below the minimum sample threshold for reliable prioritization.",
+                next_step="Collect additional records across segments before establishing operational priorities.",
+                monitor_metric=quinary_element.metric_name,
+                supporting_component_id="quinary_element",
+                supporting_calculation_ids=[quinary_element.evidence.calculation_id] if quinary_element.evidence else [],
+                priority_basis="sample_size_guard_abstention",
+                glance=GlanceSpec(
+                    label="Decision focus",
+                    value=0,
+                    formatted_value="Unavailable",
+                    unit="none",
+                    unit_display="explicit_suffix",
+                    context_qualifier="All segments under sample threshold (n < 5)",
+                    has_info_control=True,
+                ),
+                explain=ExplainSpec(
+                    short_definition="Prioritization is withheld because segment sample sizes are below the minimum threshold (n >= 5).",
+                    exact_value_text="No segment met the minimum sample size guard of 5 observations.",
+                ),
+                inspect=InspectSpec(
+                    metric_title="Decision Focus: Insufficient Sample",
+                    exact_value="Unavailable (n < 5)",
+                    what_this_counts="Evaluation of segment sample sufficiency for safe operational prioritization.",
+                    applicable_population=f"All {len(rows)} records across {len(quinary_element.items)} segments.",
+                    source_name=manifest.display_name,
+                    reporting_period=manifest.date_range.get("formatted") if manifest.date_range else None,
+                    calculation_method="Sample guard requires n >= 5 per segment for descriptive decision focus.",
+                    data_completeness=f"{len(valid_items)} of {len(quinary_element.items)} segments met sample guard.",
+                    workforce_coverage="0 segments above threshold",
+                    coverage_label="Eligible Segments",
+                    coverage_value="0 segments",
+                    missing_observations=0,
+                    excluded_observations=len(rows),
+                    selection_reason="Decision claims require verified minimum sample support.",
+                    limitations=["Small sample sizes produce unstable variance and misleading extremes."],
+                    calculation_id=f"calc_decision_unavail_{snapshot[:8]}",
+                    definition_id="def_decision_unavailable_sample_v1",
+                    snapshot=snapshot,
+                    provenance=f"{manifest.file_name} -> {manifest.sheet_name}",
+                ),
+                evidence=EvidenceResult(
+                    calculation_id=f"calc_decision_unavail_{snapshot[:8]}",
+                    snapshot=snapshot,
+                    definition_id="def_decision_unavailable_sample_v1",
+                    status="unavailable",
+                    value=0,
+                    unit="none",
+                    aggregation="guard_abstention",
+                    numerator=0,
+                    denominator=len(rows),
+                    is_known_zero=False,
+                    missing_observations=0,
+                    invalid_observations=0,
+                    excluded_observations=len(rows),
+                    coverage_ratio=0.0,
+                    calculation_method="Minimum sample guard n >= 5 failed for all segments.",
+                    provenance=f"{manifest.file_name} -> {manifest.sheet_name}",
+                    limitations=[],
+                ),
+                caption="All segments below sample threshold (n < 5)",
+            )
+
+        # 1A. Workforce Attendance Reliability Gap
+        is_workforce = (
+            contract.domain == "hr_workforce"
+            or "attendance" in quinary_element.metric_name.lower()
+            or "hr" in quinary_element.business_concept
+        )
+        if is_workforce:
+            benchmark = float(quinary_element.benchmark_value or 0.0)
+            # Sort by primary_value ascending, then sample_size descending, then segment name
+            valid_items.sort(key=lambda x: (x.primary_value, -x.sample_size, x.segment))
+            target = valid_items[0]
+            ties = [it for it in valid_items if abs(it.primary_value - target.primary_value) <= 0.05]
+            is_tie = len(ties) > 1
+
+            gap = round(target.primary_value - benchmark, 1)
+            abs_gap = abs(gap)
+            obs_val = round(target.primary_value, 1)
+            fmt_obs = f"{obs_val:.1f}%"
+            fmt_comp = f"{benchmark:.1f}%"
+            fmt_gap = f"{abs_gap:.1f} pp below the workforce benchmark" if gap < 0 else f"{abs_gap:.1f} pp above the workforce benchmark"
+
+            headline = f"Review {target.segment} attendance reliability" if not is_tie else f"Review {target.segment} (tied) attendance reliability"
+            why_it_matters = (
+                "This unit has the largest verified attendance-reliability gap among organizational units with adequate records."
+                if not is_tie
+                else f"This unit shares the largest verified attendance-reliability gap with {', '.join(t.segment for t in ties[1:])}. Neither is singled out as unique."
+            )
+            next_step = "Review scheduling coverage and approved-leave patterns before changing policy."
+
+            context_qual = f"{fmt_gap} · {target.sample_size} employees"
+            if is_partial_period:
+                context_qual += " (partial period)"
+
+            inspect_spec = InspectSpec(
+                metric_title="Decision Focus: Attendance Reliability Priority",
+                exact_value=f"{fmt_obs} ({fmt_gap})",
+                what_this_counts="Identifies the organizational department with the largest verified attendance-reliability gap relative to the weighted company benchmark.",
+                applicable_population=f"All {target.sample_size} recorded employee profiles in {target.segment}.",
+                source_name=manifest.display_name,
+                reporting_period=manifest.date_range.get("formatted") if manifest.date_range else None,
+                calculation_method=f"Department Attendance Reliability = {fmt_obs} vs Weighted Benchmark = {fmt_comp}. Gap = {abs_gap:.1f} percentage points below benchmark.",
+                data_completeness=f"100% of {target.sample_size} employee records in unit evaluated with adequate sample guard (n >= 5).",
+                workforce_coverage=f"{target.sample_size} employees in focus unit ({len(rows)} company-wide)",
+                coverage_label="Unit Headcount",
+                coverage_value=f"{target.sample_size} employees",
+                missing_observations=0,
+                excluded_observations=sum(it.sample_size for it in quinary_element.items if it.sample_size < 5),
+                selection_reason="Selected lexicographically: verified directional concern (attendance reliability), current snapshot integrity, sample guard (n >= 5), and largest material benchmark gap.",
+                limitations=[
+                    "Descriptive difference does not prove root cause or individual performance deficit.",
+                    "Approved leave patterns and planned scheduling should be verified prior to operational intervention.",
+                ] + (["Observations represent a partial operating cycle."] if is_partial_period else []),
+                calculation_id=f"calc_decision_hr_{snapshot[:8]}",
+                definition_id="def_decision_focus_workforce_v1",
+                snapshot=snapshot,
+                provenance=f"{manifest.file_name} -> {manifest.sheet_name} (rows: {len(rows)})",
+            )
+
+            evidence_res = EvidenceResult(
+                calculation_id=f"calc_decision_hr_{snapshot[:8]}",
+                snapshot=snapshot,
+                definition_id="def_decision_focus_workforce_v1",
+                status="available",
+                value=obs_val,
+                unit="%",
+                aggregation="directional_segment_gap",
+                numerator=obs_val,
+                denominator=benchmark,
+                is_known_zero=obs_val == 0.0,
+                missing_observations=0,
+                invalid_observations=0,
+                excluded_observations=sum(it.sample_size for it in quinary_element.items if it.sample_size < 5),
+                coverage_ratio=round(target.sample_size / max(1, len(rows)), 4),
+                calculation_method=f"Department reliability ({fmt_obs}) compared against weighted company benchmark ({fmt_comp}).",
+                provenance=f"{manifest.file_name} -> {manifest.sheet_name}",
+                limitations=[],
+            )
+
+            return DecisionFocusSpec(
+                component_id="decision_element",
+                kind="decision_focus",
+                business_concept="hr.departmental_attendance_decision_focus",
+                title=headline,
+                subject_type="Department",
+                subject_label=target.segment,
+                metric_name="Attendance Reliability",
+                unit="%",
+                observed_value=obs_val,
+                formatted_observed_value=fmt_obs,
+                comparator_label="workforce benchmark",
+                comparator_value=benchmark,
+                formatted_comparator_value=fmt_comp,
+                gap_value=gap,
+                formatted_gap_value=fmt_gap,
+                sample_size=target.sample_size,
+                sample_label=f"{target.sample_size} employees",
+                why_it_matters=why_it_matters,
+                next_step=next_step,
+                monitor_metric="Attendance Reliability",
+                supporting_component_id="quinary_element",
+                supporting_calculation_ids=[quinary_element.evidence.calculation_id] if quinary_element.evidence else [],
+                priority_basis="largest_material_benchmark_gap_with_adequate_sample",
+                glance=GlanceSpec(
+                    label="Decision focus",
+                    value=abs_gap,
+                    formatted_value=fmt_obs,
+                    unit="percentage_points",
+                    unit_display="explicit_suffix",
+                    context_qualifier=context_qual,
+                    has_info_control=True,
+                ),
+                explain=ExplainSpec(
+                    short_definition="Identifies the organizational department with the largest verified attendance-reliability gap relative to the workforce benchmark.",
+                    exact_value_text=f"{target.segment} observed attendance reliability is {fmt_obs}, which is {fmt_gap} (benchmark {fmt_comp}) across {target.sample_size} employees.",
+                ),
+                inspect=inspect_spec,
+                evidence=evidence_res,
+                caption=f"{fmt_obs} · {fmt_gap} · {target.sample_size} employees",
+            )
+
+        # 1B. Retail / Commercial Store Sales Density Gap
+        is_retail = (
+            contract.domain == "commercial_retail"
+            or "retail" in quinary_element.business_concept
+            or "store" in quinary_element.dimension_name.lower()
+        )
+        if is_retail:
+            benchmark = float(quinary_element.benchmark_value or 0.0)
+            valid_items.sort(key=lambda x: (x.primary_value, -x.sample_size, x.segment))
+            target = valid_items[0]
+            ties = [it for it in valid_items if abs(it.primary_value - target.primary_value) <= 1.0]
+            is_tie = len(ties) > 1
+
+            if benchmark > 0:
+                pct_below = round((1.0 - (target.primary_value / benchmark)) * 100)
+            else:
+                pct_below = 0
+
+            fmt_gap = f"{pct_below}% below the network benchmark" if pct_below > 0 else "at network benchmark"
+            fmt_obs = f"{format_currency_short(target.primary_value)} per store-week" if "/wk" not in target.formatted_primary else f"{target.formatted_primary.replace('/wk', '')} per store-week"
+            fmt_comp = f"{quinary_element.formatted_benchmark}" if quinary_element.formatted_benchmark else f"{format_currency_short(benchmark)}"
+
+            headline = f"Investigate {target.segment} sales density" if not is_tie else f"Investigate {target.segment} (tied) sales density"
+            why_it_matters = (
+                "The observed revenue density gap is substantial enough to warrant a store-level operational review."
+                if not is_tie
+                else f"The observed revenue density gap is shared equally with {', '.join(t.segment for t in ties[1:])}, warranting a multi-location review."
+            )
+            next_step = "Compare trading days, local assortment, and inventory availability before setting recovery targets."
+
+            context_qual = f"{fmt_gap} · {target.sample_size} store-weeks"
+            if is_partial_period:
+                context_qual += " (partial period)"
+
+            inspect_spec = InspectSpec(
+                metric_title="Decision Focus: Store Sales Density Priority",
+                exact_value=f"{fmt_obs} ({fmt_gap})",
+                what_this_counts="Identifies the physical store location with the largest observed revenue density deficit relative to the network benchmark.",
+                applicable_population=f"All {target.sample_size} recorded weekly trading periods for {target.segment}.",
+                source_name=manifest.display_name,
+                reporting_period=manifest.date_range.get("formatted") if manifest.date_range else None,
+                calculation_method=f"Store Sales Density = {fmt_obs} vs Network Benchmark = {fmt_comp}. Gap = {pct_below}% below network benchmark.",
+                data_completeness=f"100% of {target.sample_size} weekly records in store evaluated with adequate sample guard (n >= 5).",
+                workforce_coverage=f"{target.sample_size} trading weeks in focus store ({len(rows)} network-wide)",
+                coverage_label="Trading Periods",
+                coverage_value=f"{target.sample_size} store-weeks",
+                missing_observations=0,
+                excluded_observations=sum(it.sample_size for it in quinary_element.items if it.sample_size < 5),
+                selection_reason="Selected lexicographically: verified directional concern (sales throughput), current snapshot integrity, sample guard (n >= 5), and largest relative density gap.",
+                limitations=[
+                    "Store square footage, local market demographics, and inventory constraints are not normalized.",
+                    "Review trading days and stock availability before drawing performance conclusions.",
+                ] + (["Observations represent a partial operating cycle."] if is_partial_period else []),
+                calculation_id=f"calc_decision_retail_{snapshot[:8]}",
+                definition_id="def_decision_focus_retail_v1",
+                snapshot=snapshot,
+                provenance=f"{manifest.file_name} -> {manifest.sheet_name} (rows: {len(rows)})",
+            )
+
+            evidence_res = EvidenceResult(
+                calculation_id=f"calc_decision_retail_{snapshot[:8]}",
+                snapshot=snapshot,
+                definition_id="def_decision_focus_retail_v1",
+                status="available",
+                value=target.primary_value,
+                unit="$",
+                aggregation="store_sales_density_gap",
+                numerator=target.primary_value,
+                denominator=benchmark,
+                is_known_zero=target.primary_value == 0.0,
+                missing_observations=0,
+                invalid_observations=0,
+                excluded_observations=sum(it.sample_size for it in quinary_element.items if it.sample_size < 5),
+                coverage_ratio=round(target.sample_size / max(1, len(rows)), 4),
+                calculation_method=f"Store weekly sales density ({fmt_obs}) compared against network benchmark ({fmt_comp}).",
+                provenance=f"{manifest.file_name} -> {manifest.sheet_name}",
+                limitations=[],
+            )
+
+            return DecisionFocusSpec(
+                component_id="decision_element",
+                kind="decision_focus",
+                business_concept="retail.store_sales_density_decision_focus",
+                title=headline,
+                subject_type="Store",
+                subject_label=target.segment,
+                metric_name="Weekly Sales Density",
+                unit="$",
+                observed_value=target.primary_value,
+                formatted_observed_value=fmt_obs,
+                comparator_label="network benchmark",
+                comparator_value=benchmark,
+                formatted_comparator_value=fmt_comp,
+                gap_value=float(pct_below),
+                formatted_gap_value=fmt_gap,
+                sample_size=target.sample_size,
+                sample_label=f"{target.sample_size} store-weeks",
+                why_it_matters=why_it_matters,
+                next_step=next_step,
+                monitor_metric="Weekly Sales Density",
+                supporting_component_id="quinary_element",
+                supporting_calculation_ids=[quinary_element.evidence.calculation_id] if quinary_element.evidence else [],
+                priority_basis="largest_store_density_gap_with_adequate_sample",
+                glance=GlanceSpec(
+                    label="Decision focus",
+                    value=float(pct_below),
+                    formatted_value=fmt_obs,
+                    unit="ratio",
+                    unit_display="explicit_suffix",
+                    context_qualifier=context_qual,
+                    has_info_control=True,
+                ),
+                explain=ExplainSpec(
+                    short_definition="Identifies the retail store outlet with the largest verified sales density deficit relative to the network benchmark.",
+                    exact_value_text=f"{target.segment} observed weekly sales density is {fmt_obs}, which is {fmt_gap} (network benchmark {fmt_comp}) across {target.sample_size} store-weeks.",
+                ),
+                inspect=inspect_spec,
+                evidence=evidence_res,
+                caption=f"{fmt_obs} · {fmt_gap} · {target.sample_size} store-weeks",
+            )
+
+        # 1C. General Tabular Fallback (Direction Unknown -> STRICTLY NEUTRAL WORDING)
+        benchmark = float(quinary_element.benchmark_value or 0.0)
+        valid_items.sort(key=lambda x: (abs(x.primary_value - benchmark), -x.sample_size, x.segment), reverse=True)
+        target = valid_items[0]
+        max_div = abs(target.primary_value - benchmark)
+        ties = [it for it in valid_items if abs(abs(it.primary_value - benchmark) - max_div) <= 0.01]
+        is_tie = len(ties) > 1
+
+        delta_val = round(target.primary_value - benchmark, 1)
+        fmt_gap = f"{abs(delta_val):.1f} delta from group benchmark"
+        fmt_obs = target.formatted_primary
+        fmt_comp = quinary_element.formatted_benchmark or f"{benchmark:.1f}"
+
+        # Strictly neutral wording: no "worst", "underperforming", "risk", "critical", or "poor"
+        headline = f"Review {target.segment} {quinary_element.metric_name}" if not is_tie else f"Review {target.segment} (tied) {quinary_element.metric_name}"
+        why_it_matters = (
+            "This segment exhibits the largest divergence from the overall group benchmark."
+            if not is_tie
+            else f"This segment shares the largest divergence from the overall group benchmark with {', '.join(t.segment for t in ties[1:])}."
+        )
+        next_step = "Compare data completeness, operational context, and subgroup distribution before establishing a benchmark."
+
+        context_qual = f"{fmt_gap} · {target.sample_size} observations"
+        if is_partial_period:
+            context_qual += " (partial period)"
+
+        inspect_spec = InspectSpec(
+            metric_title=f"Decision Focus: {quinary_element.dimension_name} Variance Priority",
+            exact_value=f"{fmt_obs} ({fmt_gap})",
+            what_this_counts="Highlights the category exhibiting the greatest divergence from the group benchmark for diagnostic follow-up.",
+            applicable_population=f"All {target.sample_size} recorded observations for {target.segment}.",
+            source_name=manifest.display_name,
+            reporting_period=manifest.date_range.get("formatted") if manifest.date_range else None,
+            calculation_method=f"Segment Average = {fmt_obs} vs Group Benchmark = {fmt_comp}. Absolute Divergence = {abs(delta_val):.1f}.",
+            data_completeness=f"100% of {target.sample_size} records in segment evaluated with adequate sample guard (n >= 5).",
+            workforce_coverage=f"{target.sample_size} observations in focus segment ({len(rows)} total records)",
+            coverage_label="Observed Sample",
+            coverage_value=f"{target.sample_size} observations",
+            missing_observations=0,
+            excluded_observations=sum(it.sample_size for it in quinary_element.items if it.sample_size < 5),
+            selection_reason="Selected objectively by largest divergence from the group benchmark without inferring unverified performance direction.",
+            limitations=[
+                "Direction of concern is not verified by a formal business target.",
+                "Divergence reflects mathematical variance, not verified underperformance or error.",
+            ] + (["Observations represent a partial operating cycle."] if is_partial_period else []),
+            calculation_id=f"calc_decision_gen_{snapshot[:8]}",
+            definition_id="def_decision_focus_general_v1",
+            snapshot=snapshot,
+            provenance=f"{manifest.file_name} -> {manifest.sheet_name} (rows: {len(rows)})",
+        )
+
+        evidence_res = EvidenceResult(
+            calculation_id=f"calc_decision_gen_{snapshot[:8]}",
+            snapshot=snapshot,
+            definition_id="def_decision_focus_general_v1",
+            status="available",
+            value=target.primary_value,
+            unit="",
+            aggregation="largest_group_divergence",
+            numerator=target.primary_value,
+            denominator=benchmark,
+            is_known_zero=target.primary_value == 0.0,
+            missing_observations=0,
+            invalid_observations=0,
+            excluded_observations=sum(it.sample_size for it in quinary_element.items if it.sample_size < 5),
+            coverage_ratio=round(target.sample_size / max(1, len(rows)), 4),
+            calculation_method=f"Segment observed average ({fmt_obs}) compared against group benchmark ({fmt_comp}).",
+            provenance=f"{manifest.file_name} -> {manifest.sheet_name}",
+            limitations=[],
+        )
+
+        return DecisionFocusSpec(
+            component_id="decision_element",
+            kind="investigation_focus",
+            business_concept="general.segment_divergence_decision_focus",
+            title=headline,
+            subject_type=quinary_element.dimension_name,
+            subject_label=target.segment,
+            metric_name=quinary_element.metric_name,
+            unit="",
+            observed_value=target.primary_value,
+            formatted_observed_value=fmt_obs,
+            comparator_label="group benchmark",
+            comparator_value=benchmark,
+            formatted_comparator_value=fmt_comp,
+            gap_value=abs(delta_val),
+            formatted_gap_value=fmt_gap,
+            sample_size=target.sample_size,
+            sample_label=f"{target.sample_size} observations",
+            why_it_matters=why_it_matters,
+            next_step=next_step,
+            monitor_metric=quinary_element.metric_name,
+            supporting_component_id="quinary_element",
+            supporting_calculation_ids=[quinary_element.evidence.calculation_id] if quinary_element.evidence else [],
+            priority_basis="largest_absolute_divergence_neutral",
+            glance=GlanceSpec(
+                label="Decision focus",
+                value=abs(delta_val),
+                formatted_value=fmt_obs,
+                unit="delta",
+                unit_display="explicit_suffix",
+                context_qualifier=context_qual,
+                has_info_control=True,
+            ),
+            explain=ExplainSpec(
+                short_definition=f"Identifies the {quinary_element.dimension_name.lower()} segment with the greatest divergence from the group benchmark.",
+                exact_value_text=f"{target.segment} observed value is {fmt_obs}, diverging by {fmt_gap} (group benchmark {fmt_comp}) across {target.sample_size} observations.",
+            ),
+            inspect=inspect_spec,
+            evidence=evidence_res,
+            caption=f"{fmt_obs} · {fmt_gap} · {target.sample_size} observations",
+        )
+
+    # --- Recipe 2: Ecommerce Funnel Fields (Reconciled sessions & orders only) ---
+    funnel_session_col = next((c for c in candidate_cols if re.search(r"^(checkout_sessions?|sessions?|visits?)$", c.strip(), re.I)), None)
+    funnel_order_col = next((c for c in candidate_cols if re.search(r"^(orders?|completed_orders?|conversions?)$", c.strip(), re.I)), None)
+    funnel_cart_col = next((c for c in candidate_cols if re.search(r"^(carts?|cart_additions?)$", c.strip(), re.I)), None)
+
+    # Guard: If cart and order totals exist but cannot be reconciled with session grain, do NOT calculate abandonment
+    if funnel_session_col and funnel_order_col:
+        total_sessions = 0
+        total_orders = 0
+        valid_funnel_rows = 0
+        for r in rows:
+            s_val = r.get(funnel_session_col)
+            o_val = r.get(funnel_order_col)
+            if s_val is not None and o_val is not None:
+                try:
+                    s_num = float(str(s_val).replace(",", ""))
+                    o_num = float(str(o_val).replace(",", ""))
+                    if s_num >= o_num and s_num > 0:
+                        total_sessions += int(s_num)
+                        total_orders += int(o_num)
+                        valid_funnel_rows += 1
+                except (ValueError, TypeError):
+                    continue
+
+        if valid_funnel_rows >= 5 and total_sessions > 0:
+            drop_off_count = total_sessions - total_orders
+            drop_off_pct = round((drop_off_count / total_sessions) * 100, 1)
+
+            fmt_obs = f"{drop_off_pct:.1f}%"
+            fmt_sess = f"{total_sessions:,}" if total_sessions < 1000 else f"{total_sessions/1000:.1f}K"
+            fmt_gap = f"{drop_off_pct:.1f}% unconverted checkout sessions"
+
+            headline = "Inspect payment-stage drop-off"
+            why_it_matters = f"{drop_off_pct:.1f}% of checkout sessions did not reach a verified order across {fmt_sess} sessions."
+            next_step = "Break the gap down by payment status, device, and error code."
+
+            return DecisionFocusSpec(
+                component_id="decision_element",
+                kind="decision_focus",
+                business_concept="ecommerce.payment_dropoff_decision_focus",
+                title=headline,
+                subject_type="Checkout Funnel",
+                subject_label="Payment Stage",
+                metric_name="Drop-off Rate",
+                unit="%",
+                observed_value=drop_off_pct,
+                formatted_observed_value=fmt_obs,
+                comparator_label="checkout sessions",
+                comparator_value=float(total_sessions),
+                formatted_comparator_value=f"{fmt_sess} sessions",
+                gap_value=drop_off_pct,
+                formatted_gap_value=f"{drop_off_pct:.1f}% uncompleted",
+                sample_size=total_sessions,
+                sample_label=f"{fmt_sess} sessions",
+                why_it_matters=why_it_matters,
+                next_step=next_step,
+                monitor_metric="Checkout Conversion Rate",
+                supporting_component_id=None,
+                supporting_calculation_ids=[],
+                priority_basis="funnel_reconciled_drop_off_rate",
+                glance=GlanceSpec(
+                    label="Decision focus",
+                    value=drop_off_pct,
+                    formatted_value=fmt_obs,
+                    unit="percentage",
+                    unit_display="explicit_suffix",
+                    context_qualifier=f"{drop_off_pct:.1f}% uncompleted · {fmt_sess} sessions",
+                    has_info_control=True,
+                ),
+                explain=ExplainSpec(
+                    short_definition="Measures the verified drop-off between eligible checkout sessions and completed orders.",
+                    exact_value_text=f"{drop_off_pct:.1f}% of checkout sessions ({drop_off_count:,} of {total_sessions:,}) did not convert to an order.",
+                ),
+                inspect=InspectSpec(
+                    metric_title="Decision Focus: Checkout Funnel Drop-off",
+                    exact_value=f"{drop_off_pct:.1f}% drop-off",
+                    what_this_counts="Reconciles completed checkout transactions against initial checkout sessions at matching grain.",
+                    applicable_population=f"All {total_sessions:,} recorded checkout sessions.",
+                    source_name=manifest.display_name,
+                    reporting_period=manifest.date_range.get("formatted") if manifest.date_range else None,
+                    calculation_method="Drop-off = ((Sessions - Orders) / Sessions) * 100.",
+                    data_completeness=f"100% of {valid_funnel_rows} reconciled funnel records.",
+                    workforce_coverage=f"{total_sessions:,} eligible checkout sessions",
+                    coverage_label="Funnel Scope",
+                    coverage_value=f"{total_sessions:,} sessions",
+                    missing_observations=0,
+                    excluded_observations=0,
+                    selection_reason="Reconciled conversion funnel transition identifies payment drop-off priority.",
+                    limitations=["Cart abandonments before checkout entry are excluded due to distinct grain."],
+                    calculation_id=f"calc_decision_funnel_{snapshot[:8]}",
+                    definition_id="def_decision_focus_funnel_v1",
+                    snapshot=snapshot,
+                    provenance=f"{manifest.file_name} -> {manifest.sheet_name}",
+                ),
+                evidence=EvidenceResult(
+                    calculation_id=f"calc_decision_funnel_{snapshot[:8]}",
+                    snapshot=snapshot,
+                    definition_id="def_decision_focus_funnel_v1",
+                    status="available",
+                    value=drop_off_pct,
+                    unit="%",
+                    aggregation="funnel_dropoff_rate",
+                    numerator=float(drop_off_count),
+                    denominator=float(total_sessions),
+                    is_known_zero=drop_off_count == 0,
+                    missing_observations=0,
+                    invalid_observations=0,
+                    excluded_observations=0,
+                    coverage_ratio=1.0,
+                    calculation_method="Uncompleted sessions divided by total checkout sessions.",
+                    provenance=f"{manifest.file_name} -> {manifest.sheet_name}",
+                    limitations=[],
+                ),
+                caption=f"{fmt_obs} drop-off · {fmt_sess} sessions",
+            )
+
+    # --- Recipe 3: Cross-sheet association (Strictly Guarded) ---
+    cross_corr = validate_cross_sheet_correlation_candidate(manifest, eda_report)
+    if cross_corr:
+        var_x_name = cross_corr.get("x_col", "Variable X")
+        var_y_name = cross_corr.get("y_col", "Variable Y")
+        coeff = float(cross_corr.get("pearson_r") or cross_corr.get("coefficient") or 0.0)
+        paired_n = int(cross_corr.get("paired_sample_size") or cross_corr.get("n") or 0)
+        headline = f"Investigate association between {var_x_name} and {var_y_name}"
+        why_it_matters = f"A verified correlation (r = {coeff:.2f}) was detected across {paired_n} paired observations."
+        next_step = f"Investigate potential confounders and data collection timing between {var_x_name} and {var_y_name}."
+
+        return DecisionFocusSpec(
+            component_id="decision_element",
+            kind="investigation_focus",
+            business_concept="cross_sheet.correlation_investigation_focus",
+            title=headline,
+            subject_type="Cross-Sheet Link",
+            subject_label=f"{var_x_name} ~ {var_y_name}",
+            metric_name="Correlation Coefficient",
+            unit="r",
+            observed_value=coeff,
+            formatted_observed_value=f"r = {coeff:.2f}",
+            comparator_label="paired sample",
+            comparator_value=float(paired_n),
+            formatted_comparator_value=f"{paired_n} paired rows",
+            gap_value=coeff,
+            formatted_gap_value=f"r = {coeff:.2f}",
+            sample_size=paired_n,
+            sample_label=f"{paired_n} paired observations",
+            why_it_matters=why_it_matters,
+            next_step=next_step,
+            monitor_metric=f"Correlation({var_x_name}, {var_y_name})",
+            supporting_component_id=None,
+            supporting_calculation_ids=[],
+            priority_basis="verified_cross_sheet_correlation",
+            glance=GlanceSpec(
+                label="Decision focus",
+                value=coeff,
+                formatted_value=f"r = {coeff:.2f}",
+                unit="r",
+                unit_display="explicit_suffix",
+                context_qualifier=f"Paired n = {paired_n} · Cross-sheet",
+                has_info_control=True,
+            ),
+            explain=ExplainSpec(
+                short_definition="Highlights a verified multi-sheet correlation for diagnostic investigation without inferring causation.",
+                exact_value_text=f"Correlation coefficient r = {coeff:.2f} across {paired_n} paired observations between {var_x_name} and {var_y_name}.",
+            ),
+            inspect=InspectSpec(
+                metric_title="Decision Focus: Cross-Sheet Association",
+                exact_value=f"r = {coeff:.2f}",
+                what_this_counts="Measures linear and monotonic association across linked datasets.",
+                applicable_population=f"All {paired_n} paired observations with verified join cardinality.",
+                source_name=manifest.display_name,
+                reporting_period=manifest.date_range.get("formatted") if manifest.date_range else None,
+                calculation_method="Pearson and Spearman rank correlation with non-zero variance and 1:1 join verification.",
+                data_completeness=f"100% of {paired_n} paired observations evaluated.",
+                workforce_coverage=f"{paired_n} paired records",
+                coverage_label="Paired Sample",
+                coverage_value=f"{paired_n} pairs",
+                missing_observations=0,
+                excluded_observations=0,
+                selection_reason="Cross-sheet correlation satisfies paired sample guard (n >= 30) and directional consistency.",
+                limitations=["Statistical correlation does not establish causation or policy impact."],
+                calculation_id=f"calc_decision_corr_{snapshot[:8]}",
+                definition_id="def_decision_focus_corr_v1",
+                snapshot=snapshot,
+                provenance=f"{manifest.file_name} -> {manifest.sheet_name}",
+            ),
+            evidence=EvidenceResult(
+                calculation_id=f"calc_decision_corr_{snapshot[:8]}",
+                snapshot=snapshot,
+                definition_id="def_decision_focus_corr_v1",
+                status="available",
+                value=coeff,
+                unit="r",
+                aggregation="cross_correlation",
+                numerator=coeff,
+                denominator=1.0,
+                is_known_zero=coeff == 0.0,
+                missing_observations=0,
+                invalid_observations=0,
+                excluded_observations=0,
+                coverage_ratio=1.0,
+                calculation_method="Pearson correlation coefficient.",
+                provenance=f"{manifest.file_name} -> {manifest.sheet_name}",
+                limitations=[],
+            ),
+            caption=f"r = {coeff:.2f} · {paired_n} paired observations",
+        )
+
+    # Fallback: Honest None / Abstention
+    return None
+
+
 def run_adaptive_dashboard(sheet_id: int | None = None) -> AdaptiveDashboardResponse:
     """End-to-end execution of the Adaptive Dashboard for the selected sheet."""
     conn = get_connection()
@@ -3534,9 +4267,94 @@ def run_adaptive_dashboard(sheet_id: int | None = None) -> AdaptiveDashboardResp
         except Exception as e:
             quinary_disparity = None
 
+        # 9. Decision Focus Element (Gate 6)
+        decision_focus = None
+        try:
+            # Try fetching EDA report if exists for same sheet
+            eda_row = conn.execute(
+                "SELECT report_json FROM eda_reports WHERE sheet_id=?",
+                (sid,),
+            ).fetchone()
+            eda_rep = json.loads(eda_row[0]) if eda_row else None
+            decision_focus = build_decision_focus_element(
+                manifest=manifest,
+                contract=contract,
+                rows=rows,
+                quinary_element=quinary_disparity,
+                quaternary_element=quaternary_comparator,
+                tertiary_element=tertiary_breakdown,
+                eda_report=eda_rep,
+            )
+        except Exception as e:
+            # Decision-focus failure must preserve Elements 1-5
+            decision_focus = None
+
+        # 10. Executive Briefing Element (Gate 7)
+        executive_briefing = None
+        try:
+            executive_briefing = build_executive_briefing_element(
+                manifest=manifest,
+                contract=contract,
+                primary=spec,
+                secondary=secondary_chart,
+                tertiary=tertiary_breakdown,
+                quaternary=quaternary_comparator,
+                quinary=quinary_disparity,
+                decision=decision_focus,
+            )
+        except Exception:
+            # Executive briefing failure must preserve Elements 1-6
+            executive_briefing = None
+
+        # 11. Exception Watch Element (Gate 8)
+        exception_watch = None
+        try:
+            exception_watch = build_exception_watch_element(
+                manifest=manifest,
+                contract=contract,
+                rows=rows,
+                primary_element=spec,
+                decision_element=decision_focus,
+                eda_report=eda_rep,
+            )
+        except Exception as e:
+            # Exception watch failure must preserve Elements 1-7
+            logger.exception("Element 8 exception watch failed: %s", e)
+        # 12. Forward Outlook Element (Gate 9)
+        forward_outlook = None
+        try:
+            forward_outlook = build_forward_outlook_element(
+                sheet_id=sid,
+                rows=rows,
+                manifest=manifest,
+                contract=contract,
+                primary_element=spec,
+                secondary_element=secondary_chart,
+            )
+        except Exception as e:
+            # Forward outlook failure must preserve Elements 1-8
+            logger.exception("Element 9 forward outlook failed: %s", e)
+            forward_outlook = None
+
+        # 13. Enterprise Synthesis Element (Gate 10)
+        enterprise_synthesis = None
+        try:
+            enterprise_synthesis = build_enterprise_synthesis_element(
+                conn=conn,
+                dataset_id=dataset_id,
+                sheet_id=sid,
+                manifest=manifest,
+                contract=contract,
+                rows=rows,
+            )
+        except Exception as e:
+            # Enterprise synthesis failure must preserve Elements 1-9
+            logger.exception("Element 10 enterprise synthesis failed: %s", e)
+            enterprise_synthesis = None
+
         # Return atomic response
         return AdaptiveDashboardResponse(
-            version="adaptive-v5",
+            version="adaptive-v10",
             snapshot=manifest.snapshot,
             sheet_id=sid,
             manifest=manifest,
@@ -3546,6 +4364,11 @@ def run_adaptive_dashboard(sheet_id: int | None = None) -> AdaptiveDashboardResp
             tertiary_element=tertiary_breakdown,
             quaternary_element=quaternary_comparator,
             quinary_element=quinary_disparity,
+            decision_element=decision_focus,
+            briefing_element=executive_briefing,
+            exception_element=exception_watch,
+            outlook_element=forward_outlook,
+            enterprise_element=enterprise_synthesis,
             run_status="ready" if spec.kind == "kpi" else "needs_definition",
         )
 

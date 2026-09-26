@@ -1,6 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Info, X } from "lucide-react";
+import { ArrowRight, Info, X } from "lucide-react";
 import SafeReactECharts from "../components/charts/SafeReactECharts";
+import ExecutiveBriefingCard from "../components/adaptive/ExecutiveBriefingCard";
+import ExceptionWatchCard from "../components/adaptive/ExceptionWatchCard";
+import ForwardOutlookCard from "../components/adaptive/ForwardOutlookCard";
+import EnterpriseSynthesisCard from "../components/adaptive/EnterpriseSynthesisCard";
 import "../styles/adaptive-dashboard.scss";
 
 async function fetchJson(url, options = {}) {
@@ -72,7 +76,7 @@ function computeRelativeAge(dateStr) {
   }
 }
 
-export default function AdaptiveDashboardPage() {
+export default function AdaptiveDashboardPage({ onNavigateTab }) {
   // Source State
   const [sources, setSources] = useState([]);
   const [sourcesLoading, setSourcesLoading] = useState(true);
@@ -98,8 +102,9 @@ export default function AdaptiveDashboardPage() {
   const [showExplainTertiary, setShowExplainTertiary] = useState(false);
   const [showExplainQuaternary, setShowExplainQuaternary] = useState(false);
   const [showExplainQuinary, setShowExplainQuinary] = useState(false);
+  const [showExplainDecision, setShowExplainDecision] = useState(false);
   const [inspectModalOpen, setInspectModalOpen] = useState(false);
-  const [inspectTarget, setInspectTarget] = useState("primary"); // "primary" | "secondary" | "tertiary" | "quaternary" | "quinary"
+  const [inspectTarget, setInspectTarget] = useState("primary");
 
   // Focus & Accessibility Refs
   const triggerBtnRef = useRef(null);
@@ -107,6 +112,9 @@ export default function AdaptiveDashboardPage() {
   const breakdownTriggerBtnRef = useRef(null);
   const comparatorTriggerBtnRef = useRef(null);
   const disparityTriggerBtnRef = useRef(null);
+  const decisionTriggerBtnRef = useRef(null);
+  const enterpriseTriggerBtnRef = useRef(null);
+  const decisionCardRef = useRef(null);
   const modalCloseBtnRef = useRef(null);
   const dialogRef = useRef(null);
 
@@ -176,8 +184,12 @@ export default function AdaptiveDashboardPage() {
       signal: controller.signal,
     })
       .then((res) => {
-        if (currentReqId !== requestCounter.current) return;
         setData(res);
+        const inspectParam = new URLSearchParams(window.location.search).get("inspect");
+        if (inspectParam) {
+          setInspectTarget(inspectParam);
+          setInspectModalOpen(true);
+        }
       })
       .catch((err) => {
         if (currentReqId !== requestCounter.current) return;
@@ -203,6 +215,8 @@ export default function AdaptiveDashboardPage() {
       setShowExplainSecondary(false);
       setShowExplainTertiary(false);
       setShowExplainQuaternary(false);
+      setShowExplainQuinary(false);
+      setShowExplainDecision(false);
       setTimeout(() => {
         modalCloseBtnRef.current?.focus();
       }, 50);
@@ -233,6 +247,10 @@ export default function AdaptiveDashboardPage() {
       comparatorTriggerBtnRef.current?.focus();
     } else if (inspectTarget === "quinary") {
       disparityTriggerBtnRef.current?.focus();
+    } else if (inspectTarget === "decision") {
+      decisionTriggerBtnRef.current?.focus();
+    } else if (inspectTarget === "enterprise") {
+      enterpriseTriggerBtnRef.current?.focus();
     } else {
       triggerBtnRef.current?.focus();
     }
@@ -243,6 +261,11 @@ export default function AdaptiveDashboardPage() {
   const tertiaryElement = data?.tertiary_element;
   const quaternaryElement = data?.quaternary_element;
   const quinaryElement = data?.quinary_element;
+  const decisionElement = data?.decision_element;
+  const briefingElement = data?.briefing_element;
+  const exceptionElement = data?.exception_element;
+  const outlookElement = data?.outlook_element;
+  const enterpriseElement = data?.enterprise_element;
   const manifest = data?.manifest;
   const glance = element?.glance;
   const explain = element?.explain;
@@ -953,6 +976,16 @@ export default function AdaptiveDashboardPage() {
       ? quaternaryElement?.inspect
       : inspectTarget === "quinary"
       ? quinaryElement?.inspect
+      : inspectTarget === "decision"
+      ? decisionElement?.inspect
+      : inspectTarget === "briefing"
+      ? briefingElement?.inspect
+      : inspectTarget === "exception"
+      ? exceptionElement?.inspect
+      : inspectTarget === "outlook"
+      ? outlookElement?.inspect
+      : inspectTarget === "enterprise"
+      ? enterpriseElement?.inspect
       : inspect;
 
   return (
@@ -1461,6 +1494,161 @@ export default function AdaptiveDashboardPage() {
             </div>
           </section>
         )}
+
+        {/* Layer 1: Element 6 — Decision Focus Card (Gate 6) */}
+        {!calculating && !calcError && decisionElement && (
+          <section
+            ref={decisionCardRef}
+            className="adaptive-decision-card"
+            aria-labelledby="decision-focus-title"
+          >
+            {/* Header: Eyebrow + Info Control */}
+            <div className="decision-card-header">
+              <div className="decision-eyebrow-group">
+                <span className="decision-eyebrow">Decision focus</span>
+              </div>
+
+              <div className="decision-controls-group">
+                {/* Layer 1 Info Control with Layer 2 Explain Preview */}
+                <div className="info-trigger-wrapper">
+                  <button
+                    ref={decisionTriggerBtnRef}
+                    type="button"
+                    className="glance-info-btn"
+                    aria-label={`View methodology and audit for ${decisionElement.title}`}
+                    aria-haspopup="dialog"
+                    aria-expanded={inspectModalOpen && inspectTarget === "decision"}
+                    onClick={() => handleOpenInspect("decision")}
+                    onMouseEnter={() => !inspectModalOpen && setShowExplainDecision(true)}
+                    onMouseLeave={() => setShowExplainDecision(false)}
+                    onFocus={() => !inspectModalOpen && setShowExplainDecision(true)}
+                    onBlur={() => setShowExplainDecision(false)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Escape") setShowExplainDecision(false);
+                    }}
+                  >
+                    <Info size={16} aria-hidden="true" />
+                  </button>
+
+                  {/* Layer 2: Explain Hover / Focus Preview Card */}
+                  {showExplainDecision && !inspectModalOpen && decisionElement.explain && (
+                    <div className="adaptive-explain-preview" role="tooltip">
+                      <p className="preview-def">{decisionElement.caption || decisionElement.explain.short_definition}</p>
+                      <p className="preview-exact-val">{decisionElement.explain.exact_value_text}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Headline: Strongest text element */}
+            <h2 id="decision-focus-title" className="decision-headline">
+              {decisionElement.title}
+            </h2>
+
+            {/* Evidence Row: At most 3 compact facts separated visually */}
+            <div className="decision-evidence-row" role="group" aria-label="Supporting evidence">
+              <span className="evidence-fact primary-fact">
+                <span className="fact-label">Observed:</span>
+                <strong className="fact-value">{decisionElement.formatted_observed_value}</strong>
+              </span>
+              <span className="evidence-separator" aria-hidden="true">·</span>
+              <span className="evidence-fact gap-fact">
+                <span className="fact-label">Gap:</span>
+                <strong className="fact-value">{decisionElement.formatted_gap_value}</strong>
+              </span>
+              {decisionElement.sample_label && (
+                <>
+                  <span className="evidence-separator" aria-hidden="true">·</span>
+                  <span className="evidence-fact sample-fact">
+                    <span className="fact-label">Scope:</span>
+                    <strong className="fact-value">{decisionElement.sample_label}</strong>
+                  </span>
+                </>
+              )}
+            </div>
+
+            {/* Two short text blocks: Why this matters and Next check */}
+            <div className="decision-narrative-grid">
+              <div className="decision-narrative-block">
+                <span className="narrative-tag">Why this matters</span>
+                <p className="narrative-text">{decisionElement.why_it_matters}</p>
+              </div>
+
+              <div className="decision-narrative-block">
+                <span className="narrative-tag">Next check</span>
+                <p className="narrative-text">{decisionElement.next_step}</p>
+              </div>
+            </div>
+
+            {/* Supporting evidence action link/button when supporting_component_id exists */}
+            {decisionElement.supporting_component_id && (
+              <div className="decision-action-footer">
+                <button
+                  type="button"
+                  className="decision-action-btn"
+                  onClick={() => {
+                    if (decisionElement.supporting_component_id === "quinary_element") {
+                      disparityTriggerBtnRef.current?.focus();
+                      disparityTriggerBtnRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+                    } else if (decisionElement.supporting_component_id === "quaternary_element") {
+                      comparatorTriggerBtnRef.current?.focus();
+                      comparatorTriggerBtnRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+                    } else if (decisionElement.supporting_component_id === "tertiary_element") {
+                      breakdownTriggerBtnRef.current?.focus();
+                      breakdownTriggerBtnRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+                    }
+                  }}
+                  aria-label="Open supporting evidence in segment disparity matrix"
+                >
+                  <span>Open supporting evidence</span>
+                  <ArrowRight size={14} aria-hidden="true" />
+                </button>
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* Layer 1: Element 7 — Executive Briefing with Voice Orb (Gate 7) */}
+        {!calculating && !calcError && briefingElement && (
+          <ExecutiveBriefingCard
+            briefing={briefingElement}
+            snapshot={data?.snapshot}
+            onInspect={handleOpenInspect}
+          />
+        )}
+
+        {/* Layer 1: Element 8 — Exception Watch (Gate 8) */}
+        {!calculating && !calcError && exceptionElement && (
+          <ExceptionWatchCard
+            exception={exceptionElement}
+            sheetId={selectedSheetId}
+            snapshot={data?.snapshot}
+            onInspect={handleOpenInspect}
+            onNavigateTab={onNavigateTab}
+          />
+        )}
+
+        {/* Layer 1: Element 9 — Forward Outlook (Gate 9) */}
+        {!calculating && !calcError && outlookElement && (
+          <ForwardOutlookCard
+            outlook={outlookElement}
+            sheetId={selectedSheetId}
+            snapshot={data?.snapshot}
+            onInspect={handleOpenInspect}
+          />
+        )}
+
+        {/* Layer 1: Element 10 — Enterprise Synthesis (Gate 10) */}
+        {!calculating && !calcError && enterpriseElement && (
+          <EnterpriseSynthesisCard
+            enterprise={enterpriseElement}
+            sheetId={selectedSheetId}
+            snapshot={data?.snapshot}
+            onInspect={handleOpenInspect}
+            infoButtonRef={enterpriseTriggerBtnRef}
+          />
+        )}
       </main>
 
       {/* Layer 3: Inspect Modal Details Dialog / Sheet */}
@@ -1481,7 +1669,11 @@ export default function AdaptiveDashboardPage() {
           >
             <div className="inspect-dialog-header">
               <div className="inspect-title-area">
-                <h3 id="inspect-dialog-title">{activeInspect.metric_title}</h3>
+                <h3 id="inspect-dialog-title">
+                  {inspectTarget === "enterprise"
+                    ? "Enterprise synthesis — Methodology & Audit"
+                    : activeInspect.metric_title}
+                </h3>
                 <div className="inspect-exact-headline">{activeInspect.exact_value}</div>
               </div>
 
@@ -1750,6 +1942,163 @@ export default function AdaptiveDashboardPage() {
                         ))}
                       </tbody>
                     </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Supporting Decision Context */}
+              {inspectTarget === "decision" && decisionElement && (
+                <div className="inspect-item">
+                  <span className="item-label">Decision Target & Recommendation</span>
+                  <div className="inspect-decision-summary" style={{ fontSize: "13px", lineHeight: "1.6", color: "var(--fg-secondary, #c9bdb0)" }}>
+                    <div><strong>Focus Subject:</strong> {decisionElement.subject_type}: {decisionElement.subject_label}</div>
+                    <div><strong>Observed vs Comparator:</strong> {decisionElement.formatted_observed_value} vs {decisionElement.formatted_comparator_value} ({decisionElement.formatted_gap_value})</div>
+                    <div><strong>Next Diagnostic Step:</strong> {decisionElement.next_step}</div>
+                    <div><strong>Priority Basis:</strong> <code>{decisionElement.priority_basis}</code></div>
+                  </div>
+                </div>
+              )}
+
+              {/* Supporting Executive Briefing Claims Audit (Gate 7) */}
+              {inspectTarget === "briefing" && briefingElement && (
+                <div className="inspect-item">
+                  <span className="item-label">Evidence-Bound Claims Provenance</span>
+                  <div className="inspect-table-wrapper">
+                    <table className="inspect-data-table" aria-label="Executive Briefing Claims Audit">
+                      <thead>
+                        <tr>
+                          <th scope="col">#</th>
+                          <th scope="col">Claim Type</th>
+                          <th scope="col">Evidence Claim Statement</th>
+                          <th scope="col">Source Component</th>
+                          <th scope="col">Calculation IDs</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {briefingElement.claims.map((claim, idx) => (
+                          <tr key={claim.claim_id || idx}>
+                            <td>#{idx + 1}</td>
+                            <td>
+                              <span className={`tier-badge ${claim.claim_type === 'limitation' ? 'tier-friction_tier' : 'tier-standard_tier'}`}>
+                                {claim.claim_type.replace('_', ' ')}
+                              </span>
+                            </td>
+                            <td style={{ textAlign: "left" }}>{claim.text}</td>
+                            <td><code>{claim.source_component_id}</code></td>
+                            <td><code>{claim.calculation_ids.join(", ") || "—"}</code></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Supporting Exception Watch Statistical Methodology (Gate 8) */}
+              {inspectTarget === "exception" && exceptionElement && exceptionElement.lead_exception && (
+                <div className="inspect-item">
+                  <span className="item-label">Statistical Methodology & Screening Context</span>
+                  <div className="inspect-calc-method-block">
+                    <div><strong>Detection Method:</strong> {exceptionElement.lead_exception.method}</div>
+                    <div><strong>Observed Cohort Value:</strong> {exceptionElement.lead_exception.formatted_observed_value}</div>
+                    <div><strong>Typical Observed Range:</strong> {exceptionElement.lead_exception.formatted_expected_range} (Statistical baseline)</div>
+                    <div><strong>Deviation Magnitude:</strong> {exceptionElement.lead_exception.formatted_deviation} ({exceptionElement.lead_exception.direction})</div>
+                    <div><strong>Sample Size / Breadth:</strong> {exceptionElement.lead_exception.sample_label}</div>
+                    <div><strong>Why Inspect:</strong> {exceptionElement.why_inspect}</div>
+                    <div><strong>Next Scheduled Review:</strong> {exceptionElement.next_check}</div>
+                  </div>
+                </div>
+              )}
+
+              {/* Supporting Forward Outlook Statistical Methodology (Gate 9) */}
+              {inspectTarget === "outlook" && outlookElement && (
+                <div className="inspect-item">
+                  <span className="item-label">Forward Outlook Methodology & Validation</span>
+                  <div className="inspect-calc-method-block">
+                    <div><strong>Outlook Mode:</strong> {outlookElement.kind}</div>
+                    {outlookElement.kind === "target_gap" && (
+                      <>
+                        <div><strong>Actual Value:</strong> {outlookElement.actual_value} {outlookElement.unit}</div>
+                        <div><strong>Recorded Target:</strong> {outlookElement.target_value} {outlookElement.unit}</div>
+                        <div><strong>Variance Gap:</strong> {outlookElement.gap_value} {outlookElement.unit}</div>
+                      </>
+                    )}
+                    {outlookElement.kind === "statistical_forecast" && (
+                      <>
+                        <div><strong>Forecast Model:</strong> {outlookElement.validation?.model_label || outlookElement.model_id}</div>
+                        <div><strong>Point Estimate:</strong> {outlookElement.forecast_value} {outlookElement.unit}</div>
+                        <div><strong>Empirical Range:</strong> {outlookElement.lower_bound}–{outlookElement.upper_bound} {outlookElement.unit}</div>
+                        <div><strong>Validation Folds:</strong> {outlookElement.validation?.fold_count} rolling-origin folds</div>
+                        <div><strong>Model WAPE / MAE:</strong> {(outlookElement.validation?.wape * 100).toFixed(1)}% / {outlookElement.validation?.mae}</div>
+                        <div><strong>Baseline WAPE / MAE:</strong> {(outlookElement.validation?.baseline_wape * 100).toFixed(1)}% / {outlookElement.validation?.baseline_mae}</div>
+                      </>
+                    )}
+                    <div><strong>Context & Status:</strong> {outlookElement.why_available_or_unavailable}</div>
+                  </div>
+                </div>
+              )}
+
+              {/* Supporting Enterprise Synthesis Methodology (Gate 10) */}
+              {inspectTarget === "enterprise" && enterpriseElement && (
+                <div className="inspect-item enterprise-audit-block">
+                  <span className="item-label">Enterprise Synthesis Evidence & Reconciliation</span>
+                  <div className="enterprise-audit-summary">
+                    <div>
+                      <strong>Lead finding:</strong>{" "}
+                      {enterpriseElement.lead_finding?.title || "No analytical recipe passed; coverage only"}
+                    </div>
+                    <div>
+                      <strong>Recipe ID:</strong>{" "}
+                      <code>{enterpriseElement.lead_finding?.recipe_id || "coverage_only"}</code>
+                    </div>
+                    <div>
+                      <strong>Join description:</strong>{" "}
+                      {enterpriseElement.lead_finding?.join_description || "No verified cross-source join available"}
+                    </div>
+                    <div className="enterprise-audit-counts">
+                      <span>
+                        <strong>Matched:</strong>{" "}
+                        {(enterpriseElement.lead_finding?.matched_count ?? 0).toLocaleString()}
+                      </span>
+                      <span>
+                        <strong>Unmatched:</strong>{" "}
+                        {(enterpriseElement.lead_finding?.unmatched_count ?? 0).toLocaleString()}
+                      </span>
+                      <span>
+                        <strong>Coverage:</strong>{" "}
+                        {enterpriseElement.lead_finding
+                          ? `${(enterpriseElement.lead_finding.coverage_ratio * 100).toFixed(1)}%`
+                          : "Not established"}
+                      </span>
+                    </div>
+                    <div>
+                      <strong>Combined snapshot hash:</strong>{" "}
+                      <code>{enterpriseElement.lead_finding?.snapshot || activeInspect.snapshot}</code>
+                    </div>
+                    <div>
+                      <strong>What it establishes:</strong> {enterpriseElement.what_it_establishes}
+                    </div>
+                    <div>
+                      <strong>What it does not establish:</strong>{" "}
+                      {enterpriseElement.what_it_does_not_establish}
+                    </div>
+                  </div>
+
+                  {enterpriseElement.drilldown_targets?.length > 0 && (
+                    <div className="enterprise-audit-sources" aria-label="Enterprise synthesis source sheets">
+                      <strong>Source sheets:</strong>
+                      {enterpriseElement.drilldown_targets.map((target) => (
+                        <a key={target.sheet_id} href={target.route}>
+                          {target.label}
+                        </a>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="enterprise-audit-identifiers">
+                    <div><strong>Calculation ID:</strong> <code>{activeInspect.calculation_id}</code></div>
+                    <div><strong>Definition ID:</strong> <code>{activeInspect.definition_id}</code></div>
+                    <div><strong>Provenance:</strong> {activeInspect.provenance}</div>
                   </div>
                 </div>
               )}

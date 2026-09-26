@@ -345,11 +345,90 @@ class DisparitySpec(BaseModel):
     caption: str | None = None
 
 
-class AdaptiveDashboardResponse(BaseModel):
-    """Top-level response delivering primary tile, secondary chart, tertiary breakdown, quaternary comparator, and quinary disparity matrix."""
+class DecisionFocusSpec(BaseModel):
+    """Specification for the Element 6 Decision Focus component (Gate 6)."""
     model_config = ConfigDict(extra="forbid")
 
-    version: str = "adaptive-v5"
+    component_id: str = "decision_element"
+    kind: Literal["decision_focus", "investigation_focus", "unavailable_card"] = "decision_focus"
+    business_concept: str
+    title: str
+    subject_type: str
+    subject_label: str
+    metric_name: str
+    unit: str
+    observed_value: float | int
+    formatted_observed_value: str
+    comparator_label: str
+    comparator_value: float | int
+    formatted_comparator_value: str
+    gap_value: float | int
+    formatted_gap_value: str
+    sample_size: int
+    sample_label: str
+    why_it_matters: str
+    next_step: str
+    monitor_metric: str | None = None
+    supporting_component_id: str | None = None
+    supporting_calculation_ids: list[str] = Field(default_factory=list)
+    priority_basis: str
+    glance: GlanceSpec
+    explain: ExplainSpec
+    inspect: InspectSpec
+    evidence: EvidenceResult
+    caption: str | None = None
+
+
+class BriefingClaim(BaseModel):
+    """Structured, evidence-bound claim segment within an executive briefing."""
+    model_config = ConfigDict(extra="forbid")
+
+    claim_id: str
+    claim_type: Literal[
+        "scope",
+        "observation",
+        "comparison",
+        "association",
+        "decision_focus",
+        "next_check",
+        "limitation",
+    ]
+    text: str
+    source_component_id: str
+    calculation_ids: list[str] = Field(default_factory=list)
+    numeric_values: list[float | int] = Field(default_factory=list)
+    unit: str = ""
+    is_material_qualifier: bool = False
+
+
+class ExecutiveBriefingSpec(BaseModel):
+    """Specification for the Element 7 Executive Briefing component (Gate 7)."""
+    model_config = ConfigDict(extra="forbid")
+
+    component_id: str = "briefing_element"
+    kind: Literal["executive_briefing", "briefing_unavailable"] = "executive_briefing"
+    business_concept: str
+    title: str = "Executive briefing"
+    context_line: str
+    spoken_text: str
+    transcript_text: str
+    claims: list[BriefingClaim]
+    source_component_ids: list[str] = Field(default_factory=list)
+    calculation_ids: list[str] = Field(default_factory=list)
+    estimated_word_count: int
+    estimated_duration_seconds: int
+    snapshot: str
+    glance: GlanceSpec
+    explain: ExplainSpec
+    inspect: InspectSpec
+    caption: str | None = None
+
+
+class AdaptiveDashboardResponse(BaseModel):
+    """Top-level response delivering primary tile, secondary chart, tertiary breakdown, quaternary comparator, quinary disparity matrix, decision focus, executive briefing, exception watch, forward outlook, and enterprise synthesis."""
+    model_config = ConfigDict(extra="forbid")
+
+    version: str = "adaptive-v10"
     snapshot: str
     sheet_id: int
     manifest: SourceManifest
@@ -359,4 +438,239 @@ class AdaptiveDashboardResponse(BaseModel):
     tertiary_element: BreakdownSpec | None = None
     quaternary_element: ComparatorSpec | None = None
     quinary_element: DisparitySpec | None = None
+    decision_element: DecisionFocusSpec | None = None
+    briefing_element: ExecutiveBriefingSpec | None = None
+    exception_element: "ExceptionWatchSpec | None" = None
+    outlook_element: "ForwardOutlookSpec | None" = None
+    enterprise_element: "EnterpriseSynthesisSpec | None" = None
     run_status: Literal["ready", "needs_definition", "failed"] = "ready"
+
+
+class ExceptionPoint(BaseModel):
+    """Single point in an exception timeline or segment dotplot."""
+    model_config = ConfigDict(extra="forbid")
+
+    label: str
+    raw_period_or_segment: str
+    value: float | None = None
+    formatted_value: str
+    expected_lower: float | None = None
+    expected_upper: float | None = None
+    is_exception: bool = False
+    is_partial: bool = False
+    sample_size: int | None = None
+
+
+class ExceptionItem(BaseModel):
+    """Structured representation of one statistically defensible unusual period or segment."""
+    model_config = ConfigDict(extra="forbid")
+
+    exception_id: str
+    exception_type: Literal["temporal", "segment", "reconciled_rate", "distribution"]
+    subject_type: str
+    subject_label: str
+    metric_name: str
+    unit: str
+    observed_value: float
+    formatted_observed_value: str
+    expected_lower: float
+    expected_upper: float
+    formatted_expected_range: str
+    deviation_value: float
+    formatted_deviation: str
+    direction: Literal["above", "below", "outside", "neutral"]
+    sample_size: int
+    sample_label: str
+    method: str
+    context_flags: list[str] = Field(default_factory=list)
+    calculation_id: str
+    snapshot: str
+
+
+class ExceptionVisualSpec(BaseModel):
+    """Specification for the visual representation of an exception."""
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["timeline_band", "segment_dotplot", "none"] = "none"
+    x_axis_title: str | None = None
+    y_axis_title: str | None = None
+    points: list[ExceptionPoint] = Field(default_factory=list)
+
+
+class ExceptionWatchSpec(BaseModel):
+    """Specification for the Element 8 Exception Watch component (Gate 8)."""
+    model_config = ConfigDict(extra="forbid")
+
+    component_id: str = "exception_element"
+    kind: Literal["exception_watch", "exception_unavailable"] = "exception_watch"
+    business_concept: str
+    title: str = "Exception watch"
+    lead_exception: ExceptionItem | None = None
+    additional_exceptions: list[ExceptionItem] = Field(default_factory=list)
+    total_eligible_exceptions: int = 0
+    why_inspect: str
+    next_check: str
+    visual: ExceptionVisualSpec | None = None
+    glance: GlanceSpec
+    explain: ExplainSpec
+    inspect: InspectSpec
+    evidence: EvidenceResult | None = None
+    caption: str | None = None
+
+
+class OutlookPoint(BaseModel):
+    """Single point in a historical actual series, target baseline, or forecast horizon."""
+    model_config = ConfigDict(extra="forbid")
+
+    period: str
+    period_label: str
+    actual_value: float | None = None
+    forecast_value: float | None = None
+    lower_bound: float | None = None
+    upper_bound: float | None = None
+    is_partial: bool = False
+
+
+class ModelValidationResult(BaseModel):
+    """Chronological backtest results evaluated against a naive baseline."""
+    model_config = ConfigDict(extra="forbid")
+
+    model_id: str
+    model_label: str
+    fold_count: int
+    mae: float
+    wape: float
+    baseline_mae: float
+    baseline_wape: float
+    passed: bool
+    rejection_reason: str | None = None
+
+
+class ForwardOutlookSpec(BaseModel):
+    """Specification for the Element 9 Forward Outlook component (Gate 9)."""
+    model_config = ConfigDict(extra="forbid")
+
+    component_id: str = "outlook_element"
+    kind: Literal["target_gap", "statistical_forecast", "outlook_unavailable"]
+    business_concept: str
+    title: str = "Forward outlook"
+    metric_name: str
+    unit: str
+    temporal_grain: str | None = None
+    horizon: int | None = None
+    actual_value: float | None = None
+    target_value: float | None = None
+    gap_value: float | None = None
+    forecast_value: float | None = None
+    lower_bound: float | None = None
+    upper_bound: float | None = None
+    model_id: str | None = None
+    validation: ModelValidationResult | None = None
+    points: list[OutlookPoint] = Field(default_factory=list)
+    next_review_period: str | None = None
+    why_available_or_unavailable: str
+    glance: GlanceSpec
+    explain: ExplainSpec
+    inspect: InspectSpec
+    evidence: EvidenceResult | None = None
+    caption: str | None = None
+
+
+class EnterpriseSourceRef(BaseModel):
+    """Reference to a verified sibling sheet included in enterprise synthesis."""
+    model_config = ConfigDict(extra="forbid")
+
+    sheet_id: int
+    display_name: str
+    snapshot: str
+    entity_count: int
+    period: str | None = None
+    role: str = "source"
+
+
+class CrossSourceEvidence(BaseModel):
+    """Structured evidence for a cross-source finding connecting two or more sheets."""
+    model_config = ConfigDict(extra="forbid")
+
+    finding_id: str
+    recipe_id: str
+    title: str
+    observation: str
+    interpretation: str
+    metric_names: list[str] = Field(default_factory=list)
+    values: list[float] = Field(default_factory=list)
+    units: list[str] = Field(default_factory=list)
+    paired_or_eligible_count: int
+    matched_count: int
+    unmatched_count: int
+    coverage_ratio: float
+    join_description: str
+    calculation_id: str
+    source_sheet_ids: list[int] = Field(default_factory=list)
+    snapshot: str
+
+
+class EnterpriseVisualPoint(BaseModel):
+    """Aggregated, privacy-safe point for cross-source scatter, paired-dot, or flow visual."""
+    model_config = ConfigDict(extra="forbid")
+
+    label: str
+    x: float
+    y: float
+    group: str | None = None
+    sample_size: int | None = None
+    formatted_x: str | None = None
+    formatted_y: str | None = None
+
+
+class EnterpriseVisualSpec(BaseModel):
+    """Specification for the visual representation of enterprise synthesis."""
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["scatter", "paired_dot", "lifecycle_flow", "none"] = "none"
+    x_axis_title: str | None = None
+    y_axis_title: str | None = None
+    points: list[EnterpriseVisualPoint] = Field(default_factory=list)
+    reference_line: str | None = None
+
+
+class EnterpriseDrilldownTarget(BaseModel):
+    """Verified target destination in Data Explorer for cross-source inspection."""
+    model_config = ConfigDict(extra="forbid")
+
+    sheet_id: int
+    label: str
+    target_type: str = "sheet"
+    route: str
+
+
+class EnterpriseSynthesisSpec(BaseModel):
+    """Specification for the Element 10 Enterprise Synthesis component (Gate 10)."""
+    model_config = ConfigDict(extra="forbid")
+
+    component_id: str = "enterprise_element"
+    kind: Literal[
+        "reconciled_metric",
+        "matched_comparison",
+        "cross_source_association",
+        "temporal_comovement",
+        "coverage_only",
+    ]
+    business_concept: str
+    title: str = "Enterprise synthesis"
+    sources: list[EnterpriseSourceRef] = Field(default_factory=list)
+    source_count: int
+    lead_finding: CrossSourceEvidence | None = None
+    visual: EnterpriseVisualSpec | None = None
+    what_it_establishes: str
+    what_it_does_not_establish: str
+    next_check: str
+    drilldown_targets: list[EnterpriseDrilldownTarget] = Field(default_factory=list)
+    glance: GlanceSpec
+    explain: ExplainSpec
+    inspect: InspectSpec
+    evidence: EvidenceResult | None = None
+    caption: str | None = None
+
+
+AdaptiveDashboardResponse.model_rebuild()

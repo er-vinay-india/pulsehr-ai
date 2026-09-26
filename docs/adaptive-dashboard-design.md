@@ -734,3 +734,428 @@ Revision 7 resolves critical cognitive grain mismatches and visual layout defect
 
 5. **Distinct Subtitle Hierarchy**:
    - Secondary element subtitle (`Per store · Weekly` / `Per store-week · Monthly`) is positioned on its own separate line beneath the main title rather than cramped horizontally on the same baseline.
+
+## 14. Revision 8: Element 6 — Decision Focus (Gate 6)
+
+### 14.1 The Executive Question Answered
+Elements 1–5 answer what the headline number is, how measures change over time, how population is distributed across categories, what verified cohort comparisons exist, and where segment disparity is visible.
+The missing executive question answered by Element 6 is:
+> **Where should I look first, why does it deserve attention, and what is the safest next action supported by the data?**
+
+Element 6 provides a single, evidence-backed interpretation layer connecting verified analysis to a practical next diagnostic step. It reduces cognitive reading effort so an executive can understand the priority in seconds, with full calculation provenance available on demand.
+
+### 14.2 Eligible Evidence Recipes
+1. **Directional segment gap**:
+   - Evaluates segments from verified disparity matrices or deterministic source aggregations.
+   - Identified against a verified direction of concern (e.g. attendance reliability % in workforce; weekly sales density in retail).
+   - Targets the largest material benchmark gap among adequately represented segments (`sample_size >= 5`).
+2. **Verified cohort gap**:
+   - Two comparable cohorts sharing a valid denominator/grain (e.g. trading uplift between holiday and non-holiday periods).
+3. **Reconciled funnel drop-off**:
+   - Reconciles eligible sessions and completed conversions at the same grain (e.g. payment-stage drop-off in checkout).
+   - Prohibits abandonment calculations when funnel stages cannot be reconciled.
+4. **Guarded cross-sheet association**:
+   - Verified when join keys are safe (no many-to-many multiplication), paired sample is adequate (`paired_n >= 30`), both variables vary, missingness is disclosed, Pearson and Spearman rank directions are consistent, and snapshots match.
+5. **Data-definition blocker (honest abstention)**:
+   - When no recipe passes validation or sample guards fail, an honest unavailable card is returned.
+
+### 14.3 Minimum Evidence Guards & Selection Policy
+- **Minimum sample guard**: Requires `sample_size >= 5` per displayed segment for descriptive comparison and `paired_n >= 30` for correlation-based candidates.
+- **Missing values vs true zero**: Missing/null observations are excluded from denominators rather than silently treated as zero.
+- **Ties preservation**: When multiple segments share the identical gap or value, the tie is explicitly disclosed; no false "unique worst" claim is manufactured.
+- **Categorical segregation**: "Unknown" or "Other" categories are never targeted as operational priorities.
+- **Snapshot and EDA binding**: EDA reports are validated against `manifest.snapshot`. Stale snapshots or unsafe cardinalities are rejected immediately.
+
+### 14.4 Non-Causal Action-Language Policy
+- Strictly descriptive and investigative: recommends review of scheduling, operational context, assortment, or data completeness.
+- Never asserts unverified causality ("because of", "driven by", "caused by", "will improve").
+- When metric direction is unknown (general tabular), wording remains strictly neutral (e.g. "Review {segment} {metric}"), never using "worst", "underperforming", "poor", "critical", or "risk".
+
+### 14.5 Minimal Card Anatomy & Disclosure Layers
+- **Eyebrow**: Stable section label `Decision focus`.
+- **Headline**: The strongest text element naming the specific unit and issue.
+- **Evidence Row**: Up to 3 compact facts (observed value, benchmark gap, sample scope).
+- **Narrative Blocks**: Two short, clean text blocks — `Why this matters` and `Next check`.
+- **Supporting Action**: Direct focus transition to `quinary_element` (or supporting component).
+- **Inspect Modal**: Complete calculation formula, population, coverage, declared limitations, provenance, and technical IDs.
+
+### 14.6 Status
+- **Implementation Status**: Implemented and verified across responsive viewports (320px, 390px, 768px, desktop).
+- **Review Status**: Awaiting client approval.
+
+## 15. Revision 9: Element 7 — Executive Briefing with Voice Orb (Gate 7)
+
+### 15.1 The Executive Question Answered
+Elements 1–6 present verified analytical components: headline KPI, temporal trajectory, categorical composition, cohort comparator, segment disparity, and an operational decision focus. However, an executive opening the dashboard requires immediate situational awareness without having to scan, cross-reference, and mentally reconstruct 6 visual cards.
+
+The executive question answered by Element 7 is:
+> **What is the concise, spoken executive summary of this dataset, what key pattern and priority matter right now, and what should we check next?**
+
+Element 7 synthesizes the active analytical state into a focused, human-paced audio and text briefing (50–100 words, ~20–40 seconds) designed for immediate comprehension at a glance or on the go.
+
+### 15.2 Evidence-Bound Claim Selection
+The briefing is constructed deterministically from 4 distinct, verified analytical claims:
+1. **Scope & State Claim (Element 1 KPI)**:
+   - Identifies the population size, entity type, and observation timeframe directly from `primary_element`.
+   - Examples: "The attendance data represents 259 employees across July 2026." / "Weekly sales data tracks 45 stores across 143 retail weeks."
+2. **Exploratory Pattern Claim (Elements 2–5)**:
+   - Identifies the anchor finding from the explanatory cards (e.g. highest vs benchmark reliability from Element 5 disparity, holiday uplift from Element 4 comparator, or major category share from Element 3 composition).
+   - Prohibits inventing trends: if the time series is flat or non-monotonic, it is described neutrally without claiming an increase or decrease.
+3. **Action / Decision Focus Claim (Element 6)**:
+   - Captures the operational priority unit, observed value, benchmark gap, and affected sample size directly from `decision_element`.
+   - Bounded by sample guards ($n \ge 5$); skips or abstains if Decision Focus is unavailable.
+4. **Next Check Claim (Diagnostic Step)**:
+   - States the exact operational investigation step from Element 6 (e.g., "The next check is to review scheduling coverage and approved-leave patterns before changing policy.").
+
+### 15.3 Narration Strength and Non-Causal Wording Policy
+- **Evidence-Bound Wording**: Every spoken number and entity must resolve to a verified calculation in the current snapshot manifest. No numbers may appear in the narration that do not exist in the supporting claims.
+- **Strict Non-Causality**: The narration never asserts unproven causal mechanisms ("driven by", "because of", "due to").
+- **Neutral Polarity**: Where business metric polarity is general or uncertified, wording uses neutral verbs ("recorded", "measures", "stands at") rather than value-laden judgment ("poor", "concerning", "failing").
+- **No Hallucinated Predictions or Targets**: Zero forward-looking targets, forecasts, confidence percentages, or speculative interventions are permitted.
+- **Temporal & Partial Period Qualifiers**: If an active period is incomplete or partial, qualifying language is preserved in both written text and spoken narration.
+
+### 15.4 Typed Claim Provenance & Strict Schema
+- Contracts are enforced via Pydantic with `ConfigDict(extra="forbid")`.
+- `BriefingClaim`:
+  - `claim_id`: Stable identifier (e.g., `claim-scope-f5b4447a`).
+  - `claim_type`: `scope` | `pattern` | `action` | `next_step` | `caveat`.
+  - `text`: Natural language statement of the claim.
+  - `source_component_id`: Identifies originating component (`primary_element`, `quinary_element`, `decision_element`).
+  - `calculation_ids`: Array of cryptographic calculation hashes (`calc_...`).
+  - `numeric_values`: Array of all numeric metrics present in the claim.
+  - `unit`: Formatted unit of measure (e.g., `%`, `employees`, `$`).
+  - `is_material_qualifier`: Boolean indicating whether the claim serves as an essential limitation or scope boundary.
+- `ExecutiveBriefingSpec`:
+  - `component_id`: `"briefing_element"`.
+  - `kind`: `"executive_briefing"` | `"briefing_unavailable"`.
+  - `spoken_text` & `transcript_text`: Reconciled word-for-word text.
+  - `estimated_word_count`: Enforced between 40 and 130 words.
+  - `estimated_duration_seconds`: Calculated at 150 words per minute.
+  - `snapshot`: Matching source dataset snapshot.
+  - `glance`, `explain`, `inspect`: Standard disclosure metadata including claim-level audit tables.
+
+### 15.5 Duration & Local Privacy Requirements
+- **Length & Pace**: Spoken text is constrained to 55–100 spoken words (~22–40 seconds at conversational 150 wpm).
+- **Hard Word/Char Limits**: Maximum 130 words, maximum 1,200 characters.
+- **Zero Cloud Audio Transmission**: Local voice synthesis runs strictly via the backend voiceover endpoint (`/api/analytics/decision-brief/voiceover`) utilizing native macOS system speech (`say` to AIFF/WAV). Audio data never leaves the server.
+- **Zero Record-Level PII**: Individual employee names, private notes, or unaggregated free-text fields are strictly prohibited from briefing claims.
+
+### 15.6 Voice Failure Isolation & Resilient Playback
+- **Component Isolation**: If Element 7 builder encounters an exception, it is caught independently (`try/except Exception: executive_briefing = None`), leaving Elements 1–6 completely intact and unaffected.
+- **Audio Fault Tolerance**: If the local speech service is unavailable, audio fails to load, or network drops, the visual card remains 100% usable. The complete written briefing and interactive claim-by-claim transcript are rendered immediately.
+- **No Autoplay**: Audio playback requires an explicit, deliberate user click on the Listen button (`autoPlay: false`).
+- **Clean Lifecycle Controls**: Users can stop playback at any time during generation or playback. Switching dataset sources immediately aborts in-flight audio requests and revokes active blob URLs to prevent stale audio playback.
+
+### 15.7 Orb Preservation, Reduced Motion, Accessibility, and Responsive Ergonomics
+- **Visual Continuity**: Reuses the established `AnimatedAcousticOrb` component. In idle or loading states, the orb maintains gentle resting dynamics; during playback, it synchronizes fluidly with audio activity.
+- **Reduced Motion**: Respects `prefers-reduced-motion`. In reduced-motion mode, animations are paused, rendering a clean static visual with unambiguous textual state indicators (`Speaking`, `Ready to listen`).
+- **Full Keyboard & Screen Reader Accessibility**:
+  - Accessible `<button>` elements with `aria-label` and `aria-pressed`.
+  - Full collapsible transcript panel with ARIA attributes (`aria-expanded`, `aria-controls`).
+  - Interactive "Inspect Evidence" modal (`inspectTarget === "briefing"`) detailing all 4 claims with their source components, calculation IDs, and population parameters.
+- **Responsive Layout**:
+  - **Desktop (1440px)**: 2-column layout (280px left orb column with centered player and status pill; 1fr right column with context badge, written briefing, and collapsible transcript).
+  - **Tablet (768px)**: Optimized card padding and responsive narrative typography.
+  - **Mobile (390px & 320px)**: Natural single-column vertical stack (orb centered above briefing), touch targets $\ge 44\text{px}$, zero horizontal scroll, and full clearance above bottom mobile navigation bars.
+
+### 15.8 Status
+- **Implementation Status**: Implemented, verified across 320px, 390px, 768px, desktop, and 200% zoom viewports; audio endpoint verified live.
+- **Review Status**: Awaiting client approval.
+
+## 16. Revision 10: Element 8 — Exception Watch (Gate 8)
+
+### 16.1 The Executive Question Answered
+Elements 1–7 provide verified headline metrics, trajectories, breakdowns, comparisons, segment disparities, operational priorities, and an executive audio briefing. However, even when general distributions appear stable, leaders need an automated sentinel identifying isolated statistical anomalies without manufacturing false alarms.
+
+The executive question answered by Element 8 is:
+> **What is currently unusual enough to merit investigation, how far outside typical behavior is it, and what should we inspect?**
+
+Element 8 surfaces **exactly one** statistically defensible unusual period or segment from current-snapshot evidence, displays the observed value against a typical observed range, and provides one-click drill-through to Data Explorer for root-level inspection.
+
+### 16.2 Candidate Discovery & Robust Statistical Formulations
+Outliers in exploratory data analysis (EDA) are treated strictly as screening candidates, not automatic operational defects. Every candidate is recalculated from scratch against current snapshot rows:
+
+1. **Robust Center & Spread**:
+   - For an observed series $X = [x_1, \dots, x_N]$, center is computed using the sample median:
+     $$\tilde{x} = \text{median}(X)$$
+   - Scale is computed via Median Absolute Deviation (MAD):
+     $$\text{MAD} = \text{median}(|x_i - \tilde{x}|)$$
+     $$S_{\text{MAD}} = 1.4826 \cdot \text{MAD}$$
+   - **Zero-Spread Guard**: If $S_{\text{MAD}} = 0$ (e.g., discrete values or identical values across $>50\%$ of cohorts), the engine falls back to the Interquartile Range (IQR):
+     $$\text{IQR} = Q_3 - Q_1$$
+     $$S_{\text{IQR}} = 0.7413 \cdot \text{IQR}$$
+   - If both $S_{\text{MAD}} = 0$ and $S_{\text{IQR}} = 0$, the series exhibits insufficient empirical variation; the candidate is rejected and no artificial exception is manufactured.
+
+2. **Typical Observed Range**:
+   - The typical range is an empirical statistical baseline:
+     $$[\text{typical\_range\_lower}, \text{typical\_range\_upper}] = [\tilde{x} - 2S, \tilde{x} + 2S]$$
+   - It is strictly labeled as empirical historical dispersion. It is **never** presented as an operational target, policy goal, budget, forecast, or confidence interval.
+
+3. **Robust Deviation Score & Screening Guard**:
+   - Candidate deviation score:
+     $$z = \frac{|x_{\text{observed}} - \tilde{x}|}{S}$$
+   - An item qualifies as an exception only if $z \ge 2.5$ and the observed value falls outside the typical observed range.
+
+4. **Strict Sample & Quality Guards**:
+   - **Temporal Guard**: Requires $N \ge 12$ distinct chronological periods (weeks or months).
+   - **Segment Guard**: Requires $n \ge 5$ valid records per evaluated segment cohort.
+   - **Denominator & Null Handling**: Missing and null values are explicitly excluded from denominators; they are never silently coerced to zero.
+   - **Calendar & Holiday Conditioning**: Known calendar holidays (e.g., Thanksgiving, Christmas) and partial or truncated time periods are contextualized rather than flagged as internal failures.
+   - **Categorical Exclusions**: Catch-all buckets such as `"Unknown"`, `"Other"`, or unmapped identifiers are never highlighted as actionable operational exceptions.
+
+### 16.3 Duplicate Suppression Rule (Cross-Component Guard)
+To preserve executive clarity and eliminate cognitive redundancy:
+- If a segment or cohort was selected by **Element 6 (Decision Focus)**, it is automatically suppressed from selection in Element 8.
+- The pipeline selects the next highest statistically defensible candidate (or cleanly abstains if no other candidate satisfies all guards).
+
+### 16.4 Non-Causal Action & Wording Policy
+- **Strictly Descriptive & Inquisitive**: Explains that statistical rarity invites inspection of context, recording anomalies, calendar quirks, or operational shifts.
+- **Forbidden Vocabulary**: Never uses "error", "defect", "breach", "fault", "failure", "broken", "culprit", "blame", or "underperforming".
+- **Evidence-Bound Direction**: Uses neutral, factual descriptors: "outside the typical observed range", "above typical range", or "below typical range".
+
+### 16.5 Typed Contracts & Schema Definition
+Enforced via Pydantic with strict schema validation (`ConfigDict(extra="forbid")`):
+- `ExceptionPoint`:
+  - `label`: Dimension or period label.
+  - `observed_value`: Float value of the observation.
+  - `is_exception`: Boolean flag for the highlighted exception.
+  - `sample_size`: Optional count of underlying records.
+- `ExceptionItem`:
+  - `candidate_id`: Deterministic hash (`exc-seg-...` or `exc-temp-...`).
+  - `category`: `"temporal"` | `"segment"`.
+  - `target_label`: Name of the unusual cohort or period.
+  - `measure_name`: Name of the underlying metric.
+  - `observed_value`: Numeric value.
+  - `typical_range_lower` & `typical_range_upper`: 2-sigma empirical bounds.
+  - `robust_center` & `robust_spread`: Median and scaled scale estimate.
+  - `deviation_magnitude`: Distance beyond typical range.
+  - `direction`: `"above"` | `"below"`.
+  - `method`: Robust method (`"MAD-based robust deviation"` or `"IQR-based robust deviation"`).
+  - `sample_size`: Valid observation count.
+  - `total_baseline_units`: Number of comparison cohorts or periods.
+  - `why_inspect`: Descriptive non-causal explanation.
+  - `drill_down_query`: Query string parameters for Data Explorer.
+- `ExceptionVisualSpec`:
+  - `chart_family`: `"echarts"`.
+  - `chart_type`: `"timeline_band"` | `"segment_dotplot"`.
+  - `option`: Complete, self-contained ECharts configuration object.
+  - `table_data`: Structured accessible fallback table.
+- `ExceptionWatchSpec`:
+  - `component_id`: `"exception_element"`.
+  - `kind`: `"exception_watch"` | `"exception_unavailable"`.
+  - `lead_exception`: `ExceptionItem | None`.
+  - `visual`: `ExceptionVisualSpec | None`.
+  - `glance`, `explain`, `inspect`: Multi-layer audit and provenance contracts.
+
+### 16.6 Disclosure Layers & Frontend Architecture
+- **Glance**: Eyebrow `Exception watch`, dominant headline naming the cohort and measure, prominent observed value, typical range reference pill (`7.9–13.8 days Typical observed range`), deviation badge (`5.2 days above range`), and sample size badge.
+- **Visual Presentation**: Exclusively uses **ECharts**:
+  - `segment_dotplot`: Horizontal dot plot showing the typical range band, baseline cohort medians, and highlighted outlier point.
+  - `timeline_band`: Chronological band chart with observed line and shaded typical range corridor.
+  - Built-in accessible table view toggle for screen readers and high-contrast tabular inspection.
+- **Explain**: Non-causal callout box explaining why inspection is warranted, paired with the primary action button **"Inspect supporting data"** that routes directly to Data Explorer with the active sheet and EDA tab selected (`/?sheet_id=<id>&view=eda#explorer`).
+- **Inspect Modal**: Deep statistical provenance modal revealing exact calculation methodology, median, MAD, bounds, baseline count, sample size, applicable population, selection rationale, and snapshot identifiers.
+
+### 16.7 Verification & Status
+- **Sample Guards**: Verified on Sheet 80 (259 records, attendance) and Sheet 77 (retail sales).
+- **Duplicate Suppression**: Verified against Element 6 (Element 6 selected `Corporate Functions`; Element 8 suppressed it and selected `Operations and Infrastructure`).
+- **Responsive Inspection**: Verified at 1440px desktop, 768px tablet, 390px mobile, 320px narrow mobile, and 200% browser zoom ($\ge 44$px touch targets, zero clipping, zero horizontal scroll).
+- **Drill-Through**: Verified Data Explorer deep-link renders with active sheet and EDA report preloaded.
+- **Review Status**: Presented for user approval.
+
+## 17. Revision 11: Element 9 — Forward Outlook (Gate 9)
+
+### 17.1 The Executive Question Answered
+> "Where is this metric headed, and how confident should I be in that estimate?"
+
+Element 9 provides a forward-looking estimate of the primary metric, produced only when evidence quality is sufficient for a credible forecast. It will never fabricate a trend or silently publish a low-quality projection.
+
+### 17.2 Two Distinct Operating Modes
+
+| Mode | Condition | Output |
+|------|-----------|--------|
+| **Target-gap** | A named target is available with matching scope and temporal grain | Gap to target: distance, direction, periods remaining, and whether the current trajectory is on-track |
+| **Statistical forecast** | ≥ 12 complete historical periods with a validated candidate model | Rolling-origin backtested point estimate, forecast range, horizon, and model identity |
+| **Unavailable** | Neither condition is met | Honest disclosure card explaining what additional data would enable a forecast |
+
+### 17.3 Forecast Eligibility Requirements
+- **Minimum history**: 12 complete, non-partial periods at the detected temporal grain (weekly / monthly / quarterly).
+- **Partial period exclusion**: The most recent period is excluded from training if it is incomplete at computation time.
+- **Grain requirement**: The temporal grain must be determinable from the data; mixed or ambiguous grains → unavailable.
+- **Protected outcomes**: Individual-level predictions (e.g., which employee will resign) are permanently prohibited regardless of data availability.
+
+### 17.4 Rolling-Origin Backtest (Statistical Forecast)
+- **Candidate models**: Naïve Last, Drift, Simple Exponential Smoothing (SES), Holt, Seasonal Naïve (if seasonal period detected).
+- **Protocol**: Minimum 5 rolling-origin folds. Each fold trains on the available history up to a cutoff and tests on the next h steps.
+- **Error metric**: Weighted Absolute Percentage Error (WAPE), with zero-safe fallback to MAE when denominators are near zero.
+- **Naïve baseline guard**: The selected candidate model must beat the Naïve Last model on WAPE/MAE on held-out folds. If it does not, the forecast is withheld and the card renders as unavailable with explanation.
+- **Published result**: Includes model name, backtest fold count, candidate WAPE, and baseline WAPE for full auditability.
+
+### 17.5 Forecast Range
+- The empirical residual distribution from rolling-origin folds is used to construct the range.
+- Range expands by √h for multi-step horizons (consistent with random-walk uncertainty growth).
+- Non-negative metrics are clamped at zero. Percentage metrics are clamped at [0, 100].
+- Range is explicitly labelled as an "empirical forecast range" — not a statistical confidence interval.
+
+### 17.6 Governance Prohibition
+- Forecasts at the individual employee or personal identifier grain are permanently prohibited.
+- All forecast subjects must be aggregate metrics (company-wide, department-level, time-period-level).
+- Violation → card renders as `forecast_unavailable` regardless of data availability.
+
+### 17.7 Unavailable Card (Constructive Disclosure)
+When neither target-gap nor statistical forecast is available, the card renders a constructive disclosure:
+- States what condition is not met (e.g., "Fewer than 12 complete periods available").
+- Explains what data or configuration would enable the outlook.
+- Never renders as a broken chart or empty white space.
+
+### 17.8 Typed Contracts & Schema
+
+**`ForwardOutlookSpec`** fields:
+- `kind`: `"target_gap"` | `"statistical_forecast"` | `"forecast_unavailable"`
+- `metric_name`, `metric_unit`, `grain`
+- `horizon_periods`, `horizon_label`
+- `point_estimate` (forecast value), `range_low`, `range_high`
+- `model_name`, `backtest_folds`, `candidate_wape`, `baseline_wape` (statistical forecast only)
+- `target_value`, `gap_value`, `gap_direction`, `on_track` (target-gap only)
+- `unavailable_reason` (unavailable mode only)
+- `glance`, `explain`, `inspect`: Multi-layer audit contracts (same pattern as Elements 1–8)
+
+### 17.9 Frontend Architecture
+- **Glance**: "Element 9 · Forward outlook" eyebrow, metric name, point estimate with unit, forecast range pill, horizon label, model badge (statistical mode) or gap badge (target-gap mode).
+- **Visual**: ECharts line chart with:
+  - Historical actuals as solid line
+  - Forecast point as distinct marker
+  - Forecast range as shaded band
+  - Accessible data table toggle
+- **Unavailable mode**: Alert-style amber card with reason and constructive next-step guidance.
+- **Inspect Modal**: Full backtest provenance — fold count, WAPE vs. baseline, model selection rationale, range derivation, limitations.
+
+### 17.10 Verification & Status
+- **Tests**: 15 test scenarios covering target-gap, statistical forecast, insufficient history, partial period exclusion, zero-safe WAPE, rolling-origin no-leakage, naïve baseline rejection, non-negative clamping, protected outcome rejection, and fault isolation.
+- **Responsive**: Verified at 1440px desktop, 768px tablet, 390px mobile, 320px narrow, and 200% zoom. Zero clipping, zero overflow.
+- **Version**: `adaptive-v9`
+- **Review Status**: Awaiting client approval.
+
+---
+
+## 18. Revision 12: Element 10 — Enterprise Synthesis (Gate 10)
+
+### 18.1 The Executive Question Answered
+> "What does connecting our different data sources reveal that a single sheet cannot?"
+
+Element 10 searches for verified, non-causal relationships across sibling sheets within the same dataset upload. It publishes one useful cross-source finding, or an honest coverage-only result when no safe join is possible.
+
+### 18.2 Scope Policy — Same-Dataset Sibling Sheets Only
+- **In scope**: Sheets that belong to the same dataset upload (same `dataset_id` in the catalog).
+- **Out of scope**: Sheets from different dataset uploads, derived or cached tables, EDA intermediate results.
+- **Minimum**: Requires ≥ 2 sibling sheets. Single-sheet datasets always render coverage-only.
+- **Rationale**: Cross-dataset joins involve unknown provenance, temporal misalignment, and unverifiable entity identity. They are permanently prohibited.
+
+### 18.3 Multi-Source Manifest & Combined Snapshot
+- A `SourceManifest` is built for each sibling sheet: `sheet_id`, `dataset_id`, `display_name`, `row_count`, `col_count`, `snapshot` hash, `date_range`.
+- A **combined deterministic snapshot** is computed as a SHA-256 hex digest of all individual sheet snapshot hashes sorted and concatenated. Any change to any source row invalidates the combined snapshot.
+- The combined snapshot is published in the response for reproducibility auditing.
+
+### 18.4 Join Key Detection & Cardinality Policy
+
+**Key scoring heuristics** (applied to each column pair across two sheets):
+- Entity detection (ID-like columns with high cardinality, low duplicate rate): +5.0 points
+- Name match across sheets (same column name): +0.5 points
+- Entity-only single sheet: +2.0 points
+- Small-integer guard: columns with numeric values predominantly ≤ 20 are rejected as keys (likely period codes)
+- N:N joins (neither side is unique): permanently rejected
+
+**Cardinality verification**:
+- 1:1 — preferred, full entity coverage
+- N:1 — allowed with explicit entity grain aggregation before join
+- 1:N — allowed with symmetry
+- N:N — rejected, returns coverage-only
+
+**Unmatched entity tracking**: All matched and unmatched counts are reconciled and published in the response.
+
+### 18.5 Time Alignment & Period Policy
+- Sheets must cover overlapping or comparable periods to be joinable.
+- Mismatched "as-of" dates (e.g., one sheet is a July snapshot, the other is a December snapshot with no overlap) → join rejected, coverage-only.
+- Mixed temporal grains (weekly vs. monthly) → rejected unless one is a superset of the other.
+
+### 18.6 Recipe Priority Order
+The engine attempts recipes in order and publishes the first that passes all guards:
+
+| Recipe | Description | Guard |
+|--------|-------------|-------|
+| **A — Lifecycle** | Orders→Returns, Leads→Wins, Applications→Hires | Denominator > 0, unit-compatible |
+| **B — Matched cohort comparison** | Compare metric distributions across a shared grouping dimension (e.g., Department) | N ≥ 5 cohorts, privacy-safe aggregation (group-level only, no individual rows) |
+| **C — Cross-source association** | Pearson / Spearman correlation across matched entities | N ≥ 30 matched pairs, non-trending (detrend required if time-indexed), outlier sensitivity check |
+| **E — Coverage-only** | Fallback when no recipe passes | Always available |
+
+Recipe D (temporal leading indicator) is reserved for future implementation with time-series alignment.
+
+### 18.7 Non-Causal Wording Policy
+- All published observations use associative, not causal, language.
+- Prohibited: "causes", "drives", "leads to", "results in".
+- Required: "is associated with", "tends to co-occur with", "differs across", "is higher in".
+- Violation at any recipe step → the finding is withheld.
+
+### 18.8 PII Protection
+- No row-level data (individual names, employee IDs, personal identifiers, email addresses) is published in visual point data or inspection payloads.
+- Visual points contain only aggregated cohort-level values.
+- Matched entity keys are used only for join computation and are never exposed in API responses.
+
+### 18.9 Typed Contracts & Schema
+
+**`EnterpriseSynthesisSpec`** fields (top-level):
+- `kind`: `"matched_comparison"` | `"association"` | `"lifecycle_metric"` | `"coverage_only"`
+- `business_concept`, `title`, `caption`
+- `source_count`, `sources`: list of `EnterpriseSourceRef`
+- `combined_snapshot`: deterministic content hash
+- `lead_finding`: `CrossSourceEvidence | None`
+- `visual`: `EnterpriseVisualSpec | None`
+- `what_it_establishes`, `what_it_does_not_establish`, `recommended_next_check`
+- `drilldown_targets`: list of `EnterpriseDrilldownTarget`
+- `glance`, `inspect`: audit and provenance contracts
+
+**`CrossSourceEvidence`** fields:
+- `recipe_id`, `join_description`, `matched_count`, `unmatched_count`, `coverage_ratio`
+- `metric_names`, `observation`, `snapshot`
+- `calculation_id`, `definition_id`
+
+**`EnterpriseVisualSpec`** fields:
+- `chart_family`: `"echarts"` (only allowed value)
+- `chart_type`: `"paired_bar"` | `"scatter"` | `"lifecycle_flow"` | `"paired_dot"`
+- `x_label`, `y_label`, `points`: list of `EnterpriseVisualPoint`
+
+### 18.10 Frontend Architecture
+- **Eyebrow**: "Element 10 · Enterprise synthesis" + scope badge ("N evaluated sources · [scope]")
+- **Glance bar**: source count, matched count, coverage ratio (3-column grid; single-column on mobile)
+- **Visual (analytical recipes)**: ECharts paired-bar or scatter chart, accessible table toggle
+- **Coverage-only mode**: Amber alert block with scope notice, interpretation grid (establishes / does not establish / next check)
+- **Inspect Modal**: Full reconciliation audit — lead finding title, recipe ID, join description, matched/unmatched counts, coverage ratio, combined snapshot hash, source sheet links, limitations
+- **Drill-through**: Each source sheet linked to Data Explorer (`/?sheet_id=<id>&view=eda#explorer`)
+
+### 18.11 Verification & Status
+- **Tests**: 20 test scenarios covering same-dataset scope enforcement, combined snapshot change detection, 1:1 join, N:1 aggregation, N:N rejection, duplicate-key cardinality violation, match/unmatched reconciliation, privacy-safe cohort comparison, correlation guards (N<30 withheld), trending time-series spurious correlation rejection, mixed currency rejection, mismatched period rejection, stale EDA rejection, single-sheet coverage-only, unknown join labels, fault isolation (Element 10 failure preserves Elements 1–9), adaptive-v10 contract validation, no PII in response, matched keys without metrics → coverage-only, multiple sibling sheets evaluated in dataset order.
+- **All 128 backend tests pass** (123 adaptive dashboard + 5 EDA pipeline).
+- **Frontend build**: Zero errors. Bundle size within expected range.
+- **Responsive**: Verified at 1440px desktop, 768px tablet, 390px mobile, 320px narrow, and 200% zoom. Zero overflow, ≥44px touch targets, no horizontal scroll.
+- **Inspect Modal**: Full audit trail rendered and verifiable.
+- **Drill-through**: Source sheet links navigate correctly to Data Explorer.
+- **Version**: `adaptive-v10`
+- **Review Status**: Awaiting client approval.
+
+### 18.12 Final Ten-Element Dashboard Acceptance
+All ten elements are now implemented and verified end-to-end:
+
+| Gate | Element | Description | Version |
+|------|---------|-------------|---------|
+| 1 | Primary metric | Headline KPI with glance/explain/inspect | adaptive-v1 |
+| 2 | Trend | Time-series trend with ECharts | adaptive-v2 |
+| 3 | Breakdown | Ranked segment comparison | adaptive-v3 |
+| 4 | Correlation | Bivariate association (N≥30 guard) | adaptive-v4 |
+| 5 | Benchmark | Cross-dataset percentile comparison | adaptive-v5 |
+| 6 | Decision focus | Actionable segment highlight | adaptive-v6 |
+| 7 | Executive briefing | Voice orb narration with typed claims | adaptive-v7 |
+| 8 | Exception watch | Robust statistical outlier detection | adaptive-v8 |
+| 9 | Forward outlook | Backtested forecast or target-gap | adaptive-v9 |
+| 10 | Enterprise synthesis | Verified cross-source finding | adaptive-v10 |
+
+All ten elements: ECharts only, fault-isolated, non-causal wording, PII-free, accessible, responsive.
