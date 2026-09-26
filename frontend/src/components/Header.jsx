@@ -12,14 +12,12 @@ import {
 } from "lucide-react";
 import { openExecutivePrintReport } from "../api/client";
 
-export default function Header({ activeTab, onSelectTab, onOpenPresentationModal, activeJob }) {
+export default function Header({ activeTab, onSelectTab, onOpenUploadModal, activeJob }) {
   const tabs = [
     { id: "adaptive", label: "Executive Dashboard", short: "Dashboard", icon: LayoutDashboard },
     { id: "explorer", label: "Data Explorer", short: "Explorer", icon: Table },
-    { id: "ingestion", label: "Ingestion Studio", short: "Uploads", icon: UploadCloud }
+    { id: "presentation", label: "Presentation Studio", short: "Presentation", icon: Presentation }
   ];
-
-  const isJobRunning = activeJob && (activeJob.status === "in_progress" || activeJob.status === "pending");
 
   return (
     <header className="app-header">
@@ -65,22 +63,13 @@ export default function Header({ activeTab, onSelectTab, onOpenPresentationModal
 
           <button
             type="button"
-            className={`btn-primary btn-create-pres ${isJobRunning ? "is-generating" : ""}`}
-            onClick={onOpenPresentationModal}
-            title="Launch AI-Assisted Presentation Pipeline"
-            aria-label="Create presentation"
+            className="btn-primary"
+            onClick={onOpenUploadModal}
+            title="Upload and ingest a new spreadsheet"
+            aria-label="Upload spreadsheet"
           >
-            {isJobRunning ? (
-              <>
-                <RotateCw size={15} className="spin-icon" />
-                <span>Generating {activeJob.progress_pct || 0}%</span>
-              </>
-            ) : (
-              <>
-                <Sparkles size={15} />
-                <span>Create presentation</span>
-              </>
-            )}
+            <UploadCloud size={15} />
+            <span>Upload Data</span>
           </button>
         </div>
       </div>

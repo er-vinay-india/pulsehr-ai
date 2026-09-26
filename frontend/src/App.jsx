@@ -5,13 +5,15 @@ import EmployeeDrawer from "./components/EmployeeDrawer.jsx";
 import GlobalCopilotWidget from "./components/GlobalCopilotWidget.jsx";
 import AdaptiveDashboardPage from "./pages/AdaptiveDashboardPage.jsx";
 import DataExplorerPage from "./pages/DataExplorerPage.jsx";
-import IngestionPage from "./pages/IngestionPage.jsx";
-import CreatePresentationModal from "./components/CreatePresentationModal.jsx";
+import PresentationPage from "./pages/PresentationPage.jsx";
+import UploadModal from "./components/ingestion/UploadModal.jsx";
 
 function parseHash() {
   const hash = window.location.hash.replace("#", "").trim();
-  const valid = ["adaptive", "explorer", "ingestion"];
+  const valid = ["adaptive", "explorer", "presentation"];
   if (valid.includes(hash)) return hash;
+  if (hash === "presentations") return "presentation";
+  if (hash === "ingestion" || hash === "upload") return "explorer";
   if (hash === "report" || hash === "overview" || hash === "reference") {
     try {
       window.location.hash = "adaptive";
@@ -25,9 +27,12 @@ export default function App() {
   const [activeTab, setActiveTab] = useState(parseHash);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState(null);
   const [copilotOpen, setCopilotOpen] = useState(() => window.location.hash.replace("#", "").trim() === "copilot");
+  const [uploadModalOpen, setUploadModalOpen] = useState(() => {
+    const raw = window.location.hash.replace("#", "").trim();
+    return raw === "upload" || raw === "ingestion";
+  });
 
-  // Presentation Pipeline Modal & Job State
-  const [presentationModalOpen, setPresentationModalOpen] = useState(false);
+  // Presentation Pipeline Job & Deck State
   const [activePresentationJob, setActivePresentationJob] = useState(null);
   const [activeDeck, setActiveDeck] = useState(null);
   const [activeScope, setActiveScope] = useState({ datasetId: null, sheetId: null, snapshotId: null });
@@ -38,9 +43,9 @@ export default function App() {
       if (h === "copilot") {
         setCopilotOpen(true);
         setActiveTab("adaptive");
-      } else if (h === "presentation" || h === "presentations") {
-        setPresentationModalOpen(true);
-        setActiveTab("adaptive");
+      } else if (h === "upload" || h === "ingestion") {
+        setUploadModalOpen(true);
+        setActiveTab("explorer");
       } else {
         setActiveTab(parseHash());
       }
@@ -56,8 +61,8 @@ export default function App() {
       setCopilotOpen(true);
       return;
     }
-    if (tab === "presentation" || tab === "presentations") {
-      setPresentationModalOpen(true);
+    if (tab === "upload" || tab === "ingestion") {
+      setUploadModalOpen(true);
       return;
     }
     window.location.hash = tab;
@@ -70,7 +75,7 @@ export default function App() {
       <Header
         activeTab={activeTab}
         onSelectTab={handleSelectTab}
-        onOpenPresentationModal={() => setPresentationModalOpen(true)}
+        onOpenUploadModal={() => setUploadModalOpen(true)}
         activeJob={activePresentationJob}
       />
 
@@ -81,27 +86,31 @@ export default function App() {
             onSelectEmployee={setSelectedEmployeeId}
           />
         )}
-        {activeTab === "ingestion" && (
-          <IngestionPage />
+        {activeTab === "presentation" && (
+          <PresentationPage
+            activeJobId={activePresentationJob?.job_id || activePresentationJob?.id}
+            initialDeck={activeDeck}
+            initialScopeType="workspace"
+            onJobUpdate={job => {
+              setActivePresentationJob(job);
+              if (!job || job.status === "in_progress" || !job.deck) {
+                setActiveDeck(null);
+              } else if (job.deck) {
+                setActiveDeck(job.deck);
+              }
+            }}
+          />
         )}
       </main>
 
       <Footer />
 
-      {/* AI Presentation Pipeline & Studio Modal */}
-      <CreatePresentationModal
-        isOpen={presentationModalOpen}
-        onClose={() => setPresentationModalOpen(false)}
-        activeJobId={activePresentationJob?.job_id || activePresentationJob?.id}
-        initialDeck={activeDeck}
-        initialScopeType="workspace"
-        onJobUpdate={job => {
-          setActivePresentationJob(job);
-          if (!job || job.status === "in_progress" || !job.deck) {
-            setActiveDeck(null);
-          } else if (job.deck) {
-            setActiveDeck(job.deck);
-          }
+      {/* Multi-Step Spreadsheet Ingestion Modal */}
+      <UploadModal
+        isOpen={uploadModalOpen}
+        onClose={() => setUploadModalOpen(false)}
+        onUploadSuccess={() => {
+          // If on explorer or adaptive, components reload seamlessly
         }}
       />
 

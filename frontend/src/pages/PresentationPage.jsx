@@ -3,7 +3,6 @@ import "../styles/presentation-responsive.scss";
 import {
   Presentation,
   Download,
-  X,
   Sliders,
   Sparkles,
   RefreshCw,
@@ -14,17 +13,15 @@ import {
   getPresentationDeck,
   exportPresentationPptx
 } from "../api/client";
-import EvidenceInspectionDrawer from "./EvidenceInspectionDrawer.jsx";
+import EvidenceInspectionDrawer from "../components/EvidenceInspectionDrawer.jsx";
 import { exportStandaloneHtmlPresentation } from "../utils/standaloneHtmlExporter";
-import DeckConfigView from "./presentation/DeckConfigView.jsx";
-import DeckGeneratingView from "./presentation/DeckGeneratingView.jsx";
-import DeckStudioView from "./presentation/DeckStudioView.jsx";
-import SlideRegenModal from "./presentation/SlideRegenModal.jsx";
-import { usePresentationWorkflow, STAGES } from "./presentation/usePresentationWorkflow";
+import DeckConfigView from "../components/presentation/DeckConfigView.jsx";
+import DeckGeneratingView from "../components/presentation/DeckGeneratingView.jsx";
+import DeckStudioView from "../components/presentation/DeckStudioView.jsx";
+import SlideRegenModal from "../components/presentation/SlideRegenModal.jsx";
+import { usePresentationWorkflow, STAGES } from "../components/presentation/usePresentationWorkflow";
 
-export default function CreatePresentationModal({
-  isOpen,
-  onClose,
+export default function PresentationPage({
   activeJobId = null,
   initialDeck = null,
   initialScopeType = "workspace",
@@ -95,23 +92,21 @@ export default function CreatePresentationModal({
     handleRegenerateSlideSubmit,
     handleExportPptx
   } = usePresentationWorkflow({
-    isOpen,
+    isOpen: true,
     activeJobId,
     initialDeck,
     initialScopeType,
     onJobUpdate
   });
 
-  if (!isOpen) return null;
-
   return (
-    <div className="presentation-modal-backdrop" role="dialog" aria-modal="true">
-      <div className={`presentation-modal-shell mode-${viewMode}`}>
-        {/* MODAL HEADER */}
+    <div className="presentation-page-container">
+      <div className={`presentation-modal-shell presentation-page-shell mode-${viewMode}`}>
+        {/* PAGE HEADER / TOOLBAR */}
         <div className="pres-modal-header">
           <div className="header-title-wrap">
             <div className="icon-badge">
-              <Presentation size={18} />
+              <Presentation size={20} />
             </div>
             <div>
               <h3>
@@ -195,15 +190,6 @@ export default function CreatePresentationModal({
                 </button>
               </>
             )}
-
-            <button
-              type="button"
-              className="btn-icon-close"
-              onClick={onClose}
-              aria-label="Close presentation studio"
-            >
-              <X size={18} />
-            </button>
           </div>
         </div>
 
@@ -254,12 +240,12 @@ export default function CreatePresentationModal({
               if (deckSpec) {
                 setViewMode("studio");
               } else if (currentJobId) {
-                getPresentationJob(currentJobId).then(j => {
+                getPresentationJob(currentJobId).then((j) => {
                   if (j?.deck) {
                     setDeckSpec(j.deck);
                     setViewMode("studio");
                   } else if (j?.deck_id) {
-                    getPresentationDeck(j.deck_id).then(d => {
+                    getPresentationDeck(j.deck_id).then((d) => {
                       setDeckSpec(d);
                       setViewMode("studio");
                     });
@@ -271,7 +257,7 @@ export default function CreatePresentationModal({
               if (deckSpec) {
                 exportPresentationPptx(deckSpec);
               } else if (currentJobId) {
-                getPresentationJob(currentJobId).then(j => {
+                getPresentationJob(currentJobId).then((j) => {
                   const did = j?.deck_id;
                   if (did) window.open(`/api/presentations/download/${did}`, "_blank");
                 });
@@ -281,10 +267,10 @@ export default function CreatePresentationModal({
               if (deckSpec) {
                 exportStandaloneHtmlPresentation(deckSpec, selectedThemeId);
               } else if (currentJobId) {
-                getPresentationJob(currentJobId).then(j => {
+                getPresentationJob(currentJobId).then((j) => {
                   const did = j?.deck_id;
                   if (did) {
-                    getPresentationDeck(did).then(d => {
+                    getPresentationDeck(did).then((d) => {
                       if (d?.deck) exportStandaloneHtmlPresentation(d.deck, selectedThemeId);
                     });
                   }
