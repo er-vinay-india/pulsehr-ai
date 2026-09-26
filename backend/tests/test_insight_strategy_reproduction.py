@@ -957,10 +957,23 @@ def test_acceptance_t30_copilot_top_3_and_worst_department_parity():
         worst_data1 = resp_worst_s1.json()
         assert worst_data1["engine"] == "shared_findings"
         assert worst_data1["timings"]["llm_calls"] == 0
+        assert worst_data1["timings"]["total_ms"] >= 0.01  # Measured latency
+        assert worst_data1["metadata"]["direction"] == "lowest"
         focus_finding = next((f for f in findings_s1 if f.decision_category == "segment_disparity"), None)
         assert focus_finding is not None
         assert focus_finding.finding_id == worst_data1["citations"][0]["fact_id"]
         assert focus_finding.short_business_title in worst_data1["answer"]
+
+        # 3b. Query 2b: Highest attendance query must NEVER return the lowest/worst department
+        resp_highest_s1 = client.post("/api/copilot/query", json={
+            "query": "Which department has the highest attendance?",
+            "sheet_id": sid1,
+        })
+        assert resp_highest_s1.status_code == 200
+        highest_data1 = resp_highest_s1.json()
+        assert highest_data1["engine"] == "shared_findings"
+        assert highest_data1["metadata"]["direction"] == "highest"
+        assert "Top Performing Unit" in highest_data1["answer"]
 
         # 4. Query 3: Switching to Sheet 2 replaces findings context completely
         findings_s2 = get_shared_findings_for_sheet(sid2)

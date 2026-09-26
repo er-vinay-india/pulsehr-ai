@@ -210,6 +210,70 @@ def detect_candidate_join_keys(
     return candidates
 
 
+def find_semantic_shared_measures(
+    left_columns: list[str],
+    right_columns: list[str],
+    left_key: str,
+    right_key: str,
+    left_name: str = "",
+    right_name: str = "",
+) -> tuple[str | None, str | None]:
+    """Finds semantically compatible continuous measures to reconcile across sheets.
+    Prevents false pairings (e.g. matching attendance columns with leave columns
+    merely because column headers share a calendar substring like '1st to 5th July').
+    """
+    l_candidates = [c for c in left_columns if c != left_key and not is_pii_column(c)]
+    r_candidates = [c for c in right_columns if c != right_key and not is_pii_column(c)]
+
+    r_is_leave_sheet = any(term in right_name.lower() for term in ["leave", "absence", "timeoff"])
+    l_is_leave_sheet = any(term in left_name.lower() for term in ["leave", "absence", "timeoff"])
+
+    # 1. Total Leave Measure Pairing
+    l_total_leave = next(
+        (c for c in l_candidates if c.lower() in [
+            "approved leaves", "total approved leaves", "total leaves", "leaves total", "approved leave"
+        ]),
+        None,
+    )
+    r_total_leave = next(
+        (c for c in r_candidates if c.lower() in [
+            "total approved leaves", "approved leaves", "total leaves", "leaves total", "approved leave"
+        ]),
+        None,
+    )
+    if l_total_leave and r_total_leave:
+        return l_total_leave, r_total_leave
+
+    # 2. Total Attendance Measure Pairing
+    l_total_att = next((c for c in l_candidates if c.lower() in ["total attendance", "attendance total", "recorded attendance"]), None)
+    r_total_att = next((c for c in r_candidates if c.lower() in ["total attendance", "attendance total", "recorded attendance"]), None)
+    if l_total_att and r_total_att:
+        return l_total_att, r_total_att
+
+    # 3. Direct matching columns with semantic integrity guards
+    for lc in l_candidates:
+        lc_low = lc.lower()
+        l_has_leave = "leave" in lc_low
+        l_has_attend = "attend" in lc_low or "presence" in lc_low
+
+        for rc in r_candidates:
+            rc_low = rc.lower()
+            r_has_leave = "leave" in rc_low or r_is_leave_sheet
+            r_has_attend = "attend" in rc_low or "presence" in rc_low
+
+            # Semantic blocker: Never match leave with attendance
+            if (l_has_leave and r_has_attend and not r_has_leave) or (l_has_attend and r_has_leave and not l_has_leave):
+                continue
+            if l_has_leave != r_has_leave and (l_has_leave or r_has_leave):
+                continue
+
+            # Exact or normalized match
+            if lc_low == rc_low:
+                return lc, rc
+
+    return None, None
+
+
 def inspect_cardinality(
     left_rows: list[dict[str, Any]],
     right_rows: list[dict[str, Any]],
@@ -842,18 +906,19 @@ def build_enterprise_synthesis_element(
         any("leave" in c for c in left_col_names_lower)
         and (any("attend" in c for c in right_col_names_lower) or contract.entity_type == "employee")
     )
-    shared_measure_left = next(
-        (c for c in primary_columns if c != l_key and not is_pii_column(c) and any(c.lower() == rc.lower() for rc in other["columns"] if rc != r_key)),
-        None,
+    shared_measure_left, shared_measure_right = find_semantic_shared_measures(
+        left_columns=primary_columns,
+        right_columns=other["columns"],
+        left_key=l_key,
+        right_key=r_key,
+        left_name=manifest.display_name or manifest.sheet_name,
+        right_name=other["ref"].display_name or other["ref"].sheet_name,
     )
-    shared_measure_right = next(
-        (rc for rc in other["columns"] if shared_measure_left and rc.lower() == shared_measure_left.lower() and rc != r_key),
-        None,
-    ) if shared_measure_left else None
 
     if (is_attendance_leave or shared_measure_left) and not analytical_blocker:
         primary_only = left_eligible - matched_count
         sibling_only = right_eligible - matched_count
+        has_numerical_agreement = False
 
         if shared_measure_left and shared_measure_right:
             l_vals_by_key = _mean_by_key(rows, l_key, shared_measure_left)
@@ -863,30 +928,101 @@ def build_enterprise_synthesis_element(
                 if k in l_vals_by_key and k in r_vals_by_key and abs(l_vals_by_key[k] - r_vals_by_key[k]) < 0.01
             }
             agreed_count = len(agreed_keys)
+            agreement_rate = round((agreed_count / max(matched_count, 1)) * 100, 1) if matched_count > 0 else 0.0
+            reconciliation_title = "Approved leave ledger reconciliation" if is_attendance_leave else "Cross-source ledger reconciliation"
+            glance_label = "Matched leave agreement" if is_attendance_leave else "Ledger agreement"
+            glance_val = agreement_rate
+            glance_fmt = f"{agreement_rate:.1f}%"
+            glance_qualifier = f"{agreed_count:,} of {matched_count:,} matched ({sibling_only} sibling-only, {primary_only} primary-only)"
+
+            # Sibling-only and primary-only sums for honest narrative
+            r_only_keys = set(r_vals_by_key.keys()) - common_set
+            r_only_val_sum = sum(r_vals_by_key.get(k, 0.0) for k in r_only_keys)
+            l_only_keys = set(l_vals_by_key.keys()) - common_set
+            l_only_val_sum = sum(l_vals_by_key.get(k, 0.0) for k in l_only_keys)
+
+            if is_attendance_leave and agreement_rate == 100.0:
+                obs_text = (
+                    f"{agreed_count:,} of {matched_count:,} matched employee leave totals agree (100.0%). "
+                    f"{sibling_only} leave-register IDs outside attendance source account for {r_only_val_sum:.1f} leave days; "
+                    f"{primary_only} primary-only records have {l_only_val_sum:.1f} recorded leave days."
+                )
+                interp_text = (
+                    f"Leave totals reconcile for all {agreed_count:,} matched employees between {shared_measure_left} and {shared_measure_right}. "
+                    f"{sibling_only} leave-register IDs account for {r_only_val_sum:.1f} additional leave days. "
+                    f"All {primary_only:,} primary-only records record zero leave days, consistent with a leave-register inclusion rule."
+                )
+                est_text = (
+                    f"100.0% agreement ({agreed_count:,} of {matched_count:,}) on recorded leave totals across verified matched entities. "
+                    f"{sibling_only} sibling-only records ({r_only_val_sum:.1f} leave days) and {primary_only} primary-only records (zero leave days) identified."
+                )
+                not_est_text = (
+                    f"Agreement is strictly conditional on the matched cohort ({matched_count:,} records). "
+                    f"Inclusion rules for the {sibling_only} leave-register-only IDs and {primary_only} zero-leave attendance records require roster confirmation."
+                )
+                next_check_text = (
+                    f"Confirm inclusion rules for the {sibling_only} leave-register IDs ({r_only_val_sum:.1f} days) and roster scope in Data Explorer."
+                )
+            else:
+                obs_text = f"{matched_count:,} matched entities reconciled ({agreement_rate:.1f}% agreement on {shared_measure_left}); {primary_only:,} primary-only and {sibling_only:,} sibling-only records identified."
+                interp_text = f"Agreement is conditional on the matched cohort ({matched_count:,} records). {primary_only:,} records in {manifest.display_name} and {sibling_only:,} records in {other['ref'].display_name} remain unmatched across systems."
+                est_text = f"{agreement_rate:.1f}% agreement ({agreed_count:,} of {matched_count:,}) across verified matched entities without event-row multiplication. {primary_only:,} primary-only and {sibling_only:,} sibling-only records identified."
+                not_est_text = "Agreement is strictly conditional on the matched cohort; unmatched records cannot be assumed to agree without cross-system confirmation. This reconciliation does not imply an association or causal relationship."
+                if primary_only == 0 and sibling_only == 0:
+                    next_check_text = "No unmatched employee IDs found in this comparison."
+                elif sibling_only == 0:
+                    next_check_text = f"Investigate the {primary_only:,} primary-only exceptions in Data Explorer."
+                elif primary_only == 0:
+                    next_check_text = f"Investigate the {sibling_only:,} sibling-only exceptions in Data Explorer."
+                else:
+                    next_check_text = f"Investigate the {primary_only:,} primary-only and {sibling_only:,} sibling-only exceptions in Data Explorer."
+            has_numerical_agreement = True
         else:
             agreed_count = matched_count
+            match_pct = round((matched_count / max(left_eligible, 1)) * 100, 1) if left_eligible > 0 else 0.0
+            agreement_rate = match_pct
+            reconciliation_title = "Cross-source employee ID match coverage" if contract.entity_type == "employee" else "Cross-source entity ID match coverage"
+            glance_label = "Employee ID match coverage" if contract.entity_type == "employee" else "Entity ID match coverage"
+            glance_val = match_pct
+            glance_fmt = f"{match_pct:.1f}%"
+            glance_qualifier = f"{matched_count:,} of {left_eligible:,} primary IDs matched ({primary_only} unlinked)"
+            obs_text = f"{matched_count:,} employee IDs matched across {manifest.display_name} and {other['ref'].display_name}; {primary_only:,} primary-only records identified."
+            interp_text = f"{matched_count:,} employee IDs match between the two sources ({match_pct:.1f}% of primary roster). No shared numerical ledger measures were verified for numerical agreement."
+            est_text = f"{matched_count:,} employee IDs matched between {manifest.display_name} ({left_eligible:,} records) and {other['ref'].display_name} ({right_eligible:,} records)."
+            not_est_text = "Employee ID matching confirms roster overlap only; it does not establish numerical ledger agreement or consistent attendance reporting between systems."
 
-        agreement_rate = round((agreed_count / max(matched_count, 1)) * 100, 1) if matched_count > 0 else 0.0
-        reconciliation_title = "Cross-source ledger reconciliation" if not is_attendance_leave else "Attendance & leave ledger reconciliation"
+        if is_attendance_leave and agreement_rate == 100.0 and sibling_only > 0:
+            next_check_text = f"Confirm inclusion rules for the {sibling_only} leave-register IDs ({r_only_val_sum:.1f} days) and roster scope in Data Explorer."
+        elif primary_only == 0 and sibling_only == 0:
+            next_check_text = "No unmatched employee IDs found in this comparison."
+        elif sibling_only == 0:
+            next_check_text = f"Investigate the {primary_only:,} primary-only exceptions in Data Explorer."
+        elif primary_only == 0:
+            next_check_text = f"Investigate the {sibling_only:,} sibling-only exceptions in Data Explorer."
+        else:
+            next_check_text = f"Investigate the {primary_only:,} primary-only and {sibling_only:,} sibling-only exceptions in Data Explorer."
 
         flow_points = [
             EnterpriseVisualPoint(label="Primary records", x=0.0, y=float(left_eligible), sample_size=left_eligible, formatted_y=f"{left_eligible:,}"),
             EnterpriseVisualPoint(label="Matched cohort", x=1.0, y=float(matched_count), sample_size=matched_count, formatted_y=f"{matched_count:,}"),
-            EnterpriseVisualPoint(label="Agreed records", x=2.0, y=float(agreed_count), sample_size=agreed_count, formatted_y=f"{agreed_count:,}"),
         ]
+        if has_numerical_agreement:
+            flow_points.append(
+                EnterpriseVisualPoint(label="Agreed records", x=2.0, y=float(agreed_count), sample_size=agreed_count, formatted_y=f"{agreed_count:,}")
+            )
         if sibling_only > 0:
             flow_points.append(
-                EnterpriseVisualPoint(label="Sibling only", x=3.0, y=float(sibling_only), sample_size=sibling_only, formatted_y=f"{sibling_only:,}")
+                EnterpriseVisualPoint(label="Sibling only", x=3.0 if has_numerical_agreement else 2.0, y=float(sibling_only), sample_size=sibling_only, formatted_y=f"{sibling_only:,}")
             )
 
         evidence = CrossSourceEvidence(
             finding_id="finding_ledger_reconciliation",
             recipe_id="recipe_s17_reconciliation",
             title=reconciliation_title,
-            observation=f"{matched_count:,} matched entities reconciled ({agreement_rate:.1f}% agreement); {primary_only:,} primary-only and {sibling_only:,} sibling-only records identified.",
-            interpretation=f"Agreement is conditional on the matched cohort ({matched_count:,} records). {primary_only:,} records in {manifest.display_name} and {sibling_only:,} records in {other['ref'].display_name} remain unmatched across systems.",
-            metric_names=["Agreement rate", "Primary-only records", "Sibling-only records"],
-            values=[agreement_rate, float(primary_only), float(sibling_only)],
+            observation=obs_text,
+            interpretation=interp_text,
+            metric_names=[glance_label, "Primary-only records", "Sibling-only records"],
+            values=[glance_val, float(primary_only), float(sibling_only), float(r_only_val_sum), float(matched_count), float(agreed_count)] if has_numerical_agreement else [glance_val, float(primary_only), float(sibling_only)],
             units=["%", "records", "records"],
             paired_or_eligible_count=left_eligible,
             matched_count=matched_count,
@@ -912,26 +1048,26 @@ def build_enterprise_synthesis_element(
                 y_axis_title="Records",
                 points=flow_points,
             ),
-            what_it_establishes=f"{agreement_rate:.1f}% agreement across {matched_count:,} verified matched entities without event-row multiplication. {primary_only:,} primary-only and {sibling_only:,} sibling-only records identified.",
-            what_it_does_not_establish="Agreement is strictly conditional on the matched cohort; unmatched records cannot be assumed to agree without cross-system confirmation. This reconciliation does not imply an association or causal relationship.",
-            next_check=f"Investigate the {primary_only:,} primary-only and {sibling_only:,} sibling-only exceptions in Data Explorer.",
+            what_it_establishes=est_text,
+            what_it_does_not_establish=not_est_text,
+            next_check=next_check_text,
             drilldown_targets=drilldown_targets,
             glance=GlanceSpec(
-                label="Ledger agreement",
-                value=agreement_rate,
-                formatted_value=f"{agreement_rate:.1f}%",
+                label=glance_label,
+                value=glance_val,
+                formatted_value=glance_fmt,
                 unit="%",
                 unit_display="explicit_suffix",
-                context_qualifier=f"{matched_count:,} matched ({primary_only} primary-only, {sibling_only} sibling-only)",
+                context_qualifier=glance_qualifier,
             ),
             explain=ExplainSpec(
                 short_definition="Cross-source ledger reconciliation compares corresponding entity records and measures across separate operational systems.",
-                exact_value_text=f"{agreement_rate:.1f}% agreement across {matched_count:,} matched records ({primary_only:,} primary-only, {sibling_only:,} sibling-only).",
+                exact_value_text=f"{glance_fmt} {glance_label.lower()} across {matched_count:,} matched records ({primary_only:,} primary-only, {sibling_only:,} sibling-only).",
             ),
             inspect=InspectSpec(
                 metric_title=reconciliation_title,
-                exact_value=f"{agreement_rate:.1f}%",
-                what_this_counts="Proportion of matched entity records showing consistent values across systems.",
+                exact_value=glance_fmt,
+                what_this_counts="Proportion of matched entity records showing consistent values or identities across systems.",
                 applicable_population=f"Matched records between {manifest.display_name} and {other['ref'].display_name}.",
                 source_name=f"{manifest.display_name} & {other['ref'].display_name}",
                 calculation_method=f"Distinct entity matching on {l_key} = {r_key} with strict cardinality enforcement.",

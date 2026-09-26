@@ -109,6 +109,10 @@ def is_eligible_numeric_measure(col_name: str, values: list[Any], contract: Sema
         if c_lower not in ("paid", "valid", "credit"):
             return False
 
+    # Disallow unresolved derived metrics from triggering exceptions
+    if any(unresolved in c_lower for unresolved in ("final attendance", "net attendance", "adjusted attendance")):
+        return False
+
     # Extract non-null numeric floats
     clean = []
     for v in values:
@@ -238,23 +242,24 @@ def discover_segment_exception_candidates(
                     "above" if dev > 0 else "below" if dev < 0 else "neutral"
                 )
 
-                # Format strings
+                # Format strings with honest distance above/below range
+                bound_dist = val - upper if val > upper else (lower - val if val < lower else abs(dev))
                 if unit == "%":
                     fmt_val = f"{val:.1f}%"
                     fmt_range = f"{lower:.1f}%–{upper:.1f}%"
-                    fmt_dev = f"{abs(dev):.1f} pp {'above' if dev > 0 else 'below'} range"
+                    fmt_dev = f"{bound_dist:.1f} pp {'above' if dev > 0 else 'below'} range"
                 elif unit == "$":
                     fmt_val = f"${val:,.0f}" if val >= 100 else f"${val:,.2f}"
                     fmt_range = f"${lower:,.0f}–${upper:,.0f}" if lower >= 100 else f"${lower:,.2f}–${upper:,.2f}"
-                    fmt_dev = f"${abs(dev):,.0f} {'above' if dev > 0 else 'below'} range"
+                    fmt_dev = f"${bound_dist:,.0f} {'above' if dev > 0 else 'below'} range"
                 elif unit in ("days", "hours"):
                     fmt_val = f"{val:.1f} {unit}"
                     fmt_range = f"{lower:.1f}–{upper:.1f} {unit}"
-                    fmt_dev = f"{abs(dev):.1f} {unit} {'above' if dev > 0 else 'below'} range"
+                    fmt_dev = f"{bound_dist:.1f} {unit} {'above' if dev > 0 else 'below'} range"
                 else:
                     fmt_val = f"{val:.1f}"
                     fmt_range = f"{lower:.1f}–{upper:.1f}"
-                    fmt_dev = f"{abs(dev):.1f} {'above' if dev > 0 else 'below'} range"
+                    fmt_dev = f"{bound_dist:.1f} {'above' if dev > 0 else 'below'} range"
 
                 sample_size = len(eligible_segs[seg])
                 sample_label = f"{sample_size} records"
@@ -424,7 +429,8 @@ def discover_temporal_exception_candidates(
 
             fmt_val = f"${val:,.0f}" if unit == "$" else f"{val:.1f}"
             fmt_range = f"${lower:,.0f}–${upper:,.0f}" if unit == "$" else f"{lower:.1f}–{upper:.1f}"
-            fmt_dev = f"${abs(dev):,.0f} {'above' if dev > 0 else 'below'} range" if unit == "$" else f"{abs(dev):.1f} {'above' if dev > 0 else 'below'} range"
+            bound_dist = val - upper if val > upper else (lower - val if val < lower else abs(dev))
+            fmt_dev = f"${bound_dist:,.0f} {'above' if dev > 0 else 'below'} range" if unit == "$" else f"{bound_dist:.1f} {'above' if dev > 0 else 'below'} range"
 
             calc_id = f"calc_exception_temp_{hashlib.sha256(f'{manifest.snapshot}:{p}:{num_col}:{ENGINE_VERSION}'.encode()).hexdigest()[:8]}"
 

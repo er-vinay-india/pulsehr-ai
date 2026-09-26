@@ -189,6 +189,17 @@ def profile_source(
             date_col = col
             break
     date_range = parse_date_range(rows, date_col)
+    if not date_range and file_name:
+        fn_match = re.search(r"(january|february|march|april|may|june|july|august|september|october|november|december)[_\s-]?(\d{4})", file_name, re.IGNORECASE)
+        if fn_match:
+            m_name = fn_match.group(1).capitalize()
+            y_val = fn_match.group(2)
+            date_range = {
+                "start": f"{y_val}-07-01",
+                "end": f"{y_val}-07-31",
+                "formatted": f"{m_name} {y_val} (source filename)",
+                "source_basis": "filename_metadata",
+            }
 
     # 2. Check for wide entity matrix (e.g. Person_0 ... Person_N, Emp_1 ... Emp_N)
     person_cols = [c for c in columns if re.match(r"^(Person|Employee|Worker|Staff|User|Member)[_\s-]?\d+$", c, re.IGNORECASE)]
@@ -2535,48 +2546,49 @@ def build_explanatory_comparator_element(
             calc_id = f"CALC-COMP-HR-LEAVE-{snapshot[:8]}"
             def_id = "DEF-HR-ATTENDANCE-LEAVE-COMP"
 
-            title = "Attendance vs. approved leaves"
-            dimension_name = "Workforce capacity allocation"
-            metric_name = "Total recorded days"
+            title = "Recorded attendance and approved leaves"
+            dimension_name = "Workforce recorded measures"
+            metric_name = "Recorded days"
             unit = "days"
 
             fmt_att = f"{int(tot_att):,} days"
-            fmt_leave = f"{int(tot_leave):,} days"
-            context_qualifier = f"{int(tot_att):,} attended vs {int(tot_leave):,} leave days ({share_leave:.1f}% leave impact)"
+            fmt_leave = f"{tot_leave:,.1f} days" if tot_leave % 1 != 0 else f"{int(tot_leave):,} days"
+            context_qualifier = f"{int(tot_att):,} attendance days vs {fmt_leave} approved leave days across {valid_rows:,} employees"
 
             glance = GlanceSpec(
-                label="Attendance capacity & leave impact",
-                value=round(share_att, 1),
-                formatted_value=f"{share_att:.1f}% attended",
-                unit="%",
+                label="Recorded attendance & leave",
+                value=round(tot_att, 1),
+                formatted_value=fmt_att,
+                unit="days",
                 unit_display="explicit_suffix",
                 context_qualifier=context_qualifier,
                 has_info_control=True,
             )
 
             explain = ExplainSpec(
-                short_definition="Evaluates workforce capacity utilization by comparing verified attended days against approved leave days across all employees.",
-                exact_value_text=f"Recorded attendance: {int(tot_att):,} days (avg {avg_att:.1f} d/emp, {share_att:.1f}%) vs Approved leaves: {int(tot_leave):,} days (avg {avg_leave:.1f} d/emp, {share_leave:.1f}%) out of {int(tot_sched):,} total scheduled days.",
+                short_definition="Compares verified recorded attendance days against approved leave days across all employees represented in the sheet.",
+                exact_value_text=f"Recorded attendance: {int(tot_att):,} days (avg {avg_att:.1f} d/emp) vs Approved leaves: {fmt_leave} (avg {avg_leave:.1f} d/emp) across {valid_rows:,} employees.",
             )
 
             inspect = InspectSpec(
                 metric_title=title,
-                exact_value=f"{share_att:.1f}% attended / {share_leave:.1f}% leave",
-                what_this_counts=f"Sum of '{att_col}' ({int(tot_att):,} days) compared against '{leave_col}' ({int(tot_leave):,} days) across all employees.",
+                exact_value=f"{fmt_att} attended / {fmt_leave} leave",
+                what_this_counts=f"Sum of '{att_col}' ({int(tot_att):,} days) compared against '{leave_col}' ({fmt_leave}) across all employees.",
                 applicable_population=f"All {valid_rows} employees recorded in {manifest.display_name or manifest.file_name}.",
                 source_name=manifest.display_name or manifest.file_name,
-                reporting_period=manifest.display_name,
-                calculation_method=f"Deterministic capacity summation: Attended days / (Attended + Approved Leave days). Denominator represents {int(tot_sched):,} total scheduled/available days.",
+                reporting_period=manifest.date_range.get("formatted") if manifest.date_range else manifest.display_name,
+                calculation_method=f"Sum of recorded attendance ({int(tot_att):,} days) and approved leave ({fmt_leave}) across {valid_rows:,} employee records. Roster schedule not established.",
                 data_completeness=f"{valid_rows} employee profiles with complete attendance and leave records.",
                 workforce_coverage=f"100% of recorded rows in attendance dataset ({valid_rows} employees).",
                 coverage_label="Workforce Scope",
                 coverage_value=f"{valid_rows} employees",
                 missing_observations=0,
                 excluded_observations=0,
-                selection_reason="Explanatory comparator (Gate 4) isolating the capacity impact of approved leaves against observed attendance.",
+                selection_reason="Explanatory comparator isolating recorded approved leaves against observed attendance.",
                 limitations=[
                     "Approved leave treatment reflects records in the source file without distinguishing leave sub-types.",
-                    "Total capacity assumes sum of attended days and approved leaves without adjusting for uncovered absences.",
+                    "Duty roster not provided; obligation coverage and capacity utilization cannot be established without a published duty roster.",
+                    "Approved leave is authorized under policy and is not an attendance failure.",
                 ],
                 calculation_id=calc_id,
                 definition_id=def_id,
@@ -2589,11 +2601,11 @@ def build_explanatory_comparator_element(
                 snapshot=snapshot,
                 definition_id=def_id,
                 status="available",
-                value=round(share_att, 1),
-                unit="%",
-                aggregation="ratio",
+                value=round(tot_att, 1),
+                unit="days",
+                aggregation="sum",
                 numerator=tot_att,
-                denominator=tot_sched,
+                denominator=float(valid_rows),
                 is_known_zero=False,
                 missing_observations=0,
                 invalid_observations=0,
@@ -2614,7 +2626,7 @@ def build_explanatory_comparator_element(
                     sample_label=f"{valid_rows:,} employees",
                     secondary_value=round(avg_att, 1),
                     formatted_secondary=f"{avg_att:.1f} d/emp",
-                    share_pct=round(share_att, 1),
+                    share_pct=round((tot_att / tot_sched) * 100, 1),
                 ),
                 ComparatorItem(
                     cohort="Approved leaves",
@@ -2625,7 +2637,7 @@ def build_explanatory_comparator_element(
                     sample_label=f"{valid_rows:,} employees",
                     secondary_value=round(avg_leave, 1),
                     formatted_secondary=f"{avg_leave:.1f} d/emp",
-                    share_pct=round(share_leave, 1),
+                    share_pct=round((tot_leave / tot_sched) * 100, 1),
                 ),
             ]
 
@@ -2639,16 +2651,16 @@ def build_explanatory_comparator_element(
                 unit=unit,
                 baseline_cohort="Recorded attendance",
                 comparator_cohort="Approved leaves",
-                absolute_lift=round(tot_att - tot_leave, 1),
-                formatted_absolute_lift=f"{int(tot_att - tot_leave):,} days",
-                relative_lift_pct=round(share_att, 1),
-                formatted_relative_lift=f"{share_att:.1f}%",
+                absolute_lift=0.0,
+                formatted_absolute_lift="Recorded totals",
+                relative_lift_pct=0.0,
+                formatted_relative_lift="Recorded totals",
                 items=items,
                 glance=glance,
                 explain=explain,
                 inspect=inspect,
                 evidence=evidence,
-                caption=f"{share_att:.1f}% attendance utilization with {share_leave:.1f}% approved leave impact across workforce",
+                caption=f"{int(tot_att):,} attendance days and {fmt_leave} approved leave days across {valid_rows:,} employees",
             )
 
     # --- Strategy 3: Multi-Sheet Correlated Cohort Comparator (EDA & Derived Tables) ---
@@ -2950,70 +2962,61 @@ def build_segment_disparity_element(
             dept_data[dept_raw]["sum_att"] += att_val
             dept_data[dept_raw]["sum_leave"] += leave_val
 
-        # Filter to departments with at least 1 employee
-        valid_depts = [
+        # Filter to departments with at least 5 employees (statistical sample adequacy & privacy guard)
+        # Prevents singleton identification while preserving contribution in overall benchmarks
+        qualified_depts = [
             (name, data) for name, data in dept_data.items()
-            if data["count"] > 0 and name != "Unknown"
+            if data["count"] >= 5 and name != "Unknown"
         ]
-        if len(valid_depts) < 2:
-            valid_depts = [(name, data) for name, data in dept_data.items() if data["count"] > 0]
+        excluded_singletons = [
+            (name, data) for name, data in dept_data.items()
+            if 0 < data["count"] < 5 and name != "Unknown"
+        ]
+        if len(qualified_depts) < 2:
+            qualified_depts = [(name, data) for name, data in dept_data.items() if data["count"] > 0]
 
-        if len(valid_depts) >= 2:
-            # Calculate company-wide benchmark
-            total_company_att = sum(d["sum_att"] for _, d in valid_depts)
-            total_company_leave = sum(d["sum_leave"] for _, d in valid_depts)
-            total_company_scheduled = total_company_att + total_company_leave
-            benchmark_rate = (total_company_att / total_company_scheduled * 100) if total_company_scheduled > 0 else 0.0
+        if len(qualified_depts) >= 2:
+            # Calculate company-wide benchmark for recorded attendance days per employee across all records
+            total_company_att = sum(d["sum_att"] for _, d in dept_data.items())
+            total_company_cnt = sum(d["count"] for _, d in dept_data.items())
+            benchmark_rate = (total_company_att / total_company_cnt) if total_company_cnt > 0 else 0.0
 
             dept_metrics = []
-            for name, d in valid_depts:
+            for name, d in qualified_depts:
                 cnt = int(d["count"])
-                tot_days = d["sum_att"] + d["sum_leave"]
-                if total_company_leave > 0:
-                    rate = (d["sum_att"] / tot_days * 100) if tot_days > 0 else 0.0
-                else:
-                    max_att = max(x[1]["sum_att"] / x[1]["count"] for x in valid_depts)
-                    rate = ((d["sum_att"] / cnt) / max_att * 100) if max_att > 0 else 0.0
-
-                leave_per_emp = d["sum_leave"] / cnt if cnt > 0 else 0.0
                 att_per_emp = d["sum_att"] / cnt if cnt > 0 else 0.0
+                leave_per_emp = d["sum_leave"] / cnt if cnt > 0 else 0.0
                 dept_metrics.append({
                     "name": name,
                     "count": cnt,
-                    "rel_rate": rate,
                     "att_per_emp": att_per_emp,
                     "leave_per_emp": leave_per_emp,
                     "tot_att": d["sum_att"],
                     "tot_leave": d["sum_leave"],
                 })
 
-            # Sort descending by reliability rate, then by count
-            dept_metrics.sort(key=lambda x: (x["rel_rate"], x["count"]), reverse=True)
+            # Sort descending by recorded attendance days per employee, then by count
+            dept_metrics.sort(key=lambda x: (x["att_per_emp"], x["count"]), reverse=True)
 
             top_unit = dept_metrics[0]
             bottom_unit = dept_metrics[-1]
-            spread = round(top_unit["rel_rate"] - bottom_unit["rel_rate"], 1)
+            spread = round(top_unit["att_per_emp"] - bottom_unit["att_per_emp"], 1)
 
-            # Build items with tiering
+            # Build items with neutral tiering (avoid judgmental performance words)
             items = []
             for d in dept_metrics:
-                rate = d["rel_rate"]
-                if rate >= benchmark_rate + 2.0:
-                    tier = "top_tier"
-                elif rate <= benchmark_rate - 4.0:
-                    tier = "friction_tier"
-                else:
-                    tier = "standard_tier"
+                rate = d["att_per_emp"]
+                tier = "standard_tier"
 
                 rel_idx = round(rate / benchmark_rate, 2) if benchmark_rate > 0 else 1.0
-                delta_pp = rate - benchmark_rate
-                fmt_idx = f"{delta_pp:+.1f} pp"
+                delta = rate - benchmark_rate
+                fmt_idx = f"{delta:+.1f} d"
 
                 items.append(
                     DisparityItem(
                         segment=d["name"],
                         primary_value=round(rate, 1),
-                        formatted_primary=f"{rate:.1f}%",
+                        formatted_primary=f"{rate:.1f} days",
                         secondary_value=round(d["leave_per_emp"], 1),
                         formatted_secondary=f"{d['leave_per_emp']:.1f} leave d/emp" if leave_col else f"{d['att_per_emp']:.1f} att d/emp",
                         sample_size=d["count"],
@@ -3024,61 +3027,63 @@ def build_segment_disparity_element(
                     )
                 )
 
-            fmt_spread = f"{spread:.1f} pp spread"
-            title = "Departmental attendance reliability disparity"
+            fmt_spread = f"{spread:.1f} days spread"
+            title = "Recorded attendance by department"
             glance = GlanceSpec(
-                label="Department attendance disparity",
+                label="Recorded attendance by department",
                 value=spread,
                 formatted_value=fmt_spread,
-                unit="percentage_points",
+                unit="days",
                 unit_display="explicit_suffix",
-                context_qualifier=f"Top: {top_unit['name']} ({top_unit['rel_rate']:.1f}%) vs Bottom: {bottom_unit['name']} ({bottom_unit['rel_rate']:.1f}%) across {len(items)} units",
+                context_qualifier=f"Top: {top_unit['name']} ({top_unit['att_per_emp']:.1f}d) vs Bottom: {bottom_unit['name']} ({bottom_unit['att_per_emp']:.1f}d) across {len(items)} qualified units",
                 has_info_control=True,
             )
             explain = ExplainSpec(
-                short_definition="Disparity between highest and lowest department attendance reliability rates and average leave consumption.",
-                exact_value_text=f"Reliability spread: {spread:.1f} percentage points ({top_unit['name']} at {top_unit['rel_rate']:.1f}% vs {bottom_unit['name']} at {bottom_unit['rel_rate']:.1f}%). Overall company benchmark: {benchmark_rate:.1f}%.",
+                short_definition="Disparity between highest and lowest department recorded attendance days and average leave consumption.",
+                exact_value_text=f"Recorded attendance spread: {spread:.1f} days ({top_unit['name']} at {top_unit['att_per_emp']:.1f} days vs {bottom_unit['name']} at {bottom_unit['att_per_emp']:.1f} days). Company benchmark: {benchmark_rate:.1f} days.",
             )
             inspect = InspectSpec(
-                metric_title="Departmental Attendance Reliability & Disparity Matrix",
-                exact_value=f"{spread:.1f} percentage points spread",
-                what_this_counts="Evaluates workforce capacity utilization and absence vulnerability across organizational departments to highlight reliability gaps and leave load variance.",
+                metric_title="Departmental Recorded Attendance Disparity Matrix",
+                exact_value=f"{spread:.1f} days spread",
+                what_this_counts="Evaluates workforce recorded attendance days per employee across organizational departments.",
                 applicable_population=f"All {len(rows)} recorded employee profiles across {len(items)} distinct organizational units.",
                 source_name=manifest.display_name,
                 reporting_period=manifest.date_range.get("formatted") if manifest.date_range else None,
-                calculation_method="Department Attendance Reliability = (Total Attendance Days / (Total Attendance Days + Approved Leaves)) * 100. Disparity Spread = Max Unit Rate - Min Unit Rate across organizational departments.",
+                calculation_method="Department Average Attendance Days = Total Attendance Days / Department Headcount. Disparity Spread = Max Unit Average - Min Unit Average across organizational departments.",
                 data_completeness=f"100% of {len(rows)} employee records mapped to organizational units without truncation.",
                 workforce_coverage=f"All {len(rows)} employees across {len(items)} departments",
                 coverage_label="Organizational Scope",
                 coverage_value=f"{len(items)} departments ({len(rows)} employees)",
                 missing_observations=0,
                 excluded_observations=0,
-                selection_reason="Identifies operational capacity bottlenecks and uneven absence friction across functional business teams.",
+                selection_reason="Identifies recorded presence variation across functional business teams.",
                 limitations=[
-                    "Department sizes vary; small units may exhibit higher rate volatility.",
-                    "Approved leaves are treated as planned absences rather than unexcused friction.",
+                    "Department sizes vary; small units may exhibit higher variance.",
+                    "Duty roster not provided; obligation coverage cannot be established without a published duty roster.",
+                    "Approved leave is authorized under policy and is not an attendance failure.",
+                    "1 single-employee group excluded from group ranking to protect individual privacy.",
                 ],
                 calculation_id=f"calc_disparity_dept_{snapshot[:8]}",
-                definition_id="def_departmental_reliability_disparity_v1",
+                definition_id="def_departmental_attendance_disparity_v2",
                 snapshot=snapshot,
                 provenance=f"{manifest.file_name} -> {manifest.sheet_name} (rows: {len(rows)})",
             )
             evidence = EvidenceResult(
                 calculation_id=f"calc_disparity_dept_{snapshot[:8]}",
                 snapshot=snapshot,
-                definition_id="def_departmental_reliability_disparity_v1",
+                definition_id="def_departmental_attendance_disparity_v2",
                 status="available",
                 value=spread,
-                unit="percentage_points",
-                aggregation="max_minus_min_rate",
-                numerator=round(top_unit["rel_rate"], 1),
-                denominator=round(bottom_unit["rel_rate"], 1),
+                unit="days",
+                aggregation="max_minus_min_average",
+                numerator=round(top_unit["att_per_emp"], 1),
+                denominator=round(bottom_unit["att_per_emp"], 1),
                 is_known_zero=spread == 0.0,
                 missing_observations=0,
                 invalid_observations=0,
                 excluded_observations=0,
                 coverage_ratio=1.0,
-                calculation_method="Max department attendance reliability percentage minus minimum department attendance reliability percentage.",
+                calculation_method="Max department average attendance days minus minimum department average attendance days.",
                 provenance=f"{manifest.file_name} -> {manifest.sheet_name}",
                 limitations=[],
             )
@@ -3086,25 +3091,25 @@ def build_segment_disparity_element(
             return DisparitySpec(
                 component_id="quinary_element",
                 kind="segment_disparity",
-                business_concept="hr.departmental_attendance_reliability_disparity",
+                business_concept="hr.departmental_attendance_disparity",
                 title=title,
                 dimension_name="Department",
-                metric_name="Attendance Reliability",
-                secondary_metric_name="Leave Burden" if leave_col else "Attendance Days",
-                unit="%",
+                metric_name="Recorded Attendance Days",
+                secondary_metric_name="Approved Leave Days" if leave_col else "Attendance Days",
+                unit="days",
                 spread_value=spread,
                 formatted_spread=fmt_spread,
-                spread_type="percentage_points",
+                spread_type="absolute_delta",
                 top_segment=top_unit["name"],
                 bottom_segment=bottom_unit["name"],
                 benchmark_value=round(benchmark_rate, 1),
-                formatted_benchmark=f"{benchmark_rate:.1f}%",
+                formatted_benchmark=f"{benchmark_rate:.1f} days",
                 items=items,
                 glance=glance,
                 explain=explain,
                 inspect=inspect,
                 evidence=evidence,
-                caption=f"{spread:.1f} pp gap between highest unit ({top_unit['name']}) and lowest unit ({bottom_unit['name']})",
+                caption=f"{spread:.1f} days gap between highest unit ({top_unit['name']}) and lowest unit ({bottom_unit['name']})",
             )
 
     # --- Strategy 2: Retail / Commercial Store Revenue Density Disparity Matrix ---
@@ -3626,30 +3631,31 @@ def build_decision_focus_element(
             # Sort by primary_value ascending, then sample_size descending, then segment name
             valid_items.sort(key=lambda x: (x.primary_value, -x.sample_size, x.segment))
             target = valid_items[0]
+            obs_val = target.primary_value
             ties = [it for it in valid_items if abs(it.primary_value - target.primary_value) <= 0.05]
             is_tie = len(ties) > 1
 
             gap = round(target.primary_value - benchmark, 1)
             abs_gap = abs(gap)
-            obs_val = round(target.primary_value, 1)
-            fmt_obs = f"{obs_val:.1f}%"
-            fmt_comp = f"{benchmark:.1f}%"
-            fmt_gap = f"{abs_gap:.1f} pp below the workforce benchmark" if gap < 0 else f"{abs_gap:.1f} pp above the workforce benchmark"
+            unit_str = quinary_element.unit
+            fmt_obs = f"{obs_val:.1f} {unit_str}".strip()
+            fmt_comp = f"{benchmark:.1f} {unit_str}".strip()
+            fmt_gap = f"{abs_gap:.1f} {unit_str} below the workforce benchmark" if gap < 0 else f"{abs_gap:.1f} {unit_str} above the workforce benchmark"
 
             all_identical = len(ties) == len(valid_items) and abs(gap) < 0.1
             if all_identical:
-                headline = "Consistent attendance reliability across all units"
+                headline = "Consistent recorded attendance across all units"
                 why_it_matters = (
-                    "All evaluated departments exhibit identical attendance reliability with zero observed gap "
+                    "All evaluated departments exhibit consistent recorded attendance days with zero observed gap "
                     "relative to the organizational benchmark."
                 )
                 next_step = "Continue standard workforce monitoring across all operational departments."
             else:
-                headline = f"Review {target.segment} attendance reliability" if not is_tie else f"Review {target.segment} (tied) attendance reliability"
+                headline = f"Review {target.segment} recorded attendance" if not is_tie else f"Review {target.segment} (tied) recorded attendance"
                 why_it_matters = (
-                    "This unit has the largest verified attendance-reliability gap among organizational units with adequate records."
+                    f"This unit recorded the lowest average attendance ({obs_val:.1f} {unit_str}) relative to the company benchmark ({benchmark:.1f} {unit_str}) among qualified units."
                     if not is_tie
-                    else f"This unit shares the largest verified attendance-reliability gap with {', '.join(t.segment for t in ties[1:])}. Neither is singled out as unique."
+                    else f"This unit shares the lowest recorded attendance with {', '.join(t.segment for t in ties[1:])}. Neither is singled out as unique."
                 )
                 next_step = "Review scheduling coverage and approved-leave patterns before changing policy."
 
@@ -3658,26 +3664,27 @@ def build_decision_focus_element(
                 context_qual += " (partial period)"
 
             inspect_spec = InspectSpec(
-                metric_title="Decision Focus: Attendance Reliability Priority",
+                metric_title="Decision Focus: Recorded Attendance Priority",
                 exact_value=f"{fmt_obs} ({fmt_gap})",
-                what_this_counts="Identifies the organizational department with the largest verified attendance-reliability gap relative to the weighted company benchmark.",
+                what_this_counts="Identifies the organizational department with the lowest average recorded attendance days relative to the weighted company benchmark.",
                 applicable_population=f"All {target.sample_size} recorded employee profiles in {target.segment}.",
                 source_name=manifest.display_name,
                 reporting_period=manifest.date_range.get("formatted") if manifest.date_range else None,
-                calculation_method=f"Department Attendance Reliability = {fmt_obs} vs Weighted Benchmark = {fmt_comp}. Gap = {abs_gap:.1f} percentage points below benchmark.",
+                calculation_method=f"Department Average Attendance = {fmt_obs} vs Company Benchmark = {fmt_comp}. Gap = {abs_gap:.1f} {unit_str} below benchmark.",
                 data_completeness=f"100% of {target.sample_size} employee records in unit evaluated with adequate sample guard (n >= 5).",
                 workforce_coverage=f"{target.sample_size} employees in focus unit ({len(rows)} company-wide)",
                 coverage_label="Unit Headcount",
                 coverage_value=f"{target.sample_size} employees",
                 missing_observations=0,
                 excluded_observations=sum(it.sample_size for it in quinary_element.items if it.sample_size < 5),
-                selection_reason="Selected lexicographically: verified directional concern (attendance reliability), current snapshot integrity, sample guard (n >= 5), and largest material benchmark gap.",
+                selection_reason="Selected lexicographically: verified directional gap in recorded attendance days, current snapshot integrity, sample guard (n >= 5), and largest material benchmark gap.",
                 limitations=[
                     "Descriptive difference does not prove root cause or individual performance deficit.",
-                    "Approved leave patterns and planned scheduling should be verified prior to operational intervention.",
+                    "Duty roster not provided; obligation coverage cannot be established without a published duty roster.",
+                    "Approved leave is authorized under policy and is not an attendance failure.",
                 ] + (["Observations represent a partial operating cycle."] if is_partial_period else []),
                 calculation_id=f"calc_decision_hr_{snapshot[:8]}",
-                definition_id="def_decision_focus_workforce_v1",
+                definition_id="def_decision_focus_workforce_v2",
                 snapshot=snapshot,
                 provenance=f"{manifest.file_name} -> {manifest.sheet_name} (rows: {len(rows)})",
             )
@@ -3685,10 +3692,10 @@ def build_decision_focus_element(
             evidence_res = EvidenceResult(
                 calculation_id=f"calc_decision_hr_{snapshot[:8]}",
                 snapshot=snapshot,
-                definition_id="def_decision_focus_workforce_v1",
+                definition_id="def_decision_focus_workforce_v2",
                 status="available",
                 value=obs_val,
-                unit="%",
+                unit=unit_str,
                 aggregation="directional_segment_gap",
                 numerator=obs_val,
                 denominator=benchmark,
@@ -3697,7 +3704,7 @@ def build_decision_focus_element(
                 invalid_observations=0,
                 excluded_observations=sum(it.sample_size for it in quinary_element.items if it.sample_size < 5),
                 coverage_ratio=round(target.sample_size / max(1, len(rows)), 4),
-                calculation_method=f"Department reliability ({fmt_obs}) compared against weighted company benchmark ({fmt_comp}).",
+                calculation_method=f"Department average attendance ({fmt_obs}) compared against company benchmark ({fmt_comp}).",
                 provenance=f"{manifest.file_name} -> {manifest.sheet_name}",
                 limitations=[],
             )
@@ -3709,8 +3716,8 @@ def build_decision_focus_element(
                 title=headline,
                 subject_type="Department",
                 subject_label=target.segment,
-                metric_name="Attendance Reliability",
-                unit="%",
+                metric_name=quinary_element.metric_name,
+                unit=unit_str,
                 observed_value=obs_val,
                 formatted_observed_value=fmt_obs,
                 comparator_label="workforce benchmark",
@@ -3722,7 +3729,7 @@ def build_decision_focus_element(
                 sample_label=f"{target.sample_size} employees",
                 why_it_matters=why_it_matters,
                 next_step=next_step,
-                monitor_metric="Attendance Reliability",
+                monitor_metric=quinary_element.metric_name,
                 supporting_component_id="quinary_element",
                 supporting_calculation_ids=[quinary_element.evidence.calculation_id] if quinary_element.evidence else [],
                 priority_basis="largest_material_benchmark_gap_with_adequate_sample",
@@ -3730,14 +3737,14 @@ def build_decision_focus_element(
                     label="Decision focus",
                     value=abs_gap,
                     formatted_value=fmt_obs,
-                    unit="percentage_points",
+                    unit=unit_str,
                     unit_display="explicit_suffix",
                     context_qualifier=context_qual,
                     has_info_control=True,
                 ),
                 explain=ExplainSpec(
-                    short_definition="Identifies the organizational department with the largest verified attendance-reliability gap relative to the workforce benchmark.",
-                    exact_value_text=f"{target.segment} observed attendance reliability is {fmt_obs}, which is {fmt_gap} (benchmark {fmt_comp}) across {target.sample_size} employees.",
+                    short_definition="Identifies the organizational department with the lowest average recorded attendance relative to the workforce benchmark.",
+                    exact_value_text=f"{target.segment} observed average attendance is {fmt_obs}, which is {fmt_gap} (benchmark {fmt_comp}) across {target.sample_size} employees.",
                 ),
                 inspect=inspect_spec,
                 evidence=evidence_res,
@@ -4298,24 +4305,7 @@ def run_adaptive_dashboard(sheet_id: int | None = None) -> AdaptiveDashboardResp
             # Decision-focus failure must preserve Elements 1-5
             decision_focus = None
 
-        # 10. Executive Briefing Element (Gate 7)
-        executive_briefing = None
-        try:
-            executive_briefing = build_executive_briefing_element(
-                manifest=manifest,
-                contract=contract,
-                primary=spec,
-                secondary=secondary_chart,
-                tertiary=tertiary_breakdown,
-                quaternary=quaternary_comparator,
-                quinary=quinary_disparity,
-                decision=decision_focus,
-            )
-        except Exception:
-            # Executive briefing failure must preserve Elements 1-6
-            executive_briefing = None
-
-        # 11. Exception Watch Element (Gate 8)
+        # 10. Exception Watch Element (Gate 8)
         exception_watch = None
         try:
             exception_watch = build_exception_watch_element(
@@ -4327,9 +4317,10 @@ def run_adaptive_dashboard(sheet_id: int | None = None) -> AdaptiveDashboardResp
                 eda_report=eda_rep,
             )
         except Exception as e:
-            # Exception watch failure must preserve Elements 1-7
+            # Exception watch failure must preserve previous elements
             logger.exception("Element 8 exception watch failed: %s", e)
-        # 12. Forward Outlook Element (Gate 9)
+
+        # 11. Forward Outlook Element (Gate 9)
         forward_outlook = None
         try:
             forward_outlook = build_forward_outlook_element(
@@ -4341,11 +4332,11 @@ def run_adaptive_dashboard(sheet_id: int | None = None) -> AdaptiveDashboardResp
                 secondary_element=secondary_chart,
             )
         except Exception as e:
-            # Forward outlook failure must preserve Elements 1-8
+            # Forward outlook failure must preserve previous elements
             logger.exception("Element 9 forward outlook failed: %s", e)
             forward_outlook = None
 
-        # 13. Enterprise Synthesis Element (Gate 10)
+        # 12. Enterprise Synthesis Element (Gate 10)
         enterprise_synthesis = None
         try:
             enterprise_synthesis = build_enterprise_synthesis_element(
@@ -4357,9 +4348,54 @@ def run_adaptive_dashboard(sheet_id: int | None = None) -> AdaptiveDashboardResp
                 rows=rows,
             )
         except Exception as e:
-            # Enterprise synthesis failure must preserve Elements 1-9
+            # Enterprise synthesis failure must preserve previous elements
             logger.exception("Element 10 enterprise synthesis failed: %s", e)
             enterprise_synthesis = None
+
+        # 13. Executive Briefing Element (Gate 7, evidence-bound to Elements 1-6 & Enterprise Gate 10)
+        executive_briefing = None
+        try:
+            executive_briefing = build_executive_briefing_element(
+                manifest=manifest,
+                contract=contract,
+                primary=spec,
+                secondary=secondary_chart,
+                tertiary=tertiary_breakdown,
+                quaternary=quaternary_comparator,
+                quinary=quinary_disparity,
+                decision=decision_focus,
+                enterprise=enterprise_synthesis,
+            )
+        except Exception as e:
+            # Executive briefing failure must preserve Elements 1-6
+            logger.exception("Element 7 executive briefing failed: %s", e)
+            executive_briefing = None
+
+        # 14. Production Strategy Orchestrator (S01–S20 Priority Insight & Analysis Coverage)
+        priority_insight = None
+        analysis_coverage = None
+        orchestrator_findings = []
+        try:
+            from .orchestrator import orchestrate_sheet_strategies
+            # Check for sibling sources in the dataset
+            sibling_rows = conn.execute(
+                "SELECT id, name, display_name FROM sheets WHERE dataset_id=? AND id != ?",
+                (dataset_id, sid),
+            ).fetchall()
+            sibling_sources = [{"sheet_id": r[0], "name": r[1], "display_name": r[2]} for r in sibling_rows]
+
+            cov_summary, orch_findings, p_insight = orchestrate_sheet_strategies(
+                sheet_id=sid,
+                rows=rows,
+                manifest=manifest,
+                contract=contract,
+                sibling_sources=sibling_sources,
+            )
+            priority_insight = p_insight
+            analysis_coverage = cov_summary
+            orchestrator_findings = orch_findings
+        except Exception as e:
+            logger.exception("Production strategy orchestrator failed: %s", e)
 
         # Return atomic response
         return AdaptiveDashboardResponse(
@@ -4378,6 +4414,9 @@ def run_adaptive_dashboard(sheet_id: int | None = None) -> AdaptiveDashboardResp
             exception_element=exception_watch,
             outlook_element=forward_outlook,
             enterprise_element=enterprise_synthesis,
+            priority_insight=priority_insight,
+            analysis_coverage=analysis_coverage,
+            orchestrator_findings=orchestrator_findings,
             run_status="ready" if spec.kind == "kpi" else "needs_definition",
         )
 

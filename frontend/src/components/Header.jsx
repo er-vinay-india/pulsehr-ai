@@ -14,11 +14,9 @@ import { openExecutivePrintReport } from "../api/client";
 
 export default function Header({ activeTab, onSelectTab, onOpenPresentationModal, activeJob }) {
   const tabs = [
-    { id: "adaptive", label: "Adaptive Dashboard", short: "Adaptive", icon: Activity },
-    { id: "report", label: "Leadership Report", short: "Report", icon: Sparkles },
-    { id: "overview", label: "Reference Overview", short: "Reference", icon: LayoutDashboard },
-    { id: "explorer", label: "Data Explorer", short: "Explore", icon: Table },
-    { id: "ingestion", label: "Ingestion Studio", short: "Upload", icon: UploadCloud }
+    { id: "adaptive", label: "Executive Dashboard", short: "Dashboard", icon: LayoutDashboard },
+    { id: "explorer", label: "Data Explorer", short: "Explorer", icon: Table },
+    { id: "ingestion", label: "Ingestion Studio", short: "Uploads", icon: UploadCloud }
   ];
 
   const isJobRunning = activeJob && (activeJob.status === "in_progress" || activeJob.status === "pending");

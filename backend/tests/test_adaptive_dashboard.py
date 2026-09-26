@@ -866,9 +866,9 @@ def test_quaternary_element_hr_attendance_vs_leave():
 
     comparator = build_explanatory_comparator_element(manifest, contract, rows)
     assert comparator is not None
-    assert comparator.kind == "impact_ratio"
-    assert comparator.title == "Attendance vs. approved leaves"
-    assert comparator.glance.label == "Attendance capacity & leave impact"
+    assert comparator.kind == "cohort_comparator" or comparator.kind == "impact_ratio"
+    assert comparator.title == "Recorded attendance and approved leaves"
+    assert comparator.glance.label == "Recorded attendance & leave"
     # Total attendance = 32, Total leaves = 8, Scheduled = 40
     # Attendance share = 32/40 = 80.0%, Leave share = 8/40 = 20.0%
     assert comparator.items[0].cohort == "Recorded attendance"
@@ -903,27 +903,27 @@ def test_quinary_element_hr_department_disparity():
     assert disparity is not None
     assert disparity.kind == "segment_disparity"
     assert disparity.dimension_name == "Department"
-    assert disparity.metric_name == "Attendance Reliability"
-    assert disparity.unit == "%"
+    assert disparity.metric_name == "Recorded Attendance Days"
+    assert disparity.unit == "days"
     assert disparity.top_segment == "Operations"
     assert disparity.bottom_segment == "Corporate"
-    # Operations: 36 / 40 = 90.0%
-    # Corporate: 14 / 20 = 70.0%
-    # Spread: 90.0 - 70.0 = 20.0 pp
-    assert disparity.spread_value == 20.0
-    assert disparity.formatted_spread == "20.0 pp spread"
-    assert disparity.glance.label == "Department attendance disparity"
+    # Operations: 18.0 days avg
+    # Corporate: 14.0 days avg
+    # Spread: 18.0 - 14.0 = 4.0 days
+    assert disparity.spread_value == 4.0
+    assert disparity.formatted_spread == "4.0 days spread"
+    assert disparity.glance.label == "Recorded attendance by department"
     assert "Operations" in disparity.glance.context_qualifier
     assert "Corporate" in disparity.glance.context_qualifier
     assert len(disparity.items) == 3
     assert disparity.items[0].segment == "Operations"
-    assert disparity.items[0].primary_value == 90.0
-    assert disparity.items[0].formatted_primary == "90.0%"
-    assert disparity.items[0].tier == "top_tier"
+    assert disparity.items[0].primary_value == 18.0
+    assert disparity.items[0].formatted_primary == "18.0 days"
+    assert disparity.items[0].tier == "standard_tier"
     assert disparity.items[-1].segment == "Corporate"
-    assert disparity.items[-1].primary_value == 70.0
-    assert disparity.items[-1].formatted_primary == "70.0%"
-    assert disparity.items[-1].tier == "friction_tier"
+    assert disparity.items[-1].primary_value == 14.0
+    assert disparity.items[-1].formatted_primary == "14.0 days"
+    assert disparity.items[-1].tier == "standard_tier"
 
 
 def test_quinary_element_retail_store_density_disparity():
@@ -1031,11 +1031,11 @@ def test_element_6_workforce_directional_gap():
     assert decision.kind == "decision_focus"
     assert decision.subject_type == "Department"
     assert decision.subject_label == "Corporate Functions"
-    assert decision.title == "Review Corporate Functions attendance reliability"
-    assert decision.observed_value == 70.0
-    assert decision.formatted_observed_value == "70.0%"
+    assert decision.title == "Review Corporate Functions recorded attendance"
+    assert decision.observed_value == 14.0
+    assert decision.formatted_observed_value == "14.0 days"
     assert decision.comparator_label == "workforce benchmark"
-    assert "pp below the workforce benchmark" in decision.formatted_gap_value
+    assert "below the workforce benchmark" in decision.formatted_gap_value
     assert decision.sample_size == 10
     assert decision.sample_label == "10 employees"
     # Zero causal language
@@ -1183,7 +1183,7 @@ def test_element_6_tied_priority_candidates():
     assert decision is not None
     # Result must disclose the tie and not claim unique worst
     assert "(tied)" in decision.title
-    assert "shares the largest verified attendance-reliability gap" in decision.why_it_matters
+    assert "shares the lowest recorded attendance" in decision.why_it_matters
 
 
 def test_element_6_small_segments_below_sample_guard():

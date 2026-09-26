@@ -130,12 +130,12 @@ label { min-width: 0; }
   .app-header .header-actions button span { display: none; }
   .app-header .tabs-nav-segmented {
     position: fixed; top: auto; bottom: 0; left: 0; right: 0; width: 100%; z-index: 60;
-    display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0;
+    display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0;
     padding: 6px 8px calc(6px + env(safe-area-inset-bottom)); background: #171411; border-top: 1px solid var(--border-strong);
     box-shadow: 0 -8px 28px #0003;
-    .nav-segment { flex-direction: column; justify-content: center; gap: 5px; padding: 8px 2px; min-height: 52px; border: 0; border-radius: 10px; font-size: .63rem; }
-    .nav-segment svg { width: 19px; height: 19px; }
-    .nav-segment.active { border: 0; background: #ffad8510; }
+    .nav-segment { flex-direction: column; justify-content: center; gap: 5px; padding: 8px 6px; min-height: 52px; border: 0; border-radius: 10px; font-size: .74rem; font-weight: 500; }
+    .nav-segment svg { width: 20px; height: 20px; }
+    .nav-segment.active { border: 0; background: #ffad8510; font-weight: 600; }
   }
   .nav-label-long { display: none; }
   .nav-label-short { display: inline; }
@@ -2267,15 +2267,32 @@ label { min-width: 0; }
 
 @media (max-width: 480px) {
   .global-copilot-launcher {
-    bottom: calc(74px + env(safe-area-inset-bottom));
+    bottom: calc(72px + env(safe-area-inset-bottom));
     right: 12px;
-    padding: 7px 12px;
-    font-size: 0.78rem;
-    gap: 5px;
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0;
+    justify-content: center;
+    border-radius: 50%;
+    box-shadow: 0 4px 16px rgba(99, 102, 241, 0.5), 0 2px 8px rgba(0, 0, 0, 0.3);
+
+    .launcher-label {
+      display: none;
+    }
 
     .launcher-icon {
-      width: 18px;
-      height: 18px;
+      width: 20px;
+      height: 20px;
+    }
+
+    .launcher-pulse {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      width: 8px;
+      height: 8px;
     }
   }
 }

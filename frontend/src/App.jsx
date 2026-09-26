@@ -3,17 +3,22 @@ import Header from "./components/Header.jsx";
 import Footer from "./components/Footer.jsx";
 import EmployeeDrawer from "./components/EmployeeDrawer.jsx";
 import GlobalCopilotWidget from "./components/GlobalCopilotWidget.jsx";
-import LeadershipReportPage from "./pages/LeadershipReportPage.jsx";
 import AdaptiveDashboardPage from "./pages/AdaptiveDashboardPage.jsx";
-import OverviewPage from "./pages/OverviewPage.jsx";
 import DataExplorerPage from "./pages/DataExplorerPage.jsx";
 import IngestionPage from "./pages/IngestionPage.jsx";
 import CreatePresentationModal from "./components/CreatePresentationModal.jsx";
 
 function parseHash() {
   const hash = window.location.hash.replace("#", "").trim();
-  const valid = ["adaptive", "report", "overview", "explorer", "ingestion"];
-  return valid.includes(hash) ? hash : "report";
+  const valid = ["adaptive", "explorer", "ingestion"];
+  if (valid.includes(hash)) return hash;
+  if (hash === "report" || hash === "overview" || hash === "reference") {
+    try {
+      window.location.hash = "adaptive";
+    } catch {}
+    return "adaptive";
+  }
+  return "adaptive";
 }
 
 export default function App() {
@@ -32,10 +37,10 @@ export default function App() {
       const h = window.location.hash.replace("#", "").trim();
       if (h === "copilot") {
         setCopilotOpen(true);
-        setActiveTab("overview");
+        setActiveTab("adaptive");
       } else if (h === "presentation" || h === "presentations") {
         setPresentationModalOpen(true);
-        setActiveTab("overview");
+        setActiveTab("adaptive");
       } else {
         setActiveTab(parseHash());
       }
@@ -71,14 +76,6 @@ export default function App() {
 
       <main id="main-content" className="app-main" tabIndex={-1}>
         {activeTab === "adaptive" && <AdaptiveDashboardPage onNavigateTab={handleSelectTab} />}
-        {activeTab === "report" && <LeadershipReportPage onNavigateTab={handleSelectTab} onScopeChange={setActiveScope} />}
-        {activeTab === "overview" && (
-          <OverviewPage
-            onSelectEmployee={setSelectedEmployeeId}
-            onNavigateTab={handleSelectTab}
-            onScopeChange={setActiveScope}
-          />
-        )}
         {activeTab === "explorer" && (
           <DataExplorerPage
             onSelectEmployee={setSelectedEmployeeId}
@@ -97,7 +94,7 @@ export default function App() {
         onClose={() => setPresentationModalOpen(false)}
         activeJobId={activePresentationJob?.job_id || activePresentationJob?.id}
         initialDeck={activeDeck}
-        initialScopeType={activeTab === "overview" ? "workspace" : "workspace"}
+        initialScopeType="workspace"
         onJobUpdate={job => {
           setActivePresentationJob(job);
           if (!job || job.status === "in_progress" || !job.deck) {

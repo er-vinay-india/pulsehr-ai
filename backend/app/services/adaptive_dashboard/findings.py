@@ -9,63 +9,75 @@ import hashlib
 from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
-from .contracts import AdaptiveDashboardResponse
-
-
-class UnifiedFinding(BaseModel):
-    """Immutable finding representation shared across Dashboard, Copilot, Narration, and Presentation (Section 4 / T31)."""
-    model_config = ConfigDict(extra="forbid")
-
-    finding_id: str
-    recipe_id: str
-    calculation_id: str
-    definition_id: str
-    source_sheet_ids: list[int]
-    source_scope: list[str]
-    snapshot: str
-    status: Literal["available", "needs_definition", "withheld", "abstain"] = "available"
-
-    short_business_title: str
-    typed_value: float | None = None
-    formatted_value: str
-    unit: str
-
-    population_or_exposure: str
-    comparison_and_effect: str | None = None
-    evidence_bound_observation: str
-    possible_operational_implication: str | None = None
-    one_next_check_or_action: str
-    allowed_claim_level: Literal[
-        "descriptive_fact",
-        "reconciled_ledger",
-        "statistical_association",
-        "non_causal_forecast",
-        "exploratory_pattern",
-    ] = "descriptive_fact"
-
-    visual_kind: str = "none"
-    visual_points_summary: list[dict[str, Any]] = Field(default_factory=list)
-    drilldown_route: str | None = None
-    privacy_state: Literal["cohort_safe", "aggregate_safe", "pii_suppressed"] = "aggregate_safe"
-    limitations: list[str] = Field(default_factory=list)
-
-    # Ranking & deduplication keys
-    analytical_subject: str
-    decision_category: str
-    rank_score: float = 0.0
+from .contracts import AdaptiveDashboardResponse, UnifiedFinding
 
 
 def extract_findings_from_response(response: AdaptiveDashboardResponse) -> list[UnifiedFinding]:
-    """Extracts unified immutable findings from an AdaptiveDashboardResponse (T31)."""
+    """Extracts unified immutable findings from an AdaptiveDashboardResponse (T31).
+    
+    Authoritative findings from the Production Strategy Orchestrator are retained in full.
+    Any legacy element findings that do not duplicate orchestrator findings are also retained,
+    while unsupported legacy calculations (such as attendance reliability) are strictly excluded.
+    """
     findings: list[UnifiedFinding] = []
     sheet_id = response.sheet_id
     snapshot = response.snapshot
     sheet_name = response.manifest.display_name or response.manifest.sheet_name
     domain = response.contract.domain
 
-    # 1. Element 1: Primary Metric / Scale Finding
+    # 1. Authoritative Orchestrator Findings (Retain all valid findings produced by orchestrator)
+    if response.orchestrator_findings:
+        findings.extend(response.orchestrator_findings)
+    elif response.priority_insight:
+        # Fallback: if only priority_insight was set
+        pi = response.priority_insight
+        allowed_claim = (
+            pi.allowed_claim_level
+            if pi.allowed_claim_level in (
+                "descriptive_fact",
+                "reconciled_ledger",
+                "statistical_association",
+                "non_causal_forecast",
+                "exploratory_pattern",
+                "policy_exposure",
+            )
+            else "descriptive_fact"
+        )
+        findings.append(
+            UnifiedFinding(
+                finding_id=pi.finding_id,
+                recipe_id=pi.recipe_id,
+                calculation_id=pi.evidence_details.get("calculation_id", f"calc_{pi.recipe_id}_{snapshot[:8]}"),
+                definition_id=pi.evidence_details.get("definition_id", f"def_{pi.recipe_id}_v1"),
+                source_sheet_ids=[sheet_id],
+                source_scope=[sheet_name],
+                snapshot=snapshot,
+                status="available",
+                short_business_title=pi.short_business_title,
+                typed_value=pi.numeric_value,
+                formatted_value=pi.prominent_number,
+                unit=pi.unit,
+                population_or_exposure=pi.population_summary,
+                comparison_and_effect=pi.comparison_value,
+                evidence_bound_observation=pi.evidence_details.get("observation", pi.implication),
+                possible_operational_implication=pi.implication,
+                one_next_check_or_action=pi.next_check,
+                allowed_claim_level=allowed_claim,
+                visual_kind=pi.visual_type,
+                visual_points_summary=[],
+                drilldown_route=f"/?sheet_id={sheet_id}&view=eda#explorer",
+                privacy_state="cohort_safe",
+                limitations=pi.evidence_details.get("limitations", []),
+                analytical_subject=domain,
+                decision_category="priority_insight",
+                rank_score=99.0,
+            )
+        )
+
+    # 1. Element 1: Primary Metric / Scale Finding (add if operational_scale not already covered)
     elem = response.element
-    if elem.evidence.status == "available":
+    has_scale = any(f.decision_category == "operational_scale" for f in findings)
+    if not has_scale and elem.evidence.status == "available":
         f1_id = f"finding_kpi_{elem.evidence.calculation_id.replace('CALC-', '')[:8]}"
         findings.append(
             UnifiedFinding(
@@ -94,56 +106,61 @@ def extract_findings_from_response(response: AdaptiveDashboardResponse) -> list[
                 limitations=elem.evidence.limitations,
                 analytical_subject=domain,
                 decision_category="operational_scale",
-                rank_score=65.0,
+                rank_score=75.0,
             )
         )
 
-    # 2. Element 6: Decision Focus (Material Disparity / Management Priority)
-    if response.decision_element and response.decision_element.kind != "unavailable_card":
+    # 2. Element 6: Decision Focus (Reject unsupported reliability findings; sync with S09 decision focus)
+    if response.decision_element and response.decision_element.kind in ("decision_focus", "investigation_focus"):
         df = response.decision_element
-        calc_id = df.evidence.calculation_id if df.evidence else f"calc_focus_{snapshot[:8]}"
         def_id = df.evidence.definition_id if df.evidence else "def_decision_focus_v1"
-        f6_id = f"finding_focus_{calc_id.replace('CALC-', '')[:8]}"
-        target_lbl = df.subject_label
-        obs_val = float(df.observed_value)
-        obs_fmt = df.formatted_observed_value
-        comp_lbl = df.comparator_label
-        comp_val = float(df.comparator_value)
-        comp_fmt = df.formatted_comparator_value
-        gap_fmt = df.formatted_gap_value
-        findings.append(
-            UnifiedFinding(
-                finding_id=f6_id,
-                recipe_id="recipe_s09_decision_focus",
-                calculation_id=calc_id,
-                definition_id=def_id,
-                source_sheet_ids=[sheet_id],
-                source_scope=[sheet_name],
-                snapshot=snapshot,
-                status="available",
-                short_business_title=df.title,
-                typed_value=obs_val,
-                formatted_value=obs_fmt,
-                unit=df.unit,
-                population_or_exposure=f"Segment: {target_lbl} ({df.sample_label})",
-                comparison_and_effect=f"{comp_lbl}: {comp_fmt} (gap: {gap_fmt})",
-                evidence_bound_observation=f"{target_lbl} observed at {obs_fmt} vs {comp_lbl} of {comp_fmt}.",
-                possible_operational_implication=df.why_it_matters,
-                one_next_check_or_action=df.next_step,
-                allowed_claim_level="descriptive_fact",
-                visual_kind="decision_gap",
-                visual_points_summary=[
-                    {"label": target_lbl, "value": obs_val},
-                    {"label": comp_lbl, "value": comp_val},
-                ],
-                drilldown_route=f"/?sheet_id={sheet_id}&view=eda#explorer",
-                privacy_state="cohort_safe",
-                limitations=df.evidence.limitations if df.evidence else ["Identified as greatest observed gap; causal drivers require targeted investigation."],
-                analytical_subject=domain,
-                decision_category="segment_disparity",
-                rank_score=95.0,
-            )
-        )
+        title_low = df.title.lower()
+        if "reliability" not in title_low and def_id != "def_departmental_reliability_disparity_v1":
+            calc_id = df.evidence.calculation_id if df.evidence else f"calc_focus_{snapshot[:8]}"
+            f6_id = f"finding_focus_{calc_id.replace('CALC-', '').replace('calc_', '')[:8]}"
+            target_lbl = df.subject_label
+            obs_val = float(df.observed_value)
+            obs_fmt = df.formatted_observed_value
+            comp_lbl = df.comparator_label
+            comp_val = float(df.comparator_value)
+            comp_fmt = df.formatted_comparator_value
+            gap_fmt = df.formatted_gap_value
+
+            has_focus = any(f.recipe_id == "recipe_s09_decision_focus" for f in findings)
+            if not has_focus:
+                findings.append(
+                    UnifiedFinding(
+                        finding_id=f6_id,
+                        recipe_id="recipe_s09_decision_focus",
+                        calculation_id=calc_id,
+                        definition_id=def_id,
+                        source_sheet_ids=[sheet_id],
+                        source_scope=[sheet_name],
+                        snapshot=snapshot,
+                        status="available",
+                        short_business_title=df.title,
+                        typed_value=obs_val,
+                        formatted_value=obs_fmt,
+                        unit=df.unit,
+                        population_or_exposure=f"Segment: {target_lbl} ({df.sample_label})",
+                        comparison_and_effect=f"{comp_lbl}: {comp_fmt} (gap: {gap_fmt})",
+                        evidence_bound_observation=f"{target_lbl} observed at {obs_fmt} vs {comp_lbl} of {comp_fmt}.",
+                        possible_operational_implication=df.why_it_matters,
+                        one_next_check_or_action=df.next_step,
+                        allowed_claim_level="descriptive_fact",
+                        visual_kind="decision_gap",
+                        visual_points_summary=[
+                            {"label": target_lbl, "value": obs_val},
+                            {"label": comp_lbl, "value": comp_val},
+                        ],
+                        drilldown_route=f"/?sheet_id={sheet_id}&view=eda#explorer",
+                        privacy_state="cohort_safe",
+                        limitations=df.evidence.limitations if df.evidence else ["Identified as greatest observed gap; causal drivers require targeted investigation."],
+                        analytical_subject=domain,
+                        decision_category="decision_focus",
+                        rank_score=90.0,
+                    )
+                )
 
     # 3. Element 8: Exception Watch
     if response.exception_element and response.exception_element.kind == "exception_watch":
@@ -231,36 +248,44 @@ def extract_findings_from_response(response: AdaptiveDashboardResponse) -> list[
             "statistical_association" if ent.kind == "cross_source_association" else "descriptive_fact"
         )
         sources_list = [s.display_name for s in ent.sources]
-        findings.append(
-            UnifiedFinding(
-                finding_id=f10_id,
-                recipe_id=lead.recipe_id,
-                calculation_id=lead.calculation_id,
-                definition_id=ent.inspect.definition_id,
-                source_sheet_ids=lead.source_sheet_ids,
-                source_scope=sources_list,
-                snapshot=lead.snapshot,
-                status="available",
-                short_business_title=lead.title,
-                typed_value=float(lead.values[0]) if lead.values else None,
-                formatted_value=ent.glance.formatted_value,
-                unit=ent.glance.unit or (lead.units[0] if lead.units else ""),
-                population_or_exposure=f"{lead.matched_count:,} matched entities across {len(sources_list)} sources",
-                comparison_and_effect=lead.join_description,
-                evidence_bound_observation=ent.what_it_establishes,
-                possible_operational_implication=lead.interpretation,
-                one_next_check_or_action=ent.next_check,
-                allowed_claim_level=claim_level,
-                visual_kind=ent.visual.kind if ent.visual else "none",
-                visual_points_summary=[{"label": p.label, "value": p.y} for p in (ent.visual.points if ent.visual else [])],
-                drilldown_route=ent.drilldown_targets[0].route if ent.drilldown_targets else f"/?sheet_id={sheet_id}&view=eda#explorer",
-                privacy_state="cohort_safe",
-                limitations=[ent.what_it_does_not_establish],
-                analytical_subject=domain,
-                decision_category="cross_source_reconciliation",
-                rank_score=92.0,
+        existing_ent = next((f for f in findings if f.recipe_id == lead.recipe_id), None)
+        if existing_ent:
+            existing_ent.finding_id = f10_id
+            existing_ent.calculation_id = lead.calculation_id
+            existing_ent.definition_id = ent.inspect.definition_id
+            existing_ent.source_sheet_ids = lead.source_sheet_ids
+            existing_ent.source_scope = sources_list
+        else:
+            findings.append(
+                UnifiedFinding(
+                    finding_id=f10_id,
+                    recipe_id=lead.recipe_id,
+                    calculation_id=lead.calculation_id,
+                    definition_id=ent.inspect.definition_id,
+                    source_sheet_ids=lead.source_sheet_ids,
+                    source_scope=sources_list,
+                    snapshot=lead.snapshot,
+                    status="available",
+                    short_business_title=lead.title,
+                    typed_value=float(lead.values[0]) if lead.values else None,
+                    formatted_value=ent.glance.formatted_value,
+                    unit=ent.glance.unit or (lead.units[0] if lead.units else ""),
+                    population_or_exposure=f"{lead.matched_count:,} matched entities across {len(sources_list)} sources",
+                    comparison_and_effect=lead.join_description,
+                    evidence_bound_observation=ent.what_it_establishes,
+                    possible_operational_implication=lead.interpretation,
+                    one_next_check_or_action=ent.next_check,
+                    allowed_claim_level=claim_level,
+                    visual_kind=ent.visual.kind if ent.visual else "none",
+                    visual_points_summary=[{"label": p.label, "value": p.y} for p in (ent.visual.points if ent.visual else [])],
+                    drilldown_route=ent.drilldown_targets[0].route if ent.drilldown_targets else f"/?sheet_id={sheet_id}&view=eda#explorer",
+                    privacy_state="cohort_safe",
+                    limitations=[ent.what_it_does_not_establish],
+                    analytical_subject=domain,
+                    decision_category="cross_source_reconciliation",
+                    rank_score=92.0,
+                )
             )
-        )
 
     return findings
 
@@ -304,4 +329,4 @@ def get_shared_findings_for_sheet(sheet_id: int) -> list[UnifiedFinding]:
 
     response = run_adaptive_dashboard(sheet_id=sheet_id)
     raw_findings = extract_findings_from_response(response)
-    return rank_and_deduplicate_findings(raw_findings, max_findings=5)
+    return rank_and_deduplicate_findings(raw_findings, max_findings=10)

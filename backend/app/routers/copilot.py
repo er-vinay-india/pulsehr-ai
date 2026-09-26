@@ -73,19 +73,32 @@ def _load_active_sheet_dataframe(sheet_id: int | None = None, dataset_id: int | 
 
 def _answer_from_shared_findings(query: str, sheet_id: int, dataset_name: str) -> dict | None:
     """Answers high-level management questions directly from the authoritative Shared Findings Store (T30, T31)."""
-    q_low = query.lower()
-    is_top_points = any(phrase in q_low for phrase in ["top 3", "top three", "top points", "top findings", "key findings", "summary", "overview"])
-    is_worst_dept = any(phrase in q_low for phrase in ["worst department", "worst team", "worst unit", "lowest department", "which department"])
+    t_start = time.perf_counter()
+    q_low = query.lower().strip()
 
-    if not (is_top_points or is_worst_dept):
+    # Detect target metrics and directions
+    is_leave = any(w in q_low for w in ["leave", "approved leave", "pto", "vacation", "absence", "sick"])
+    is_headcount = any(phrase in q_low for phrase in ["headcount", "how many employees", "total employees", "employee count", "staff count", "most employees", "largest team", "biggest department", "fewest employees"])
+    is_attendance = any(w in q_low for w in ["attendance", "present", "presence", "attended"]) and not is_leave
+    is_highest = any(w in q_low for w in ["highest", "best", "top", "most", "max", "maximum", "leader", "leading"])
+    is_lowest = any(w in q_low for w in ["lowest", "worst", "bottom", "least", "min", "minimum", "deficit", "lagging", "friction"])
+    is_general_dept = any(phrase in q_low for phrase in ["which department", "which team", "which unit", "what department"]) and not (is_highest or is_lowest or is_leave or is_attendance or is_headcount)
+    is_top_points = any(phrase in q_low for phrase in ["top 3", "top three", "top points", "top findings", "key findings", "summary", "overview"])
+    is_reconciliation = any(phrase in q_low for phrase in ["reconciliation", "ledger", "matched", "cross source", "cross-source"])
+
+    if not (is_top_points or is_highest or is_lowest or is_general_dept or is_headcount or is_leave or is_attendance or is_reconciliation):
         return None
 
     try:
+        from ..services.adaptive_dashboard.engine import run_adaptive_dashboard
         from ..services.adaptive_dashboard.findings import get_shared_findings_for_sheet
-        findings = get_shared_findings_for_sheet(sheet_id)
+
+        resp = run_adaptive_dashboard(sheet_id=sheet_id)
+        findings = get_shared_findings_for_sheet(sheet_id=sheet_id)
         if not findings:
             return None
 
+        # 1. Top 3 verified findings overview
         if is_top_points:
             top_3 = findings[:3]
             lines = [f"### Top 3 Verified Findings for {dataset_name}\n"]
@@ -98,6 +111,7 @@ def _answer_from_shared_findings(query: str, sheet_id: int, dataset_name: str) -
                     "type": "unified_finding",
                     "calculation_id": f.calculation_id,
                 })
+            duration_ms = round((time.perf_counter() - t_start) * 1000, 2)
             return {
                 "query": query,
                 "answer": "\n".join(lines),
@@ -105,46 +119,214 @@ def _answer_from_shared_findings(query: str, sheet_id: int, dataset_name: str) -
                 "citations": citations,
                 "exact_matches": [],
                 "suggested_questions": [
-                    "Which department has the lowest attendance rate?",
-                    "What are the verified ledger reconciliation findings?",
+                    "Which department has the lowest attendance?",
+                    "Which department has the highest attendance?",
                 ],
                 "visual_charts": [],
                 "related_rows": len(findings),
-                "timings": {"total_ms": 1.0, "llm_calls": 0, "is_deterministic": True},
+                "timings": {"total_ms": max(0.1, duration_ms), "llm_calls": 0, "is_deterministic": True},
                 "engine": "shared_findings",
                 "metadata": {"source": "shared_findings_store", "sheet_id": sheet_id},
             }
 
-        if is_worst_dept:
-            focus = next((f for f in findings if f.decision_category == "segment_disparity"), None)
-            if focus:
+        # 2. Approved Leave Query (Lowest or Highest)
+        if is_leave and resp.quinary_element and resp.quinary_element.items:
+            items_by_leave = [it for it in resp.quinary_element.items if it.secondary_value is not None]
+            if items_by_leave:
+                items_by_leave.sort(key=lambda x: x.secondary_value)
+                target_unit = items_by_leave[0] if is_lowest or not is_highest else items_by_leave[-1]
+                contrast_unit = items_by_leave[-1] if target_unit == items_by_leave[0] else items_by_leave[0]
+                dir_label = "Lowest" if target_unit == items_by_leave[0] else "Highest"
                 ans = (
-                    f"### Department Attendance Reliability Priority\n\n"
-                    f"**Focus Unit**: {focus.short_business_title}\n\n"
-                    f"- **Observation**: {focus.evidence_bound_observation}\n"
-                    f"- **Context & Benchmark**: {focus.comparison_and_effect or 'Workforce benchmark comparison'}\n"
-                    f"- **Population**: {focus.population_or_exposure}\n"
-                    f"- **Recommended Next Step**: {focus.one_next_check_or_action}\n\n"
-                    f"*Note: This prioritization reflects the greatest verified rate disparity below the workforce benchmark. "
-                    f"It does not imply an individual performance deficit or policy violation.*"
+                    f"### {dir_label} Approved Leave Department\n\n"
+                    f"**Department**: {target_unit.segment}\n\n"
+                    f"- **Value**: {target_unit.formatted_secondary}\n"
+                    f"- **Sample**: {target_unit.sample_label}\n"
+                    f"- **Contrast**: Compared to {contrast_unit.segment} at {contrast_unit.formatted_secondary}\n"
+                    f"- **Note**: Approved leaves represent authorized policy usage, not unexcused absences.\n"
                 )
+                duration_ms = round((time.perf_counter() - t_start) * 1000, 2)
                 return {
                     "query": query,
                     "answer": ans,
                     "model_used": "shared_findings_store",
                     "citations": [{
-                        "fact_id": focus.finding_id,
+                        "fact_id": f"finding_leave_{target_unit.segment.lower()[:6]}",
                         "type": "unified_finding",
-                        "calculation_id": focus.calculation_id,
+                        "calculation_id": resp.quinary_element.evidence.calculation_id if resp.quinary_element.evidence else "calc_leave_dept",
+                    }],
+                    "exact_matches": [],
+                    "suggested_questions": ["Which department has the highest attendance?", "Which department has the lowest attendance?"],
+                    "visual_charts": [],
+                    "related_rows": 1,
+                    "timings": {"total_ms": max(0.1, duration_ms), "llm_calls": 0, "is_deterministic": True},
+                    "engine": "shared_findings",
+                    "metadata": {"source": "shared_findings_store", "sheet_id": sheet_id, "metric": "approved_leave", "direction": "lowest" if is_lowest else "highest"},
+                }
+
+        # 3. Most Employees / Headcount by Department
+        if ("most employees" in q_low or "largest team" in q_low or "biggest department" in q_low) and resp.quinary_element and resp.quinary_element.items:
+            items_by_size = sorted(resp.quinary_element.items, key=lambda x: x.sample_size, reverse=True)
+            top_size = items_by_size[0]
+            bot_size = items_by_size[-1]
+            ans = (
+                f"### Department with Most Employees\n\n"
+                f"**Department**: {top_size.segment}\n\n"
+                f"- **Headcount**: {top_size.sample_size} employees\n"
+                f"- **Average Attendance**: {top_size.formatted_primary}\n"
+                f"- **Comparison**: Smallest department is {bot_size.segment} with {bot_size.sample_size} employees.\n"
+            )
+            duration_ms = round((time.perf_counter() - t_start) * 1000, 2)
+            return {
+                "query": query,
+                "answer": ans,
+                "model_used": "shared_findings_store",
+                "citations": [{
+                    "fact_id": f"finding_headcount_{top_size.segment.lower()[:6]}",
+                    "type": "unified_finding",
+                    "calculation_id": resp.quinary_element.evidence.calculation_id if resp.quinary_element.evidence else "calc_headcount_dept",
+                }],
+                "exact_matches": [],
+                "suggested_questions": ["Which department has the highest attendance?", "Which department has the lowest attendance?"],
+                "visual_charts": [],
+                "related_rows": 1,
+                "timings": {"total_ms": max(0.1, duration_ms), "llm_calls": 0, "is_deterministic": True},
+                "engine": "shared_findings",
+                "metadata": {"source": "shared_findings_store", "sheet_id": sheet_id, "metric": "headcount", "direction": "highest"},
+            }
+
+        # 4. Highest Attendance Department Query
+        if is_highest or ("highest attendance" in q_low or "most attendance" in q_low):
+            if resp.quinary_element and resp.quinary_element.items:
+                items_sorted = sorted(resp.quinary_element.items, key=lambda x: x.primary_value, reverse=True)
+                top_unit = items_sorted[0]
+                bot_unit = items_sorted[-1]
+                ans = (
+                    f"### Highest Recorded Attendance Department\n\n"
+                    f"**Top Performing Unit**: {top_unit.segment}\n\n"
+                    f"- **Recorded Attendance**: {top_unit.formatted_primary}\n"
+                    f"- **Headcount**: {top_unit.sample_label}\n"
+                    f"- **Peer Contrast**: {top_unit.segment} recorded {top_unit.formatted_primary} vs {bot_unit.segment} at {bot_unit.formatted_primary}.\n"
+                    f"- **Observation**: Recorded presence reflects verified attendance logs.\n"
+                )
+                duration_ms = round((time.perf_counter() - t_start) * 1000, 2)
+                return {
+                    "query": query,
+                    "answer": ans,
+                    "model_used": "shared_findings_store",
+                    "citations": [{
+                        "fact_id": f"finding_highest_att_{top_unit.segment.lower()[:6]}",
+                        "type": "unified_finding",
+                        "calculation_id": resp.quinary_element.evidence.calculation_id if resp.quinary_element.evidence else "calc_att_dept",
+                    }],
+                    "exact_matches": [],
+                    "suggested_questions": ["Which department has the lowest attendance?", "Which department has the lowest approved leave?"],
+                    "visual_charts": [],
+                    "related_rows": 1,
+                    "timings": {"total_ms": max(0.1, duration_ms), "llm_calls": 0, "is_deterministic": True},
+                    "engine": "shared_findings",
+                    "metadata": {"source": "shared_findings_store", "sheet_id": sheet_id, "metric": "attendance", "direction": "highest"},
+                }
+
+        # 5. Lowest Attendance Department Query
+        if is_lowest or ("lowest attendance" in q_low or "least attendance" in q_low or is_general_dept):
+            if resp.quinary_element and resp.quinary_element.items:
+                items_sorted = sorted(resp.quinary_element.items, key=lambda x: x.primary_value)
+                bot_unit = items_sorted[0]
+                top_unit = items_sorted[-1]
+                focus_finding = next((f for f in findings if f.decision_category == "segment_disparity"), None)
+                title_line = f"**Insight**: {focus_finding.short_business_title}\n\n" if focus_finding else ""
+                ans = (
+                    f"### Lowest Recorded Attendance Department\n\n"
+                    f"{title_line}"
+                    f"**Focus Department**: {bot_unit.segment}\n\n"
+                    f"- **Recorded Attendance**: {bot_unit.formatted_primary}\n"
+                    f"- **Headcount**: {bot_unit.sample_label}\n"
+                    f"- **Peer Contrast**: {bot_unit.segment} recorded {bot_unit.formatted_primary} vs {top_unit.segment} at {top_unit.formatted_primary}.\n"
+                    f"- **Recommended Next Check**: Review shift schedules and authorized leave allocations for {bot_unit.segment}.\n\n"
+                    f"*Note: Figures represent recorded attendance days. Duty roster not provided; obligation coverage rate is unavailable.*"
+                )
+                cited_fact_id = focus_finding.finding_id if focus_finding else f"finding_lowest_att_{bot_unit.segment.lower()[:6]}"
+                cited_calc_id = focus_finding.calculation_id if focus_finding else (resp.quinary_element.evidence.calculation_id if resp.quinary_element.evidence else "calc_att_dept")
+                duration_ms = round((time.perf_counter() - t_start) * 1000, 2)
+                return {
+                    "query": query,
+                    "answer": ans,
+                    "model_used": "shared_findings_store",
+                    "citations": [{
+                        "fact_id": cited_fact_id,
+                        "type": "unified_finding",
+                        "calculation_id": cited_calc_id,
+                    }],
+                    "exact_matches": [],
+                    "suggested_questions": ["Which department has the highest attendance?", "Which department has the lowest approved leave?"],
+                    "visual_charts": [],
+                    "related_rows": 1,
+                    "timings": {"total_ms": max(0.1, duration_ms), "llm_calls": 0, "is_deterministic": True},
+                    "engine": "shared_findings",
+                    "metadata": {"source": "shared_findings_store", "sheet_id": sheet_id, "metric": "attendance", "direction": "lowest"},
+                }
+
+        # 6. Overall Headcount Query
+        if is_headcount:
+            scale_f = next((f for f in findings if f.decision_category == "operational_scale"), None)
+            if scale_f:
+                ans = (
+                    f"### Workforce Headcount & Population\n\n"
+                    f"**Total Observed Headcount**: {scale_f.formatted_value}\n\n"
+                    f"- **Detail**: {scale_f.evidence_bound_observation}\n"
+                    f"- **Coverage**: {scale_f.population_or_exposure}\n"
+                    f"- **Next Check**: {scale_f.one_next_check_or_action}\n"
+                )
+                duration_ms = round((time.perf_counter() - t_start) * 1000, 2)
+                return {
+                    "query": query,
+                    "answer": ans,
+                    "model_used": "shared_findings_store",
+                    "citations": [{
+                        "fact_id": scale_f.finding_id,
+                        "type": "unified_finding",
+                        "calculation_id": scale_f.calculation_id,
+                    }],
+                    "exact_matches": [],
+                    "suggested_questions": ["Which department has the highest attendance?", "Which department has the lowest attendance?"],
+                    "visual_charts": [],
+                    "related_rows": 1,
+                    "timings": {"total_ms": max(0.1, duration_ms), "llm_calls": 0, "is_deterministic": True},
+                    "engine": "shared_findings",
+                    "metadata": {"source": "shared_findings_store", "sheet_id": sheet_id, "metric": "headcount"},
+                }
+
+        # 7. Ledger reconciliation query
+        if is_reconciliation:
+            rec_f = next((f for f in findings if f.decision_category == "cross_source_reconciliation"), None)
+            if rec_f:
+                ans = (
+                    f"### Cross-Source Ledger Reconciliation\n\n"
+                    f"**Finding**: {rec_f.short_business_title} ({rec_f.formatted_value})\n\n"
+                    f"- **Observation**: {rec_f.evidence_bound_observation}\n"
+                    f"- **Coverage**: {rec_f.population_or_exposure}\n"
+                    f"- **Next Action**: {rec_f.one_next_check_or_action}\n"
+                )
+                duration_ms = round((time.perf_counter() - t_start) * 1000, 2)
+                return {
+                    "query": query,
+                    "answer": ans,
+                    "model_used": "shared_findings_store",
+                    "citations": [{
+                        "fact_id": rec_f.finding_id,
+                        "type": "unified_finding",
+                        "calculation_id": rec_f.calculation_id,
                     }],
                     "exact_matches": [],
                     "suggested_questions": ["What are the top 3 overall points?"],
                     "visual_charts": [],
                     "related_rows": 1,
-                    "timings": {"total_ms": 1.0, "llm_calls": 0, "is_deterministic": True},
+                    "timings": {"total_ms": max(0.1, duration_ms), "llm_calls": 0, "is_deterministic": True},
                     "engine": "shared_findings",
-                    "metadata": {"source": "shared_findings_store", "sheet_id": sheet_id},
+                    "metadata": {"source": "shared_findings_store", "sheet_id": sheet_id, "category": "reconciliation"},
                 }
+
     except Exception as exc:
         logger.warning(f"Could not retrieve shared findings for copilot: {exc}")
         return None

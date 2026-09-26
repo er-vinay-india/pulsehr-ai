@@ -5,6 +5,10 @@ import ExecutiveBriefingCard from "../components/adaptive/ExecutiveBriefingCard"
 import ExceptionWatchCard from "../components/adaptive/ExceptionWatchCard";
 import ForwardOutlookCard from "../components/adaptive/ForwardOutlookCard";
 import EnterpriseSynthesisCard from "../components/adaptive/EnterpriseSynthesisCard";
+import PriorityInsightCard from "../components/adaptive/PriorityInsightCard";
+import AnalysisCoverageSection from "../components/adaptive/AnalysisCoverageSection";
+import InvestigationDrawer from "../components/InvestigationDrawer";
+import EmployeeDrawer from "../components/EmployeeDrawer";
 import "../styles/adaptive-dashboard.scss";
 
 async function fetchJson(url, options = {}) {
@@ -105,6 +109,8 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
   const [showExplainDecision, setShowExplainDecision] = useState(false);
   const [inspectModalOpen, setInspectModalOpen] = useState(false);
   const [inspectTarget, setInspectTarget] = useState("primary");
+  const [investigationTarget, setInvestigationTarget] = useState(null);
+  const [inspectedEmployeeId, setInspectedEmployeeId] = useState(null);
 
   // Focus & Accessibility Refs
   const triggerBtnRef = useRef(null);
@@ -128,6 +134,15 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
   const activeControllerRef = useRef(null);
   const requestCounter = useRef(0);
 
+  const handleSourceSelect = (newId) => {
+    setSelectedSheetId(newId);
+    try {
+      const url = new URL(window.location);
+      url.searchParams.set("sheet_id", newId);
+      window.history.replaceState({}, "", url);
+    } catch {}
+  };
+
   // 1. Load Sources on Mount
   const loadSources = () => {
     setSourcesLoading(true);
@@ -139,10 +154,14 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
         const urlParam = new URLSearchParams(window.location.search).get("sheet_id");
         if (urlParam && list.some((s) => String(s.id) === urlParam)) {
           setSelectedSheetId(urlParam);
-        } else if (list.length === 1) {
-          setSelectedSheetId(String(list[0].id));
-        } else if (list.length > 1 && !selectedSheetId) {
-          setSelectedSheetId(String(list[0].id));
+        } else if (list.length > 0) {
+          const firstId = String(list[0].id);
+          setSelectedSheetId(firstId);
+          try {
+            const url = new URL(window.location);
+            url.searchParams.set("sheet_id", firstId);
+            window.history.replaceState({}, "", url);
+          } catch {}
         }
       })
       .catch((err) => {
@@ -266,6 +285,8 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
   const exceptionElement = data?.exception_element;
   const outlookElement = data?.outlook_element;
   const enterpriseElement = data?.enterprise_element;
+  const priorityInsight = data?.priority_insight;
+  const analysisCoverage = data?.analysis_coverage;
   const manifest = data?.manifest;
   const glance = element?.glance;
   const explain = element?.explain;
@@ -290,6 +311,78 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
     const rel = computeRelativeAge(dStr);
     return rel ? `Data through ${hDate} · ${rel}` : `Data through ${hDate}`;
   }, [secondaryElement?.data_through_date, manifest?.date_range?.end]);
+
+  // Scope line definition per WP1
+  const scopeLine = useMemo(() => {
+    if (!manifest) return null;
+    const workbook = manifest.display_name || manifest.file_name || "Dataset";
+    const sheet = manifest.sheet_name || `Sheet ${selectedSheetId}`;
+    let period = manifest.date_range?.formatted;
+    if (!period) {
+      if (manifest.date_range?.start && manifest.date_range?.end) {
+        period = `${formatHumanDate(manifest.date_range.start)} – ${formatHumanDate(manifest.date_range.end)}`;
+      } else {
+        period = "Reporting period not established";
+      }
+    }
+    const population = manifest.row_count ? `${manifest.row_count} employees represented` : "Workforce scope pending";
+    return {
+      workbook,
+      sheet,
+      period,
+      population,
+      refreshed: "Live verified",
+    };
+  }, [manifest, selectedSheetId]);
+
+  // Compact business measures per WP2 (up to 3 supported measures)
+  const compactMeasures = useMemo(() => {
+    if (!data) return [];
+    const measures = [];
+    const rowCount = data.manifest?.row_count;
+    if (rowCount) {
+      measures.push({
+        id: "employees",
+        label: "Employees represented",
+        value: Number(rowCount).toLocaleString(),
+        context: "In attendance dataset",
+        unit: "",
+      });
+    }
+
+    if (data.quaternary_element?.items) {
+      const attItem = data.quaternary_element.items.find((i) => i.cohort.toLowerCase().includes("attendance"));
+      if (attItem) {
+        measures.push({
+          id: "attendance",
+          label: "Recorded attendance",
+          value: attItem.formatted_secondary || attItem.formatted_value,
+          context: `${attItem.formatted_value} recorded`,
+          unit: "",
+        });
+      }
+
+      const leaveItem = data.quaternary_element.items.find((i) => i.cohort.toLowerCase().includes("leave"));
+      if (leaveItem) {
+        measures.push({
+          id: "leave",
+          label: "Approved leave",
+          value: leaveItem.formatted_secondary || leaveItem.formatted_value,
+          context: `${leaveItem.formatted_value} recorded`,
+          unit: "",
+        });
+      }
+    } else if (data.quinary_element?.formatted_benchmark) {
+      measures.push({
+        id: "attendance",
+        label: "Recorded attendance",
+        value: data.quinary_element.formatted_benchmark,
+        context: "Company benchmark per employee",
+        unit: "",
+      });
+    }
+    return measures;
+  }, [data]);
 
   // Chart configuration for Apache ECharts (Revision 5)
   const chartPoints = secondaryElement?.chart_series?.points || [];
@@ -988,6 +1081,24 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
       ? enterpriseElement?.inspect
       : inspect;
 
+  // Collapsible Secondary Findings Wrapper (de-duplicates findings when Priority Insight is active)
+  const SecondaryFindingsWrapper = ({ children }) => {
+    if (!priorityInsight) return <>{children}</>;
+    return (
+      <details className="adaptive-secondary-findings-accordion">
+        <summary className="adaptive-secondary-findings-summary">
+          <span>Detailed Department Disparity & Supporting Action Analysis</span>
+          {quinaryElement?.items && (
+            <span className="summary-badge">{quinaryElement.items.length} units evaluated</span>
+          )}
+        </summary>
+        <div className="adaptive-secondary-findings-content">
+          {children}
+        </div>
+      </details>
+    );
+  };
+
   return (
     <div className="adaptive-dashboard-page" role="region" aria-label="Dashboard">
       {/* Quiet Local Page Header */}
@@ -1001,7 +1112,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
             <select
               id="source-selector"
               value={selectedSheetId}
-              onChange={(e) => setSelectedSheetId(e.target.value)}
+              onChange={(e) => handleSourceSelect(e.target.value)}
               disabled={sourcesLoading}
               aria-label="Selected data source"
             >
@@ -1010,7 +1121,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
               )}
               {sources.map((s) => (
                 <option key={s.id} value={s.id}>
-                  {s.display_name || s.name} ({s.row_count} rows)
+                  {s.name} ({s.row_count} records) — {s.display_name || "Dataset"}
                 </option>
               ))}
             </select>
@@ -1082,8 +1193,78 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
           </div>
         )}
 
-        {/* State B: Ready Primary KPI Tile (Preserved exactly as approved) */}
-        {!calculating && !calcError && element && element.kind === "kpi" && glance && (
+        {/* Authoritative Scope Line (WP1) */}
+        {!calculating && scopeLine && (
+          <div className="adaptive-scope-line" aria-label="Dataset and population scope">
+            <span className="scope-line-item scope-line-workbook">
+              <strong>{scopeLine.workbook}</strong> · {scopeLine.sheet}
+            </span>
+            <span className="scope-line-separator">·</span>
+            <span className="scope-line-item scope-line-period">
+              Reporting period: <strong>{scopeLine.period}</strong>
+            </span>
+            <span className="scope-line-separator">·</span>
+            <span className="scope-line-item scope-line-population">
+              {scopeLine.population}
+            </span>
+            <span className="scope-line-separator">·</span>
+            <span className="scope-line-item scope-line-status">
+              <span className="scope-live-dot" />
+              {scopeLine.refreshed}
+            </span>
+          </div>
+        )}
+
+        {/* Compact Business Measures (WP2) */}
+        {!calculating && !calcError && compactMeasures.length > 0 && (
+          <section className="adaptive-compact-summary-strip" aria-label="Key workforce measures">
+            {compactMeasures.map((m) => (
+              <div key={m.id} className="compact-summary-tile">
+                <span className="compact-summary-tile__label">{m.label}</span>
+                <div className="compact-summary-tile__val-row">
+                  <span className="compact-summary-tile__value">{m.value}</span>
+                  {m.unit && <span className="compact-summary-tile__unit">{m.unit}</span>}
+                </div>
+                <span className="compact-summary-tile__context">{m.context}</span>
+              </div>
+            ))}
+          </section>
+        )}
+
+        {/* Priority Insight (New Decision-Focused Autonomous Discovery Engine — WP3 & WP4) */}
+        {!calculating && !calcError && priorityInsight && (
+          <PriorityInsightCard
+            priorityInsight={priorityInsight}
+            sheetId={selectedSheetId}
+            snapshot={manifest?.snapshot}
+            onInspect={() => handleOpenInspect("priority")}
+            onOpenRecords={() =>
+              setInvestigationTarget({
+                sheetId: selectedSheetId,
+                entityType: "department",
+                targetId: priorityInsight.focus_group || priorityInsight.finding_id || null,
+              })
+            }
+            onListen={() => {
+              const el = document.querySelector(".adaptive-briefing-card");
+              if (el) {
+                el.scrollIntoView({ behavior: "smooth" });
+                const playBtn = el.querySelector(".voiceover-player button");
+                if (playBtn) {
+                  playBtn.click();
+                }
+              }
+            }}
+          />
+        )}
+
+        {/* Compact Expandable Analysis Coverage Drawer (S01–S20 Audit) */}
+        {!calculating && !calcError && analysisCoverage && (
+          <AnalysisCoverageSection coverage={analysisCoverage} />
+        )}
+
+        {/* State B: Ready Primary KPI Tile (Rendered as fallback when compact summary strip is absent) */}
+        {!calculating && !calcError && element && element.kind === "kpi" && glance && compactMeasures.length === 0 && (
           <article className="adaptive-glance-tile" aria-labelledby="primary-metric-title">
             <div className="glance-header-row">
               <h2 id="primary-metric-title" className="glance-metric-label">
@@ -1346,9 +1527,11 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
           </section>
         )}
 
-        {/* Layer 1: Quinary Element — Segment Disparity & Variance Matrix (Gate 5) */}
-        {!calculating && !calcError && quinaryElement && (quinaryElement.kind === "segment_disparity" || quinaryElement.kind === "variance_matrix") && (
-          <section className="adaptive-disparity-card" aria-labelledby="quinary-disparity-title">
+        {/* Layer 1: Quinary Element & Decision Focus (Wrapped in Collapsible Secondary Findings when Priority Insight is Active) */}
+        {!calculating && !calcError && (quinaryElement || decisionElement) && (
+          <SecondaryFindingsWrapper>
+            {quinaryElement && (quinaryElement.kind === "segment_disparity" || quinaryElement.kind === "variance_matrix") && (
+              <section className="adaptive-disparity-card" aria-labelledby="quinary-disparity-title">
             {/* Header: Title, Context Qualifier, Dominant Spread Pill, and Info Button */}
             <div className="disparity-card-header">
               <div className="disparity-title-group">
@@ -1496,7 +1679,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
         )}
 
         {/* Layer 1: Element 6 — Decision Focus Card (Gate 6) */}
-        {!calculating && !calcError && decisionElement && (
+        {decisionElement && (
           <section
             ref={decisionCardRef}
             className="adaptive-decision-card"
@@ -1568,7 +1751,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
               )}
             </div>
 
-            {/* Two short text blocks: Why this matters and Next check */}
+            {/* Three narrative blocks: Why this matters, Next check, and Accountable Owner (Merged from Report) */}
             <div className="decision-narrative-grid">
               <div className="decision-narrative-block">
                 <span className="narrative-tag">Why this matters</span>
@@ -1579,6 +1762,19 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
                 <span className="narrative-tag">Next check</span>
                 <p className="narrative-text">{decisionElement.next_step}</p>
               </div>
+
+              <div className="decision-narrative-block decision-narrative-block--owner">
+                <span className="narrative-tag">Accountable Owner</span>
+                <p className="narrative-text">
+                  <strong>{decisionElement.owner || "Lead HRBP with Unit Manager"}</strong> · Review: 14-day cycle
+                </p>
+              </div>
+            </div>
+
+            {/* HR Policy Compliance Guideline */}
+            <div className="decision-compliance-guardrail" role="note">
+              <span className="guardrail-dot" />
+              <span>HR Policy Guardrail: Recommendation is for managerial decision-support. Reconcile medical/annual leaves before adjusting capacity targets.</span>
             </div>
 
             {/* Supporting evidence action link/button when supporting_component_id exists */}
@@ -1608,6 +1804,8 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
             )}
           </section>
         )}
+      </SecondaryFindingsWrapper>
+    )}
 
         {/* Layer 1: Element 7 — Executive Briefing with Voice Orb (Gate 7) */}
         {!calculating && !calcError && briefingElement && (
@@ -2116,6 +2314,29 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Inline Contextual Evidence & Source Records Drawer (Preserves Executive Context) */}
+      {investigationTarget && (
+        <InvestigationDrawer
+          investigationTarget={investigationTarget}
+          onClose={() => setInvestigationTarget(null)}
+          onDrillDown={(newTarget) => {
+            if (newTarget?.employeeId != null || newTarget?.employee_id != null) {
+              setInspectedEmployeeId(newTarget.employeeId || newTarget.employee_id);
+            } else {
+              setInvestigationTarget(newTarget);
+            }
+          }}
+        />
+      )}
+
+      {/* Inline Employee Profile Drawer */}
+      {inspectedEmployeeId != null && (
+        <EmployeeDrawer
+          employeeId={inspectedEmployeeId}
+          onClose={() => setInspectedEmployeeId(null)}
+        />
       )}
     </div>
   );

@@ -55,6 +55,12 @@ def _format_pp_for_speech(text: str) -> str:
 
 def _detect_reporting_period(manifest: SourceManifest, secondary: ChartSpec | None) -> str | None:
     """Extracts a concise reporting period label from filename, display name, or secondary chart."""
+    if manifest.date_range and isinstance(manifest.date_range, dict) and manifest.date_range.get("formatted"):
+        fmt = str(manifest.date_range["formatted"])
+        m_clean = re.search(r"\b(January|February|March|April|May|June|July|August|September|October|November|December)[_\s]+(20\d\d)\b", fmt, re.IGNORECASE)
+        if m_clean:
+            return f"{m_clean.group(1).capitalize()} {m_clean.group(2)}"
+        return fmt
     combined = (manifest.file_name or "") + " " + (manifest.display_name or "")
     m = re.search(r"\b(January|February|March|April|May|June|July|August|September|October|November|December)[_\s]+(20\d\d)\b", combined, re.IGNORECASE)
     if m:
@@ -145,8 +151,8 @@ def validate_briefing_claims(
             # Ignore standard 4-digit years
             if 2000 <= val <= 2035 and "." not in clean_tok:
                 continue
-            # Verify value exists in claim.numeric_values within display rounding tolerance (0.15)
-            matched = any(abs(val - num) < 0.15 or abs(abs(val) - abs(num)) < 0.15 for num in claim.numeric_values)
+            # Verify value exists in claim.numeric_values within display rounding tolerance (0.6 for integer rounding)
+            matched = any(abs(val - num) <= 0.6 or abs(abs(val) - abs(num)) <= 0.6 for num in claim.numeric_values)
             if not matched:
                 raise ValueError(
                     f"Unbound numeric value '{token}' in claim '{claim.claim_id}' not found in claim.numeric_values ({claim.numeric_values})."
@@ -162,6 +168,7 @@ def build_executive_briefing_element(
     quaternary: ComparatorSpec | None = None,
     quinary: DisparitySpec | None = None,
     decision: DecisionFocusSpec | None = None,
+    enterprise: Any | None = None,
 ) -> ExecutiveBriefingSpec | None:
     """Builds a deterministic, evidence-grounded Executive Briefing specification."""
     # Verify snapshot integrity across all input components
@@ -174,6 +181,8 @@ def build_executive_briefing_element(
                     f"Snapshot mismatch: component '{comp.component_id}' has snapshot '{comp.inspect.snapshot}', expected '{snapshot}'"
                 )
             available_components[comp.component_id] = comp
+    if enterprise is not None:
+        available_components[enterprise.component_id] = enterprise
 
     claims: list[BriefingClaim] = []
     domain = contract.domain
@@ -232,40 +241,121 @@ def build_executive_briefing_element(
         )
 
     # ==========================================
-    # Part 2: Pattern (One explanatory fact from Elements 2-5)
+    # Part 2: Pattern & Action
     # ==========================================
-    # Auditable selection priority:
-    # 1. Decision focus supporting component (if distinct)
-    # 2. Quaternary comparator
-    # 3. Quinary disparity matrix
-    # 4. Secondary timeline (if not flat)
-    # 5. Tertiary breakdown concentration
+    has_enterprise_reconciliation = (
+        domain == "workforce_hr"
+        and enterprise is not None
+        and getattr(enterprise, "lead_finding", None) is not None
+        and getattr(enterprise, "glance", None) is not None
+        and "Matched leave agreement" in getattr(enterprise.glance, "label", "")
+    )
 
-    pattern_claim: BriefingClaim | None = None
+    if has_enterprise_reconciliation:
+        # Grounded multi-source workforce reconciliation story (P0/P1 HR requirements)
+        if quaternary and quaternary.items:
+            att_item = next((it for it in quaternary.items if "attend" in it.cohort.lower()), None)
+            leave_item = next((it for it in quaternary.items if "leave" in it.cohort.lower()), None)
+            if att_item and leave_item:
+                claims.append(
+                    BriefingClaim(
+                        claim_id="claim_pattern_workforce_totals",
+                        claim_type="comparison",
+                        text=f"Recorded attendance totals {att_item.formatted_value} and approved leave {leave_item.formatted_value}.",
+                        source_component_id=quaternary.component_id,
+                        calculation_ids=[quaternary.inspect.calculation_id],
+                        numeric_values=[att_item.value, leave_item.value],
+                        unit="days",
+                    )
+                )
 
-    # Option 1: Supporting component from Element 6 (Quinary or Quaternary)
-    if decision and decision.supporting_component_id == "quinary_element" and quinary:
-        # Disparity anchor: top segment vs benchmark
-        if quinary.top_segment and quinary.benchmark_value is not None:
-            top_item = next((it for it in quinary.items if it.segment == quinary.top_segment), None)
-            if top_item and top_item.segment != decision.subject_label:
-                benchmark_context = "company attendance" if domain == "workforce_hr" else "the overall benchmark"
+        matched_cnt = enterprise.lead_finding.matched_count
+        claims.append(
+            BriefingClaim(
+                claim_id="claim_pattern_leave_reconciliation",
+                claim_type="comparison",
+                text=f"Leave totals agree for all {matched_cnt:,} matched employees across the two sheets.",
+                source_component_id=enterprise.component_id,
+                calculation_ids=[enterprise.lead_finding.calculation_id],
+                numeric_values=[float(matched_cnt)],
+                unit="employees",
+            )
+        )
+
+        vals = enterprise.lead_finding.values
+        sib_cnt = int(vals[2]) if len(vals) > 2 else 0
+        r_sum = vals[3] if len(vals) > 3 else 0.0
+        if sib_cnt > 0:
+            formatted_r_sum = f"{r_sum:,.1f}" if r_sum % 1 != 0 else f"{int(r_sum)}"
+            claims.append(
+                BriefingClaim(
+                    claim_id="claim_pattern_scope_diff",
+                    claim_type="observation",
+                    text=f"{sib_cnt} leave-register IDs outside the attendance source account for {formatted_r_sum} additional leave days.",
+                    source_component_id=enterprise.component_id,
+                    calculation_ids=[enterprise.lead_finding.calculation_id],
+                    numeric_values=[float(sib_cnt), float(r_sum)],
+                    unit="days",
+                )
+            )
+
+        claims.append(
+            BriefingClaim(
+                claim_id="claim_action_next_check",
+                claim_type="next_check",
+                text="The next check is to confirm their inclusion and the meaning of Final Attendance before using that derived measure operationally.",
+                source_component_id=enterprise.component_id,
+                calculation_ids=[enterprise.lead_finding.calculation_id],
+                numeric_values=[],
+                unit="",
+            )
+        )
+
+    else:
+        # Standard pattern selection: (Auditable selection priority: Decision Focus -> Quaternary -> Quinary -> Secondary -> Tertiary)
+        pattern_claim: BriefingClaim | None = None
+
+        # Option 1: Supporting component from Element 6 (Quinary or Quaternary)
+        if decision and decision.supporting_component_id == "quinary_element" and quinary:
+            # Disparity anchor: top segment vs benchmark
+            if quinary.top_segment and quinary.benchmark_value is not None:
+                top_item = next((it for it in quinary.items if it.segment == quinary.top_segment), None)
+                if top_item and top_item.segment != decision.subject_label:
+                    benchmark_context = "company attendance" if domain == "workforce_hr" else "the overall benchmark"
+                    pattern_text = (
+                        f"{top_item.segment} recorded the highest {quinary.metric_name.lower()} at "
+                        f"{top_item.formatted_primary}, while {benchmark_context} averaged {quinary.formatted_benchmark}."
+                    )
+                    pattern_claim = BriefingClaim(
+                        claim_id="claim_pattern_disparity_top",
+                        claim_type="comparison",
+                        text=pattern_text,
+                        source_component_id=quinary.component_id,
+                        calculation_ids=[quinary.inspect.calculation_id],
+                        numeric_values=[top_item.primary_value, quinary.benchmark_value],
+                        unit=quinary.unit,
+                    )
+
+        if pattern_claim is None and decision and decision.supporting_component_id == "quaternary_element" and quaternary:
+            if quaternary.items and len(quaternary.items) >= 2:
+                base_item = next((it for it in quaternary.items if it.is_baseline), quaternary.items[0])
+                comp_item = next((it for it in quaternary.items if not it.is_baseline), quaternary.items[-1])
                 pattern_text = (
-                    f"{top_item.segment} recorded the highest {quinary.metric_name.lower()} at "
-                    f"{top_item.formatted_primary}, while {benchmark_context} averaged {quinary.formatted_benchmark}."
+                    f"{comp_item.cohort} averaged {comp_item.formatted_value}, compared to "
+                    f"{base_item.formatted_value} for {base_item.cohort.lower()}."
                 )
                 pattern_claim = BriefingClaim(
-                    claim_id="claim_pattern_disparity_top",
+                    claim_id="claim_pattern_comparator",
                     claim_type="comparison",
                     text=pattern_text,
-                    source_component_id=quinary.component_id,
-                    calculation_ids=[quinary.inspect.calculation_id],
-                    numeric_values=[top_item.primary_value, quinary.benchmark_value],
-                    unit=quinary.unit,
+                    source_component_id=quaternary.component_id,
+                    calculation_ids=[quaternary.inspect.calculation_id],
+                    numeric_values=[comp_item.value, base_item.value],
+                    unit=quaternary.unit,
                 )
 
-    if pattern_claim is None and decision and decision.supporting_component_id == "quaternary_element" and quaternary:
-        if quaternary.items and len(quaternary.items) >= 2:
+        # Option 2: Quaternary comparator independently
+        if pattern_claim is None and quaternary and quaternary.items and len(quaternary.items) >= 2:
             base_item = next((it for it in quaternary.items if it.is_baseline), quaternary.items[0])
             comp_item = next((it for it in quaternary.items if not it.is_baseline), quaternary.items[-1])
             pattern_text = (
@@ -273,7 +363,7 @@ def build_executive_briefing_element(
                 f"{base_item.formatted_value} for {base_item.cohort.lower()}."
             )
             pattern_claim = BriefingClaim(
-                claim_id="claim_pattern_comparator",
+                claim_id="claim_pattern_comparator_direct",
                 claim_type="comparison",
                 text=pattern_text,
                 source_component_id=quaternary.component_id,
@@ -282,138 +372,118 @@ def build_executive_briefing_element(
                 unit=quaternary.unit,
             )
 
-    # Option 2: Quaternary comparator independently
-    if pattern_claim is None and quaternary and quaternary.items and len(quaternary.items) >= 2:
-        base_item = next((it for it in quaternary.items if it.is_baseline), quaternary.items[0])
-        comp_item = next((it for it in quaternary.items if not it.is_baseline), quaternary.items[-1])
-        pattern_text = (
-            f"{comp_item.cohort} averaged {comp_item.formatted_value}, compared to "
-            f"{base_item.formatted_value} for {base_item.cohort.lower()}."
-        )
-        pattern_claim = BriefingClaim(
-            claim_id="claim_pattern_comparator_direct",
-            claim_type="comparison",
-            text=pattern_text,
-            source_component_id=quaternary.component_id,
-            calculation_ids=[quaternary.inspect.calculation_id],
-            numeric_values=[comp_item.value, base_item.value],
-            unit=quaternary.unit,
-        )
+        # Option 3: Quinary disparity independently
+        if pattern_claim is None and quinary and quinary.items and quinary.top_segment:
+            top_item = next((it for it in quinary.items if it.segment == quinary.top_segment), None)
+            if top_item and (not decision or top_item.segment != decision.subject_label):
+                pattern_text = (
+                    f"{top_item.segment} recorded {top_item.formatted_primary} {quinary.metric_name.lower()}, "
+                    f"differing from the benchmark of {quinary.formatted_benchmark}."
+                )
+                pattern_claim = BriefingClaim(
+                    claim_id="claim_pattern_disparity_direct",
+                    claim_type="comparison",
+                    text=pattern_text,
+                    source_component_id=quinary.component_id,
+                    calculation_ids=[quinary.inspect.calculation_id],
+                    numeric_values=[top_item.primary_value, quinary.benchmark_value],
+                    unit=quinary.unit,
+                )
 
-    # Option 3: Quinary disparity independently
-    if pattern_claim is None and quinary and quinary.items and quinary.top_segment:
-        top_item = next((it for it in quinary.items if it.segment == quinary.top_segment), None)
-        if top_item and (not decision or top_item.segment != decision.subject_label):
+        # Option 4: Secondary timeline (only if not nearly flat!)
+        if pattern_claim is None and secondary and not _is_flat_time_series(secondary):
+            pts = secondary.chart_series.points if hasattr(secondary, "chart_series") else []
+            valid_pts = [p for p in pts if p.average_hours is not None]
+            if len(valid_pts) >= 2:
+                first_pt, last_pt = valid_pts[0], valid_pts[-1]
+                diff = last_pt.average_hours - first_pt.average_hours
+                direction = "increased" if diff > 0 else "decreased"
+                pattern_text = (
+                    f"{secondary.glance.label} moved from {first_pt.formatted_hours} in {first_pt.period_label} "
+                    f"to {last_pt.formatted_hours} in {last_pt.period_label}."
+                )
+                pattern_claim = BriefingClaim(
+                    claim_id="claim_pattern_movement",
+                    claim_type="observation",
+                    text=pattern_text,
+                    source_component_id=secondary.component_id,
+                    calculation_ids=[secondary.inspect.calculation_id],
+                    numeric_values=[first_pt.average_hours, last_pt.average_hours],
+                    unit=secondary.glance.unit or "",
+                )
+
+        # Option 5: Tertiary breakdown concentration
+        if pattern_claim is None and tertiary and tertiary.items:
+            top_cat = tertiary.items[0]
             pattern_text = (
-                f"{top_item.segment} recorded {top_item.formatted_primary} {quinary.metric_name.lower()}, "
-                f"differing from the benchmark of {quinary.formatted_benchmark}."
+                f"{top_cat.category} accounts for {top_cat.formatted_value} of {tertiary.metric_name.lower()}, "
+                f"representing {top_cat.share_pct:.1f}% of the total."
             )
             pattern_claim = BriefingClaim(
-                claim_id="claim_pattern_disparity_direct",
-                claim_type="comparison",
-                text=pattern_text,
-                source_component_id=quinary.component_id,
-                calculation_ids=[quinary.inspect.calculation_id],
-                numeric_values=[top_item.primary_value, quinary.benchmark_value],
-                unit=quinary.unit,
-            )
-
-    # Option 4: Secondary timeline (only if not nearly flat!)
-    if pattern_claim is None and secondary and not _is_flat_time_series(secondary):
-        pts = secondary.chart_series.points if hasattr(secondary, "chart_series") else []
-        valid_pts = [p for p in pts if p.average_hours is not None]
-        if len(valid_pts) >= 2:
-            first_pt, last_pt = valid_pts[0], valid_pts[-1]
-            diff = last_pt.average_hours - first_pt.average_hours
-            direction = "increased" if diff > 0 else "decreased"
-            pattern_text = (
-                f"{secondary.glance.label} moved from {first_pt.formatted_hours} in {first_pt.period_label} "
-                f"to {last_pt.formatted_hours} in {last_pt.period_label}."
-            )
-            pattern_claim = BriefingClaim(
-                claim_id="claim_pattern_movement",
+                claim_id="claim_pattern_concentration",
                 claim_type="observation",
                 text=pattern_text,
-                source_component_id=secondary.component_id,
-                calculation_ids=[secondary.inspect.calculation_id],
-                numeric_values=[first_pt.average_hours, last_pt.average_hours],
-                unit=secondary.glance.unit or "",
+                source_component_id=tertiary.component_id,
+                calculation_ids=[tertiary.inspect.calculation_id],
+                numeric_values=[top_cat.value, round(top_cat.share_pct, 1)],
+                unit=tertiary.unit or "",
             )
 
-    # Option 5: Tertiary breakdown concentration
-    if pattern_claim is None and tertiary and tertiary.items:
-        top_cat = tertiary.items[0]
-        pattern_text = (
-            f"{top_cat.category} accounts for {top_cat.formatted_value} of {tertiary.metric_name.lower()}, "
-            f"representing {top_cat.share_pct:.1f}% of the total."
-        )
-        pattern_claim = BriefingClaim(
-            claim_id="claim_pattern_concentration",
-            claim_type="observation",
-            text=pattern_text,
-            source_component_id=tertiary.component_id,
-            calculation_ids=[tertiary.inspect.calculation_id],
-            numeric_values=[top_cat.value, round(top_cat.share_pct, 1)],
-            unit=tertiary.unit or "",
-        )
+        if pattern_claim:
+            claims.append(pattern_claim)
 
-    if pattern_claim:
-        claims.append(pattern_claim)
-
-    # ==========================================
-    # Part 3: Action / Decision Focus (Element 6)
-    # ==========================================
-    if decision:
-        clean_gap = _format_pp_for_speech(decision.formatted_gap_value)
-        sample_str = decision.sample_label if decision.sample_label.strip().startswith(str(decision.sample_size)) else f"{decision.sample_size} {decision.sample_label}"
-        # Avoid double 'the' or formatting quirks
-        action_text = (
-            f"{decision.subject_label} records {decision.formatted_observed_value} {decision.metric_name.lower()}, "
-            f"{clean_gap} across {sample_str}."
-        )
-        subj_nums = [float(n) for n in re.findall(r"\d+", decision.subject_label)]
-        numeric_vals = [
-            decision.observed_value,
-            decision.comparator_value,
-            decision.gap_value,
-            abs(decision.gap_value),
-            decision.sample_size,
-        ] + subj_nums
-        claims.append(
-            BriefingClaim(
-                claim_id="claim_action_decision_focus",
-                claim_type="decision_focus",
-                text=action_text,
-                source_component_id=decision.component_id,
-                calculation_ids=decision.supporting_calculation_ids or [decision.inspect.calculation_id],
-                numeric_values=numeric_vals,
-                unit=decision.unit or "",
+        # ==========================================
+        # Part 3: Action / Decision Focus (Element 6)
+        # ==========================================
+        if decision:
+            clean_gap = _format_pp_for_speech(decision.formatted_gap_value)
+            sample_str = decision.sample_label if decision.sample_label.strip().startswith(str(decision.sample_size)) else f"{decision.sample_size} {decision.sample_label}"
+            action_text = (
+                f"{decision.subject_label} records {decision.formatted_observed_value} {decision.metric_name.lower()}, "
+                f"{clean_gap} across {sample_str}."
             )
-        )
-
-        # Part 4: Next Check
-        clean_next_step = decision.next_step.strip()
-        if not clean_next_step.endswith("."):
-            clean_next_step += "."
-        # Ensure smooth phrasing: "The next check is to ..."
-        first_word = clean_next_step.split()[0].lower()
-        rest_words = " ".join(clean_next_step.split()[1:])
-        if first_word in ("review", "compare", "evaluate", "inspect", "investigate", "audit"):
-            next_check_text = f"The next check is to {first_word} {rest_words}"
-        else:
-            next_check_text = f"The next check is {clean_next_step}"
-
-        claims.append(
-            BriefingClaim(
-                claim_id="claim_action_next_check",
-                claim_type="next_check",
-                text=next_check_text,
-                source_component_id=decision.component_id,
-                calculation_ids=decision.supporting_calculation_ids or [decision.inspect.calculation_id],
-                numeric_values=[],
-                unit="",
+            subj_nums = [float(n) for n in re.findall(r"\d+", decision.subject_label)]
+            numeric_vals = [
+                decision.observed_value,
+                decision.comparator_value,
+                decision.gap_value,
+                abs(decision.gap_value),
+                decision.sample_size,
+            ] + subj_nums
+            claims.append(
+                BriefingClaim(
+                    claim_id="claim_action_decision_focus",
+                    claim_type="decision_focus",
+                    text=action_text,
+                    source_component_id=decision.component_id,
+                    calculation_ids=decision.supporting_calculation_ids or [decision.inspect.calculation_id],
+                    numeric_values=numeric_vals,
+                    unit=decision.unit or "",
+                )
             )
-        )
+
+            # Part 4: Next Check
+            clean_next_step = decision.next_step.strip()
+            if not clean_next_step.endswith("."):
+                clean_next_step += "."
+            first_word = clean_next_step.split()[0].lower()
+            rest_words = " ".join(clean_next_step.split()[1:])
+            if first_word in ("review", "compare", "evaluate", "inspect", "investigate", "audit"):
+                next_check_text = f"The next check is to {first_word} {rest_words}"
+            else:
+                next_check_text = f"The next check is {clean_next_step}"
+
+            claims.append(
+                BriefingClaim(
+                    claim_id="claim_action_next_check",
+                    claim_type="next_check",
+                    text=next_check_text,
+                    source_component_id=decision.component_id,
+                    calculation_ids=decision.supporting_calculation_ids or [decision.inspect.calculation_id],
+                    numeric_values=[],
+                    unit="",
+                )
+            )
 
     # Optional Qualifier: Partial period warning if secondary timeline has partial points
     if secondary:

@@ -443,7 +443,108 @@ class AdaptiveDashboardResponse(BaseModel):
     exception_element: "ExceptionWatchSpec | None" = None
     outlook_element: "ForwardOutlookSpec | None" = None
     enterprise_element: "EnterpriseSynthesisSpec | None" = None
+    priority_insight: "PriorityInsightSpec | None" = None
+    analysis_coverage: "AnalysisCoverageSummary | None" = None
+    orchestrator_findings: list["UnifiedFinding"] = Field(default_factory=list)
     run_status: Literal["ready", "needs_definition", "failed"] = "ready"
+
+
+class UnifiedFinding(BaseModel):
+    """Immutable finding representation shared across Dashboard, Copilot, Narration, and Presentation."""
+    model_config = ConfigDict(extra="forbid")
+
+    finding_id: str
+    recipe_id: str
+    calculation_id: str
+    definition_id: str
+    source_sheet_ids: list[int]
+    source_scope: list[str]
+    snapshot: str
+    status: Literal["available", "needs_definition", "withheld", "abstain"] = "available"
+
+    short_business_title: str
+    typed_value: float | None = None
+    formatted_value: str
+    unit: str
+
+    population_or_exposure: str
+    comparison_and_effect: str | None = None
+    evidence_bound_observation: str
+    possible_operational_implication: str | None = None
+    one_next_check_or_action: str
+    allowed_claim_level: Literal[
+        "descriptive_fact",
+        "reconciled_ledger",
+        "statistical_association",
+        "non_causal_forecast",
+        "exploratory_pattern",
+        "policy_exposure",
+    ] = "descriptive_fact"
+
+    visual_kind: str = "none"
+    visual_points_summary: list[dict[str, Any]] = Field(default_factory=list)
+    drilldown_route: str | None = None
+    privacy_state: Literal["cohort_safe", "aggregate_safe", "pii_suppressed"] = "aggregate_safe"
+    limitations: list[str] = Field(default_factory=list)
+
+    # Ranking & deduplication keys
+    analytical_subject: str
+    decision_category: str
+    rank_score: float = 0.0
+    score_breakdown: dict[str, float] = Field(default_factory=dict)
+
+
+class PriorityInsightSpec(BaseModel):
+    """Specification for the top verified priority insight component."""
+    model_config = ConfigDict(extra="forbid")
+
+    finding_id: str
+    recipe_id: str
+    strategy_code: str
+    strategy_name: str
+    short_business_title: str
+    prominent_number: str
+    numeric_value: float | None = None
+    unit: str
+    comparison_label: str
+    comparison_value: str
+    implication: str
+    next_check: str
+    evidence_details: dict[str, Any]
+    visual_type: Literal["category_comparison", "time_trend", "composition", "distribution", "none"] = "none"
+    echarts_option: dict[str, Any] | None = None
+    population_summary: str
+    allowed_claim_level: str
+
+
+class StrategyCoverageItem(BaseModel):
+    """Status and missing prerequisites for one evaluated strategy (S01-S20)."""
+    model_config = ConfigDict(extra="forbid")
+
+    recipe_id: str
+    strategy_code: str
+    strategy_name: str
+    status: Literal["completed", "needs_inputs", "incompatible", "execution_failure", "not_implemented"]
+    status_label: str
+    summary_reason: str
+    missing_prerequisites: list[str] = Field(default_factory=list)
+    generated_finding_ids: list[str] = Field(default_factory=list)
+
+
+class AnalysisCoverageSummary(BaseModel):
+    """Summary of strategy coverage and evaluated prerequisites across S01-S20."""
+    model_config = ConfigDict(extra="forbid")
+
+    total_strategies: int = 20
+    completed_count: int
+    needs_inputs_count: int
+    incompatible_count: int
+    execution_failure_count: int
+    not_implemented_count: int
+    # Optional legacy aliases for non-breaking API consumption
+    supported_count: int | None = None
+    descriptive_only_count: int | None = None
+    strategies: list[StrategyCoverageItem]
 
 
 class ExceptionPoint(BaseModel):
