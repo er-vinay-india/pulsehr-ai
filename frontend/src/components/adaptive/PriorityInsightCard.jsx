@@ -63,47 +63,79 @@ function getCategoriesAndValues(baseOption, dimensionName = "") {
 }
 
 /**
- * Builds an executive Donut Option.
- * If > 7 categories, consolidates into Top 5 + 'Other (N units)' to eliminate rainbow clutter.
+ * Builds an executive Donut Option with spacious Executive Split Layout.
+ * Returns both the pure ECharts option (uncluttered, centered, large radius)
+ * and rich slice metadata for the native HTML/React legend table.
  */
-function buildDonutOption(baseOption, heroValue, unitSuffix, title, unit = "", dimensionName = "") {
+function buildDonutData(
+  baseOption,
+  heroValue,
+  unitSuffix,
+  title,
+  unit = "",
+  dimensionName = "",
+  densityMode = "top10"
+) {
   if (!baseOption) return null;
   const { categories, values } = getCategoriesAndValues(baseOption, dimensionName);
   if (!categories.length) return null;
 
-  const palette = ["#ff8a62", "#34d399", "#60a5fa", "#fbbb27", "#c084fc", "#fb7185", "#38bdf8"];
+  const palette = [
+    "#ff8a62",
+    "#34d399",
+    "#60a5fa",
+    "#fbbb27",
+    "#c084fc",
+    "#38bdf8",
+    "#fb7185",
+    "#a3e635",
+  ];
+
+  const paired = categories.map((cat, i) => ({
+    name: formatCategoryLabel(cat, dimensionName),
+    value: values[i] || 0,
+  }));
+  paired.sort((a, b) => b.value - a.value);
+
+  const totalSum = paired.reduce((sum, p) => sum + (p.value || 0), 0);
   let pieData = [];
 
   if (categories.length > 7) {
-    // Pair and sort descending
-    const paired = categories.map((cat, i) => ({ name: String(cat), value: values[i] || 0 }));
-    paired.sort((a, b) => b.value - a.value);
+    const sliceCount = densityMode === "all" ? 8 : 6;
+    const topSlices = paired.slice(0, sliceCount);
+    const otherVal = paired.slice(sliceCount).reduce((sum, p) => sum + p.value, 0);
 
-    const top5 = paired.slice(0, 5);
-    const otherVal = paired.slice(5).reduce((sum, p) => sum + p.value, 0);
-
-    pieData = top5.map((p, i) => ({
+    pieData = topSlices.map((p, i) => ({
       name: p.name,
       value: p.value,
+      color: palette[i % palette.length],
       itemStyle: { color: palette[i % palette.length], borderColor: "#171412", borderWidth: 2 },
     }));
 
     if (otherVal > 0) {
       pieData.push({
-        name: `Other (${categories.length - 5} units)`,
+        name: `Other (${categories.length - sliceCount} units)`,
         value: otherVal,
+        color: "#524940",
         itemStyle: { color: "#524940", borderColor: "#171412", borderWidth: 2 },
       });
     }
   } else {
-    pieData = categories.map((cat, i) => ({
-      name: String(cat),
-      value: values[i] || 0,
+    pieData = paired.map((p, i) => ({
+      name: p.name,
+      value: p.value,
+      color: palette[i % palette.length],
       itemStyle: { color: palette[i % palette.length], borderColor: "#171412", borderWidth: 2 },
     }));
   }
 
-  return {
+  // Pre-calculate exact percentage and formatted values
+  pieData.forEach((d) => {
+    d.pct = totalSum > 0 ? ((d.value / totalSum) * 100).toFixed(1) + "%" : "0%";
+    d.formattedVal = formatCompactNumber(d.value, unit);
+  });
+
+  const option = {
     backgroundColor: "transparent",
     animation: false,
     tooltip: {
@@ -119,21 +151,12 @@ function buildDonutOption(baseOption, heroValue, unitSuffix, title, unit = "", d
         return `${params.name}: <strong>${valFmt}</strong> (${params.percent}%)`;
       },
     },
-    legend: {
-      orient: "horizontal",
-      bottom: 0,
-      left: "center",
-      textStyle: { color: "#ded5cb", fontSize: 11 },
-      itemWidth: 10,
-      itemHeight: 10,
-      itemGap: 14,
-    },
     series: [
       {
         name: title || "Unit Split",
         type: "pie",
-        radius: ["46%", "72%"],
-        center: ["50%", "45%"],
+        radius: ["58%", "86%"],
+        center: ["50%", "50%"],
         avoidLabelOverlap: false,
         itemStyle: {
           borderRadius: 4,
@@ -143,27 +166,29 @@ function buildDonutOption(baseOption, heroValue, unitSuffix, title, unit = "", d
         label: {
           show: true,
           position: "center",
-          formatter: () => `${heroValue}${unitSuffix}\n{sub|Split}`,
+          formatter: () => `${heroValue}${unitSuffix}\n{sub|Hero Spread}`,
           rich: {
             sub: {
               fontSize: 11,
               color: "#ded5cb",
-              lineHeight: 16,
+              lineHeight: 18,
               fontWeight: 500,
             },
           },
-          fontSize: 16,
+          fontSize: 18,
           fontWeight: 700,
           color: "#fff9f2",
         },
         emphasis: {
           scale: true,
-          scaleSize: 4,
+          scaleSize: 5,
         },
         data: pieData,
       },
     ],
   };
+
+  return { option, pieData };
 }
 
 /**
@@ -354,10 +379,26 @@ export default function PriorityInsightCard({
   const displayVal = String(prominent_number || "");
   const unitSuffix = unit && !displayVal.toLowerCase().includes(unit.toLowerCase()) ? ` ${unit}` : "";
 
-  // Dynamic Donut Option
-  const donutOption = useMemo(() => {
-    return buildDonutOption(echarts_option, displayVal, unitSuffix, short_business_title, unit, effectiveDimension);
-  }, [echarts_option, displayVal, unitSuffix, short_business_title, unit, effectiveDimension]);
+  const [isMobileView, setIsMobileView] = useState(() => typeof window !== "undefined" && window.innerWidth < 640);
+
+  React.useEffect(() => {
+    const handleResize = () => setIsMobileView(window.innerWidth < 640);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  // Dynamic Donut Data (pure chart option + structured React legend)
+  const donutData = useMemo(() => {
+    return buildDonutData(
+      echarts_option,
+      displayVal,
+      unitSuffix,
+      short_business_title,
+      unit,
+      effectiveDimension,
+      densityMode
+    );
+  }, [echarts_option, displayVal, unitSuffix, short_business_title, unit, effectiveDimension, densityMode]);
 
   // Dynamic Bounded Bar Option
   const boundedBarOption = useMemo(() => {
@@ -642,13 +683,43 @@ export default function PriorityInsightCard({
                     </tbody>
                   </table>
                 </div>
-              ) : visualMode === "donut" && donutOption ? (
-                <div className="adaptive-priority-chart-container" style={{ minHeight: 320, height: 340 }}>
-                  <SafeReactECharts
-                    option={donutOption}
-                    opts={{ renderer: "svg" }}
-                    style={{ height: "100%", width: "100%" }}
-                  />
+              ) : visualMode === "donut" && donutData ? (
+                <div className="adaptive-priority-donut-layout">
+                  <div className="adaptive-priority-donut-graphic">
+                    <SafeReactECharts
+                      option={donutData.option}
+                      opts={{ renderer: "svg" }}
+                      style={{ height: "260px", width: "100%" }}
+                    />
+                  </div>
+                  <div className="adaptive-priority-donut-legend">
+                    <div className="adaptive-priority-donut-legend__header">
+                      <span className="adaptive-priority-donut-legend__col-unit">
+                        {effectiveDimension ? effectiveDimension.toUpperCase() : "SEGMENT"}
+                      </span>
+                      <span className="adaptive-priority-donut-legend__col-val">SHARE</span>
+                      <span className="adaptive-priority-donut-legend__col-pct">RATIO</span>
+                    </div>
+                    <div className="adaptive-priority-donut-legend__list">
+                      {donutData.pieData.map((slice) => (
+                        <div key={slice.name} className="adaptive-priority-donut-legend__item">
+                          <div className="adaptive-priority-donut-legend__name-col">
+                            <span
+                              className="adaptive-priority-donut-legend__dot"
+                              style={{ backgroundColor: slice.color }}
+                            />
+                            <span className="adaptive-priority-donut-legend__name" title={slice.name}>
+                              {slice.name}
+                            </span>
+                          </div>
+                          <div className="adaptive-priority-donut-legend__val-col">
+                            <span className="adaptive-priority-donut-legend__val">{slice.formattedVal}</span>
+                            <span className="adaptive-priority-donut-legend__pct">{slice.pct}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               ) : (
                 <div

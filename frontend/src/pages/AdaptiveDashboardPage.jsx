@@ -1320,9 +1320,13 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
           />
         )}
 
-        {/* Compact Expandable Analysis Coverage Drawer (S01–S20 Audit) */}
+        {/* Executive HR Strategy Coverage & Intelligence Audit (S01–S20) */}
         {!calculating && !calcError && analysisCoverage && (
-          <AnalysisCoverageSection coverage={analysisCoverage} />
+          <AnalysisCoverageSection
+            coverage={analysisCoverage}
+            sheetId={selectedSheetId}
+            onNavigateTab={onNavigateTab}
+          />
         )}
 
         {/* State B: Ready Primary KPI Tile (Rendered as fallback when compact summary strip is absent) */}

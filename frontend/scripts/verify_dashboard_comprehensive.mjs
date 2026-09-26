@@ -73,6 +73,35 @@ async function run() {
     });
   }
 
+  // 6b. Test Executive HR Strategy Coverage Audit (Collapsed & Expanded)
+  console.log('Testing Executive HR Strategy Coverage Audit...');
+  const coverageDrawer = await page.$('.adaptive-coverage-drawer');
+  if (coverageDrawer) {
+    await coverageDrawer.screenshot({
+      path: path.join(ARTIFACT_DIR, 'verify_coverage_drawer_collapsed.png')
+    });
+
+    const expandBtn = await page.$('.adaptive-coverage-expand-btn');
+    if (expandBtn) {
+      await expandBtn.click();
+      await new Promise(r => setTimeout(r, 800));
+
+      await coverageDrawer.screenshot({
+        path: path.join(ARTIFACT_DIR, 'verify_coverage_drawer_expanded.png')
+      });
+
+      // Click on Workforce pillar tab
+      const pillarBtn = await page.$('.adaptive-coverage-pillar-btn:nth-child(2)');
+      if (pillarBtn) {
+        await pillarBtn.click();
+        await new Promise(r => setTimeout(r, 500));
+        await coverageDrawer.screenshot({
+          path: path.join(ARTIFACT_DIR, 'verify_coverage_pillar_workforce.png')
+        });
+      }
+    }
+  }
+
   // 7. Test Mobile viewport (390px)
   console.log('Testing Mobile viewport (390px)...');
   await page.setViewport({ width: 390, height: 844 });
