@@ -515,6 +515,13 @@ class PriorityInsightSpec(BaseModel):
     echarts_option: dict[str, Any] | None = None
     population_summary: str
     allowed_claim_level: str
+    top_segment: str | None = None
+    focus_group: str | None = None
+    dimension_name: str | None = None
+    metric_name: str | None = None
+    owner: str | None = None
+    guardrail: str | None = None
+    review_cycle: str | None = None
 
 
 class StrategyCoverageItem(BaseModel):

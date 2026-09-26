@@ -251,7 +251,7 @@ def _detect_column_unit(col_name: str | None) -> str:
         return "hours"
     if any(k in c_low for k in ("day", "days", "workdays", "attendancedays", "absencedays", "leavedays", "attendance", "leave", "leaves", "presence")):
         return "days"
-    if any(k in c_low for k in ("dollar", "cost", "salary", "wage", "spend", "revenue", "price", "amount")):
+    if any(k in c_low for k in ("dollar", "cost", "salary", "wage", "spend", "revenue", "sales", "price", "amount", "earning", "profit")):
         return "$"
     if any(k in c_low for k in ("percent", "rate", "ratio", "pct")):
         return "%"
@@ -262,6 +262,28 @@ def _detect_column_unit(col_name: str | None) -> str:
     if any(k in c_low for k in ("order", "orders")):
         return "orders"
     return ""
+
+
+def _format_metric_value(val: float | None, unit: str = "") -> str:
+    """Intelligently formats metric values with currency, SI prefixes (K, M, B) or standard rounding."""
+    if val is None:
+        return "—"
+    is_curr = unit == "$" or unit.lower() in ("$", "usd", "eur", "gbp")
+    prefix = "$" if is_curr else ""
+    suffix = f" {unit}" if unit and not is_curr else ""
+    abs_v = abs(val)
+    if abs_v >= 1_000_000_000:
+        return f"{prefix}{val / 1_000_000_000:.2f}B{suffix}"
+    if abs_v >= 1_000_000:
+        return f"{prefix}{val / 1_000_000:.2f}M{suffix}"
+    if abs_v >= 10_000:
+        return f"{prefix}{val / 1_000:.1f}K{suffix}"
+    if abs_v >= 100:
+        return f"{prefix}{val:,.0f}{suffix}"
+    rounded = round(val, 1)
+    if rounded == int(rounded):
+        return f"{prefix}{int(rounded):,}{suffix}"
+    return f"{prefix}{rounded:,.1f}{suffix}"
 
 
 def _is_employee_grain(entity_type: str, entity_col: str | None, rows: list[dict[str, Any]]) -> bool:
@@ -1394,10 +1416,13 @@ def orchestrate_sheet_strategies(
                     ]
                 else:
                     unit_label = unit_suffix
-                    gap_fmt = f"{gap:.1f} {unit_label}".strip()
-                    title = f"Segment Disparity: {top_seg} vs {bot_seg} on {met_col}"
-                    implication = f"{top_seg} observed at {top_val:.1f} vs {bot_seg} at {bot_val:.1f} (spread: {gap_fmt})."
-                    next_act = f"Conduct operational diagnostic on performance factors differentiating {top_seg} and {bot_seg}."
+                    gap_fmt = _format_metric_value(gap, unit_label)
+                    top_fmt = _format_metric_value(top_val, unit_label)
+                    bot_fmt = _format_metric_value(bot_val, unit_label)
+                    seg_noun = "Store" if "store" in seg_col.lower() else ("Department" if "dept" in seg_col.lower() else "Segment")
+                    title = f"{seg_noun} Disparity: {top_seg} vs {bot_seg} on {met_col}"
+                    implication = f"{seg_noun} {top_seg} observed at {top_fmt} vs {bot_seg} at {bot_fmt} (spread: {gap_fmt})."
+                    next_act = f"Conduct operational diagnostic on performance factors differentiating {seg_noun.lower()} {top_seg} and {bot_seg}."
                     lims = ["Identified as largest observed peer gap; causal drivers require targeted investigation."]
 
                 fid = _generate_finding_id("s09", f"{sheet_id}_{snapshot}_{top_seg}_{bot_seg}")
@@ -1415,8 +1440,8 @@ def orchestrate_sheet_strategies(
                     formatted_value=gap_fmt,
                     unit=unit_label,
                     population_or_exposure=f"{len(rows)} records across {len(valid_segs)} qualified units (n >= 5)",
-                    comparison_and_effect=f"{top_seg}: {top_val:.1f} vs {bot_seg}: {bot_val:.1f}",
-                    evidence_bound_observation=f"Disparity of {gap_fmt} observed between top unit ({top_seg}: {top_val:.1f}) and bottom unit ({bot_seg}: {bot_val:.1f}).",
+                    comparison_and_effect=f"{top_seg}: {top_fmt if not is_att else f'{top_val:.1f}'} vs {bot_seg}: {bot_fmt if not is_att else f'{bot_val:.1f}'}",
+                    evidence_bound_observation=f"Disparity of {gap_fmt} observed between top unit ({top_seg}: {top_fmt if not is_att else f'{top_val:.1f}'}) and bottom unit ({bot_seg}: {bot_fmt if not is_att else f'{bot_val:.1f}'}).",
                     possible_operational_implication=implication,
                     one_next_check_or_action=next_act,
                     allowed_claim_level="descriptive_fact",
@@ -2259,6 +2284,13 @@ def orchestrate_sheet_strategies(
             echarts_option=echarts_opt,
             population_summary=top_f.population_or_exposure,
             allowed_claim_level=top_f.allowed_claim_level,
+            top_segment=top_f.visual_points_summary[0]["label"] if top_f.visual_points_summary else None,
+            focus_group=top_f.visual_points_summary[0]["label"] if top_f.visual_points_summary else None,
+            dimension_name="Department" if contract.domain == "hr" else ("Store" if "store" in str(inputs.entity_col or "").lower() or "store" in top_f.short_business_title.lower() else "Unit"),
+            metric_name=top_f.unit if top_f.unit and top_f.unit != "$" else "Value",
+            owner="Lead HRBP with Operations Head" if contract.domain == "hr" else "Operations & Performance Lead",
+            guardrail="Verify flex arrangements & leave ledgers before review" if contract.domain == "hr" else "Validate localized seasonal drivers and inventory levels before adjusting operational targets",
+            review_cycle="14 days (Q3 Workforce Cycle)" if contract.domain == "hr" else "14-day operational review cycle",
         )
 
     return coverage_summary, findings, priority_insight

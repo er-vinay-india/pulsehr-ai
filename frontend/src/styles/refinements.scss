@@ -7621,5 +7621,52 @@ textarea:focus-visible,
   }
 }
 
+/* ==========================================================================
+   Adaptive Priority Insight Density System & Scope Bar Balance
+   ========================================================================== */
+.adaptive-priority-density-pills {
+  display: inline-flex;
+  align-items: center;
+  background: #181411;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  padding: 2px;
+  gap: 2px;
 
+  .density-pill-btn {
+    background: transparent;
+    border: none;
+    color: var(--fg-muted, #aa9f95);
+    font-size: 0.72rem;
+    font-weight: 500;
+    padding: 2px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s ease;
 
+    &:hover {
+      color: #fff9f2;
+      background: rgba(255, 255, 255, 0.06);
+    }
+
+    &.active {
+      background: #2a221b;
+      color: #ffad85;
+      font-weight: 600;
+      border: 1px solid rgba(255, 173, 133, 0.3);
+    }
+  }
+}
+
+.adaptive-scope-bar {
+  .scope-refresh-btn {
+    margin-left: auto;
+  }
+}
+
+@media (max-width: 760px) {
+  .adaptive-scope-bar .scope-refresh-btn {
+    margin-left: 0;
+    width: 100%;
+  }
+}

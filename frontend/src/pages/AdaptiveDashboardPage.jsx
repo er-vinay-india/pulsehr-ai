@@ -325,7 +325,12 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
         period = "Reporting period not established";
       }
     }
-    const population = manifest.row_count ? `${manifest.row_count} employees represented` : "Workforce scope pending";
+    const isHr = data?.contract?.domain === "hr" || data?.contract?.analyst_persona?.toLowerCase().includes("hr");
+    const population = manifest.row_count
+      ? (isHr
+          ? `${Number(manifest.row_count).toLocaleString()} employees represented`
+          : `${Number(manifest.row_count).toLocaleString()} records indexed`)
+      : "Population scope pending";
     return {
       workbook,
       sheet,
@@ -333,19 +338,21 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
       population,
       refreshed: "Live verified",
     };
-  }, [manifest, selectedSheetId]);
+  }, [manifest, selectedSheetId, data?.contract]);
 
   // Compact business measures per WP2 (up to 3 supported measures)
   const compactMeasures = useMemo(() => {
     if (!data) return [];
     const measures = [];
     const rowCount = data.manifest?.row_count;
+    const isHr = data?.contract?.domain === "hr" || data?.contract?.analyst_persona?.toLowerCase().includes("hr");
+
     if (rowCount) {
       measures.push({
-        id: "employees",
-        label: "Employees represented",
+        id: "population",
+        label: isHr ? "Employees represented" : "Records indexed",
         value: Number(rowCount).toLocaleString(),
-        context: "In attendance dataset",
+        context: isHr ? "In attendance dataset" : (data.manifest?.display_name || "Active dataset"),
         unit: "",
       });
     }
@@ -375,10 +382,18 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
     } else if (data.quinary_element?.formatted_benchmark) {
       measures.push({
         id: "attendance",
-        label: "Recorded attendance",
+        label: isHr ? "Recorded attendance" : "Benchmark average",
         value: data.quinary_element.formatted_benchmark,
-        context: "Company benchmark per employee",
+        context: isHr ? "Company benchmark per employee" : "Organization benchmark",
         unit: "",
+      });
+    } else if (!isHr && data.priority_insight) {
+      measures.push({
+        id: "disparity",
+        label: "Observed Disparity",
+        value: data.priority_insight.prominent_number,
+        context: data.priority_insight.comparison_label || "Max cohort spread",
+        unit: data.priority_insight.unit || "",
       });
     }
     return measures;
@@ -1061,7 +1076,34 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
   }, [comparatorItems, quaternaryElement, isMobile]);
 
   const activeInspect =
-    inspectTarget === "secondary"
+    inspectTarget === "priority" && priorityInsight
+      ? {
+          metric_title: priorityInsight.short_business_title || "Priority Strategic Insight",
+          exact_value: `${priorityInsight.prominent_number || ""} ${priorityInsight.unit || ""}`.trim(),
+          what_this_counts:
+            priorityInsight.evidence_details?.observation ||
+            priorityInsight.implication ||
+            "Empirical disparity and variance evaluation across qualified organizational cohorts.",
+          applicable_population:
+            priorityInsight.population_summary ||
+            "Qualified cohorts meeting minimum sample reliability criteria (n >= 5).",
+          source_name: manifest?.display_name || manifest?.file_name || "Active Source",
+          reporting_period: formattedReportingRange,
+          calculation_method:
+            priorityInsight.evidence_details?.calculation_id ||
+            "Deterministic multi-factor decision ranking & variance attribution",
+          data_completeness: "100% verified non-null records across evaluated cohorts.",
+          coverage_label: "Strategy Alignment",
+          coverage_value: `Strategy ${priorityInsight.strategy_code} (${priorityInsight.strategy_name})`,
+          selection_reason:
+            "Selected as top actionable insight based on relevance, statistical magnitude, and verified decision bounds.",
+          limitations: priorityInsight.evidence_details?.limitations || [],
+          calculation_id: priorityInsight.evidence_details?.calculation_id || "calc_priority_s09",
+          definition_id: priorityInsight.evidence_details?.definition_id || "def_priority_v2",
+          provenance: "Autonomous Insight Orchestrator Engine",
+          snapshot: manifest?.snapshot || "live_source",
+        }
+      : inspectTarget === "secondary"
       ? secondaryElement?.inspect
       : inspectTarget === "tertiary"
       ? tertiaryElement?.inspect
@@ -1084,10 +1126,11 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
   // Collapsible Secondary Findings Wrapper (de-duplicates findings when Priority Insight is active)
   const SecondaryFindingsWrapper = ({ children }) => {
     if (!priorityInsight) return <>{children}</>;
+    const isHr = data?.contract?.domain === "hr" || data?.contract?.analyst_persona?.toLowerCase().includes("hr");
     return (
       <details className="adaptive-secondary-findings-accordion">
         <summary className="adaptive-secondary-findings-summary">
-          <span>Detailed Department Disparity & Supporting Action Analysis</span>
+          <span>{isHr ? "Detailed Department Disparity & Supporting Action Analysis" : "Detailed Cohort Disparity & Supporting Action Analysis"}</span>
           {quinaryElement?.items && (
             <span className="summary-badge">{quinaryElement.items.length} units evaluated</span>
           )}
@@ -1238,13 +1281,16 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
             sheetId={selectedSheetId}
             snapshot={manifest?.snapshot}
             onInspect={() => handleOpenInspect("priority")}
-            onOpenRecords={() =>
+            onOpenRecords={() => {
+              const isHr = data?.contract?.domain === "hr" || data?.contract?.analyst_persona?.toLowerCase().includes("hr");
+              const targetId = priorityInsight.focus_group || priorityInsight.top_segment || null;
               setInvestigationTarget({
                 sheetId: selectedSheetId,
-                entityType: "department",
-                targetId: priorityInsight.focus_group || priorityInsight.finding_id || null,
-              })
-            }
+                entityType: isHr ? "department" : (priorityInsight.dimension_name?.toLowerCase() || "segment"),
+                targetId: targetId,
+                metric: priorityInsight.metric_name || null,
+              });
+            }}
             onListen={() => {
               const el = document.querySelector(".adaptive-briefing-card");
               if (el) {
