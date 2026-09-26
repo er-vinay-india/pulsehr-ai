@@ -7670,3 +7670,68 @@ textarea:focus-visible,
     width: 100%;
   }
 }
+
+/* Co-located Chart Controls & Density Scroller in Priority Insight Card */
+.adaptive-priority-chart-wrapper {
+  .adaptive-priority-chart-wrapper__header {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 10px;
+    padding: 0 4px;
+
+    .adaptive-priority-chart-wrapper__top-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+
+      .adaptive-priority-chart-wrapper__title {
+        font-size: 0.74rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--fg-secondary, #ded5cb);
+      }
+    }
+
+    .adaptive-priority-chart-wrapper__sub-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+  }
+
+  .adaptive-priority-seg-control {
+    min-height: 28px;
+    padding: 2px;
+    background: #14110e;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 6px;
+
+    .adaptive-priority-seg-btn {
+      padding: 3px 8px;
+      font-size: 0.72rem;
+      min-height: 22px;
+    }
+  }
+
+  .adaptive-priority-table-container {
+    max-height: 380px;
+    overflow-y: auto;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 6px;
+
+    &::-webkit-scrollbar {
+      width: 6px;
+    }
+    &::-webkit-scrollbar-thumb {
+      background: #524940;
+      border-radius: 3px;
+    }
+  }
+}
+

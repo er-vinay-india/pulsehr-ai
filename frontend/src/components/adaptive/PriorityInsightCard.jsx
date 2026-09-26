@@ -37,12 +37,24 @@ function formatCompactNumber(val, unit = "") {
 }
 
 /**
+ * Formats a category label with the dimension noun (e.g. 'Store 20') if it is numeric or bare.
+ */
+function formatCategoryLabel(cat, dimensionName = "") {
+  const str = String(cat ?? "").trim();
+  if (/^\d+$/.test(str) && dimensionName) {
+    return `${dimensionName} ${str}`;
+  }
+  return str;
+}
+
+/**
  * Extracts categories and numeric values whether horizontal (yAxis.data) or vertical (xAxis.data).
  */
-function getCategoriesAndValues(baseOption) {
+function getCategoriesAndValues(baseOption, dimensionName = "") {
   if (!baseOption) return { categories: [], values: [], isHoriz: false };
   const isHoriz = baseOption.yAxis?.type === "category";
-  const categories = (isHoriz ? baseOption.yAxis?.data : baseOption.xAxis?.data) || [];
+  const rawCategories = (isHoriz ? baseOption.yAxis?.data : baseOption.xAxis?.data) || [];
+  const categories = rawCategories.map((c) => formatCategoryLabel(c, dimensionName));
   const seriesData = baseOption.series?.[0]?.data || [];
   const values = seriesData.map((d) =>
     typeof d === "object" && d !== null ? (d.value != null ? Number(d.value) : 0) : Number(d) || 0
@@ -54,9 +66,9 @@ function getCategoriesAndValues(baseOption) {
  * Builds an executive Donut Option.
  * If > 7 categories, consolidates into Top 5 + 'Other (N units)' to eliminate rainbow clutter.
  */
-function buildDonutOption(baseOption, heroValue, unitSuffix, title, unit = "") {
+function buildDonutOption(baseOption, heroValue, unitSuffix, title, unit = "", dimensionName = "") {
   if (!baseOption) return null;
-  const { categories, values } = getCategoriesAndValues(baseOption);
+  const { categories, values } = getCategoriesAndValues(baseOption, dimensionName);
   if (!categories.length) return null;
 
   const palette = ["#ff8a62", "#34d399", "#60a5fa", "#fbbb27", "#c084fc", "#fb7185", "#38bdf8"];
@@ -157,9 +169,9 @@ function buildDonutOption(baseOption, heroValue, unitSuffix, title, unit = "") {
 /**
  * Builds a density-bounded ECharts Bar Option for executive display.
  */
-function buildBoundedBarOption(baseOption, densityMode, unit = "") {
+function buildBoundedBarOption(baseOption, densityMode, unit = "", dimensionName = "") {
   if (!baseOption) return null;
-  const { categories, values, isHoriz } = getCategoriesAndValues(baseOption);
+  const { categories, values, isHoriz } = getCategoriesAndValues(baseOption, dimensionName);
   if (!categories.length) return baseOption;
 
   let filteredCats = categories;
@@ -192,10 +204,20 @@ function buildBoundedBarOption(baseOption, densityMode, unit = "") {
     }
   }
 
-  // Clone and override data with intelligent number formatting
+  // Clone and override data with intelligent number formatting and dimension labels
   const opt = JSON.parse(JSON.stringify(baseOption));
   if (isHoriz) {
-    if (opt.yAxis) opt.yAxis.data = filteredCats;
+    if (opt.yAxis) {
+      opt.yAxis.data = filteredCats;
+      opt.yAxis.name = dimensionName || "Store";
+      opt.yAxis.nameLocation = "end";
+      opt.yAxis.nameTextStyle = {
+        color: "#ded5cb",
+        fontSize: 11,
+        fontWeight: 600,
+        padding: [0, 0, 6, 0],
+      };
+    }
     if (opt.xAxis) {
       opt.xAxis.axisLabel = {
         ...opt.xAxis.axisLabel,
@@ -203,7 +225,10 @@ function buildBoundedBarOption(baseOption, densityMode, unit = "") {
       };
     }
   } else {
-    if (opt.xAxis) opt.xAxis.data = filteredCats;
+    if (opt.xAxis) {
+      opt.xAxis.data = filteredCats;
+      opt.xAxis.name = dimensionName || "Store";
+    }
     if (opt.yAxis) {
       opt.yAxis.axisLabel = {
         ...opt.yAxis.axisLabel,
@@ -229,6 +254,33 @@ function buildBoundedBarOption(baseOption, densityMode, unit = "") {
       return `${item.name}: <strong>${valFmt}</strong>`;
     },
   };
+
+  // Component scroller: add vertical/horizontal dataZoom when displaying all categories
+  if (densityMode === "all" && categories.length > 10) {
+    opt.dataZoom = [
+      {
+        type: "inside",
+        orient: isHoriz ? "vertical" : "horizontal",
+        start: 65,
+        end: 100,
+        zoomOnMouseWheel: true,
+        moveOnMouseMove: true,
+        moveOnMouseWheel: true,
+      },
+      {
+        type: "slider",
+        orient: isHoriz ? "vertical" : "horizontal",
+        right: isHoriz ? 6 : undefined,
+        bottom: !isHoriz ? 4 : undefined,
+        width: isHoriz ? 12 : undefined,
+        height: !isHoriz ? 12 : undefined,
+        borderColor: "#524940",
+        fillerColor: "rgba(255, 138, 98, 0.25)",
+        handleStyle: { color: "#ff8a62" },
+        textStyle: { color: "#ded5cb", fontSize: 10 },
+      },
+    ];
+  }
 
   return opt;
 }
@@ -276,19 +328,12 @@ export default function PriorityInsightCard({
   const hasChart = echarts_option && visual_type !== "none";
   const claimLevelLabel = allowed_claim_level.replace(/_/g, " ").toUpperCase();
 
-  // Extract categories and values for multi-view modes
-  const { categories, values } = useMemo(
-    () => getCategoriesAndValues(echarts_option),
-    [echarts_option]
-  );
-  const hasManyCategories = categories.length > 10;
-
   // Domain-aware copy
   const isHr =
     (metric_name && metric_name.toLowerCase().includes("attendance")) ||
     (dimension_name && dimension_name.toLowerCase() === "department");
 
-  const effectiveDimension = dimension_name || (isHr ? "Department" : "Unit");
+  const effectiveDimension = dimension_name || (isHr ? "Department" : "Store");
   const effectiveMetric = metric_name || (isHr ? "Recorded Attendance" : "Observed Metric");
   const effectiveOwner = owner || (isHr ? "Lead HRBP with Operations Head" : "Operations & Performance Lead");
   const effectiveGuardrail =
@@ -298,19 +343,26 @@ export default function PriorityInsightCard({
       : "Data guardrail: Validate localized operational drivers before adjusting targets");
   const effectiveReviewCycle = review_cycle || (isHr ? "within 14 days (Q3 Workforce Cycle)" : "14-day operational review cycle");
 
+  // Extract categories and values for multi-view modes
+  const { categories, values } = useMemo(
+    () => getCategoriesAndValues(echarts_option, effectiveDimension),
+    [echarts_option, effectiveDimension]
+  );
+  const hasManyCategories = categories.length > 10;
+
   // Clean formatted hero value
   const displayVal = String(prominent_number || "");
   const unitSuffix = unit && !displayVal.toLowerCase().includes(unit.toLowerCase()) ? ` ${unit}` : "";
 
   // Dynamic Donut Option
   const donutOption = useMemo(() => {
-    return buildDonutOption(echarts_option, displayVal, unitSuffix, short_business_title, unit);
-  }, [echarts_option, displayVal, unitSuffix, short_business_title, unit]);
+    return buildDonutOption(echarts_option, displayVal, unitSuffix, short_business_title, unit, effectiveDimension);
+  }, [echarts_option, displayVal, unitSuffix, short_business_title, unit, effectiveDimension]);
 
   // Dynamic Bounded Bar Option
   const boundedBarOption = useMemo(() => {
-    return buildBoundedBarOption(echarts_option, densityMode, unit);
-  }, [echarts_option, densityMode, unit]);
+    return buildBoundedBarOption(echarts_option, densityMode, unit, effectiveDimension);
+  }, [echarts_option, densityMode, unit, effectiveDimension]);
 
   // Dynamic Bar Height
   const barChartHeight = useMemo(() => {
@@ -340,42 +392,8 @@ export default function PriorityInsightCard({
           </p>
         </div>
 
-        {/* Secondary Controls Bar */}
+        {/* Action Controls Bar */}
         <div className="adaptive-priority-card__controls">
-          {hasChart && (
-            <div className="adaptive-priority-seg-control" role="group" aria-label="Visual view toggle">
-              <button
-                type="button"
-                className={`adaptive-priority-seg-btn ${visualMode === "bar" ? "adaptive-priority-seg-btn--active" : ""}`}
-                onClick={() => setVisualMode("bar")}
-                aria-pressed={visualMode === "bar"}
-                title="Ranked Comparison Chart"
-              >
-                <BarChart3 size={13} />
-                <span>Bar</span>
-              </button>
-              <button
-                type="button"
-                className={`adaptive-priority-seg-btn ${visualMode === "donut" ? "adaptive-priority-seg-btn--active" : ""}`}
-                onClick={() => setVisualMode("donut")}
-                aria-pressed={visualMode === "donut"}
-                title="Proportion Donut"
-              >
-                <PieChart size={13} />
-                <span>Donut</span>
-              </button>
-              <button
-                type="button"
-                className={`adaptive-priority-seg-btn ${visualMode === "table" ? "adaptive-priority-seg-btn--active" : ""}`}
-                onClick={() => setVisualMode("table")}
-                aria-pressed={visualMode === "table"}
-                title="Tabular Data Breakdown"
-              >
-                <Table size={13} />
-                <span>Table</span>
-              </button>
-            </div>
-          )}
 
           {onOpenRecords ? (
             <button
@@ -523,15 +541,52 @@ export default function PriorityInsightCard({
           {hasChart ? (
             <div className="adaptive-priority-chart-wrapper">
               <div className="adaptive-priority-chart-wrapper__header">
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <span>
+                <div className="adaptive-priority-chart-wrapper__top-bar">
+                  <span className="adaptive-priority-chart-wrapper__title">
                     {visualMode === "bar"
                       ? `${effectiveDimension} Comparison (${visual_type.replace(/_/g, " ")})`
                       : visualMode === "donut"
                       ? `${effectiveDimension} Proportion Split`
                       : `Tabular ${effectiveDimension} Breakdown`}
                   </span>
-                  {hasManyCategories && visualMode === "bar" && (
+
+                  {/* Co-located Visual Switcher: Bar | Donut | Table */}
+                  <div className="adaptive-priority-seg-control" role="group" aria-label="Visual view toggle">
+                    <button
+                      type="button"
+                      className={`adaptive-priority-seg-btn ${visualMode === "bar" ? "adaptive-priority-seg-btn--active" : ""}`}
+                      onClick={() => setVisualMode("bar")}
+                      aria-pressed={visualMode === "bar"}
+                      title="Ranked Comparison Chart"
+                    >
+                      <BarChart3 size={13} />
+                      <span>Bar</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={`adaptive-priority-seg-btn ${visualMode === "donut" ? "adaptive-priority-seg-btn--active" : ""}`}
+                      onClick={() => setVisualMode("donut")}
+                      aria-pressed={visualMode === "donut"}
+                      title="Proportion Donut"
+                    >
+                      <PieChart size={13} />
+                      <span>Donut</span>
+                    </button>
+                    <button
+                      type="button"
+                      className={`adaptive-priority-seg-btn ${visualMode === "table" ? "adaptive-priority-seg-btn--active" : ""}`}
+                      onClick={() => setVisualMode("table")}
+                      aria-pressed={visualMode === "table"}
+                      title="Tabular Data Breakdown"
+                    >
+                      <Table size={13} />
+                      <span>Table</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="adaptive-priority-chart-wrapper__sub-bar">
+                  {hasManyCategories && visualMode === "bar" ? (
                     <div className="adaptive-priority-density-pills" role="group" aria-label="Category display density">
                       <button
                         type="button"
@@ -553,17 +608,17 @@ export default function PriorityInsightCard({
                         type="button"
                         className={`density-pill-btn ${densityMode === "all" ? "active" : ""}`}
                         onClick={() => setDensityMode("all")}
-                        title={`Display all ${categories.length} units`}
+                        title={`Display all ${categories.length} units with scroll zoom`}
                       >
                         All ({categories.length})
                       </button>
                     </div>
-                  )}
-                </div>
+                  ) : <div />}
 
-                <span className="adaptive-priority-chart-wrapper__badge">
-                  {visualMode === "donut" ? "Share Ratio" : effectiveMetric}
-                </span>
+                  <span className="adaptive-priority-chart-wrapper__badge">
+                    {visualMode === "donut" ? "Share Ratio" : effectiveMetric}
+                  </span>
+                </div>
               </div>
 
               {visualMode === "table" ? (
@@ -578,7 +633,7 @@ export default function PriorityInsightCard({
                     <tbody>
                       {categories.map((label, idx) => (
                         <tr key={label}>
-                          <td>{label}</td>
+                          <td>{formatCategoryLabel(label, effectiveDimension)}</td>
                           <td className="adaptive-priority-table__td-right">
                             <strong>{formatCompactNumber(values[idx], unit)}</strong>
                           </td>

@@ -2138,8 +2138,8 @@ def build_categorical_breakdown_element(
         sorted_groups = sorted(items_raw.items(), key=lambda x: x[1]["measure_sum"], reverse=True)
         metric_name = "Sales Volume"
         unit = "$"
-        title = f"{dimension_label} sales concentration"
-        caption = f"Total commercial sales distributed across {total_categories} {dimension_label.lower()}s."
+        title = f"Top {dimension_label}s by Sales Volume" if total_categories > 10 else f"{dimension_label} Sales Performance"
+        caption = f"Ranked sales performance across top {dimension_label.lower()}s with fleet benchmark."
     else:
         # Workforce/general breakdown by Department/Group
         total_val = total_records
@@ -2180,22 +2180,40 @@ def build_categorical_breakdown_element(
                 )
             )
 
-        # Aggregate remainder
-        rest_val = sum(s["measure_sum"] if (is_sales and primary_measure) else s["count"] for _, s in rest_slice)
+        # Aggregate remainder - normalize commercial sales to average per store to prevent linear scale distortion
         rest_count = sum(s["count"] for _, s in rest_slice)
-        rest_pct = round((rest_val / total_val) * 100, 1) if total_val > 0 else 0.0
-        fmt_rest = format_currency_short(rest_val) if (is_sales and primary_measure) else f"{rest_count} employees"
-        items.append(
-            BreakdownItem(
-                category="Other",
-                value=round(rest_val, 2) if isinstance(rest_val, float) else rest_val,
-                formatted_value=fmt_rest,
-                share_pct=rest_pct,
-                secondary_value=None,
-                formatted_secondary=f"{len(rest_slice)} {dimension_label.lower()}s",
-                count=rest_count,
+        if is_sales and primary_measure:
+            rest_sum = sum(s["measure_sum"] for _, s in rest_slice)
+            rest_avg = rest_sum / len(rest_slice) if rest_slice else 0.0
+            rest_val = round(rest_avg, 2)
+            rest_pct = round((rest_sum / total_val) * 100, 1) if total_val > 0 else 0.0
+            fmt_rest = f"{format_currency_short(rest_avg)} avg"
+            items.append(
+                BreakdownItem(
+                    category=f"Other {len(rest_slice)} {dimension_label}s (Avg)",
+                    value=rest_val,
+                    formatted_value=fmt_rest,
+                    share_pct=rest_pct,
+                    secondary_value=None,
+                    formatted_secondary=f"Fleet benchmark ({len(rest_slice)} stores avg)",
+                    count=rest_count,
+                )
             )
-        )
+        else:
+            rest_val = sum(s["count"] for _, s in rest_slice)
+            rest_pct = round((rest_val / total_val) * 100, 1) if total_val > 0 else 0.0
+            fmt_rest = f"{rest_count} employees" if is_hr else f"{rest_val}"
+            items.append(
+                BreakdownItem(
+                    category="Other",
+                    value=round(rest_val, 2) if isinstance(rest_val, float) else rest_val,
+                    formatted_value=fmt_rest,
+                    share_pct=rest_pct,
+                    secondary_value=None,
+                    formatted_secondary=f"{len(rest_slice)} {dimension_label.lower()}s",
+                    count=rest_count,
+                )
+            )
     else:
         for cat, s in sorted_groups:
             val = s["measure_sum"] if (is_sales and primary_measure) else s["count"]

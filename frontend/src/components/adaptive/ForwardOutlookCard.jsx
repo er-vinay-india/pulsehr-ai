@@ -3,6 +3,23 @@ import { Info, ShieldCheck, Target, TrendingUp, AlertCircle, Table } from "lucid
 import SafeReactECharts from "../charts/SafeReactECharts";
 
 /**
+ * Intelligent compact number formatter for metrics, ticks, tooltips, and data tables.
+ */
+function formatCompactNumber(val, unit = "") {
+  if (val === null || val === undefined || isNaN(val)) return "—";
+  const num = Number(val);
+  const isCurr = unit === "$" || unit.toLowerCase() === "usd";
+  const prefix = isCurr ? "$" : "";
+  const suffix = !isCurr && unit ? ` ${unit}` : "";
+  const abs = Math.abs(num);
+  if (abs >= 1e9) return `${prefix}${(num / 1e9).toFixed(2)}B${suffix}`;
+  if (abs >= 1e6) return `${prefix}${(num / 1e6).toFixed(2)}M${suffix}`;
+  if (abs >= 1e3) return `${prefix}${(num / 1e3).toFixed(1)}K${suffix}`;
+  if (abs >= 100) return `${prefix}${num.toLocaleString(undefined, { maximumFractionDigits: 0 })}${suffix}`;
+  return `${prefix}${num.toLocaleString(undefined, { maximumFractionDigits: 1 })}${suffix}`;
+}
+
+/**
  * ForwardOutlookCard — Adaptive Dashboard Element 9 (Gate 9).
  * 
  * Renders one of three strictly verified forward-looking modes:
@@ -50,14 +67,17 @@ export default function ForwardOutlookCard({
       return {};
     }
 
-    const periods = points.map((p) => p.period_label || p.period);
+    // For visual clarity and preventing 140+ overlapping label collisions, window chart to recent 16 periods + forecast.
+    // The complete historical series is preserved in the underlying dataset and full data table below.
+    const displayPoints = points.length > 20 ? points.slice(-16) : points;
+    const periods = displayPoints.map((p) => p.period_label || p.period);
     
     // Historical actuals: values for historical points, null for forecast point
-    const actualSeries = points.map((p) => (p.actual_value != null ? p.actual_value : null));
+    const actualSeries = displayPoints.map((p) => (p.actual_value != null ? p.actual_value : null));
     
     // Forecast series: starts from the last actual point to connect lines, then goes to forecast value
-    const lastActualIdx = points.findIndex((p) => p.forecast_value != null) - 1;
-    const forecastSeries = points.map((p, idx) => {
+    const lastActualIdx = displayPoints.findIndex((p) => p.forecast_value != null) - 1;
+    const forecastSeries = displayPoints.map((p, idx) => {
       if (idx === lastActualIdx && p.actual_value != null) {
         return p.actual_value;
       }
@@ -65,14 +85,14 @@ export default function ForwardOutlookCard({
     });
 
     // Lower & Upper range series for forecast points
-    const lowerSeries = points.map((p) => (p.lower_bound != null ? p.lower_bound : null));
-    const upperSeries = points.map((p) => (p.upper_bound != null ? p.upper_bound : null));
+    const lowerSeries = displayPoints.map((p) => (p.lower_bound != null ? p.lower_bound : null));
+    const upperSeries = displayPoints.map((p) => (p.upper_bound != null ? p.upper_bound : null));
 
-    // Calculate Y-axis bounds with padding
-    const validVals = points.flatMap((p) => [p.actual_value, p.forecast_value, p.lower_bound, p.upper_bound]).filter((v) => v != null && isFinite(v));
+    // Calculate Y-axis bounds with padding based on visible window
+    const validVals = displayPoints.flatMap((p) => [p.actual_value, p.forecast_value, p.lower_bound, p.upper_bound]).filter((v) => v != null && isFinite(v));
     const minVal = validVals.length > 0 ? Math.min(...validVals) : 0;
     const maxVal = validVals.length > 0 ? Math.max(...validVals) : 100;
-    const yPad = (maxVal - minVal) * 0.15 || 5;
+    const yPad = (maxVal - minVal) * 0.18 || 5;
     const yMin = Math.max(0, Math.floor(minVal - yPad));
     const yMax = Math.ceil(maxVal + yPad);
 
@@ -86,18 +106,18 @@ export default function ForwardOutlookCard({
         formatter: (params) => {
           if (!params || params.length === 0) return "";
           const pIdx = params[0].dataIndex;
-          const pt = points[pIdx];
+          const pt = displayPoints[pIdx];
           if (!pt) return "";
           const isForecast = pt.forecast_value != null;
           let html = `<div style="font-weight:600;margin-bottom:4px;color:#fff9f2;">${pt.period_label || pt.period}</div>`;
           if (isForecast) {
-            html += `<div style="color:#fbbb27;">Forecast: <strong>${pt.forecast_value} ${unit}</strong></div>`;
+            html += `<div style="color:#fbbb27;">Forecast: <strong>${formatCompactNumber(pt.forecast_value, unit)}</strong></div>`;
             if (pt.lower_bound != null && pt.upper_bound != null) {
-              html += `<div style="color:#ded5cb;font-size:11px;">Empirical range: ${pt.lower_bound}–${pt.upper_bound} ${unit}</div>`;
+              html += `<div style="color:#ded5cb;font-size:11px;">Empirical range: ${formatCompactNumber(pt.lower_bound, unit)}–${formatCompactNumber(pt.upper_bound, unit)}</div>`;
             }
             html += `<div style="color:#ded5cb;font-size:11px;margin-top:2px;">Model: ${validation?.model_label || "Validated Model"}</div>`;
           } else if (pt.actual_value != null) {
-            html += `<div style="color:#38bdf8;">Observed actual: <strong>${pt.actual_value} ${unit}</strong></div>`;
+            html += `<div style="color:#38bdf8;">Observed actual: <strong>${formatCompactNumber(pt.actual_value, unit)}</strong></div>`;
             if (pt.is_partial) {
               html += `<div style="color:#fbbb27;font-size:11px;">Partial period (excluded from training)</div>`;
             }
@@ -107,32 +127,44 @@ export default function ForwardOutlookCard({
       },
       legend: {
         show: true,
-        bottom: 0,
+        bottom: 2,
         textStyle: { color: "#ded5cb", fontSize: 11 },
         data: ["Historical actuals", "Statistical forecast", "Forecast range"],
       },
       grid: {
-        top: 24,
-        left: 54,
-        right: 28,
-        bottom: 40,
-        containLabel: false,
+        top: 28,
+        left: 14,
+        right: 20,
+        bottom: 52,
+        containLabel: true,
       },
       xAxis: {
         type: "category",
         data: periods,
         axisLine: { lineStyle: { color: "#3d362f" } },
-        axisLabel: { color: "#ded5cb", fontSize: 11, rotate: periods.length > 10 ? 30 : 0 },
+        axisLabel: {
+          color: "#ded5cb",
+          fontSize: 10,
+          rotate: periods.length > 8 ? 30 : 0,
+          margin: 8,
+          interval: (idx) => {
+            if (periods.length <= 8) return true;
+            return idx % 2 === 0 || idx === periods.length - 1;
+          },
+        },
         splitLine: { show: false },
       },
       yAxis: {
         type: "value",
         min: yMin,
         max: yMax,
-        name: unit,
-        nameTextStyle: { color: "#ded5cb", fontSize: 11, align: "left" },
+        splitNumber: 4,
         axisLine: { show: false },
-        axisLabel: { color: "#ded5cb", fontSize: 11 },
+        axisLabel: {
+          color: "#ded5cb",
+          fontSize: 10,
+          formatter: (val) => formatCompactNumber(val, unit),
+        },
         splitLine: { lineStyle: { color: "#524940", type: "dashed" } },
       },
       series: [
@@ -173,7 +205,7 @@ export default function ForwardOutlookCard({
         {
           name: "Forecast range",
           type: "line",
-          data: upperSeries,
+          data: lowerSeries,
           lineStyle: { opacity: 0 },
           stack: "confidence-band",
           symbol: "none",
@@ -183,7 +215,7 @@ export default function ForwardOutlookCard({
           type: "line",
           data: lowerSeries.map((low, i) => (upperSeries[i] != null && low != null ? upperSeries[i] - low : null)),
           lineStyle: { opacity: 0 },
-          areaStyle: { color: "rgba(251, 187, 39, 0.18)" },
+          areaStyle: { color: "rgba(251, 187, 39, 0.22)" },
           stack: "confidence-band",
           symbol: "none",
         },
@@ -267,16 +299,16 @@ export default function ForwardOutlookCard({
           <div className="target-metrics-grid">
             <div className="target-metric-box">
               <span className="box-label">Current Observed Actual</span>
-              <span className="box-val">{actual_value} {unit}</span>
+              <span className="box-val">{formatCompactNumber(actual_value, unit)}</span>
             </div>
             <div className="target-metric-box">
               <span className="box-label">Recorded Target Plan</span>
-              <span className="box-val">{target_value} {unit}</span>
+              <span className="box-val">{formatCompactNumber(target_value, unit)}</span>
             </div>
             <div className="target-metric-box">
               <span className="box-label">Net Variance Gap</span>
               <span className={`box-val ${gap_value >= 0 ? "positive" : "negative"}`}>
-                {gap_value > 0 ? "+" : ""}{gap_value} {unit}
+                {gap_value > 0 ? "+" : ""}{formatCompactNumber(gap_value, unit)}
               </span>
             </div>
           </div>
@@ -297,9 +329,9 @@ export default function ForwardOutlookCard({
         <div className="outlook-forecast-body">
           <div className="forecast-headline-block">
             <div className="lead-value-row">
-              <span className="lead-forecast-value">{glance?.formatted_value}</span>
+              <span className="lead-forecast-value">{glance?.formatted_value || formatCompactNumber(forecast_value, unit)}</span>
               <span className="range-badge">
-                Range: {lower_bound}–{upper_bound} {unit}
+                Range: {formatCompactNumber(lower_bound, unit)}–{formatCompactNumber(upper_bound, unit)}
               </span>
             </div>
             <p className="forecast-subtitle">
@@ -307,10 +339,10 @@ export default function ForwardOutlookCard({
             </p>
           </div>
 
-          <div className="forecast-chart-container" style={{ height: 260, position: "relative" }}>
+          <div className="forecast-chart-container" style={{ minHeight: 250, position: "relative" }}>
             <SafeReactECharts
               option={chartOption}
-              style={{ height: "100%", width: "100%" }}
+              style={{ height: 240, width: "100%" }}
             />
           </div>
 
@@ -348,10 +380,10 @@ export default function ForwardOutlookCard({
                   {points.map((p, idx) => (
                     <tr key={p.period || idx}>
                       <td>{p.period_label || p.period}</td>
-                      <td>{p.actual_value != null ? `${p.actual_value} ${unit}` : "—"}</td>
-                      <td>{p.forecast_value != null ? `${p.forecast_value} ${unit}` : "—"}</td>
-                      <td>{p.lower_bound != null ? `${p.lower_bound} ${unit}` : "—"}</td>
-                      <td>{p.upper_bound != null ? `${p.upper_bound} ${unit}` : "—"}</td>
+                      <td>{p.actual_value != null ? formatCompactNumber(p.actual_value, unit) : "—"}</td>
+                      <td>{p.forecast_value != null ? formatCompactNumber(p.forecast_value, unit) : "—"}</td>
+                      <td>{p.lower_bound != null ? formatCompactNumber(p.lower_bound, unit) : "—"}</td>
+                      <td>{p.upper_bound != null ? formatCompactNumber(p.upper_bound, unit) : "—"}</td>
                     </tr>
                   ))}
                 </tbody>

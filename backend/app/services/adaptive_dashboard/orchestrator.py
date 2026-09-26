@@ -610,6 +610,7 @@ def _build_echarts_bar_option(title: str, categories: list[str], values: list[fl
     if len(categories) > 4:
         rev_cats = list(reversed(categories))
         rev_vals = list(reversed(values))
+        dim_label = "Store" if any("store" in str(c).lower() for c in categories) else ("Department" if any("dept" in str(c).lower() for c in categories) else "")
         return {
             "tooltip": {
                 "trigger": "axis",
@@ -628,6 +629,9 @@ def _build_echarts_bar_option(title: str, categories: list[str], values: list[fl
             },
             "yAxis": {
                 "type": "category",
+                "name": dim_label,
+                "nameLocation": "end",
+                "nameTextStyle": {"color": "#ded5cb", "fontSize": 11, "fontWeight": 600, "padding": [0, 0, 6, 0]},
                 "data": rev_cats,
                 "axisLine": {"lineStyle": {"color": "#3d362f"}},
                 "axisTick": {"alignWithLabel": True, "lineStyle": {"color": "#3d362f"}},
@@ -1396,6 +1400,12 @@ def orchestrate_sheet_strategies(
                     grain_suffix = f" per {inputs.entity_type}" if inputs.entity_type != "record" else ""
                     unit_suffix = met_unit
 
+                seg_noun = "Store" if "store" in seg_col.lower() else ("Department" if "dept" in seg_col.lower() else "Segment")
+                top_seg_display = f"{seg_noun} {top_seg}" if str(top_seg).strip().isdigit() else str(top_seg)
+                bot_seg_display = f"{seg_noun} {bot_seg}" if str(bot_seg).strip().isdigit() else str(bot_seg)
+                top_fmt = _format_metric_value(top_val, unit_suffix)
+                bot_fmt = _format_metric_value(bot_val, unit_suffix)
+
                 is_att = bool(inputs.attendance_col and met_col == inputs.attendance_col)
 
                 if is_att and not inputs.has_verified_schedule:
@@ -1414,16 +1424,17 @@ def orchestrate_sheet_strategies(
                         "Approved leave is authorized under policy and is not an attendance failure.",
                         "1 single-employee group excluded from group ranking to protect individual privacy.",
                     ]
+                    comp_effect = f"{top_seg}: {top_val:.1f} vs {bot_seg}: {bot_val:.1f}"
+                    ev_obs = f"Disparity of {gap_fmt} observed between top unit ({top_seg}: {top_val:.1f}) and bottom unit ({bot_seg}: {bot_val:.1f})."
                 else:
                     unit_label = unit_suffix
                     gap_fmt = _format_metric_value(gap, unit_label)
-                    top_fmt = _format_metric_value(top_val, unit_label)
-                    bot_fmt = _format_metric_value(bot_val, unit_label)
-                    seg_noun = "Store" if "store" in seg_col.lower() else ("Department" if "dept" in seg_col.lower() else "Segment")
-                    title = f"{seg_noun} Disparity: {top_seg} vs {bot_seg} on {met_col}"
-                    implication = f"{seg_noun} {top_seg} observed at {top_fmt} vs {bot_seg} at {bot_fmt} (spread: {gap_fmt})."
-                    next_act = f"Conduct operational diagnostic on performance factors differentiating {seg_noun.lower()} {top_seg} and {bot_seg}."
+                    title = f"{seg_noun} Disparity: {top_seg_display} vs {bot_seg_display} on {met_col}"
+                    implication = f"{top_seg_display} observed at {top_fmt} vs {bot_seg_display} at {bot_fmt} (spread: {gap_fmt})."
+                    next_act = f"Conduct operational diagnostic on performance factors differentiating {top_seg_display} and {bot_seg_display}."
                     lims = ["Identified as largest observed peer gap; causal drivers require targeted investigation."]
+                    comp_effect = f"{top_seg_display}: {top_fmt} vs {bot_seg_display}: {bot_fmt}"
+                    ev_obs = f"Disparity of {gap_fmt} observed between top unit ({top_seg_display}: {top_fmt}) and bottom unit ({bot_seg_display}: {bot_fmt})."
 
                 fid = _generate_finding_id("s09", f"{sheet_id}_{snapshot}_{top_seg}_{bot_seg}")
                 f_s09 = UnifiedFinding(
@@ -1440,13 +1451,19 @@ def orchestrate_sheet_strategies(
                     formatted_value=gap_fmt,
                     unit=unit_label,
                     population_or_exposure=f"{len(rows)} records across {len(valid_segs)} qualified units (n >= 5)",
-                    comparison_and_effect=f"{top_seg}: {top_fmt if not is_att else f'{top_val:.1f}'} vs {bot_seg}: {bot_fmt if not is_att else f'{bot_val:.1f}'}",
-                    evidence_bound_observation=f"Disparity of {gap_fmt} observed between top unit ({top_seg}: {top_fmt if not is_att else f'{top_val:.1f}'}) and bottom unit ({bot_seg}: {bot_fmt if not is_att else f'{bot_val:.1f}'}).",
+                    comparison_and_effect=comp_effect,
+                    evidence_bound_observation=ev_obs,
                     possible_operational_implication=implication,
                     one_next_check_or_action=next_act,
                     allowed_claim_level="descriptive_fact",
                     visual_kind="category_comparison",
-                    visual_points_summary=[{"label": k, "value": round(v, 1)} for k, v in sorted_segs],
+                    visual_points_summary=[
+                        {
+                            "label": f"{seg_noun} {k}" if str(k).strip().isdigit() else str(k),
+                            "value": round(v, 1),
+                        }
+                        for k, v in sorted_segs
+                    ],
                     drilldown_route=f"/?sheet_id={sheet_id}&view=eda#explorer",
                     privacy_state="cohort_safe",
                     limitations=lims,

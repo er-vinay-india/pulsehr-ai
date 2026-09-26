@@ -870,6 +870,14 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
       },
       yAxis: {
         type: "category",
+        name: tertiaryElement.dimension_name || "Store",
+        nameLocation: "end",
+        nameTextStyle: {
+          color: "#ded5cb",
+          fontSize: 11,
+          fontWeight: 600,
+          padding: [0, 0, 6, 0],
+        },
         data: categories,
         axisLine: {
           lineStyle: { color: "#3d362f" },
@@ -1038,6 +1046,14 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
       },
       yAxis: {
         type: "category",
+        name: quaternaryElement.dimension_name || "Cohort",
+        nameLocation: "end",
+        nameTextStyle: {
+          color: "#ded5cb",
+          fontSize: 11,
+          fontWeight: 600,
+          padding: [0, 0, 6, 0],
+        },
         data: categories,
         axisLine: {
           lineStyle: { color: "#3d362f" },
