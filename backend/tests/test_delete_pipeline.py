@@ -74,3 +74,49 @@ def test_bulk_delete_all_datasets():
         assert conn.execute('SELECT COUNT(*) FROM executive_narratives').fetchone()[0] == 0
     finally:
         conn.close()
+
+
+def test_selective_bulk_delete():
+    """Verify selective bulk deletion of a subset of datasets."""
+    # Upload dataset 1
+    f1 = {'file': ('batch_ds_1.csv', io.BytesIO(SAMPLE_CSV), 'text/csv')}
+    res1 = client.post('/api/upload/file', files=f1)
+    assert res1.status_code == 200
+    id1 = res1.json()['dataset_id']
+
+    # Upload dataset 2
+    f2 = {'file': ('batch_ds_2.csv', io.BytesIO(SAMPLE_CSV), 'text/csv')}
+    res2 = client.post('/api/upload/file', files=f2)
+    assert res2.status_code == 200
+    id2 = res2.json()['dataset_id']
+
+    # Upload dataset 3
+    f3 = {'file': ('batch_ds_3.csv', io.BytesIO(SAMPLE_CSV), 'text/csv')}
+    res3 = client.post('/api/upload/file', files=f3)
+    assert res3.status_code == 200
+    id3 = res3.json()['dataset_id']
+
+    # Bulk delete id1 and id2 via POST
+    del_res = client.post('/api/upload/datasets/bulk-delete', json={'dataset_ids': [id1, id2]})
+    assert del_res.status_code == 200
+    assert del_res.json()['deleted_count'] == 2
+
+    conn = get_connection()
+    try:
+        assert conn.execute('SELECT COUNT(*) FROM dataset_uploads WHERE id IN (?, ?)', (id1, id2)).fetchone()[0] == 0
+        # dataset 3 remains
+        assert conn.execute('SELECT COUNT(*) FROM dataset_uploads WHERE id=?', (id3,)).fetchone()[0] == 1
+    finally:
+        conn.close()
+
+    # Bulk delete id3 via DELETE query param
+    del_q_res = client.delete(f'/api/upload/datasets?ids={id3}')
+    assert del_q_res.status_code == 200
+    assert del_q_res.json()['deleted_count'] == 1
+
+    conn = get_connection()
+    try:
+        assert conn.execute('SELECT COUNT(*) FROM dataset_uploads WHERE id=?', (id3,)).fetchone()[0] == 0
+    finally:
+        conn.close()
+

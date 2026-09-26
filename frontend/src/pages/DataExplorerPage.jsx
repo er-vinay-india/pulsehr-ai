@@ -8,10 +8,16 @@ import {
   getDerivedTables,
   getDerivedTableRows,
   getCrossSheetCorrelations,
-  runEdaPipeline
+  runEdaPipeline,
+  listDatasets,
+  deleteDataset,
+  bulkDeleteDatasets,
+  deleteAllDatasets
 } from '../api/client';
 import { formatDisplayLabel } from '../utils/displayFormatters';
 import DataTable from '../components/DataTable';
+import DatasetListCard from '../components/ingestion/DatasetListCard';
+import DeleteConsentModal from '../components/ingestion/DeleteConsentModal';
 import {
   FileSpreadsheet,
   Table,
@@ -29,7 +35,10 @@ import {
   CheckCircle2,
   TrendingDown,
   TrendingUp,
-  ArrowRight
+  ArrowRight,
+  Trash2,
+  CheckSquare,
+  Square
 } from 'lucide-react';
 import ExecutiveHeatmapChart from '../components/charts/ExecutiveHeatmapChart';
 
@@ -79,6 +88,14 @@ export default function DataExplorerPage() {
   const [isRerunningEda, setIsRerunningEda] = useState(false);
   const [crossCorrelations, setCrossCorrelations] = useState([]);
 
+  // Workspace Datasets & Deletion State
+  const [datasets, setDatasets] = useState([]);
+  const [selectedDatasetIds, setSelectedDatasetIds] = useState([]);
+  const [datasetToDelete, setDatasetToDelete] = useState(null);
+  const [deleteConsent, setDeleteConsent] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [showDatasetManager, setShowDatasetManager] = useState(true);
+
   const refresh = () => {
     getSheets()
       .then((r) => {
@@ -98,6 +115,12 @@ export default function DataExplorerPage() {
       })
       .catch((e) => setError(e.message));
 
+    listDatasets()
+      .then((res) => {
+        setDatasets(res.datasets || []);
+      })
+      .catch(() => {});
+
     getDerivedTables()
       .then((res) => {
         setDerivedTables(res.derived_tables || []);
@@ -109,6 +132,71 @@ export default function DataExplorerPage() {
         setCrossCorrelations(res.correlations || []);
       })
       .catch(() => {});
+  };
+
+  const handleToggleSelectDataset = (id) => {
+    setSelectedDatasetIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
+
+  const handleToggleSelectAll = () => {
+    if (selectedDatasetIds.length === datasets.length) {
+      setSelectedDatasetIds([]);
+    } else {
+      setSelectedDatasetIds(datasets.map((d) => d.id));
+    }
+  };
+
+  const handlePromptSingleDelete = (dataset) => {
+    setDatasetToDelete(dataset);
+    setDeleteConsent(false);
+  };
+
+  const handlePromptBulkDelete = () => {
+    const targets = datasets.filter((d) => selectedDatasetIds.includes(d.id));
+    if (!targets.length) return;
+    setDatasetToDelete({ isBulk: true, isAll: false, datasets: targets });
+    setDeleteConsent(false);
+  };
+
+  const handlePromptDeleteAll = () => {
+    if (!datasets.length) return;
+    setDatasetToDelete({ isBulk: true, isAll: true, datasets });
+    setDeleteConsent(false);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!datasetToDelete || !deleteConsent || deleting) return;
+    setDeleting(true);
+    try {
+      if (datasetToDelete.isBulk) {
+        if (datasetToDelete.isAll) {
+          await deleteAllDatasets();
+        } else {
+          await bulkDeleteDatasets(datasetToDelete.datasets.map((d) => d.id));
+        }
+      } else {
+        await deleteDataset(datasetToDelete.id);
+      }
+
+      const deletedIds = datasetToDelete.isBulk
+        ? datasetToDelete.datasets.map((d) => d.id)
+        : [datasetToDelete.id];
+
+      setSelectedDatasetIds((prev) => prev.filter((id) => !deletedIds.includes(id)));
+      setDatasetToDelete(null);
+      setDeleteConsent(false);
+      refresh();
+
+      if (deletedIds.includes(Number(selectedSheet?.dataset_id))) {
+        setSelected('');
+      }
+    } catch (err) {
+      setError('Failed to delete dataset: ' + err.message);
+    } finally {
+      setDeleting(false);
+    }
   };
 
   useEffect(() => {
@@ -319,6 +407,134 @@ export default function DataExplorerPage() {
         </div>
       </div>
 
+      {/* Workspace Datasets Registry & Management Panel */}
+      <div className="card-panel datasets-workspace-manager" style={{ marginTop: '0.75rem', marginBottom: '1.25rem' }}>
+        <div
+          className="panel-header"
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: '0.75rem'
+          }}
+        >
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Layers size={18} color="var(--brand-400)" />
+              <h3 style={{ margin: 0, fontSize: '1.05rem', color: 'var(--fg-primary)' }}>
+                Workspace Datasets ({datasets.length})
+              </h3>
+            </div>
+            <p className="panel-sub" style={{ margin: '2px 0 0', fontSize: '0.8rem', color: 'var(--fg-secondary)' }}>
+              Manage uploaded CSV & Excel workbooks, download sources, and execute single or bulk dataset deletion.
+            </p>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+            {selectedDatasetIds.length > 0 && (
+              <button
+                type="button"
+                className="btn-danger-confirm"
+                style={{
+                  padding: '0.4rem 0.8rem',
+                  fontSize: '0.8rem',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+                onClick={handlePromptBulkDelete}
+              >
+                <Trash2 size={14} />
+                <span>Delete Selected ({selectedDatasetIds.length})</span>
+              </button>
+            )}
+
+            {datasets.length > 0 && (
+              <button
+                type="button"
+                className="btn-secondary"
+                style={{
+                  padding: '0.4rem 0.8rem',
+                  fontSize: '0.8rem',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  color: 'var(--rose-tier)',
+                  borderColor: 'rgba(255, 180, 190, 0.3)'
+                }}
+                onClick={handlePromptDeleteAll}
+              >
+                <Trash2 size={14} />
+                <span>Delete All</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              className="btn-secondary"
+              style={{ padding: '0.4rem 0.75rem', fontSize: '0.8rem' }}
+              onClick={() => setShowDatasetManager((prev) => !prev)}
+            >
+              {showDatasetManager ? 'Collapse Files ▲' : `View Files (${datasets.length}) ▼`}
+            </button>
+          </div>
+        </div>
+
+        {showDatasetManager && (
+          <div style={{ marginTop: '1rem' }}>
+            {datasets.length > 1 && (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '0.5rem 0.75rem',
+                  background: 'rgba(255, 255, 255, 0.02)',
+                  border: '1px solid var(--border-subtle)',
+                  borderRadius: '6px',
+                  marginBottom: '0.75rem',
+                  fontSize: '0.8rem'
+                }}
+              >
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', userSelect: 'none' }}>
+                  <input
+                    type="checkbox"
+                    checked={datasets.length > 0 && selectedDatasetIds.length === datasets.length}
+                    onChange={handleToggleSelectAll}
+                    style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: '#f43f5e' }}
+                  />
+                  <span>Select All ({datasets.length} files)</span>
+                </label>
+                {selectedDatasetIds.length > 0 && (
+                  <span style={{ color: 'var(--fg-muted)' }}>
+                    {selectedDatasetIds.length} of {datasets.length} selected
+                  </span>
+                )}
+              </div>
+            )}
+
+            {datasets.length === 0 ? (
+              <p style={{ color: 'var(--fg-muted)', fontSize: '0.85rem', margin: '0.5rem 0' }}>
+                No datasets currently in workspace. Use the &ldquo;Upload Data&rdquo; button in the top right to upload a CSV or Excel spreadsheet.
+              </p>
+            ) : (
+              <div className="dataset-list">
+                {datasets.map((ds) => (
+                  <DatasetListCard
+                    key={ds.id}
+                    dataset={ds}
+                    onPromptDelete={handlePromptSingleDelete}
+                    isSelected={selectedDatasetIds.includes(ds.id)}
+                    onToggleSelect={handleToggleSelectDataset}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
       {/* Filters Toolbar */}
       <div className="filters-toolbar" style={{ marginTop: '0.5rem' }}>
         <label>
@@ -343,6 +559,41 @@ export default function DataExplorerPage() {
             ))}
           </select>
         </label>
+
+        {selectedSheet && !selectedDerivedId && (
+          <button
+            type="button"
+            className="btn-secondary"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              color: 'var(--rose-tier)',
+              borderColor: 'rgba(255, 180, 190, 0.3)',
+              background: 'rgba(255, 180, 190, 0.08)',
+              padding: '0.4rem 0.75rem',
+              cursor: 'pointer'
+            }}
+            onClick={() => {
+              const ds = datasets.find((d) => d.id === selectedSheet.dataset_id);
+              if (ds) {
+                handlePromptSingleDelete(ds);
+              } else {
+                handlePromptSingleDelete({
+                  id: selectedSheet.dataset_id,
+                  original_name: selectedSheet.original_name || selectedSheet.display_name || 'Selected Dataset',
+                  row_count: selectedSheet.row_count,
+                  file_type: 'csv',
+                  sheet_count: 1
+                });
+              }
+            }}
+            title={`Delete dataset for '${selectedSheet.display_name || selectedSheet.name}'`}
+          >
+            <Trash2 size={14} color="var(--rose-tier)" />
+            <span>Delete Sheet</span>
+          </button>
+        )}
 
         {viewMode === 'table' && !selectedDerivedId && (
           <>
@@ -1069,6 +1320,16 @@ export default function DataExplorerPage() {
           )}
         </div>
       )}
+
+      {/* Consent Check Modal for Single or Bulk Deletion */}
+      <DeleteConsentModal
+        datasetToDelete={datasetToDelete}
+        deleteConsent={deleteConsent}
+        setDeleteConsent={setDeleteConsent}
+        deleting={deleting}
+        onClose={() => setDatasetToDelete(null)}
+        onConfirmDelete={handleConfirmDelete}
+      />
     </div>
   );
 }

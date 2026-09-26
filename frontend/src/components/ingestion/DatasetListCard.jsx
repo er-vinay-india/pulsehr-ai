@@ -3,17 +3,28 @@ import { FileSpreadsheet, Layers, Download, Trash2, Sparkles, ChevronDown, Chevr
 import { getDatasetDownloadUrl, getSheetDownloadUrl } from "../../api/client";
 import AnalysisBriefCard from "./AnalysisBriefCard";
 
-export default function DatasetListCard({ dataset, onPromptDelete }) {
+export default function DatasetListCard({ dataset, onPromptDelete, isSelected, onToggleSelect }) {
   const ds = dataset;
   const [showBriefEditor, setShowBriefEditor] = useState(false);
 
   return (
     <div className="dataset-card" style={{ flexDirection: "column" }}>
-      <div style={{ display: "flex", width: "100%", alignItems: "flex-start", gap: "1rem" }}>
+      <div className="dataset-card-main-row" style={{ display: "flex", width: "100%", alignItems: "flex-start", gap: "1rem", flexWrap: "wrap" }}>
+        {onToggleSelect && (
+          <div style={{ display: "flex", alignItems: "center", paddingTop: "0.5rem" }}>
+            <input
+              type="checkbox"
+              checked={Boolean(isSelected)}
+              onChange={() => onToggleSelect(ds.id)}
+              style={{ width: "16px", height: "16px", cursor: "pointer", accentColor: "#f43f5e" }}
+              aria-label={`Select ${ds.display_name || ds.original_name} for bulk action`}
+            />
+          </div>
+        )}
         <div className="dataset-icon">
           <FileSpreadsheet size={24} color="var(--accent-500)" />
         </div>
-        <div className="dataset-details" style={{ flex: 1 }}>
+        <div className="dataset-details" style={{ flex: "1 1 240px", minWidth: 0 }}>
           <div className="dataset-title-row">
             <h4>{ds.display_name || ds.original_name}</h4>
             <span className="filetype-badge">{ds.file_type.toUpperCase()}</span>
@@ -109,7 +120,7 @@ export default function DatasetListCard({ dataset, onPromptDelete }) {
         )}
       </div>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem", alignItems: "flex-end", flexShrink: 0 }}>
+      <div className="dataset-card-actions" style={{ display: "flex", flexDirection: "column", gap: "0.6rem", alignItems: "flex-end", flexShrink: 0 }}>
         <a
           href={getDatasetDownloadUrl(ds.id)}
           download={ds.original_name}

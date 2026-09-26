@@ -5,7 +5,7 @@ from pathlib import Path
 import threading
 from uuid import uuid4
 
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Query
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 
@@ -185,6 +185,53 @@ def reseed_kaggle():
     raise HTTPException(410, 'Automatic demo seeding has been removed. Upload any CSV or Excel file through the upload control.')
 
 
+class BulkDeleteRequest(BaseModel):
+    dataset_ids: list[int] = []
+    delete_all: bool = False
+
+
+def perform_bulk_delete(dataset_ids: list[int] | None = None, delete_all: bool = False):
+    conn = get_connection()
+    try:
+        if delete_all or not dataset_ids:
+            rows = conn.execute('SELECT filename FROM dataset_uploads').fetchall()
+            with conn:
+                conn.execute('DELETE FROM executive_narratives')
+                conn.execute('DELETE FROM hr_alerts')
+                conn.execute('DELETE FROM tabular_vectors')
+                conn.execute('DELETE FROM dataset_uploads')
+                rebuild_relationships(conn)
+            for row in rows:
+                path = (config.UPLOADS_DIR / row['filename']).resolve()
+                if path.is_relative_to(config.UPLOADS_DIR.resolve()):
+                    path.unlink(missing_ok=True)
+            return {'message': 'All datasets, sheets, rows, search entries, cached narratives and relationships completely cleared.', 'deleted_count': len(rows)}
+
+        placeholders = ','.join('?' for _ in dataset_ids)
+        rows = conn.execute(f'SELECT id, filename FROM dataset_uploads WHERE id IN ({placeholders})', dataset_ids).fetchall()
+        if not rows:
+            return {'message': 'No matching datasets found to delete.', 'deleted_count': 0}
+        found_ids = [r['id'] for r in rows]
+        id_placeholders = ','.join('?' for _ in found_ids)
+        with conn:
+            conn.execute(f'DELETE FROM executive_narratives WHERE target_type=\'sheet\' AND target_id IN (SELECT id FROM sheets WHERE dataset_id IN ({id_placeholders}))', found_ids)
+            conn.execute('DELETE FROM executive_narratives WHERE target_type IN (\'global\', \'relationship\')')
+            conn.execute(f'DELETE FROM tabular_vectors WHERE id IN (SELECT id FROM tabular_chunks WHERE dataset_id IN ({id_placeholders}))', found_ids)
+            conn.execute(f'DELETE FROM dataset_uploads WHERE id IN ({id_placeholders})', found_ids)
+            rebuild_relationships(conn)
+            remaining = conn.execute('SELECT COUNT(*) FROM dataset_uploads').fetchone()[0]
+            if remaining == 0:
+                conn.execute('DELETE FROM executive_narratives')
+                conn.execute('DELETE FROM hr_alerts')
+        for row in rows:
+            path = (config.UPLOADS_DIR / row['filename']).resolve()
+            if path.is_relative_to(config.UPLOADS_DIR.resolve()):
+                path.unlink(missing_ok=True)
+        return {'message': f'Successfully deleted {len(found_ids)} dataset(s).', 'deleted_count': len(found_ids)}
+    finally:
+        conn.close()
+
+
 @router.delete('/datasets/{dataset_id}')
 def delete_dataset(dataset_id: int):
     conn = get_connection()
@@ -217,24 +264,22 @@ def delete_dataset(dataset_id: int):
 
 
 @router.delete('/datasets')
-def delete_all_datasets():
-    """Bulk deletion: completely purges all datasets, sheets, narratives, relationships, and uploads."""
-    conn = get_connection()
-    try:
-        rows = conn.execute('SELECT filename FROM dataset_uploads').fetchall()
-        with conn:
-            conn.execute('DELETE FROM executive_narratives')
-            conn.execute('DELETE FROM hr_alerts')
-            conn.execute('DELETE FROM tabular_vectors')
-            conn.execute('DELETE FROM dataset_uploads')
-            rebuild_relationships(conn)
-        for row in rows:
-            path = (config.UPLOADS_DIR / row['filename']).resolve()
-            if path.is_relative_to(config.UPLOADS_DIR.resolve()):
-                path.unlink(missing_ok=True)
-        return {'message': 'All datasets, sheets, rows, search entries, cached narratives and relationships completely cleared.'}
-    finally:
-        conn.close()
+def delete_all_datasets(ids: str | None = Query(None, description="Comma-separated dataset IDs to delete. If omitted or 'all', deletes all.")):
+    """Bulk deletion: deletes specified dataset IDs or completely purges all datasets, sheets, narratives, relationships, and uploads."""
+    if ids and ids.lower() != 'all':
+        try:
+            target_ids = [int(x.strip()) for x in ids.split(',') if x.strip().isdigit()]
+        except Exception:
+            raise HTTPException(400, "Invalid ids parameter format")
+        return perform_bulk_delete(target_ids, delete_all=False)
+    return perform_bulk_delete([], delete_all=True)
+
+
+@router.post('/datasets/bulk-delete')
+def bulk_delete_datasets(payload: BulkDeleteRequest):
+    """Selective or full bulk deletion via JSON body."""
+    return perform_bulk_delete(payload.dataset_ids, payload.delete_all)
+
 
 
 class DatasetAnalysisBriefRequest(BaseModel):

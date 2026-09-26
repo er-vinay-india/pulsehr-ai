@@ -271,6 +271,22 @@ export async function deleteDataset(id) {
   return res.json();
 }
 
+export async function bulkDeleteDatasets(datasetIds = [], deleteAll = false) {
+  const res = await fetch(`${API_BASE}/upload/datasets/bulk-delete`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ dataset_ids: datasetIds, delete_all: deleteAll })
+  });
+  if (!res.ok) throw new Error("Failed to bulk delete datasets");
+  return res.json();
+}
+
+export async function deleteAllDatasets() {
+  const res = await fetch(`${API_BASE}/upload/datasets`, { method: "DELETE" });
+  if (!res.ok) throw new Error("Failed to delete all datasets");
+  return res.json();
+}
+
 export async function submitDatasetBrief(datasetId, brief) {
   const res = await fetch(`${API_BASE}/upload/datasets/${datasetId}/brief`, {
     method: "POST",

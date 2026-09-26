@@ -188,8 +188,24 @@ label { min-width: 0; }
   .chat-input-bar form button { padding: 12px; }
   .chat-input-bar form button span { display: none; }
   .dataset-list .dataset-card { padding: 16px; gap: 12px; flex-wrap: wrap; }
-  .dataset-card .dataset-details { flex: 1 1 calc(100% - 64px); }
+  .dataset-card .dataset-details { flex: 1 1 calc(100% - 64px); min-width: 0; }
   .dataset-card > button { margin-left: auto; }
+  .dataset-card-actions {
+    flex-direction: row !important;
+    flex-wrap: wrap !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    width: 100% !important;
+    gap: 8px !important;
+    margin-top: 0.75rem !important;
+    padding-top: 0.75rem !important;
+    border-top: 1px solid var(--border-subtle) !important;
+  }
+  .dataset-card-actions > * {
+    flex: 1 1 auto !important;
+    justify-content: center !important;
+    text-align: center !important;
+  }
   .upload-dropzone .dropzone-label { padding: 28px 16px; }
   .upload-meta-pills { flex-wrap: wrap; }
   .upload-meta-pills > span { max-width: 100%; overflow-wrap: anywhere; }
