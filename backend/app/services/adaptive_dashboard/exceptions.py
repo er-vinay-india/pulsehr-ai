@@ -37,6 +37,99 @@ ENGINE_VERSION = "4.0.0"
 
 
 # -----------------------------------------------------------------------------
+# 0. Display and Date Formatting Primitives
+# -----------------------------------------------------------------------------
+
+def format_compact_metric(val: float, unit: str = "") -> str:
+    """Format numbers into compact notation ($1.80M, $903.3K, 12.5%, 45.2K)."""
+    if val is None or math.isnan(val):
+        return "—"
+    is_curr = unit == "$" or (isinstance(unit, str) and unit.lower() == "usd")
+    prefix = "$" if is_curr else ""
+    suffix = f" {unit}" if (not is_curr and unit and unit != "%") else ("%" if unit == "%" else "")
+    abs_v = abs(val)
+    sign = "-" if val < 0 else ""
+
+    if abs_v >= 1_000_000_000:
+        return f"{sign}{prefix}{abs_v / 1e9:.2f}B{suffix}"
+    elif abs_v >= 1_000_000:
+        v_m = abs_v / 1e6
+        formatted = f"{v_m:.2f}".rstrip("0").rstrip(".") if f"{v_m:.2f}".endswith(".00") else f"{v_m:.2f}"
+        return f"{sign}{prefix}{formatted}M{suffix}"
+    elif abs_v >= 1_000:
+        v_k = abs_v / 1e3
+        formatted = f"{v_k:.1f}".rstrip("0").rstrip(".") if f"{v_k:.1f}".endswith(".0") else f"{v_k:.1f}"
+        return f"{sign}{prefix}{formatted}K{suffix}"
+    elif abs_v >= 100:
+        return f"{sign}{prefix}{abs_v:,.0f}{suffix}"
+    elif is_curr:
+        return f"{sign}{prefix}{abs_v:,.2f}"
+    elif abs_v >= 1:
+        return f"{sign}{prefix}{abs_v:.1f}{suffix}"
+    else:
+        return f"{sign}{prefix}{abs_v:.2f}{suffix}"
+
+
+def format_range_compact(lower: float, upper: float, unit: str = "") -> str:
+    """Format typical observed range with compact units."""
+    if unit == "%":
+        return f"{lower:.1f}%–{upper:.1f}%"
+    if unit in ("days", "hours"):
+        return f"{lower:.1f}–{upper:.1f} {unit}"
+    l_str = format_compact_metric(lower, unit)
+    u_str = format_compact_metric(upper, unit)
+    return f"{l_str}–{u_str}"
+
+
+def format_deviation_compact(bound_dist: float, dev: float, unit: str = "") -> str:
+    """Format deviation from expected range with compact units."""
+    dir_label = "above range" if dev > 0 else "below range" if dev < 0 else "within range"
+    if unit == "%":
+        return f"{bound_dist:.1f} pp {dir_label}"
+    if unit in ("days", "hours"):
+        return f"{bound_dist:.1f} {unit} {dir_label}"
+    d_str = format_compact_metric(bound_dist, unit)
+    return f"{d_str} {dir_label}"
+
+
+def format_human_date(date_str: str) -> str:
+    """Format date strings into human readable text (e.g. 2010-12-24 -> Dec 24, 2010)."""
+    if not date_str:
+        return ""
+    s = str(date_str).strip().split("T")[0].split(" ")[0]
+    month_names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+    # ISO week: YYYY-Wxx
+    w_match = re.match(r"^(\d{4})-[Ww](\d{1,2})$", s)
+    if w_match:
+        return f"Week {int(w_match.group(2))}, {w_match.group(1)}"
+
+    parts = re.split(r"[-/]", s)
+    # YYYY-MM-DD
+    if len(parts) == 3 and len(parts[0]) == 4 and parts[1].isdigit() and parts[2].isdigit():
+        y = parts[0]
+        m = int(parts[1])
+        d = int(parts[2])
+        if 1 <= m <= 12 and 1 <= d <= 31:
+            return f"{month_names[m - 1]} {d}, {y}"
+    # YYYY-MM
+    elif len(parts) == 2 and len(parts[0]) == 4 and parts[1].isdigit():
+        y = parts[0]
+        m = int(parts[1])
+        if 1 <= m <= 12:
+            return f"{month_names[m - 1]} {y}"
+    # MM/DD/YYYY
+    elif len(parts) == 3 and len(parts[2]) == 4 and parts[0].isdigit() and parts[1].isdigit():
+        m = int(parts[0])
+        d = int(parts[1])
+        y = parts[2]
+        if 1 <= m <= 12 and 1 <= d <= 31:
+            return f"{month_names[m - 1]} {d}, {y}"
+
+    return str(date_str)
+
+
+# -----------------------------------------------------------------------------
 # 1. Robust Statistical Primitives
 # -----------------------------------------------------------------------------
 
@@ -244,22 +337,9 @@ def discover_segment_exception_candidates(
 
                 # Format strings with honest distance above/below range
                 bound_dist = val - upper if val > upper else (lower - val if val < lower else abs(dev))
-                if unit == "%":
-                    fmt_val = f"{val:.1f}%"
-                    fmt_range = f"{lower:.1f}%–{upper:.1f}%"
-                    fmt_dev = f"{bound_dist:.1f} pp {'above' if dev > 0 else 'below'} range"
-                elif unit == "$":
-                    fmt_val = f"${val:,.0f}" if val >= 100 else f"${val:,.2f}"
-                    fmt_range = f"${lower:,.0f}–${upper:,.0f}" if lower >= 100 else f"${lower:,.2f}–${upper:,.2f}"
-                    fmt_dev = f"${bound_dist:,.0f} {'above' if dev > 0 else 'below'} range"
-                elif unit in ("days", "hours"):
-                    fmt_val = f"{val:.1f} {unit}"
-                    fmt_range = f"{lower:.1f}–{upper:.1f} {unit}"
-                    fmt_dev = f"{bound_dist:.1f} {unit} {'above' if dev > 0 else 'below'} range"
-                else:
-                    fmt_val = f"{val:.1f}"
-                    fmt_range = f"{lower:.1f}–{upper:.1f}"
-                    fmt_dev = f"{bound_dist:.1f} {'above' if dev > 0 else 'below'} range"
+                fmt_val = format_compact_metric(val, unit)
+                fmt_range = format_range_compact(lower, upper, unit)
+                fmt_dev = format_deviation_compact(bound_dist, dev, unit)
 
                 sample_size = len(eligible_segs[seg])
                 sample_label = f"{sample_size} records"
@@ -306,7 +386,7 @@ def discover_segment_exception_candidates(
                             label=s_name,
                             raw_period_or_segment=s_name,
                             value=round(s_val, 2),
-                            formatted_value=f"{s_val:.1f}{unit if unit == '%' else ''}",
+                            formatted_value=format_compact_metric(s_val, unit),
                             expected_lower=round(lower, 2),
                             expected_upper=round(upper, 2),
                             is_exception=(s_name == seg),
@@ -427,10 +507,10 @@ def discover_temporal_exception_candidates(
             if p_holidays[idx]:
                 context_flags.append("Holiday recorded")
 
-            fmt_val = f"${val:,.0f}" if unit == "$" else f"{val:.1f}"
-            fmt_range = f"${lower:,.0f}–${upper:,.0f}" if unit == "$" else f"{lower:.1f}–{upper:.1f}"
             bound_dist = val - upper if val > upper else (lower - val if val < lower else abs(dev))
-            fmt_dev = f"${bound_dist:,.0f} {'above' if dev > 0 else 'below'} range" if unit == "$" else f"{bound_dist:.1f} {'above' if dev > 0 else 'below'} range"
+            fmt_val = format_compact_metric(val, unit)
+            fmt_range = format_range_compact(lower, upper, unit)
+            fmt_dev = format_deviation_compact(bound_dist, dev, unit)
 
             calc_id = f"calc_exception_temp_{hashlib.sha256(f'{manifest.snapshot}:{p}:{num_col}:{ENGINE_VERSION}'.encode()).hexdigest()[:8]}"
 
@@ -438,7 +518,7 @@ def discover_temporal_exception_candidates(
                 exception_id=f"exc-{calc_id[-8:]}",
                 exception_type="temporal",
                 subject_type="Period",
-                subject_label=p,
+                subject_label=format_human_date(p),
                 metric_name=num_col,
                 unit=unit,
                 observed_value=round(val, 2),
@@ -463,10 +543,10 @@ def discover_temporal_exception_candidates(
                 t_val = p_means[t_idx]
                 timeline_points.append(
                     ExceptionPoint(
-                        label=t_p,
+                        label=format_human_date(t_p),
                         raw_period_or_segment=t_p,
                         value=round(t_val, 2),
-                        formatted_value=f"${t_val:,.0f}" if unit == "$" else f"{t_val:.1f}",
+                        formatted_value=format_compact_metric(t_val, unit),
                         expected_lower=round(lower, 2),
                         expected_upper=round(upper, 2),
                         is_exception=(t_p == p),

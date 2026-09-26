@@ -2143,8 +2143,22 @@
 
       .exception-accessible-table-wrap {
         overflow-x: auto;
+        overflow-y: auto;
+        max-height: 360px;
         border: 1px solid var(--border-subtle, #2c2722);
         border-radius: 6px;
+        scrollbar-width: thin;
+        scrollbar-color: var(--border-default, #3d362f) transparent;
+
+        &::-webkit-scrollbar {
+          width: 6px;
+          height: 6px;
+        }
+
+        &::-webkit-scrollbar-thumb {
+          background: var(--border-default, #3d362f);
+          border-radius: 3px;
+        }
 
         .exception-table {
           width: 100%;
@@ -2158,10 +2172,14 @@
           }
 
           th {
+            position: sticky;
+            top: 0;
+            z-index: 2;
             background: var(--surface-inset, #100e0c);
             color: var(--fg-disabled, #a89f94);
             font-size: 11px;
             text-transform: uppercase;
+            box-shadow: 0 1px 0 var(--border-subtle, #2c2722);
           }
 
           td {
