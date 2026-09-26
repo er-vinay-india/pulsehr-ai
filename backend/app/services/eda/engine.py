@@ -8,7 +8,13 @@ from typing import Any
 
 from ...db.database import get_connection
 from .normalizer import normalize_dataset
-from .cross_correlator import compute_cross_sheet_intelligence
+from .cross_correlator import (
+    compute_cross_sheet_intelligence,
+    compute_intra_sheet_correlations,
+    compute_metric_distribution_histograms
+)
+from .temporal_analyzer import analyze_temporal_dynamics
+from .predictive_models import generate_predictive_suite_for_sheet
 from .derived_tables import synthesize_derived_tables
 from .report_generator import build_sheet_eda_report
 
@@ -109,14 +115,32 @@ def run_eda_pipeline(sheet_ids: list[int] | None = None, conn: sqlite3.Connectio
         for s in sheets:
             sid = s["id"]
             raw_rows = raw_records_by_sheet.get(sid, [])
+            curated_rows = curated_tables.get(sid, [])
+            norm_res = normalization_results[sid]
+            diag = norm_res.get("column_diagnostics", {})
+
+            # Compute intra-sheet correlations & distribution bins
+            intra_corrs = compute_intra_sheet_correlations(curated_rows, s["columns"], diag)
+            metric_dists = compute_metric_distribution_histograms(curated_rows, s["columns"], diag)
+
+            # Compute temporal date-separated dynamics
+            temporal_dyn = analyze_temporal_dynamics(curated_rows, s["columns"])
+
+            # Compute predictive models (Linear & Logistic Regression)
+            predictive_suite = generate_predictive_suite_for_sheet(curated_rows, s["columns"], diag)
+
             from ..adaptive_dashboard.engine import compute_source_snapshot
             snap = compute_source_snapshot(sid, s["columns"], raw_rows)
 
             report = build_sheet_eda_report(
                 sheet_meta=s,
-                norm_result=normalization_results[sid],
+                norm_result=norm_res,
                 cross_intel=cross_intel,
                 derived_tables=derived_tables,
+                intra_correlations=intra_corrs,
+                metric_distributions=metric_dists,
+                temporal_analysis=temporal_dyn,
+                predictive_suite=predictive_suite,
                 snapshot=snap
             )
             reports_by_sheet[sid] = report
