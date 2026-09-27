@@ -1168,7 +1168,6 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
             <div className="adaptive-hero-text-col">
               <div className="adaptive-hero-name-badge-row">
                 <h1 className="adaptive-page-title">HighView</h1>
-                <span className="adaptive-hero-badge">Powered by HRIDAY</span>
               </div>
               <p className="adaptive-page-tagline">Clarity From Every Sheet.</p>
             </div>

@@ -103,9 +103,9 @@ body:has(.presentation-modal-backdrop) {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    background: rgba(255, 138, 98, 0.12);
-    border: 1px solid rgba(255, 138, 98, 0.3);
-    color: #ff8a62;
+    background: var(--brand-subtle);
+    border: 1px solid var(--brand-subtle-border);
+    color: var(--brand-400);
     padding: 4px 10px;
     border-radius: 20px;
     font-size: 11px;
@@ -167,7 +167,7 @@ body:has(.presentation-modal-backdrop) {
     height: 24px;
     border-radius: 6px;
     background: rgba(255, 138, 98, 0.15);
-    color: #ff8a62;
+    color: var(--brand-400);
     font-size: 12px;
     font-weight: 700;
     display: flex;
@@ -218,11 +218,11 @@ body:has(.presentation-modal-backdrop) {
     }
 
     &.active {
-      background: rgba(255, 138, 98, 0.12);
+      background: var(--brand-subtle);
       border-color: rgba(255, 138, 98, 0.5);
 
       .opt-label {
-        color: #ff8a62;
+        color: var(--brand-400);
       }
     }
 
@@ -267,7 +267,7 @@ body:has(.presentation-modal-backdrop) {
 
     &.active {
       background: rgba(255, 255, 255, 0.05);
-      border-color: #ff8a62;
+      border-color: var(--brand-500);
     }
 
     .theme-swatch {
@@ -320,9 +320,9 @@ body:has(.presentation-modal-backdrop) {
     }
 
     &.active {
-      background: rgba(255, 138, 98, 0.12);
+      background: var(--brand-subtle);
       border-color: rgba(255, 138, 98, 0.5);
-      color: #ff8a62;
+      color: var(--brand-400);
     }
   }
 
@@ -386,9 +386,9 @@ body:has(.presentation-modal-backdrop) {
     }
 
     &.active {
-      background: rgba(255, 138, 98, 0.12);
+      background: var(--brand-subtle);
       border-color: rgba(255, 138, 98, 0.4);
-      color: #ff8a62;
+      color: var(--brand-400);
       font-weight: 600;
     }
   }
@@ -419,7 +419,7 @@ body:has(.presentation-modal-backdrop) {
       display: flex;
       align-items: center;
       gap: 8px;
-      color: #ff8a62;
+      color: var(--brand-400);
 
       h4 {
         margin: 0;
@@ -513,8 +513,8 @@ body:has(.presentation-modal-backdrop) {
 
       &.highlight {
         background: rgba(255, 138, 98, 0.15);
-        color: #ff8a62;
-        border: 1px solid rgba(255, 138, 98, 0.3);
+        color: var(--brand-400);
+        border: 1px solid var(--brand-subtle-border);
       }
 
       &.alert {
@@ -538,7 +538,7 @@ body:has(.presentation-modal-backdrop) {
     align-items: center;
     justify-content: center;
     gap: 8px;
-    background: linear-gradient(135deg, #ff8a62 0%, #ff5722 100%);
+    background: var(--btn-primary-bg);
     border: none;
     border-radius: 8px;
     color: #fff;
@@ -617,8 +617,8 @@ body:has(.presentation-modal-backdrop) {
     width: 36px;
     height: 36px;
     border-radius: 8px;
-    background: rgba(255, 138, 98, 0.12);
-    color: #ff8a62;
+    background: var(--brand-subtle);
+    color: var(--brand-400);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -697,8 +697,8 @@ body:has(.presentation-modal-backdrop) {
     cursor: pointer;
 
     &:hover {
-      background: #ff8a62;
-      border-color: #ff8a62;
+      background: var(--brand-500);
+      border-color: var(--brand-500);
       color: #fff;
     }
   }
@@ -725,9 +725,9 @@ body:has(.presentation-modal-backdrop) {
     }
 
     &.active {
-      background: rgba(255, 138, 98, 0.12);
+      background: var(--brand-subtle);
       border-color: rgba(255, 138, 98, 0.4);
-      color: #ff8a62;
+      color: var(--brand-400);
       font-weight: 600;
     }
   }
@@ -757,12 +757,12 @@ body:has(.presentation-modal-backdrop) {
 
   .scrim-slider {
     width: 100px;
-    accent-color: #ff8a62;
+    accent-color: var(--brand-400);
     cursor: pointer;
   }
 
   .scrim-value {
-    color: #ff8a62;
+    color: var(--brand-400);
     font-weight: 700;
   }
 
@@ -799,7 +799,7 @@ body:has(.presentation-modal-backdrop) {
   }
 
   .spin-icon {
-    color: #ff8a62;
+    color: var(--brand-400);
     animation: spin 1.5s linear infinite;
   }
 
@@ -814,7 +814,7 @@ body:has(.presentation-modal-backdrop) {
     transition: all 150ms ease;
 
     &:hover {
-      border-color: #ff8a62;
+      border-color: var(--brand-500);
       transform: translateY(-2px);
     }
 
@@ -931,7 +931,7 @@ body:has(.presentation-modal-backdrop) {
   }
 
   .btn-apply {
-    background: #ff8a62;
+    background: var(--brand-500);
     border: none;
     color: #171412;
     padding: 6px 16px;
@@ -977,7 +977,7 @@ body:has(.presentation-modal-backdrop) {
     gap: 5px;
     font-size: 11px;
     font-weight: 700;
-    color: #ff8a62;
+    color: var(--brand-400);
     text-transform: uppercase;
     letter-spacing: 0.04em;
   }
@@ -1002,7 +1002,7 @@ body:has(.presentation-modal-backdrop) {
     &:hover:not(:disabled) {
       background: #1f1a17;
       color: #fff9f2;
-      border-color: #ff8a62;
+      border-color: var(--brand-500);
     }
   }
 
@@ -1027,7 +1027,7 @@ body:has(.presentation-modal-backdrop) {
     }
 
     &:focus {
-      border-color: #ff8a62;
+      border-color: var(--brand-500);
     }
   }
 
@@ -1035,7 +1035,7 @@ body:has(.presentation-modal-backdrop) {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    background: #ff8a62;
+    background: var(--brand-500);
     border: none;
     border-radius: 6px;
     padding: 8px 14px;
@@ -1138,7 +1138,7 @@ body:has(.presentation-modal-backdrop) {
   gap: 5px;
   background: rgba(255, 87, 34, 0.15);
   border: 1px solid rgba(255, 87, 34, 0.35);
-  color: #ff8a62;
+  color: var(--brand-400);
   padding: 5px 10px;
   border-radius: 6px;
   font-size: 11px;
@@ -1146,7 +1146,7 @@ body:has(.presentation-modal-backdrop) {
   cursor: pointer;
 
   &:hover {
-    background: #ff8a62;
+    background: var(--brand-500);
     color: #171412;
   }
 }
@@ -1198,7 +1198,7 @@ body:has(.presentation-modal-backdrop) {
     cursor: pointer;
 
     &:hover {
-      background: #ff8a62;
+      background: var(--brand-500);
       color: #171412;
     }
   }
@@ -1241,7 +1241,7 @@ body:has(.presentation-modal-backdrop) {
     }
 
     &.active {
-      background: #ff8a62;
+      background: var(--brand-500);
       color: #171412;
       box-shadow: 0 2px 8px rgba(255, 138, 98, 0.35);
     }
@@ -1249,11 +1249,11 @@ body:has(.presentation-modal-backdrop) {
 }
 
 .pres-custom-prompt-card {
-  border-color: rgba(255, 138, 98, 0.3) !important;
+  border-color: var(--brand-subtle-border) !important;
   background: linear-gradient(135deg, rgba(255, 138, 98, 0.04), rgba(28, 24, 21, 0.95)) !important;
 
   .pres-step-badge.highlight {
-    background: #ff8a62;
+    background: var(--brand-500);
     color: #171412;
   }
 
@@ -1277,7 +1277,7 @@ body:has(.presentation-modal-backdrop) {
 
       &:focus {
         outline: none;
-        border-color: #ff8a62;
+        border-color: var(--brand-500);
         box-shadow: 0 0 0 2px rgba(255, 138, 98, 0.2);
       }
     }
@@ -1312,7 +1312,7 @@ body:has(.presentation-modal-backdrop) {
           text-align: left;
 
           &:hover {
-            border-color: #ff8a62;
+            border-color: var(--brand-500);
             color: #fff;
             background: #28231e;
           }
@@ -1409,12 +1409,12 @@ body:has(.presentation-modal-backdrop) {
       width: 100%;
       max-width: 950px;
       background: #14110f;
-      border: 2px solid #ff8a62;
+      border: 2px solid var(--brand-500);
       border-radius: 10px;
       color: #fff;
       padding: 8px 16px;
       outline: none;
-      box-shadow: 0 0 20px rgba(255, 138, 98, 0.3);
+      box-shadow: 0 0 20px var(--brand-subtle-border);
     }
 
     .title-cover-subtitle {
@@ -1437,7 +1437,7 @@ body:has(.presentation-modal-backdrop) {
         gap: 8px;
         background: linear-gradient(135deg, rgba(255, 138, 98, 0.15), rgba(167, 139, 250, 0.15));
         border: 1px solid rgba(255, 138, 98, 0.4);
-        color: #ff8a62;
+        color: var(--brand-400);
         padding: 7px 16px;
         border-radius: 20px;
         font-size: 13px;
@@ -1447,7 +1447,7 @@ body:has(.presentation-modal-backdrop) {
 
         &:hover {
           background: linear-gradient(135deg, rgba(255, 138, 98, 0.25), rgba(167, 139, 250, 0.25));
-          border-color: #ff8a62;
+          border-color: var(--brand-500);
           transform: translateY(-1px);
           box-shadow: 0 4px 14px rgba(255, 138, 98, 0.25);
         }
@@ -1482,7 +1482,7 @@ body:has(.presentation-modal-backdrop) {
             gap: 6px;
             font-size: 13px;
             font-weight: 700;
-            color: #ff8a62;
+            color: var(--brand-400);
           }
 
           .popover-close-btn {
@@ -1524,7 +1524,7 @@ body:has(.presentation-modal-backdrop) {
               height: 20px;
               border-radius: 50%;
               background: #2a241f;
-              color: #ff8a62;
+              color: var(--brand-400);
               display: inline-flex;
               align-items: center;
               justify-content: center;
@@ -1540,7 +1540,7 @@ body:has(.presentation-modal-backdrop) {
 
             &:hover {
               background: #2a241f;
-              border-color: #ff8a62;
+              border-color: var(--brand-500);
               color: #fff;
               transform: translateX(2px);
             }
@@ -1665,7 +1665,7 @@ body:has(.presentation-modal-backdrop) {
     width: 6px;
     height: 6px;
     border-radius: 50%;
-    background: #ff8a62;
+    background: var(--brand-500);
   }
 }
 
@@ -1687,32 +1687,32 @@ body:has(.presentation-modal-backdrop) {
 
   &:hover {
     background: #2a2520;
-    border-color: #ff8a62;
+    border-color: var(--brand-500);
     color: #fff;
   }
 
   &.active {
-    background: #ff8a62;
+    background: var(--brand-500);
     color: #171412;
-    border-color: #ff8a62;
+    border-color: var(--brand-500);
   }
 
   &.btn-present-orb {
     background: linear-gradient(135deg, rgba(255, 138, 98, 0.15), rgba(167, 139, 250, 0.15));
     border-color: rgba(255, 138, 98, 0.4);
-    color: #ff8a62;
+    color: var(--brand-400);
 
     &:hover {
-      background: linear-gradient(135deg, #ff8a62, #a78bfa);
+      background: linear-gradient(135deg, var(--brand-500), #a78bfa);
       color: #171412;
-      border-color: #ff8a62;
+      border-color: var(--brand-500);
     }
   }
 
   &.btn-export-pptx {
-    background: #ff8a62;
+    background: var(--brand-500);
     color: #171412;
-    border-color: #ff8a62;
+    border-color: var(--brand-500);
 
     &:hover {
       background: #ff9d7b;

@@ -126,10 +126,9 @@
   --text-secondary: #94a3b8;
   --text-muted: #64748b;
   --card-bg: #1e293b;
-  --card-border: rgba(255, 255, 255, 0.08);
-  --accent-color: #ff8a62;
-  --accent-gradient: linear-gradient(135deg, #ff8a62 0%, #ff5722 100%);
-  --chart-primary: #ff8a62;
+  --accent-color: var(--brand-500);
+  --accent-gradient: var(--btn-primary-bg);
+  --chart-primary: var(--brand-400);
   --font-display: 'Space Grotesk', system-ui, sans-serif;
   --font-body: 'Plus Jakarta Sans', system-ui, sans-serif;
   --font-mono: 'Space Mono', monospace;

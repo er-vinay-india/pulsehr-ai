@@ -24,11 +24,8 @@ export default function Header({ activeTab, onSelectTab, onOpenUploadModal, acti
           <div className="brand-logo-wrap">
             <img src={highviewLogo} alt="HighView Logo" className="brand-logo-img" />
           </div>
-          <div>
-            <div className="brand-title-row">
-              <h1>HighView</h1>
-              <span className="brand-ai-attribution">Powered by HRIDAY</span>
-            </div>
+          <div className="brand-text-block">
+            <h1 className="brand-title">HighView</h1>
             <p className="subtitle">Clarity From Every Sheet.</p>
           </div>
         </div>
