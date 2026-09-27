@@ -31,6 +31,18 @@ export default function EvidenceInspectionDrawer({
   const [activeTab, setActiveTab] = useState("board_briefing"); // "board_briefing" | "ledger_all" | "coverage_manifest"
   const [expandedQa, setExpandedQa] = useState({});
 
+  React.useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   // Find corresponding evidence item from ledger
@@ -68,7 +80,13 @@ export default function EvidenceInspectionDrawer({
   }[findingType] || { label: findingType.toUpperCase(), bg: "rgba(255, 138, 98, 0.12)", color: "#ff8a62", border: "rgba(255, 138, 98, 0.3)" };
 
   return (
-    <div className="evidence-drawer-backdrop" onClick={onClose} role="dialog" aria-modal="true">
+    <div
+      className="evidence-drawer-backdrop"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="evidence-drawer-title"
+    >
       <div className="evidence-drawer-shell" onClick={e => e.stopPropagation()}>
         {/* DRAWER HEADER */}
         <div className="drawer-header">
@@ -82,7 +100,7 @@ export default function EvidenceInspectionDrawer({
                 <span className="drawer-sep">/</span>
                 <span className="evidence-id-tag">{currentEvidence.evidence_id}</span>
               </div>
-              <h3 className="drawer-title">{slide?.title || currentEvidence.title}</h3>
+              <h3 id="evidence-drawer-title" className="drawer-title">{slide?.title || currentEvidence.title}</h3>
             </div>
           </div>
 
@@ -97,9 +115,11 @@ export default function EvidenceInspectionDrawer({
         </div>
 
         {/* DRAWER TABS */}
-        <div className="drawer-tabs-row">
+        <div className="drawer-tabs-row" role="tablist" aria-label="Evidence inspection tabs">
           <button
             type="button"
+            role="tab"
+            aria-selected={activeTab === "board_briefing"}
             className={`drawer-tab-btn ${activeTab === "board_briefing" ? "active" : ""}`}
             onClick={() => setActiveTab("board_briefing")}
           >
@@ -108,6 +128,8 @@ export default function EvidenceInspectionDrawer({
           </button>
           <button
             type="button"
+            role="tab"
+            aria-selected={activeTab === "ledger_all"}
             className={`drawer-tab-btn ${activeTab === "ledger_all" ? "active" : ""}`}
             onClick={() => setActiveTab("ledger_all")}
           >
@@ -116,6 +138,8 @@ export default function EvidenceInspectionDrawer({
           </button>
           <button
             type="button"
+            role="tab"
+            aria-selected={activeTab === "coverage_manifest"}
             className={`drawer-tab-btn ${activeTab === "coverage_manifest" ? "active" : ""}`}
             onClick={() => setActiveTab("coverage_manifest")}
           >
@@ -245,6 +269,7 @@ export default function EvidenceInspectionDrawer({
                         <button
                           type="button"
                           className="qa-question-toggle"
+                          aria-expanded={isOpenQa}
                           onClick={() => toggleQa(qIdx)}
                         >
                           <span className="qa-q-prefix">Q:</span>

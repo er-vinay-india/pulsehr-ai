@@ -6,12 +6,16 @@ import {
   Image,
   Sliders,
   CheckCircle2,
+  Check,
   ArrowRight,
   ShieldCheck,
   TrendingUp,
   AlertCircle,
   Film,
   Zap,
+  Users,
+  Clock,
+  X,
 } from "lucide-react";
 import SlideImagePickerModal from "./SlideImagePickerModal.jsx";
 
@@ -28,20 +32,66 @@ export default function PromptStudioScreen({
   const [backgroundMode, setBackgroundMode] = useState("solid"); // "solid" | "image"
   const [selectedImage, setSelectedImage] = useState(null);
   const [isImagePickerOpen, setIsImagePickerOpen] = useState(false);
-  const [transitionStyle, setTransitionStyle] = useState("dissolve"); // "dissolve" | "sweep" | "none"
+  const [transitionStyle, setTransitionStyle] = useState("fade"); // "fade" | "slide" | "scale" | "reveal" | "none"
+
+  const availableThemes = themes && themes.length > 0 ? themes : [
+    { id: "executive_dark", name: "Executive Obsidian", bg_color: "#08111F" },
+    { id: "bold_signal", name: "Bold Signal", bg_color: "#131418" },
+    { id: "electric_studio", name: "Electric Studio", bg_color: "#0a0c10" },
+    { id: "clean_light", name: "Clean Modern Light", bg_color: "#ffffff" },
+    { id: "corporate_navy", name: "Corporate Navy", bg_color: "#0b1329" },
+    { id: "creative_voltage", name: "Creative Voltage", bg_color: "#090914" },
+  ];
+  const currentThemeObj = availableThemes.find((th) => th.id === selectedThemeId) || availableThemes[0];
+
+  // Priority ordering to guarantee premier themes are shown with executive_dark first
+  const THEME_PRIORITY = ["executive_dark", "bold_signal", "clean_light", "corporate_navy", "electric_studio", "creative_voltage"];
+  const displayThemes = (availableThemes || []).slice().sort((a, b) => {
+    const idxA = THEME_PRIORITY.indexOf(a.id);
+    const idxB = THEME_PRIORITY.indexOf(b.id);
+    if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+    if (idxA !== -1) return -1;
+    if (idxB !== -1) return 1;
+    return 0;
+  }).slice(0, 6);
 
   // Dashboard context tokens
-  const priorityElement = dashboardData?.primary_element || dashboardData?.quaternary_element;
-  const heroSpread = priorityElement?.prominent_number || priorityElement?.prominent_metric?.value || "";
-  const priorityTitle = priorityElement?.title || "Strategic Priority Disparity";
-  const exceptionData = dashboardData?.exception_watch;
+  const priorityElement = dashboardData?.quaternary_element || dashboardData?.primary_element || dashboardData?.priority_element;
+  const heroSpread = priorityElement?.formatted_absolute_lift || priorityElement?.prominent_number || priorityElement?.glance?.formatted_value || (priorityElement?.absolute_lift ? String(priorityElement.absolute_lift) : "");
+  const priorityTitle = priorityElement?.title || "Strategic Priority & Operational Variance";
+  const exceptionData = dashboardData?.exception_element || dashboardData?.exception_watch;
+  const forecastData = dashboardData?.outlook_element || dashboardData?.forecast;
   const coverageData = dashboardData?.analysis_coverage;
 
   const INSPIRATION_PROMPTS = [
-    "Q3 Executive Review on Remote Work vs Office Attendance & Operational Productivity",
-    "Frontline Turnover Risk, Retention Initiatives & Compensation Impact",
-    "Board Strategic Briefing on Headcount Allocation & Departmental Variance",
-    "Workforce Attendance Optimization & Shift Overtime Cost Containment",
+    {
+      id: "remote_work",
+      tag: "Productivity & Hybrid",
+      icon: TrendingUp,
+      title: "Q3 Executive Review on Remote Work vs Office Attendance & Operational Productivity",
+      desc: "Evaluates attendance benchmarks, individual productivity variance, and remote policy impacts.",
+    },
+    {
+      id: "turnover_risk",
+      tag: "Retention & Talent",
+      icon: Users,
+      title: "Frontline Turnover Risk, Retention Initiatives & Compensation Impact",
+      desc: "Analyzes frontline attrition trends, competitive pay bands, and targeted retention programs.",
+    },
+    {
+      id: "headcount_alloc",
+      tag: "Strategy & Budget",
+      icon: Layers,
+      title: "Board Strategic Briefing on Headcount Allocation & Departmental Variance",
+      desc: "Boardroom decision review on capacity planning, headcount allocation, and organizational drift.",
+    },
+    {
+      id: "overtime_cost",
+      tag: "Operations & Cost",
+      icon: Clock,
+      title: "Workforce Attendance Optimization & Shift Overtime Cost Containment",
+      desc: "Quantifies shift leakages, overtime run-rates, and schedule optimization cost-reduction opportunities.",
+    },
   ];
 
   const handleLaunch = () => {
@@ -50,7 +100,7 @@ export default function PromptStudioScreen({
       customPrompt: sourceMode === "custom_prompt" ? customPrompt : null,
       targetLength: slideCount,
       themeId: selectedThemeId,
-      deckStyle: "decision_brief",
+      deckStyle: "standard",
       backgroundMode,
       selectedImageUrl: selectedImage?.url || null,
       transitionStyle,
@@ -75,9 +125,11 @@ export default function PromptStudioScreen({
         </p>
 
         {/* Source Mode Toggle */}
-        <div className="pres-source-tabs">
+        <div className="pres-source-tabs" role="tablist" aria-label="Presentation Source Mode">
           <button
             type="button"
+            role="tab"
+            aria-selected={sourceMode === "dashboard_truth"}
             className={`source-tab-btn ${sourceMode === "dashboard_truth" ? "active" : ""}`}
             onClick={() => setSourceMode("dashboard_truth")}
           >
@@ -86,6 +138,8 @@ export default function PromptStudioScreen({
           </button>
           <button
             type="button"
+            role="tab"
+            aria-selected={sourceMode === "custom_prompt"}
             className={`source-tab-btn ${sourceMode === "custom_prompt" ? "active" : ""}`}
             onClick={() => setSourceMode("custom_prompt")}
           >
@@ -103,32 +157,67 @@ export default function PromptStudioScreen({
             <div className="pres-step-card pres-custom-prompt-card">
               <div className="pres-step-card__header">
                 <span className="pres-step-badge highlight">✦</span>
-                <div>
+                <div style={{ flex: 1 }}>
                   <h3 className="pres-step-title">Custom Topic & Talking Points</h3>
                   <p className="pres-step-desc">Enter your presentation topic, notes, or executive brief</p>
                 </div>
+                {customPrompt && (
+                  <button
+                    type="button"
+                    className="btn-clear-prompt"
+                    onClick={() => setCustomPrompt("")}
+                    title="Clear prompt"
+                    aria-label="Clear custom briefing prompt"
+                  >
+                    <X size={13} />
+                    <span>Clear</span>
+                  </button>
+                )}
               </div>
               <div className="pres-prompt-input-wrap">
                 <textarea
                   className="pres-prompt-textarea"
                   value={customPrompt}
                   onChange={(e) => setCustomPrompt(e.target.value)}
-                  placeholder="e.g. Q3 Strategic Attrition Review and Retention Roadmap for Engineering & Support teams..."
+                  placeholder="e.g. Conduct a comprehensive operational review of Store 20 vs Store 33, addressing wage disparity, overtime leakages, and Q4 margin impacts..."
+                  aria-label="Custom presentation topic and talking points"
                   rows={3}
                 />
-                <div className="inspiration-chips-row">
-                  <span className="chips-label">Inspiration ideas:</span>
-                  <div className="chips-scroll">
-                    {INSPIRATION_PROMPTS.map((insp, i) => (
-                      <button
-                        key={i}
-                        type="button"
-                        className="chip-btn"
-                        onClick={() => setCustomPrompt(insp)}
-                      >
-                        {insp}
-                      </button>
-                    ))}
+
+                <div className="inspiration-ideas-section">
+                  <div className="inspiration-ideas-header">
+                    <Sparkles size={13} className="sparkle-icon" />
+                    <span className="chips-label">Inspiration ideas (Click to populate briefing):</span>
+                  </div>
+                  <div className="inspiration-cards-grid" role="group" aria-label="Inspiration briefing prompts">
+                    {INSPIRATION_PROMPTS.map((insp) => {
+                      const isSelected = customPrompt === insp.title;
+                      const Icon = insp.icon;
+                      return (
+                        <button
+                          key={insp.id}
+                          type="button"
+                          className={`insp-card ${isSelected ? "active" : ""}`}
+                          aria-pressed={isSelected}
+                          aria-label={`Select inspiration idea: ${insp.title}`}
+                          onClick={() => setCustomPrompt(insp.title)}
+                        >
+                          <div className="insp-card-top">
+                            <span className="insp-tag-badge">
+                              <Icon size={12} />
+                              <span>{insp.tag}</span>
+                            </span>
+                            {isSelected && (
+                              <span className="insp-active-pill">
+                                <Check size={11} /> Selected
+                              </span>
+                            )}
+                          </div>
+                          <h4 className="insp-card-title">{insp.title}</h4>
+                          <p className="insp-card-desc">{insp.desc}</p>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               </div>
@@ -144,7 +233,7 @@ export default function PromptStudioScreen({
                 <p className="pres-step-desc">Select executive narrative depth</p>
               </div>
             </div>
-            <div className="pres-step-options">
+            <div className="pres-step-options" role="radiogroup" aria-label="Slide Count and Narrative Pacing">
               {[
                 { count: 5, label: "5 Slides", sub: "Executive Summary" },
                 { count: 7, label: "7 Slides (Recommended)", sub: "Boardroom Decision Brief" },
@@ -153,6 +242,8 @@ export default function PromptStudioScreen({
                 <button
                   key={opt.count}
                   type="button"
+                  role="radio"
+                  aria-checked={slideCount === opt.count}
                   onClick={() => setSlideCount(opt.count)}
                   className={`pres-option-btn ${slideCount === opt.count ? "active" : ""}`}
                 >
@@ -172,21 +263,20 @@ export default function PromptStudioScreen({
                 <p className="pres-step-desc">Optimized for boardroom screen sharing & projectors</p>
               </div>
             </div>
-            <div className="pres-theme-grid">
-              {[
-                { id: "executive_dark", label: "Executive Obsidian", color: "#171412", tag: "Dark Luxury" },
-                { id: "corporate_clean", label: "Institutional Ivory", color: "#f8f6f2", tag: "Clean Corporate" },
-                { id: "vibrant_accent", label: "High-Impact Monolith", color: "#111827", tag: "Boardroom Brief" },
-              ].map((th) => (
+            <div className="pres-theme-grid" role="radiogroup" aria-label="Theme and Visual Palette">
+              {displayThemes.map((th) => (
                 <button
                   key={th.id}
                   type="button"
+                  role="radio"
+                  aria-checked={selectedThemeId === th.id}
+                  aria-label={`${th.name || th.label} visual theme`}
                   onClick={() => setSelectedThemeId(th.id)}
                   className={`pres-theme-btn ${selectedThemeId === th.id ? "active" : ""}`}
                 >
-                  <span className="theme-swatch" style={{ backgroundColor: th.color }} />
-                  <span className="theme-name">{th.label}</span>
-                  <span className="theme-tag">{th.tag}</span>
+                  <span className="theme-swatch" style={{ backgroundColor: th.bg_color || th.color }} />
+                  <span className="theme-name">{th.name || th.label}</span>
+                  <span className="theme-tag">{th.id.replace(/_/g, " ")}</span>
                 </button>
               ))}
             </div>
@@ -201,41 +291,172 @@ export default function PromptStudioScreen({
                 <p className="pres-step-desc">Commercial-use photography with automatic contrast scrim</p>
               </div>
             </div>
-            <div className="pres-bg-row">
-              <button
-                type="button"
+            <div className="pres-bg-cards-grid" role="radiogroup" aria-label="Background Atmosphere & Royalty-Free Imagery">
+              {/* Option 1: Solid Executive Minimal */}
+              <div
+                role="radio"
+                tabIndex={0}
+                aria-checked={backgroundMode === "solid"}
+                aria-label={`Solid Executive Minimal with ${currentThemeObj.name} solid background`}
                 onClick={() => {
                   setBackgroundMode("solid");
                   setSelectedImage(null);
                 }}
-                className={`pres-bg-btn ${backgroundMode === "solid" ? "active" : ""}`}
-              >
-                <Palette size={16} />
-                <span>Solid Executive Minimal</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setBackgroundMode("image");
-                  setIsImagePickerOpen(true);
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setBackgroundMode("solid");
+                    setSelectedImage(null);
+                  }
                 }}
-                className={`pres-bg-btn ${backgroundMode === "image" ? "active" : ""}`}
+                className={`pres-bg-card ${backgroundMode === "solid" ? "active" : ""}`}
               >
-                <Image size={16} />
-                <span>{selectedImage ? "Change Image..." : "Browse Free Photos..."}</span>
-              </button>
-            </div>
+                <div className="pres-bg-card__top">
+                  <div className="pres-bg-card__header-left">
+                    <Palette size={16} className="card-icon" />
+                    <span className="card-title">Solid Executive Minimal</span>
+                  </div>
+                  {backgroundMode === "solid" && (
+                    <span className="pres-bg-active-badge">
+                      <Check size={12} /> Active
+                    </span>
+                  )}
+                </div>
 
-            {selectedImage && (
-              <div className="pres-selected-image-preview">
-                <img src={selectedImage.thumbnail} alt={selectedImage.title} />
-                <div className="selected-meta">
-                  <span className="title">{selectedImage.title}</span>
-                  <span className="author">{selectedImage.creator} (Free License)</span>
+                {/* 16:9 Canvas Simulation of Solid Theme */}
+                <div
+                  className="pres-bg-canvas-preview"
+                  style={{
+                    backgroundColor: currentThemeObj.bg_color || "#08111F",
+                  }}
+                  aria-hidden="true"
+                >
+                  <div className="canvas-mockup-slide">
+                    <div
+                      className="mockup-title-bar"
+                      style={{
+                        backgroundColor: currentThemeObj.primary_text || "#F8FAFC",
+                      }}
+                    />
+                    <div
+                      className="mockup-line"
+                      style={{
+                        backgroundColor: currentThemeObj.accent_color || "#5EEAD4",
+                      }}
+                    />
+                    <div
+                      className="mockup-line short"
+                      style={{
+                        backgroundColor: currentThemeObj.secondary_text || "#94A3B8",
+                      }}
+                    />
+                    <div className="mockup-footer-badge">
+                      <span>{currentThemeObj.name} · Solid Palette</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pres-bg-card__details">
+                  <p className="card-desc">
+                    Distraction-free solid background optimized for boardroom screens, dense tables, and financial charts.
+                  </p>
+                  <div className="card-meta-row">
+                    <span
+                      className="meta-color-swatch"
+                      style={{ backgroundColor: currentThemeObj.bg_color || "#08111F" }}
+                    />
+                    <span className="meta-color-code">{currentThemeObj.bg_color || "#08111F"}</span>
+                    <span className="meta-tag">Zero Image Noise</span>
+                  </div>
                 </div>
               </div>
-            )}
+
+              {/* Option 2: Commercial Royalty-Free Imagery */}
+              <div
+                role="radio"
+                tabIndex={0}
+                aria-checked={backgroundMode === "image"}
+                aria-label={`Commercial Royalty-Free Photography with automatic contrast scrim${selectedImage ? `: ${selectedImage.title}` : ""}`}
+                onClick={() => {
+                  setBackgroundMode("image");
+                  if (!selectedImage) {
+                    setIsImagePickerOpen(true);
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setBackgroundMode("image");
+                    if (!selectedImage) {
+                      setIsImagePickerOpen(true);
+                    }
+                  }
+                }}
+                className={`pres-bg-card ${backgroundMode === "image" ? "active" : ""}`}
+              >
+                <div className="pres-bg-card__top">
+                  <div className="pres-bg-card__header-left">
+                    <Image size={16} className="card-icon" />
+                    <span className="card-title">Commercial-Use Photography</span>
+                  </div>
+                  {backgroundMode === "image" && (
+                    <span className="pres-bg-active-badge">
+                      <Check size={12} /> Active
+                    </span>
+                  )}
+                </div>
+
+                {/* 16:9 Canvas Simulation of Scrim Photo */}
+                <div
+                  className="pres-bg-canvas-preview photo-canvas"
+                  style={{
+                    backgroundImage: `url(${selectedImage ? selectedImage.thumbnail : "https://images.unsplash.com/photo-1497366216548-37526070297c?w=600&auto=format&fit=crop&q=80"})`,
+                  }}
+                  aria-hidden="true"
+                >
+                  <div
+                    className="canvas-scrim-overlay"
+                    style={{
+                      backgroundColor: `rgba(11, 31, 58, ${(selectedImage?.scrimOpacity || 70) / 100})`,
+                    }}
+                  >
+                    <div className="canvas-mockup-slide">
+                      <div className="mockup-title-bar light" />
+                      <div className="mockup-line light" />
+                      <div className="mockup-line short light" />
+                      <div className="mockup-footer-badge scrim">
+                        <span>{selectedImage ? `${selectedImage.scrimOpacity || 70}% Contrast Scrim` : "70% Contrast Scrim"}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pres-bg-card__details">
+                  <p className="card-desc">
+                    {selectedImage
+                      ? `"${selectedImage.title}" by ${selectedImage.creator}. Automatic contrast scrim applied.`
+                      : "Enterprise workplace photography with automatic dark scrim guaranteeing AAA white text legibility."}
+                  </p>
+                  <div className="card-actions-row">
+                    <button
+                      type="button"
+                      className="btn-select-photo"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setBackgroundMode("image");
+                        setIsImagePickerOpen(true);
+                      }}
+                    >
+                      <Image size={13} />
+                      <span>{selectedImage ? "Change Photography..." : "Browse Free Photos..."}</span>
+                    </button>
+                    {selectedImage && (
+                      <span className="meta-tag photo-source">Unsplash Free License</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* Step 4: Animation & Transitions */}
@@ -247,15 +468,19 @@ export default function PromptStudioScreen({
                 <p className="pres-step-desc">Subtle transitions designed for executive focus</p>
               </div>
             </div>
-            <div className="pres-transition-pills">
+            <div className="pres-transition-pills" role="radiogroup" aria-label="Animation and Reveal Pacing">
               {[
-                { id: "dissolve", label: "Smooth Dissolve (Recommended)" },
-                { id: "sweep", label: "Staggered Metric Sweep" },
+                { id: "fade", label: "Smooth Fade (Recommended)" },
+                { id: "slide", label: "Directional Slide" },
+                { id: "scale", label: "Scale Zoom" },
+                { id: "reveal", label: "Executive Reveal" },
                 { id: "none", label: "Instant Cut" },
               ].map((tr) => (
                 <button
                   key={tr.id}
                   type="button"
+                  role="radio"
+                  aria-checked={transitionStyle === tr.id}
                   onClick={() => setTransitionStyle(tr.id)}
                   className={`transition-pill ${transitionStyle === tr.id ? "active" : ""}`}
                 >

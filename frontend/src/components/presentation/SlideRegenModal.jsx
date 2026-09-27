@@ -11,20 +11,39 @@ export default function SlideRegenModal({
   onSubmit,
   isRegenerating
 }) {
+  React.useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   return (
-    <div className="pres-regen-dialog-backdrop">
-      <div className="pres-regen-dialog">
+    <div
+      className="pres-regen-dialog-backdrop"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="regen-modal-title"
+      onClick={onClose}
+    >
+      <div className="pres-regen-dialog" onClick={(e) => e.stopPropagation()}>
         <div className="dialog-header">
           <div className="dialog-title-wrap">
             <Sparkles size={16} style={{ color: "var(--brand-500, #ff8a62)" }} />
-            <h4>Regenerate Slide {slideIndex + 1}</h4>
+            <h4 id="regen-modal-title">Regenerate Slide {slideIndex + 1}</h4>
           </div>
           <button
             type="button"
             className="btn-icon-close"
             onClick={onClose}
+            aria-label="Close regeneration dialog"
           >
             <X size={16} />
           </button>

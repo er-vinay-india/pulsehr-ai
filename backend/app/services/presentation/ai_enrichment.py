@@ -101,27 +101,55 @@ def regenerate_single_slide(
     slide_id: str,
     user_instructions: str
 ) -> dict[str, Any]:
-    """Regenerates a specific slide's narrative and title based on user instructions."""
+    """Regenerates a specific slide using the canonical visual intelligence pipeline.
+
+    Preserves other slides and manual user edits elsewhere, parses targeted intent
+    (e.g., 'make it shorter', 'use a chart', 'more visual'), enforces strict layout
+    budgets so text never overflows the 1920x1080 canvas, and re-materializes VisualSpecification.
+    """
     updated_deck = copy.deepcopy(deck_spec)
     slides = updated_deck.get("slides", [])
-    target_slide = next((s for s in slides if s["id"] == slide_id), None)
-    if not target_slide:
+    target_idx = next((i for i, s in enumerate(slides) if s["id"] == slide_id), None)
+    if target_idx is None:
         raise ValueError(f"Slide '{slide_id}' not found in presentation deck.")
 
-    audience = updated_deck.get("metadata", {}).get("audience", "Leadership")
+    target_slide = slides[target_idx]
+    theme_id = (
+        updated_deck.get("metadata", {}).get("theme_id")
+        or updated_deck.get("theme", {}).get("id")
+        or "bold_signal"
+    )
+    audience = updated_deck.get("metadata", {}).get("audience", "Executive Leadership")
+    u_lower = (user_instructions or "").lower()
+
+    # 1. Targeted Intent Parsing
+    wants_shorter = any(w in u_lower for w in ["short", "concise", "condense", "brief", "summarize"])
+    wants_visual = any(w in u_lower for w in ["visual", "chart", "graph", "plot"])
+    wants_comparison = any(w in u_lower for w in ["comparison", "compare", "versus", "vs", "split"])
+
+    if wants_comparison:
+        target_slide["layout"] = "two_charts" if target_slide.get("chart") else "comparison_split"
+    elif wants_visual and (target_slide.get("chart") or target_slide.get("visual_spec", {}).get("chart_spec")):
+        target_slide["layout"] = "full_chart_takeaway"
+
+    # 2. Content generation / rewriting
     inst_cfg = _load_instructions_config()
     template = inst_cfg.get(
         "regeneration_prompt_template",
-        "Regenerate Slide #{slide_order} for {audience}. Category: {category}. Current Title: {current_title}. User Instructions: {user_instructions}. Return JSON object."
+        "Regenerate Slide #{slide_order} for {audience}. Category: {category}. Current Title: {current_title}. User Instructions: {user_instructions}. Return JSON with 'title', 'subtitle', 'narrative', 'bullets'."
     )
-
     prompt = template.format(
-        slide_order=target_slide.get("order", 1),
+        slide_order=target_slide.get("order", target_idx + 1),
         audience=audience,
         category=target_slide.get("category", "EXECUTIVE REVIEW"),
         current_title=target_slide.get("title", ""),
         user_instructions=user_instructions
     )
+
+    generated_title = None
+    generated_narrative = None
+    generated_subtitle = None
+    generated_bullets = None
 
     try:
         from ..gateway.model_gateway import ModelGateway
@@ -135,22 +163,90 @@ def regenerate_single_slide(
             match = re.search(r'\{[\s\S]*\}', res.raw_text)
             if match:
                 data = json.loads(match.group(0))
-                if data.get("title"):
-                    target_slide["title"] = format_display_label(data["title"])
-                if data.get("subtitle"):
-                    target_slide["subtitle"] = data["subtitle"]
-                if data.get("narrative"):
-                    target_slide["narrative"] = sanitize_llm_text(data["narrative"])
-                    if data.get("speaker_notes"):
-                        target_slide["speaker_notes"] = data["speaker_notes"]
-                    updated_deck["updated_at"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
-                    return updated_deck
+                generated_title = data.get("title")
+                generated_subtitle = data.get("subtitle")
+                generated_narrative = data.get("narrative")
+                generated_bullets = data.get("bullets")
+                if data.get("speaker_notes"):
+                    target_slide["speaker_notes"] = data["speaker_notes"]
     except Exception as exc:
-        logger.warning(f"AI slide regeneration failed, falling back to rule-based update: {exc}")
+        logger.warning(f"AI slide regeneration call skipped or failed, using heuristic: {exc}")
 
-    clean_inst = user_instructions.strip().capitalize()
-    target_slide["title"] = f"{target_slide['title']}: {clean_inst[:45]}"
-    target_slide["narrative"] = f"{target_slide['narrative']} Specific focus applied: {clean_inst}."
-    target_slide["speaker_notes"] = f"Presenter note: Emphasize {clean_inst} during this discussion."
+    clean_inst = (user_instructions or "").strip().capitalize()
+    if generated_title:
+        target_slide["title"] = format_display_label(generated_title)
+    elif clean_inst:
+        target_slide["title"] = f"{target_slide.get('title', 'Executive Briefing').split(':')[0]}: {clean_inst[:40]}"
+
+    if generated_subtitle:
+        target_slide["subtitle"] = generated_subtitle
+
+    if generated_narrative:
+        target_slide["narrative"] = sanitize_llm_text(generated_narrative)
+    elif clean_inst:
+        base_narrative = target_slide.get("narrative", "")
+        target_slide["narrative"] = f"{base_narrative.split('.')[0]}. Specific focus applied: {clean_inst}."
+
+    if generated_bullets and isinstance(generated_bullets, list):
+        target_slide["bullets"] = [str(b) for b in generated_bullets if b]
+
+    # 3. Content Budget & Layout Enforcement (No overflow on 1920x1080 canvas)
+    from .visual.layout_registry import LayoutRegistry
+    current_layout_name = target_slide.get("layout", "chart_narrative")
+    budget = LayoutRegistry.get_budget(current_layout_name)
+
+    # Bound headline
+    if len(target_slide.get("title", "")) > budget.max_headline_chars:
+        target_slide["title"] = target_slide["title"][:budget.max_headline_chars - 1].rsplit(' ', 1)[0] + '…'
+
+    # Bound narrative & bullets
+    max_body_words = budget.max_body_words if not wants_shorter else min(budget.max_body_words, 25)
+    narrative_words = target_slide.get("narrative", "").split()
+    if len(narrative_words) > max_body_words:
+        target_slide["narrative"] = " ".join(narrative_words[:max_body_words]) + "."
+
+    max_insights = budget.max_insights if not wants_shorter else min(budget.max_insights, 2)
+    current_bullets = target_slide.get("bullets", [])
+    if len(current_bullets) > max_insights:
+        target_slide["bullets"] = current_bullets[:max_insights]
+
+    # 4. Canonical Phase 4 Visual Intelligence Re-materialization
+    try:
+        from .visual import VisualIntelligenceEngine
+        v_engine = VisualIntelligenceEngine()
+        v_spec = v_engine.process_slide(
+            target_slide,
+            theme_id=theme_id,
+            sequence_number=target_slide.get("order", target_idx + 1),
+            total_slides=len(slides)
+        )
+        target_slide["visual_spec"] = v_spec.model_dump()
+        if v_spec.chart_spec and not target_slide.get("chart"):
+            target_slide["chart"] = {
+                "type": v_spec.chart_spec.family.value.lower(),
+                "title": v_spec.chart_spec.title,
+                "subtitle": v_spec.chart_spec.subtitle,
+                "categories": v_spec.chart_spec.categories,
+                "series": [{"name": ser.name, "values": ser.data} for ser in v_spec.chart_spec.series]
+            }
+    except Exception as exc:
+        logger.warning(f"Failed to re-materialize visual_spec for regenerated slide: {exc}")
+
+    target_slide["provenance"] = "REGENERATED"
     updated_deck["updated_at"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+
+    # 5. Persist to database if deck exists
+    deck_id = updated_deck.get("id")
+    if deck_id:
+        try:
+            from ...db.database import get_connection
+            with get_connection() as conn:
+                conn.execute(
+                    "UPDATE presentation_decks SET spec_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                    (json.dumps(updated_deck), deck_id)
+                )
+                conn.commit()
+        except Exception as exc:
+            logger.debug(f"Deck database update during slide regeneration skipped: {exc}")
+
     return updated_deck

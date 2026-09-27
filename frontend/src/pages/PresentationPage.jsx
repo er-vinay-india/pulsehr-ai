@@ -91,6 +91,8 @@ export default function PresentationPage({
     handleDeleteSlide,
     handleDuplicateSlide,
     handleAddSlide,
+    handleSetSlideImage,
+    handleSetTransition,
     handleRegenerateSlideSubmit,
     handleExportPptx
   } = usePresentationWorkflow({
@@ -105,6 +107,30 @@ export default function PresentationPage({
   const [dashboardData, setDashboardData] = React.useState(null);
   const [dashboardLoading, setDashboardLoading] = React.useState(false);
   const [useAdvancedScopeForm, setUseAdvancedScopeForm] = React.useState(false);
+
+  // Ingest Dashboard Context from sessionStorage if initiated from Adaptive Dashboard
+  React.useEffect(() => {
+    try {
+      const rawCtx = sessionStorage.getItem("presentation_dashboard_context");
+      if (rawCtx) {
+        const parsed = JSON.parse(rawCtx);
+        if (parsed?.sheetId) {
+          setSelectedSheetId(String(parsed.sheetId));
+        }
+        if (parsed?.sheetTitle) {
+          setObjective(`Executive summary and decision-grade analysis for ${parsed.sheetTitle}`);
+        }
+        if (parsed?.activeFilters && Object.keys(parsed.activeFilters).length > 0) {
+          const filterStr = Object.entries(parsed.activeFilters)
+            .map(([k, v]) => `${k}: ${v}`)
+            .join(", ");
+          setInstructions(`Dashboard context with active filters: ${filterStr}`);
+        }
+      }
+    } catch (err) {
+      console.warn("Failed reading presentation dashboard context from sessionStorage", err);
+    }
+  }, [setSelectedSheetId, setObjective, setInstructions]);
 
   React.useEffect(() => {
     let sheetId = selectedSheetId;
@@ -130,6 +156,10 @@ export default function PresentationPage({
   }, [selectedSheetId, sheets]);
 
   const handleGenerateFromDashboard = (options) => {
+    if (options?.themeId) setSelectedThemeId(options.themeId);
+    if (options?.targetLength) setTargetLength(options.targetLength);
+    if (options?.customPrompt) setObjective(options.customPrompt);
+
     if (options?.sourceMode === "custom_prompt" && options?.customPrompt) {
       const generatedDeck = transformCustomPromptToDeck(options.customPrompt, options, dashboardData);
       if (generatedDeck) {
@@ -159,18 +189,30 @@ export default function PresentationPage({
         <div className="page-title-row">
           <div className="page-title-group">
             <h1 className="page-heading">
-              {viewMode === "config" && "Presentation Studio"}
+              {viewMode === "config" && (useAdvancedScopeForm ? "Presentation Scope & Setup" : "Presentation Studio")}
               {viewMode === "generating" && "Generating Presentation Deck"}
               {viewMode === "studio" && (deckSpec?.metadata?.title || "Presentation Studio")}
             </h1>
             <p className="page-description">
-              {viewMode === "config" && "AI-assisted slide deck generation from ground-truth sheet findings and executive insights."}
+              {viewMode === "config" && (useAdvancedScopeForm ? "Configure multi-sheet dataset boundaries, analytical scope, and evidence ledger parameters." : "AI-assisted slide deck generation from ground-truth sheet findings and executive insights.")}
               {viewMode === "generating" && "Running 6-stage background analytical intelligence pipeline..."}
               {viewMode === "studio" && `${deckSpec?.slides?.length || 0} slides · ${currentTheme?.name || "Theme"} · Frontend Slides 16:9 Stage`}
             </p>
           </div>
 
           <div className="header-actions-row">
+            {viewMode === "config" && (
+              <button
+                type="button"
+                className="btn-secondary btn-sm"
+                onClick={() => setUseAdvancedScopeForm(!useAdvancedScopeForm)}
+                title={useAdvancedScopeForm ? "Switch to AI Prompt Studio" : "Configure Custom Datasets and Advanced Scope"}
+              >
+                <Sliders size={14} />
+                <span>{useAdvancedScopeForm ? "Switch to Prompt Studio" : "Advanced Scope Form"}</span>
+              </button>
+            )}
+
             {viewMode === "generating" && (
               <button
                 type="button"
@@ -218,7 +260,6 @@ export default function PresentationPage({
                 <button
                   type="button"
                   className="btn-secondary btn-sm"
-                  disabled={deckSpec?.metadata?.deck_style === "decision_brief"}
                   onClick={() => setShowRegenModal(true)}
                   title="Regenerate current slide with AI prompt"
                 >
@@ -367,6 +408,9 @@ export default function PresentationPage({
             onUpdateSlide={handleUpdateSlide}
             onExportPptx={handleExportPptx}
             selectedThemeId={selectedThemeId}
+            onSetSlideImage={handleSetSlideImage}
+            onSetTransition={handleSetTransition}
+            onOpenRegenerate={() => setShowRegenModal(true)}
           />
         )}
 

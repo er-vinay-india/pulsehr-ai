@@ -39,6 +39,14 @@ export default function PresentationSlideContent({
   const [isEditingNarrative, setIsEditingNarrative] = useState(false);
   const [narrativeVal, setNarrativeVal] = useState(slide.narrative);
 
+  // Sync state whenever active slide changes
+  React.useEffect(() => {
+    setTitleVal(slide.title || "");
+    setNarrativeVal(slide.narrative || "");
+    setIsEditingTitle(false);
+    setIsEditingNarrative(false);
+  }, [slide.id, slide.title, slide.narrative]);
+
   const layout = slide.layout || "chart_narrative";
 
   const handleTitleBlur = () => {
@@ -69,6 +77,7 @@ export default function PresentationSlideContent({
                 type="button"
                 className="slide-evidence-badge-btn"
                 onClick={() => onViewEvidence && onViewEvidence(slide)}
+                aria-label={`Inspect calculation methodology and evidence for ${slide.evidence_id}`}
                 title="Inspect calculation methodology, evidence sources & board scrutiny briefing"
               >
                 <ShieldCheck size={12} />
@@ -96,6 +105,7 @@ export default function PresentationSlideContent({
               type="button"
               className="slide-evidence-badge-btn"
               onClick={() => onViewEvidence && onViewEvidence(slide)}
+              aria-label={`Inspect calculation methodology and evidence for ${slide.evidence_id}`}
               title="Inspect calculation methodology, evidence sources & board scrutiny briefing"
             >
               <ShieldCheck size={12} />
@@ -116,6 +126,7 @@ export default function PresentationSlideContent({
             onChange={e => setTitleVal(e.target.value)}
             onBlur={handleTitleBlur}
             onKeyDown={e => e.key === "Enter" && handleTitleBlur()}
+            aria-label="Edit slide title"
             autoFocus
           />
         ) : (
@@ -151,10 +162,12 @@ export default function PresentationSlideContent({
     const totalCount = slide.total_slides || totalSlides || 8;
     return (
       <div className="slide-footer-block" style={{ color: theme.secondary_text }}>
-        <div
-          className="footer-left clickable-evidence"
+        <button
+          type="button"
+          className="footer-left clickable-evidence btn-unstyled"
           onClick={() => onViewEvidence && onViewEvidence(slide)}
           title="Click to inspect verifiable evidence & board briefing"
+          aria-label={`Inspect verifiable evidence for ${slide.evidence_id || "this slide"}`}
         >
           <ShieldCheck size={13} style={{ color: theme.success_color }} />
           <span>
@@ -162,7 +175,7 @@ export default function PresentationSlideContent({
             {sources.length > 0 ? `Evidence: ${sources.join(" · ")}` : "Verified Deterministic Ground Truth Engine"}
           </span>
           <span className="footer-inspect-cta">View Evidence &rarr;</span>
-        </div>
+        </button>
         <div className="footer-right">
           {limitations && <span className="footer-scope">Scope: {limitations}</span>}
           <span className="footer-slide-number" style={{ color: theme.brand_color }}>
@@ -173,7 +186,7 @@ export default function PresentationSlideContent({
     );
   };
 
-  if (slide?.visual_spec && !isEditable) {
+  if (slide?.visual_spec) {
     return (
       <div className={`slide-card-wrapper layout-${layout} visual-spec-active`}>
         <VisualSlideRenderer

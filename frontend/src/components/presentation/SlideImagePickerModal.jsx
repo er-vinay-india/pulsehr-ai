@@ -46,6 +46,18 @@ export default function SlideImagePickerModal({
     }
   }, [isOpen, selectedCategory]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, onClose]);
+
   const handleSearchSubmit = (e) => {
     e.preventDefault();
     fetchImages(query, selectedCategory);
@@ -68,7 +80,13 @@ export default function SlideImagePickerModal({
 
   return (
     <div className="pres-image-picker-overlay" onClick={onClose}>
-      <div className="pres-image-picker-modal" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="pres-image-picker-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="image-picker-title"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
         <div className="pres-image-picker-header">
           <div className="header-left">
@@ -76,7 +94,7 @@ export default function SlideImagePickerModal({
               <Image size={18} />
             </div>
             <div>
-              <h3 className="header-title">Royalty-Free Imagery Engine</h3>
+              <h3 id="image-picker-title" className="header-title">Royalty-Free Imagery Engine</h3>
               <p className="header-sub">
                 Curated commercial-use enterprise photography with automatic dark contrast scrim.
               </p>
@@ -89,13 +107,14 @@ export default function SlideImagePickerModal({
 
         {/* Search & Categories */}
         <div className="pres-image-picker-controls">
-          <form onSubmit={handleSearchSubmit} className="search-form">
-            <Search size={15} className="search-icon" />
+          <form onSubmit={handleSearchSubmit} className="search-form" role="search">
+            <Search size={15} className="search-icon" aria-hidden="true" />
             <input
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search free images (e.g., retail store, boardroom meeting, analytics)..."
+              aria-label="Search royalty-free images"
               className="search-input"
             />
             <button type="submit" className="btn-search">
@@ -103,11 +122,13 @@ export default function SlideImagePickerModal({
             </button>
           </form>
 
-          <div className="category-pills">
+          <div className="category-pills" role="tablist" aria-label="Image Categories">
             {CATEGORIES.map((cat) => (
               <button
                 key={cat.id}
                 type="button"
+                role="tab"
+                aria-selected={selectedCategory === cat.id}
                 onClick={() => setSelectedCategory(cat.id)}
                 className={`cat-pill ${selectedCategory === cat.id ? "active" : ""}`}
               >
@@ -120,14 +141,16 @@ export default function SlideImagePickerModal({
         {/* Scrim Contrast Control & Active Selection Preview */}
         <div className="scrim-control-bar">
           <div className="scrim-slider-group">
-            <Sliders size={14} />
-            <span className="scrim-label">Dark Scrim Contrast:</span>
+            <Sliders size={14} aria-hidden="true" />
+            <label htmlFor="scrim-slider-input" className="scrim-label">Dark Scrim Contrast:</label>
             <input
+              id="scrim-slider-input"
               type="range"
               min="0"
               max="90"
               step="5"
               value={scrimOpacity}
+              aria-label="Dark scrim contrast percentage"
               onChange={(e) => setScrimOpacity(Number(e.target.value))}
               className="scrim-slider"
             />
@@ -143,14 +166,14 @@ export default function SlideImagePickerModal({
         </div>
 
         {/* Image Grid */}
-        <div className="pres-image-grid">
+        <div className="pres-image-grid" role="region" aria-label="Image search results">
           {loading ? (
-            <div className="grid-loading">
+            <div className="grid-loading" role="status" aria-live="polite">
               <Sparkles size={24} className="spin-icon" />
               <span>Fetching royalty-free commercial photography...</span>
             </div>
           ) : images.length === 0 ? (
-            <div className="grid-empty">
+            <div className="grid-empty" role="status">
               <p>No images found matching your search. Try &quot;office&quot;, &quot;team&quot;, or &quot;retail&quot;.</p>
             </div>
           ) : (
@@ -159,8 +182,18 @@ export default function SlideImagePickerModal({
               return (
                 <div
                   key={img.id}
+                  role="button"
+                  tabIndex={0}
+                  aria-pressed={isSelected}
+                  aria-label={`Select photo: ${img.title} by ${img.creator}`}
                   className={`image-card ${isSelected ? "selected" : ""}`}
                   onClick={() => setSelectedImage(img)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setSelectedImage(img);
+                    }
+                  }}
                 >
                   <div className="image-wrapper">
                     <img src={img.thumbnail} alt={img.title} loading="lazy" />

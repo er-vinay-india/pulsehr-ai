@@ -1,5 +1,5 @@
-import React from "react";
-import { ShieldCheck, ArrowRight } from "lucide-react";
+import React, { useState } from "react";
+import { ShieldCheck, ArrowRight, Edit3, Image as ImageIcon } from "lucide-react";
 import SlideChart from "../slides/SlideChart.jsx";
 import FormattedText from "../slides/FormattedText.jsx";
 
@@ -21,12 +21,99 @@ export default function VisualSlideRenderer({
   const cardBg = tokens.surface || theme.card_bg || "#1e293b";
   const cardBorder = tokens.border || theme.card_border || "rgba(255, 255, 255, 0.08)";
 
-  const headline = spec.headline || slide.title || "Executive Briefing";
-  const subtitle = spec.subtitle || slide.subtitle || "";
-  const kpis = spec.kpis || slide.metrics || [];
-  const insights = spec.insights || slide.bullets || [];
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [titleVal, setTitleVal] = useState(spec.headline || slide.title || "Executive Briefing");
+
+  const [isEditingSubtitle, setIsEditingSubtitle] = useState(false);
+  const [subtitleVal, setSubtitleVal] = useState(spec.subtitle || slide.subtitle || "");
+
+  const [isEditingNarrative, setIsEditingNarrative] = useState(false);
+  const [narrativeVal, setNarrativeVal] = useState(slide.narrative || "");
+
+  const [editingInsightIdx, setEditingInsightIdx] = useState(null);
+  const [insightText, setInsightText] = useState("");
+
+  const [editingKpiIdx, setEditingKpiIdx] = useState(null);
+  const [kpiVal, setKpiVal] = useState("");
+
+  // Sync state whenever slide or visual spec changes
+  React.useEffect(() => {
+    setTitleVal(spec.headline || slide.title || "Executive Briefing");
+    setSubtitleVal(spec.subtitle || slide.subtitle || "");
+    setNarrativeVal(slide.narrative || "");
+    setIsEditingTitle(false);
+    setIsEditingSubtitle(false);
+    setIsEditingNarrative(false);
+    setEditingInsightIdx(null);
+    setEditingKpiIdx(null);
+  }, [slide.id, spec.headline, spec.subtitle, slide.title, slide.subtitle, slide.narrative]);
+
+  const headline = titleVal;
+  const subtitle = subtitleVal;
+  const kpis = slide.metrics || spec.kpis || [];
+  const rawInsights = slide.bullets || spec.insights || [];
+  const insights = rawInsights.map(i => (typeof i === "string" ? i : i.text || ""));
   const tableData = spec.table_data || slide.table;
   const footer = spec.source_footer || {};
+
+  const handleTitleBlur = () => {
+    setIsEditingTitle(false);
+    if (titleVal !== (spec.headline || slide.title)) {
+      onUpdate({
+        ...slide,
+        title: titleVal,
+        visual_spec: { ...spec, headline: titleVal }
+      });
+    }
+  };
+
+  const handleSubtitleBlur = () => {
+    setIsEditingSubtitle(false);
+    if (subtitleVal !== (spec.subtitle || slide.subtitle)) {
+      onUpdate({
+        ...slide,
+        subtitle: subtitleVal,
+        visual_spec: { ...spec, subtitle: subtitleVal }
+      });
+    }
+  };
+
+  const handleNarrativeBlur = () => {
+    setIsEditingNarrative(false);
+    if (narrativeVal !== slide.narrative) {
+      onUpdate({
+        ...slide,
+        narrative: narrativeVal
+      });
+    }
+  };
+
+  const handleInsightSave = (idx) => {
+    setEditingInsightIdx(null);
+    const updatedInsights = [...insights];
+    updatedInsights[idx] = insightText;
+    onUpdate({
+      ...slide,
+      bullets: updatedInsights,
+      visual_spec: { ...spec, insights: updatedInsights }
+    });
+  };
+
+  const handleKpiSave = (idx) => {
+    setEditingKpiIdx(null);
+    const updatedKpis = [...kpis];
+    const prev = updatedKpis[idx] || {};
+    updatedKpis[idx] = {
+      ...prev,
+      value: kpiVal,
+      provenance: "USER_OVERRIDE" // Mark metric as manually overridden per Requirement 8
+    };
+    onUpdate({
+      ...slide,
+      metrics: updatedKpis,
+      visual_spec: { ...spec, kpis: updatedKpis }
+    });
+  };
 
   // Render Diagram / Process
   const renderDiagram = () => {
@@ -123,8 +210,8 @@ export default function VisualSlideRenderer({
     );
   };
 
-  const hasChart = Boolean(spec.chart_spec || slide.chart);
-  const chartPayload = slide.chart || (spec.chart_spec ? {
+  const hasChart = Boolean(spec.chart_spec || slide.chart || slide.chart_data);
+  const chartPayload = slide.chart || slide.chart_data || (spec.chart_spec ? {
     chart_type: spec.chart_spec.family?.toLowerCase()?.includes("line") ? "line" : (spec.chart_spec.family?.toLowerCase()?.includes("donut") ? "donut" : "bar"),
     title: spec.chart_spec.title || headline,
     subtitle: spec.chart_spec.subtitle || subtitle,
@@ -138,7 +225,8 @@ export default function VisualSlideRenderer({
       style={{
         padding: "24px 32px",
         background: tokens.background || theme.bg_color || "#0f172a",
-        color: primaryText
+        color: primaryText,
+        overflow: "hidden"
       }}
     >
       {/* 1. SLIDE HEADER */}
@@ -155,6 +243,7 @@ export default function VisualSlideRenderer({
               type="button"
               className="slide-evidence-badge-btn"
               onClick={() => onViewEvidence && onViewEvidence(slide)}
+              aria-label={`Inspect evidence audit trail for ${slide.evidence_id}`}
               title="Inspect ground-truth evidence audit trail"
             >
               <ShieldCheck size={12} />
@@ -162,16 +251,68 @@ export default function VisualSlideRenderer({
             </button>
           )}
         </div>
-        <h2
-          className="fw-bold mb-1"
-          style={{ fontSize: "26px", lineHeight: "1.25", color: primaryText }}
-        >
-          <FormattedText text={headline} />
-        </h2>
-        {subtitle && (
-          <p className="mb-0" style={{ fontSize: "14px", color: secondaryText, lineHeight: "1.4" }}>
-            <FormattedText text={subtitle} />
-          </p>
+        {isEditable && isEditingTitle ? (
+          <input
+            type="text"
+            className="slide-title-input"
+            aria-label="Edit slide title"
+            value={titleVal}
+            onChange={(e) => setTitleVal(e.target.value)}
+            onBlur={handleTitleBlur}
+            onKeyDown={(e) => e.key === "Enter" && handleTitleBlur()}
+            autoFocus
+            style={{
+              fontSize: "24px",
+              fontWeight: 700,
+              width: "100%",
+              background: "rgba(255,255,255,0.05)",
+              color: primaryText,
+              border: `1px solid ${accentColor}`,
+              borderRadius: "4px",
+              padding: "4px 8px"
+            }}
+          />
+        ) : (
+          <h2
+            className={`fw-bold mb-1 ${isEditable ? "editable-cursor" : ""}`}
+            style={{ fontSize: "26px", lineHeight: "1.25", color: primaryText }}
+            onClick={() => isEditable && setIsEditingTitle(true)}
+            title={isEditable ? "Click to edit title" : undefined}
+          >
+            <FormattedText text={headline} />
+          </h2>
+        )}
+
+        {isEditable && isEditingSubtitle ? (
+          <input
+            type="text"
+            aria-label="Edit slide subtitle"
+            value={subtitleVal}
+            onChange={(e) => setSubtitleVal(e.target.value)}
+            onBlur={handleSubtitleBlur}
+            onKeyDown={(e) => e.key === "Enter" && handleSubtitleBlur()}
+            autoFocus
+            style={{
+              fontSize: "14px",
+              width: "100%",
+              background: "rgba(255,255,255,0.05)",
+              color: secondaryText,
+              border: `1px solid ${accentColor}`,
+              borderRadius: "4px",
+              padding: "2px 8px"
+            }}
+          />
+        ) : (
+          subtitle && (
+            <p
+              className={`mb-0 ${isEditable ? "editable-cursor" : ""}`}
+              style={{ fontSize: "14px", color: secondaryText, lineHeight: "1.4" }}
+              onClick={() => isEditable && setIsEditingSubtitle(true)}
+              title={isEditable ? "Click to edit subtitle" : undefined}
+            >
+              <FormattedText text={subtitle} />
+            </p>
+          )
         )}
       </header>
 
@@ -180,53 +321,204 @@ export default function VisualSlideRenderer({
         {/* KPI Row (if present) */}
         {kpis && kpis.length > 0 && (
           <div className="visual-kpi-grid">
-            {kpis.map((k, idx) => (
-              <div key={idx} className="visual-kpi-card">
-                <div className="kpi-label">{k.label}</div>
-                <div className="kpi-value" style={{ color: accentColor }}>{k.value}</div>
-                {k.subtext && <div className="kpi-subtext">{k.subtext}</div>}
+            {kpis.map((k, idx) => {
+              const isOverridden = k.provenance === "USER_OVERRIDE";
+              return (
+                <div key={idx} className="visual-kpi-card" style={{ position: "relative" }}>
+                  <div className="kpi-label">{k.label}</div>
+                  {isEditable && editingKpiIdx === idx ? (
+                    <input
+                      type="text"
+                      value={kpiVal}
+                      onChange={(e) => setKpiVal(e.target.value)}
+                      onBlur={() => handleKpiSave(idx)}
+                      onKeyDown={(e) => e.key === "Enter" && handleKpiSave(idx)}
+                      autoFocus
+                      style={{
+                        fontSize: "20px",
+                        fontWeight: 700,
+                        width: "100%",
+                        background: "rgba(255,255,255,0.05)",
+                        color: accentColor,
+                        border: `1px solid ${accentColor}`,
+                        borderRadius: "4px"
+                      }}
+                    />
+                  ) : (
+                    <div
+                      className={`kpi-value ${isEditable ? "editable-cursor" : ""}`}
+                      style={{ color: accentColor }}
+                      onClick={() => {
+                        if (isEditable) {
+                          setEditingKpiIdx(idx);
+                          setKpiVal(k.value);
+                        }
+                      }}
+                      title={isEditable ? "Click to override verified metric" : undefined}
+                    >
+                      {k.value}
+                    </div>
+                  )}
+                  {k.subtext && <div className="kpi-subtext">{k.subtext}</div>}
+                  {isOverridden && (
+                    <span
+                      style={{
+                        position: "absolute",
+                        top: "4px",
+                        right: "6px",
+                        fontSize: "9px",
+                        color: "#fbbf24",
+                        fontWeight: 600
+                      }}
+                      title="User Override (manual modification)"
+                    >
+                      USER OVERRIDE
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Executive Narrative / Analytical Synthesis */}
+        {(narrativeVal || slide.narrative) && (
+          <div
+            className="visual-narrative-box"
+            style={{
+              padding: "10px 14px",
+              background: cardBg,
+              border: `1px solid ${cardBorder}`,
+              borderLeft: `3px solid ${accentColor}`,
+              borderRadius: "6px",
+              fontSize: "14px",
+              lineHeight: "1.45",
+              color: primaryText
+            }}
+          >
+            {isEditable && isEditingNarrative ? (
+              <textarea
+                value={narrativeVal}
+                onChange={(e) => setNarrativeVal(e.target.value)}
+                onBlur={handleNarrativeBlur}
+                autoFocus
+                rows={2}
+                style={{
+                  width: "100%",
+                  background: "transparent",
+                  color: primaryText,
+                  border: `1px solid ${accentColor}`,
+                  borderRadius: "4px",
+                  fontSize: "14px",
+                  outline: "none"
+                }}
+              />
+            ) : (
+              <div
+                onClick={() => isEditable && setIsEditingNarrative(true)}
+                className={isEditable ? "editable-cursor" : ""}
+                title={isEditable ? "Click to edit narrative" : undefined}
+              >
+                <FormattedText text={narrativeVal || slide.narrative} defaultColor={primaryText} />
               </div>
-            ))}
+            )}
           </div>
         )}
 
         {/* Visual & Insights Content Row */}
-        <div className="row flex-grow-1 g-3" style={{ minHeight: 0 }}>
-          {/* Main Visual Column */}
-          <div className={insights && insights.length > 0 ? "col-8" : "col-12"} style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
-            {hasChart && chartPayload && (
-              <div className="card h-100" style={{ background: cardBg, borderColor: cardBorder }}>
-                <div className="card-body p-2 d-flex flex-column">
-                  <SlideChart chartData={chartPayload} theme={theme} />
-                </div>
-              </div>
-            )}
-            {spec.diagram_spec && renderDiagram()}
-            {spec.matrix_spec && renderMatrix()}
-            {tableData && renderTable()}
-          </div>
+        {(() => {
+          const hasVisual = Boolean(
+            slide.image_url ||
+            (hasChart && chartPayload) ||
+            spec.diagram_spec ||
+            spec.matrix_spec ||
+            tableData
+          );
 
-          {/* Key Insights Aside Column */}
-          {insights && insights.length > 0 && (
-            <div className="col-4" style={{ minHeight: 0 }}>
-              <div className="visual-insight-panel">
-                <div className="insight-panel-title" style={{ color: accentColor }}>
-                  Key Findings & Takeaways
-                </div>
-                <div style={{ flex: 1, overflowY: "auto" }}>
-                  {insights.map((item, idx) => (
-                    <div key={idx} className="insight-item">
-                      <div className="insight-bullet" style={{ background: accentColor }} />
-                      <div style={{ color: primaryText }}>
-                        <FormattedText text={item} />
+          return (
+            <div className="row flex-grow-1 g-3" style={{ minHeight: 0 }}>
+              {/* Main Visual Column */}
+              {hasVisual && (
+                <div className={insights && insights.length > 0 ? "col-7" : "col-12"} style={{ display: "flex", flexDirection: "column", minHeight: 0 }}>
+                  {slide.image_url ? (
+                    <div className="card h-100" style={{ background: cardBg, borderColor: cardBorder, overflow: "hidden" }}>
+                      <img
+                        src={slide.image_url}
+                        alt={headline}
+                        style={{ width: "100%", height: "100%", objectFit: slide.image_fit || "cover", maxHeight: "380px" }}
+                      />
+                    </div>
+                  ) : hasChart && chartPayload ? (
+                    <div className="card h-100" style={{ background: cardBg, borderColor: cardBorder }}>
+                      <div className="card-body p-2 d-flex flex-column" style={{ minHeight: "260px" }}>
+                        <SlideChart chart={chartPayload} chartData={chartPayload} theme={theme} />
                       </div>
                     </div>
-                  ))}
+                  ) : null}
+                  {spec.diagram_spec && renderDiagram()}
+                  {spec.matrix_spec && renderMatrix()}
+                  {tableData && renderTable()}
                 </div>
-              </div>
+              )}
+
+              {/* Key Insights Aside Column */}
+              {insights && insights.length > 0 && (
+                <div className={hasVisual ? "col-5" : "col-12"} style={{ minHeight: 0 }}>
+                  <div className="visual-insight-panel" style={{ height: "100%", display: "flex", flexDirection: "column" }}>
+                    <div className="insight-panel-title" style={{ color: accentColor }}>
+                      Key Findings & Takeaways
+                    </div>
+                    <div style={{
+                      flex: 1,
+                      overflowY: "auto",
+                      display: hasVisual ? "block" : "grid",
+                      gridTemplateColumns: hasVisual ? "1fr" : "repeat(auto-fit, minmax(280px, 1fr))",
+                      gap: "10px"
+                    }}>
+                      {insights.map((item, idx) => (
+                        <div key={idx} className="insight-item">
+                          <div className="insight-bullet" style={{ background: accentColor }} />
+                          <div style={{ color: primaryText, flex: 1 }}>
+                            {isEditable && editingInsightIdx === idx ? (
+                              <textarea
+                                value={insightText}
+                                onChange={(e) => setInsightText(e.target.value)}
+                                onBlur={() => handleInsightSave(idx)}
+                                autoFocus
+                                rows={2}
+                                style={{
+                                  width: "100%",
+                                  background: "rgba(255,255,255,0.05)",
+                                  color: primaryText,
+                                  border: `1px solid ${accentColor}`,
+                                  borderRadius: "4px",
+                                  fontSize: "13px"
+                                }}
+                              />
+                            ) : (
+                              <div
+                                className={isEditable ? "editable-cursor" : ""}
+                                onClick={() => {
+                                  if (isEditable) {
+                                    setEditingInsightIdx(idx);
+                                    setInsightText(item);
+                                  }
+                                }}
+                                title={isEditable ? "Click to edit takeaway" : undefined}
+                              >
+                                <FormattedText text={item} />
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          );
+        })()}
       </main>
 
       {/* 3. SLIDE FOOTER */}

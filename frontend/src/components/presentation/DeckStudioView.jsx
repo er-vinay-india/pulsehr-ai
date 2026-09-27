@@ -20,6 +20,8 @@ import {
   Check,
   RotateCcw,
   Zap,
+  Film,
+  Sliders,
 } from "lucide-react";
 import PresentationRevealDeck from "../PresentationRevealDeck.jsx";
 import { exportStandaloneHtmlPresentation } from "../../utils/standaloneHtmlExporter";
@@ -53,6 +55,9 @@ export default function DeckStudioView({
   onUpdateSlide,
   onExportPptx,
   selectedThemeId,
+  onSetSlideImage,
+  onSetTransition,
+  onOpenRegenerate
 }) {
   const [isImagePickerOpen, setIsImagePickerOpen] = useState(false);
   const [isPresenterMode, setIsPresenterMode] = useState(false);
@@ -61,7 +66,7 @@ export default function DeckStudioView({
   const [previousSlideSnapshot, setPreviousSlideSnapshot] = useState(null);
   const [showApprovalBanner, setShowApprovalBanner] = useState(false);
 
-  const evidenceLocked = deckSpec.metadata?.deck_style === "decision_brief";
+  const evidenceLocked = false; // Factual boundary: Editorial content freely editable; metrics tracked with USER_OVERRIDE
   const currentSlide = deckSpec.slides[activeSlideIndex] || deckSpec.slides[0];
 
   // Handle Copilot Slide Curation
@@ -132,6 +137,7 @@ export default function DeckStudioView({
       deckSpec.slides.forEach((s, idx) => {
         const updated = {
           ...s,
+          image_url: url,
           background_image: url,
           scrim_opacity: scrimOpacity,
         };
@@ -140,10 +146,13 @@ export default function DeckStudioView({
     } else {
       const updated = {
         ...currentSlide,
+        image_url: url,
         background_image: url,
         scrim_opacity: scrimOpacity,
+        layout: currentSlide.layout === "title_cover" ? currentSlide.layout : "image_story"
       };
       onUpdateSlide(activeSlideIndex, updated);
+      if (onSetSlideImage) onSetSlideImage(activeSlideIndex, url);
     }
   };
 
@@ -177,6 +186,54 @@ export default function DeckStudioView({
               </select>
             </div>
             <span className="symbolic-tooltip">Visual Theme Palette</span>
+          </div>
+
+          <div className="symbolic-btn-wrap">
+            <div className="theme-quick-dropdown">
+              <Film size={14} />
+              <select
+                className="select-theme-inline"
+                value={currentSlide.transition || deckSpec.metadata?.transition || "none"}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (onSetTransition) onSetTransition(val);
+                  onUpdateSlide(activeSlideIndex, { ...currentSlide, transition: val });
+                }}
+                aria-label="Slide Transition"
+              >
+                <option value="none">Transition: None</option>
+                <option value="fade">Transition: Fade</option>
+                <option value="slide">Transition: Slide</option>
+                <option value="scale">Transition: Scale</option>
+                <option value="reveal">Transition: Reveal</option>
+              </select>
+            </div>
+            <span className="symbolic-tooltip">Slide Transition Effect</span>
+          </div>
+
+          <div className="symbolic-btn-wrap">
+            <div className="theme-quick-dropdown">
+              <Sliders size={14} />
+              <select
+                className="select-theme-inline"
+                value={currentSlide.layout || "chart_narrative"}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  onUpdateSlide(activeSlideIndex, { ...currentSlide, layout: val });
+                }}
+                aria-label="Slide Layout"
+              >
+                <option value="chart_narrative">Layout: Chart & Insights</option>
+                <option value="full_chart_takeaway">Layout: Hero Chart</option>
+                <option value="two_charts">Layout: Dual Charts</option>
+                <option value="comparison_split">Layout: Strategic Split</option>
+                <option value="title_hero">Layout: Executive Hero</option>
+                <option value="image_story">Layout: Visual Image Story</option>
+                <option value="table_detail">Layout: Evidence Table</option>
+                <option value="title_cover">Layout: Title Cover</option>
+              </select>
+            </div>
+            <span className="symbolic-tooltip">Slide Layout Variant</span>
           </div>
 
           {/* Audit Verification Seal */}
@@ -310,15 +367,25 @@ export default function DeckStudioView({
       <div className="studio-main-grid">
         {/* LEFT: SLIDE THUMBNAIL RAIL */}
         {!isPresenterMode && (
-          <div className="studio-thumbnails-rail">
+          <div className="studio-thumbnails-rail" role="region" aria-label="Slide thumbnail navigation">
             <div className="thumbnails-scroll-wrap">
               {deckSpec.slides.map((s, idx) => {
                 const isActive = idx === activeSlideIndex;
                 return (
                   <div
                     key={s.id || idx}
+                    role="button"
+                    tabIndex={0}
+                    aria-current={isActive ? "true" : undefined}
+                    aria-label={`Slide ${idx + 1}: ${s.title || "Untitled"}`}
                     className={`thumbnail-card ${isActive ? "active" : ""}`}
                     onClick={() => setActiveSlideIndex(idx)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setActiveSlideIndex(idx);
+                      }
+                    }}
                   >
                     <div className="thumb-header">
                       <span className="thumb-idx">{idx + 1}</span>
@@ -334,6 +401,7 @@ export default function DeckStudioView({
                         disabled={idx === 0}
                         onClick={() => onMoveSlide(idx, -1)}
                         title="Move slide up"
+                        aria-label="Move slide up"
                       >
                         <ArrowUp size={12} />
                       </button>
@@ -343,6 +411,7 @@ export default function DeckStudioView({
                         disabled={idx === deckSpec.slides.length - 1}
                         onClick={() => onMoveSlide(idx, 1)}
                         title="Move slide down"
+                        aria-label="Move slide down"
                       >
                         <ArrowDown size={12} />
                       </button>
@@ -352,6 +421,7 @@ export default function DeckStudioView({
                         disabled={evidenceLocked}
                         onClick={() => onDuplicateSlide(idx)}
                         title="Duplicate slide"
+                        aria-label="Duplicate slide"
                       >
                         <Copy size={12} />
                       </button>
@@ -361,6 +431,7 @@ export default function DeckStudioView({
                         disabled={evidenceLocked}
                         onClick={() => onDeleteSlide(idx)}
                         title="Delete slide"
+                        aria-label="Delete slide"
                       >
                         <Trash2 size={12} />
                       </button>
@@ -444,6 +515,7 @@ export default function DeckStudioView({
                   value={curatePrompt}
                   onChange={(e) => setCuratePrompt(e.target.value)}
                   placeholder="Ask HRIDAY to refine this slide (e.g. 'Rephrase for the CFO', 'Make bullet points sharper')..."
+                  aria-label="Ask HRIDAY to refine this slide"
                   className="copilot-input"
                   disabled={isCurating}
                 />
@@ -470,7 +542,7 @@ export default function DeckStudioView({
 
           {/* BOTTOM SPEAKER NOTES DRAWER */}
           {speakerNotesOpen && currentSlide && (
-            <div className="studio-speaker-notes-bar">
+            <div className="studio-speaker-notes-bar" role="region" aria-label="Speaker notes">
               <div className="notes-bar-header">
                 <div className="notes-header-left">
                   <FileText size={14} />
@@ -483,6 +555,7 @@ export default function DeckStudioView({
                 readOnly={evidenceLocked}
                 rows={2}
                 value={currentSlide.speaker_notes || ""}
+                aria-label={`Speaker notes for slide ${activeSlideIndex + 1}`}
                 onChange={(e) => {
                   const updated = { ...currentSlide, speaker_notes: e.target.value };
                   onUpdateSlide(activeSlideIndex, updated);

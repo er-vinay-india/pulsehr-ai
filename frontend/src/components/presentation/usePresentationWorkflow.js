@@ -44,7 +44,7 @@ export function usePresentationWorkflow({
   const [objective, setObjective] = useState("Executive Leadership Review");
   const [audience, setAudience] = useState("C-Suite & Operations Leadership");
   const [targetLength, setTargetLength] = useState(8);
-  const [deckStyle, setDeckStyle] = useState("decision_brief");
+  const [deckStyle, setDeckStyle] = useState("standard");
   const [selectedThemeId, setSelectedThemeId] = useState("bold_signal");
   const [selectedSheetId, setSelectedSheetId] = useState("");
   const [instructions, setInstructions] = useState("");
@@ -255,12 +255,10 @@ export function usePresentationWorkflow({
     if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
     setJobError(null);
     setCurrentJobId(null);
-    setDeckSpec(null);
     setSlideProgressData(null);
     setJobProgress(0);
     setJobStage("reviewing_coverage");
     setViewMode("config");
-    onJobUpdate(null);
   };
 
   const handleResetAndStartGeneration = () => {
@@ -357,33 +355,63 @@ export function usePresentationWorkflow({
     updatePresentationDeck(updated.id, updated).catch(console.error);
   };
 
-  const handleAddSlide = () => {
+  const handleAddSlide = (layoutFamily = "chart_narrative") => {
     if (!deckSpec) return;
+    const isBlank = layoutFamily === "blank";
+    const isTitle = layoutFamily === "title_cover";
+    const isImage = layoutFamily === "image_story";
+    const isComparison = layoutFamily === "comparison_split";
+
     const newSlide = {
       id: `slide_${Date.now()}`,
       order: deckSpec.slides.length + 1,
-      layout: "chart_narrative",
-      category: "OPERATIONAL HIGHLIGHT",
-      title: "New Strategic Slide",
-      subtitle: "Operational analysis and key recommendations",
-      narrative: "Synthesized observations regarding current dataset throughput and trends.",
-      bullets: [
+      layout: isBlank ? "blank" : isTitle ? "title_cover" : isImage ? "image_story" : isComparison ? "comparison_split" : "chart_narrative",
+      category: isTitle ? "EXECUTIVE OVERVIEW" : isImage ? "OPERATIONAL SNAPSHOT" : "OPERATIONAL HIGHLIGHT",
+      title: isBlank ? "Blank Slide" : isTitle ? "Executive Overview" : "New Strategic Slide",
+      subtitle: isBlank ? "" : "Operational analysis and key recommendations",
+      narrative: isBlank ? "" : "Synthesized observations regarding current dataset throughput and trends.",
+      bullets: isBlank ? [] : [
         "First key analytical finding identified from data audit.",
         "Recommended operational next step for leadership review."
       ],
-      metrics: [
+      metrics: isBlank ? [] : [
         { label: "Throughput", value: "Optimal", subtext: "Target range" }
       ],
       chart: null,
       table: null,
-      speaker_notes: "Add key talking points and presentation remarks here.",
-      evidence_sources: ["HighView Ground Truth Engine · Powered by HRIDAY"]
+      speaker_notes: isBlank ? "" : "Add key talking points and presentation remarks here.",
+      evidence_sources: ["HighView Ground Truth Engine · Verified Provenance"]
     };
 
     const newSlides = [...deckSpec.slides, newSlide];
     const updated = { ...deckSpec, slides: newSlides };
     setDeckSpec(updated);
     setActiveSlideIndex(newSlides.length - 1);
+    updatePresentationDeck(updated.id, updated).catch(console.error);
+  };
+
+  const handleSetSlideImage = (slideIndex, imageUrl, imageFit = "cover") => {
+    if (!deckSpec || !deckSpec.slides[slideIndex]) return;
+    const newSlides = [...deckSpec.slides];
+    const current = newSlides[slideIndex];
+    newSlides[slideIndex] = {
+      ...current,
+      image_url: imageUrl,
+      image_fit: imageFit,
+      layout: current.layout === "title_cover" ? current.layout : "image_story"
+    };
+    const updated = { ...deckSpec, slides: newSlides };
+    setDeckSpec(updated);
+    updatePresentationDeck(updated.id, updated).catch(console.error);
+  };
+
+  const handleSetTransition = (transitionType) => {
+    if (!deckSpec) return;
+    const updated = {
+      ...deckSpec,
+      metadata: { ...deckSpec.metadata, transition: transitionType }
+    };
+    setDeckSpec(updated);
     updatePresentationDeck(updated.id, updated).catch(console.error);
   };
 
@@ -489,6 +517,8 @@ export function usePresentationWorkflow({
     handleDeleteSlide,
     handleDuplicateSlide,
     handleAddSlide,
+    handleSetSlideImage,
+    handleSetTransition,
     handleRegenerateSlideSubmit,
     handleExportPptx
   };

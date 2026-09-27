@@ -39,6 +39,7 @@ export default function SlideLayoutViews({
               <input
                 type="text"
                 className="title-cover-input"
+                aria-label="Edit title cover heading"
                 value={titleVal !== undefined ? titleVal : slide.title}
                 onChange={e => setTitleVal && setTitleVal(e.target.value)}
                 onBlur={handleTitleBlur}
@@ -67,6 +68,8 @@ export default function SlideLayoutViews({
               <button
                 type="button"
                 className="btn-ai-title-suggest"
+                aria-haspopup="dialog"
+                aria-expanded={showTitleSuggestions}
                 onClick={() => setShowTitleSuggestions(!showTitleSuggestions)}
                 title="Explore intelligent title suggestions from HRIDAY"
               >
@@ -76,7 +79,7 @@ export default function SlideLayoutViews({
 
               {/* AI Title Suggestions Popover / Panel */}
               {showTitleSuggestions && (
-                <div className="title-suggestions-popover">
+                <div className="title-suggestions-popover" role="dialog" aria-label="AI Title Alternatives">
                   <div className="popover-header">
                     <div className="popover-title-row">
                       <Sparkles size={14} />
@@ -146,6 +149,7 @@ export default function SlideLayoutViews({
             {isEditable && isEditingNarrative ? (
               <textarea
                 className="slide-narrative-textarea"
+                aria-label="Edit slide narrative"
                 value={narrativeVal}
                 onChange={e => setNarrativeVal(e.target.value)}
                 onBlur={handleNarrativeBlur}
@@ -227,13 +231,24 @@ export default function SlideLayoutViews({
         </div>
       )}
 
-      {/* LAYOUT 3: chart_narrative */}
-      {layout === "chart_narrative" && (
+      {/* LAYOUT 3: chart_narrative / split_kpi_chart */}
+      {(layout === "chart_narrative" || layout === "split_kpi_chart" || layout === "split_metric_chart") && (
         <div className="layout-grid chart-narrative-grid">
           <div className="narrative-side-card" style={{ backgroundColor: theme.card_bg, borderColor: theme.card_border }}>
+            {slide.stat_callout && (
+              <div className="callout-hero-stat" style={{ marginBottom: "14px", padding: "10px 14px", borderRadius: "8px", background: "rgba(255,255,255,0.03)", border: `1px solid ${theme.card_border}` }}>
+                <div style={{ fontSize: "28px", fontWeight: "700", color: theme.brand_color }}>
+                  {slide.stat_callout.value} {slide.stat_callout.unit || ""}
+                </div>
+                <div style={{ fontSize: "12px", color: theme.secondary_text }}>
+                  {slide.stat_callout.label} {slide.stat_callout.sublabel ? `· ${slide.stat_callout.sublabel}` : ""}
+                </div>
+              </div>
+            )}
             {isEditable && isEditingNarrative ? (
               <textarea
                 className="slide-narrative-textarea"
+                aria-label="Edit slide narrative"
                 value={narrativeVal}
                 onChange={e => setNarrativeVal(e.target.value)}
                 onBlur={handleNarrativeBlur}
@@ -255,7 +270,7 @@ export default function SlideLayoutViews({
                 {slide.bullets.map((b, i) => (
                   <li key={i} className="slide-bullet-row">
                     <ChevronRight size={14} style={{ color: theme.brand_color, flexShrink: 0, marginTop: 3 }} />
-                    <FormattedText text={b} defaultColor={theme.secondary_text} />
+                    <FormattedText text={typeof b === "string" ? b : b.text} defaultColor={theme.secondary_text} />
                   </li>
                 ))}
               </ul>
@@ -279,14 +294,14 @@ export default function SlideLayoutViews({
             ) : slide.burnout_strain_data ? (
               <SlideBurnoutStrainPanel data={slide.burnout_strain_data} theme={theme} />
             ) : (
-              <SlideChart chart={slide.chart} theme={theme} />
+              <SlideChart chart={slide.chart || slide.chart_data} theme={theme} />
             )}
           </div>
         </div>
       )}
 
-      {/* LAYOUT: full_chart_takeaway */}
-      {layout === "full_chart_takeaway" && (
+      {/* LAYOUT: full_chart_takeaway / chart_focus */}
+      {(layout === "full_chart_takeaway" || layout === "chart_focus") && (
         <div className="layout-full-chart-takeaway">
           <div className="takeaway-banner-card" style={{ backgroundColor: theme.card_bg, borderColor: theme.card_border }}>
             <div className="takeaway-banner-header">
@@ -301,14 +316,14 @@ export default function SlideLayoutViews({
                 {slide.bullets.map((b, i) => (
                   <span key={i} className="takeaway-bullet-chip" style={{ borderColor: theme.card_border, color: theme.secondary_text }}>
                     <ChevronRight size={12} style={{ color: theme.brand_color, display: "inline" }} />
-                    <FormattedText text={b} defaultColor={theme.secondary_text} />
+                    <FormattedText text={typeof b === "string" ? b : b.text} defaultColor={theme.secondary_text} />
                   </span>
                 ))}
               </div>
             )}
           </div>
           <div className="hero-chart-container" style={{ backgroundColor: theme.card_bg, borderColor: theme.card_border }}>
-            <SlideChart chart={slide.chart} theme={theme} />
+            <SlideChart chart={slide.chart || slide.chart_data} theme={theme} />
           </div>
         </div>
       )}
@@ -455,38 +470,114 @@ export default function SlideLayoutViews({
         </div>
       )}
 
-      {/* LAYOUT 5: table_detail */}
-      {layout === "table_detail" && (
-        <div className="layout-table-detail">
+      {/* LAYOUT: audit_quad (Governance 4-card grid) */}
+      {layout === "audit_quad" && (
+        <div className="layout-audit-quad" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", height: "100%" }}>
+          {(slide.bullets || [
+            { text: "Data Governance: Fully validated against audit parameters" },
+            { text: "Sample Validity: Controlled for operational scale and tenure" },
+            { text: "Simpson's Paradox Protection: Subgroup distributions checked" },
+            { text: "Audit Integrity: Direct 1:1 binding to empirical records" }
+          ]).slice(0, 4).map((b, i) => (
+            <div key={i} style={{ padding: "16px 20px", borderRadius: "8px", background: theme.card_bg, borderColor: theme.card_border, border: `1px solid ${theme.card_border}`, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+                <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: "24px", height: "24px", borderRadius: "50%", background: `${theme.brand_color}22`, color: theme.brand_color, fontWeight: "bold", fontSize: "12px" }}>
+                  {i + 1}
+                </span>
+                <span style={{ fontSize: "14px", fontWeight: "600", color: theme.primary_text }}>Governance Principle {i + 1}</span>
+              </div>
+              <p style={{ margin: 0, fontSize: "13px", color: theme.secondary_text, lineHeight: "1.4" }}>
+                <FormattedText text={typeof b === "string" ? b : b.text} defaultColor={theme.secondary_text} />
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* LAYOUT: title_hero */}
+      {layout === "title_hero" && (
+        <div className="layout-title-hero" style={{ display: "flex", flexDirection: "column", gap: "20px", height: "100%", justifyContent: "center" }}>
           {slide.narrative && (
-            <p className="table-intro-narrative" style={{ color: theme.secondary_text }}>
-              <FormattedText text={slide.narrative} defaultColor={theme.secondary_text} />
+            <p style={{ fontSize: "18px", color: theme.primary_text, lineHeight: "1.5", maxWidth: "900px" }}>
+              <FormattedText text={slide.narrative} defaultColor={theme.primary_text} />
             </p>
           )}
-
-          {slide.table && (
-            <div className="table-responsive-container" style={{ borderColor: theme.card_border }}>
-              <table className="presentation-data-table">
-                <thead>
-                  <tr>
-                    {(slide.table.headers || []).map((h, i) => (
-                      <th key={i} style={{ color: theme.brand_color, backgroundColor: theme.card_bg }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {(slide.table.rows || []).slice(0, 8).map((row, rIdx) => (
-                    <tr key={rIdx} style={{ borderBottomColor: theme.card_border }}>
-                      {row.map((cell, cIdx) => (
-                        <td key={cIdx} style={{ color: cIdx === 0 ? theme.primary_text : theme.secondary_text }}>
-                          {String(cell)}
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          {slide.metrics && slide.metrics.length > 0 && (
+            <div style={{ display: "grid", gridTemplateColumns: `repeat(${Math.min(slide.metrics.length, 3)}, 1fr)`, gap: "16px" }}>
+              {slide.metrics.map((m, i) => (
+                <div key={i} style={{ padding: "16px", borderRadius: "8px", background: theme.card_bg, border: `1px solid ${theme.card_border}` }}>
+                  <div style={{ fontSize: "32px", fontWeight: "700", color: theme.brand_color }}>{m.value}</div>
+                  <div style={{ fontSize: "14px", fontWeight: "600", color: theme.primary_text, marginTop: "4px" }}>{m.label}</div>
+                  {m.subtext && <div style={{ fontSize: "12px", color: theme.secondary_text, marginTop: "2px" }}>{m.subtext}</div>}
+                </div>
+              ))}
             </div>
+          )}
+          {slide.bullets && slide.bullets.length > 0 && (
+            <ul className="slide-bullets-stack">
+              {slide.bullets.map((b, i) => (
+                <li key={i} className="slide-bullet-row">
+                  <ChevronRight size={14} style={{ color: theme.brand_color, flexShrink: 0, marginTop: 3 }} />
+                  <FormattedText text={typeof b === "string" ? b : b.text} defaultColor={theme.secondary_text} />
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
+      {/* LAYOUT: image_story */}
+      {layout === "image_story" && (
+        <div className="layout-image-story" style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: "24px", height: "100%", alignItems: "center" }}>
+          <div style={{ height: "100%", maxHeight: "420px", borderRadius: "8px", overflow: "hidden", border: `1px solid ${theme.card_border}` }}>
+            <img
+              src={slide.image_url || slide.background_image || "https://images.unsplash.com/photo-1542744173-8e7e53415bb0?auto=format&fit=crop&w=1200&q=80"}
+              alt={slide.title || "Slide visual"}
+              style={{ width: "100%", height: "100%", objectFit: slide.image_fit || "cover" }}
+            />
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+            {slide.narrative && (
+              <p style={{ fontSize: "16px", color: theme.primary_text, lineHeight: "1.5" }}>
+                <FormattedText text={slide.narrative} defaultColor={theme.primary_text} />
+              </p>
+            )}
+            {slide.bullets && slide.bullets.length > 0 && (
+              <ul className="slide-bullets-stack">
+                {slide.bullets.map((b, i) => (
+                  <li key={i} className="slide-bullet-row">
+                    <ChevronRight size={14} style={{ color: theme.brand_color, flexShrink: 0, marginTop: 3 }} />
+                    <FormattedText text={typeof b === "string" ? b : b.text} defaultColor={theme.secondary_text} />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Universal Fallback / Layout Resiliency: Ensures no slide is EVER blank */}
+      {!["title_cover", "chart_narrative", "split_kpi_chart", "split_metric_chart", "full_chart_takeaway", "chart_focus", "two_charts", "comparison_split", "kpi_cards", "title_hero", "bullets_roadmap", "roadmap_horizontal", "action_plan", "bullets_action", "table_detail", "audit_quad", "image_story"].includes(layout) && (
+        <div className="layout-universal-content" style={{ display: "flex", flexDirection: "column", gap: "16px", height: "100%" }}>
+          {slide.narrative && (
+            <div style={{ padding: "14px 18px", borderRadius: "8px", background: theme.card_bg, border: `1px solid ${theme.card_border}` }}>
+              <FormattedText text={slide.narrative} defaultColor={theme.primary_text} />
+            </div>
+          )}
+          {(slide.chart || slide.chart_data) && (
+            <div style={{ flex: 1, minHeight: "240px", padding: "12px", borderRadius: "8px", background: theme.card_bg, border: `1px solid ${theme.card_border}` }}>
+              <SlideChart chart={slide.chart || slide.chart_data} theme={theme} />
+            </div>
+          )}
+          {slide.bullets && slide.bullets.length > 0 && (
+            <ul className="slide-bullets-stack" style={{ margin: 0 }}>
+              {slide.bullets.map((b, i) => (
+                <li key={i} className="slide-bullet-row">
+                  <ChevronRight size={14} style={{ color: theme.brand_color, flexShrink: 0, marginTop: 3 }} />
+                  <FormattedText text={typeof b === "string" ? b : b.text} defaultColor={theme.secondary_text} />
+                </li>
+              ))}
+            </ul>
           )}
         </div>
       )}

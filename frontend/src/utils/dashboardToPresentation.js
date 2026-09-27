@@ -12,26 +12,25 @@ export function transformDashboardToDeck(dashboardData, options = {}) {
   const {
     targetLength = 7,
     themeId = "executive_dark",
-    deckStyle = "decision_brief",
+    deckStyle = "standard",
     backgroundMode = "solid", // "solid" | "image"
     selectedImageUrl = null,
   } = options;
 
-  const {
-    element, // primary KPI
-    quaternary_element: priorityElement, // disparity & donut
-    secondary_element: breakdownElement,
-    forecast: forecastData,
-    exception_watch: exceptionData,
-    analysis_coverage: coverageData,
-  } = dashboardData;
+  const element = dashboardData.element || {};
+  const priorityElement = dashboardData.quaternary_element || dashboardData.primary_element || dashboardData.priority_element;
+  const breakdownElement = dashboardData.secondary_element || dashboardData.breakdown_element;
+  const exceptionData = dashboardData.exception_element || dashboardData.exception_watch;
+  const forecastData = dashboardData.outlook_element || dashboardData.forecast;
+  const coverageData = dashboardData.analysis_coverage;
+  const findings = dashboardData.orchestrator_findings || [];
 
   const slides = [];
-  const primaryTitle = element?.glance?.label || "Workforce Operations & Executive Strategy";
+  const primaryTitle = element?.glance?.label || element?.title || "Workforce Operations & Executive Strategy";
   const priorityTitle = priorityElement?.title || "Strategic Priority Disparity";
-  const heroSpread = priorityElement?.prominent_number || priorityElement?.glance?.formatted_value || "—";
-  const priorityUnit = priorityElement?.glance?.unit || "";
-  const disparityDimension = priorityElement?.effective_dimension || "Department";
+  const heroSpread = priorityElement?.formatted_absolute_lift || priorityElement?.prominent_number || priorityElement?.glance?.formatted_value || (priorityElement?.absolute_lift ? String(priorityElement.absolute_lift) : "—");
+  const priorityUnit = priorityElement?.unit || priorityElement?.glance?.unit || "";
+  const disparityDimension = priorityElement?.dimension_name || priorityElement?.effective_dimension || "Cohort";
 
   // Slide 1: Title & Executive Mandate
   slides.push({
@@ -39,11 +38,11 @@ export function transformDashboardToDeck(dashboardData, options = {}) {
     order: 1,
     layout: "title_cover",
     title: priorityTitle,
-    subtitle: `Executive Briefing · ${priorityElement?.subtitle || "Empirical Boardroom Evidence"}`,
+    subtitle: `Executive Briefing · ${priorityElement?.subtitle || priorityElement?.caption || "Empirical Boardroom Evidence"}`,
     narrative: `Comprehensive operational review evaluating unit disparity, forward forecast trajectories, and S01–S20 governance guardrails.`,
     bullets: [
       { text: `Primary Metric Focus: ${primaryTitle}` },
-      { text: `Verified Sample Scope: ${priorityElement?.population_scope || "Qualified Operational Units"}` },
+      { text: `Verified Sample Scope: ${priorityElement?.population_scope || priorityElement?.comparator_cohort || "Qualified Operational Units"}` },
       { text: `Data Governance: Evaluated against 20 decision strategies with zero unvalidated inferences` },
     ],
     speaker_notes: `Welcome executive team. Today we present the operational and workforce audit findings. All data is verified from the active ledger with empirical backing.`,
@@ -53,33 +52,86 @@ export function transformDashboardToDeck(dashboardData, options = {}) {
 
   // Slide 2: Strategic Priority Disparity (Donut / Bounded Bar)
   if (priorityElement) {
+    let priorityChartData = priorityElement?.echarts_option || null;
+    if (!priorityChartData && priorityElement?.items?.length) {
+      priorityChartData = {
+        tooltip: { trigger: "item" },
+        series: [{
+          type: "pie",
+          radius: ["40%", "70%"],
+          avoidLabelOverlap: true,
+          data: priorityElement.items.map(it => ({
+            name: it.cohort || it.label || "Segment",
+            value: it.value
+          }))
+        }]
+      };
+    }
+
     slides.push({
       id: "slide-02-priority-disparity",
       order: 2,
       layout: "split_kpi_chart",
       title: "Strategic Disparity & Concentration Spread",
       subtitle: `${disparityDimension} Disparity: ${heroSpread}${priorityUnit ? " " + priorityUnit : ""}`,
-      narrative: priorityElement.operational_implication || `Observed performance gap across qualified operating units.`,
+      narrative: priorityElement.operational_implication || priorityElement.explain || `Observed performance gap across qualified operating units.`,
       stat_callout: {
         value: heroSpread,
         unit: priorityUnit,
         label: "Disparity Spread",
-        sublabel: "Gap between highest and lowest unit",
+        sublabel: "Gap between comparator and baseline",
       },
-      chart_data: priorityElement.echarts_option || null,
+      chart_data: priorityChartData,
       chart_type: "pie",
       bullets: [
-        { text: `Observed comparison: ${priorityElement.observed_comparison || "Variance between primary operating units"}` },
+        { text: `Observed comparison: ${priorityElement.observed_comparison || (priorityElement.baseline_cohort ? `${priorityElement.comparator_cohort} vs ${priorityElement.baseline_cohort}` : "Variance between primary operating units")}` },
         { text: `Operational implication: ${priorityElement.operational_implication || "Duty roster and presence variance requires structured alignment"}` },
         { text: `Recommended Action: ${priorityElement.action_recommendation?.action_text || "Conduct operational review and reallocate shift targets"}` },
       ],
-      speaker_notes: `Looking at our strategic disparity spread, we identify a ${heroSpread} variance across departments. The donut split on the right illustrates unit concentration.`,
+      speaker_notes: `Looking at our strategic disparity spread, we identify a ${heroSpread} variance across units. The donut split on the right illustrates unit concentration.`,
       narration_script: `Examining strategic disparity, we observe an operational spread of ${heroSpread}. The breakdown indicates significant concentration in leading operational divisions compared to peer units.`,
     });
   }
 
   // Slide 3: Breakdown & Unit Distribution
-  if (breakdownElement || priorityElement?.echarts_option) {
+  if (breakdownElement || findings.length) {
+    let breakdownChartData = breakdownElement?.echarts_option || null;
+    if (!breakdownChartData && breakdownElement?.chart_series?.points?.length) {
+      const rawPts = breakdownElement.chart_series.points;
+      const sample = rawPts.slice(-14);
+      breakdownChartData = {
+        tooltip: { trigger: "axis" },
+        xAxis: {
+          type: "category",
+          data: sample.map(p => p.period_label || p.period)
+        },
+        yAxis: { type: "value" },
+        series: [{
+          name: breakdownElement.title || "Observed",
+          type: "bar",
+          data: sample.map(p => p.average_hours || p.value)
+        }]
+      };
+    } else if (!breakdownChartData && findings.length) {
+      const s01 = findings.find(f => f.visual_points_summary?.length);
+      if (s01) {
+        const topPts = s01.visual_points_summary.slice(0, 10);
+        breakdownChartData = {
+          tooltip: { trigger: "axis" },
+          xAxis: {
+            type: "category",
+            data: topPts.map(p => p.label)
+          },
+          yAxis: { type: "value" },
+          series: [{
+            name: s01.short_business_title || "Variance",
+            type: "bar",
+            data: topPts.map(p => p.value)
+          }]
+        };
+      }
+    }
+
     slides.push({
       id: "slide-03-unit-breakdown",
       order: 3,
@@ -87,7 +139,7 @@ export function transformDashboardToDeck(dashboardData, options = {}) {
       title: "Unit-by-Unit Comparative Distribution",
       subtitle: `Distribution across qualified operational peer segments`,
       narrative: `Standardized comparison highlighting top-performing versus lagging business units.`,
-      chart_data: breakdownElement?.echarts_option || priorityElement?.echarts_option || null,
+      chart_data: breakdownChartData,
       chart_type: "bar",
       bullets: [
         { text: `Identifies localized divergence in attendance and operational throughput` },
@@ -100,9 +152,11 @@ export function transformDashboardToDeck(dashboardData, options = {}) {
 
   // Slide 4: Exception Watch & Anomaly Alert
   if (exceptionData) {
-    const outlierVal = exceptionData.observed_value_formatted || exceptionData.observed_value || "—";
-    const normalRange = exceptionData.expected_range_formatted || "—";
-    const unusualPeriod = exceptionData.unusual_period || "Recent operating window";
+    const lead = exceptionData.lead_exception || {};
+    const outlierVal = lead.formatted_observed_value || exceptionData.observed_value_formatted || exceptionData.observed_value || "—";
+    const normalRange = lead.formatted_expected_range || exceptionData.expected_range_formatted || "—";
+    const unusualPeriod = lead.subject_label || exceptionData.unusual_period || "Recent operating window";
+    const deviationDesc = lead.formatted_deviation || exceptionData.deviation_description || "Value recorded outside expected bounds";
 
     slides.push({
       id: "slide-04-exception-watch",
@@ -110,7 +164,7 @@ export function transformDashboardToDeck(dashboardData, options = {}) {
       layout: "callout_alert",
       title: "Exception Watch & Anomaly Alert",
       subtitle: `Unusual Deviation Detected in ${unusualPeriod}`,
-      narrative: exceptionData.summary || `Significant deviation outside established statistical tolerance bands.`,
+      narrative: exceptionData.why_inspect || exceptionData.summary || `Significant deviation outside established statistical tolerance bands.`,
       stat_callout: {
         value: outlierVal,
         label: "Observed Outlier",
@@ -118,7 +172,7 @@ export function transformDashboardToDeck(dashboardData, options = {}) {
       },
       bullets: [
         { text: `Unusual Period: ${unusualPeriod}` },
-        { text: `Statistical Deviation: ${exceptionData.deviation_description || "Value recorded outside standard 2-sigma expected boundary"}` },
+        { text: `Statistical Deviation: ${deviationDesc}` },
         { text: `Integrity Check: Verified absence of timecard entry duplication or reporting artifact` },
       ],
       speaker_notes: `Exception watch flagged an unusual anomaly on ${unusualPeriod}. Recorded value of ${outlierVal} exceeded typical range of ${normalRange}.`,
@@ -128,21 +182,47 @@ export function transformDashboardToDeck(dashboardData, options = {}) {
 
   // Slide 5: Defensible Forward Outlook
   if (forecastData) {
+    let forecastChart = forecastData.echarts_option || null;
+    if (!forecastChart && forecastData.points?.length) {
+      const pts = forecastData.points;
+      const recent = pts.slice(-14);
+      forecastChart = {
+        tooltip: { trigger: "axis" },
+        xAxis: {
+          type: "category",
+          data: recent.map(p => p.period_label || p.period)
+        },
+        yAxis: { type: "value" },
+        series: [
+          {
+            name: "Actual",
+            type: "line",
+            data: recent.map(p => p.actual_value ?? null)
+          },
+          {
+            name: "Forecast",
+            type: "line",
+            data: recent.map(p => p.forecast_value ?? null)
+          }
+        ]
+      };
+    }
+
     slides.push({
       id: "slide-05-forward-outlook",
       order: 5,
       layout: "chart_focus",
       title: "Defensible Forward Outlook (Quarterly Forecast)",
-      subtitle: `Statistically bounded 3-month forward projection with confidence intervals`,
-      narrative: forecastData.summary_reason || `Projected trajectory incorporating seasonal baselines and recent velocity.`,
-      chart_data: forecastData.echarts_option || null,
+      subtitle: `Statistically bounded forward projection with confidence intervals`,
+      narrative: forecastData.why_available_or_unavailable || forecastData.summary_reason || `Projected trajectory incorporating seasonal baselines and recent velocity.`,
+      chart_data: forecastChart,
       chart_type: "line",
       bullets: [
-        { text: `Projected Velocity: ${forecastData.trend_direction || "Expected steady forward trend"}` },
+        { text: `Projected Velocity: Expected stable trajectory over upcoming horizon` },
         { text: `Confidence Boundaries: Upper and lower bounds account for historical variance` },
-        { text: `Planning Horizon: Direct input for quarterly headcount capacity planning` },
+        { text: `Planning Horizon: Direct input for quarterly capacity planning` },
       ],
-      speaker_notes: `Our forward outlook models the next quarter with 95% confidence bands. Seasonality factors are incorporated to prevent over-hiring.`,
+      speaker_notes: `Our forward outlook models the next quarter with empirical confidence bands. Seasonality factors are incorporated to prevent over-hiring.`,
       narration_script: `Our forward outlook delivers a statistically bounded forecast for the coming quarter, providing leadership with defensible baselines for capacity and budget allocations.`,
     });
   }
@@ -244,7 +324,7 @@ export function transformCustomPromptToDeck(customPrompt, options = {}, dashboar
   const {
     targetLength = 7,
     themeId = "executive_dark",
-    deckStyle = "decision_brief",
+    deckStyle = "standard",
     backgroundMode = "solid",
     selectedImageUrl = null,
   } = options;

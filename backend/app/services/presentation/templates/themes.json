@@ -1,4 +1,18 @@
 {
+  "executive_dark": {
+    "id": "executive_dark",
+    "name": "Executive Obsidian",
+    "bg_color": "#08111F",
+    "card_bg": "#0F1B2D",
+    "card_border": "#26384D",
+    "primary_text": "#F8FAFC",
+    "secondary_text": "#CBD5E1",
+    "brand_color": "#60A5FA",
+    "accent_color": "#5EEAD4",
+    "success_color": "#A3E635",
+    "danger_color": "#F87171",
+    "chart_palette": ["#5EEAD4", "#93C5FD", "#2DD4BF", "#60A5FA", "#C084FC", "#FBBF24"]
+  },
   "bold_signal": {
     "id": "bold_signal",
     "name": "Bold Signal",
@@ -82,20 +96,6 @@
     "success_color": "#10b981",
     "danger_color": "#ef4444",
     "chart_palette": ["#2563eb", "#f59e0b", "#10b981", "#6366f1", "#ec4899", "#8b5cf6"]
-  },
-  "executive_dark": {
-    "id": "executive_dark",
-    "name": "Executive Dark",
-    "bg_color": "#08111F",
-    "card_bg": "#0F1B2D",
-    "card_border": "#26384D",
-    "primary_text": "#F8FAFC",
-    "secondary_text": "#CBD5E1",
-    "brand_color": "#60A5FA",
-    "accent_color": "#5EEAD4",
-    "success_color": "#A3E635",
-    "danger_color": "#F87171",
-    "chart_palette": ["#5EEAD4", "#93C5FD", "#2DD4BF", "#60A5FA", "#C084FC", "#FBBF24"]
   },
   "clean_light": {
     "id": "clean_light",

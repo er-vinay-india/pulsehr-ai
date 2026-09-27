@@ -265,22 +265,26 @@ export default function FrontendSlidesDeck({
           )}
         </div>
 
-        <div className="mobile-deck-nav-bar">
+        <div className="mobile-deck-nav-bar" role="navigation" aria-label="Mobile slide navigation">
           <button
             type="button"
             className="btn-secondary"
             disabled={activeSlideIndex <= 0}
             onClick={() => onSlideChange(Math.max(0, activeSlideIndex - 1))}
+            aria-label="Previous Slide"
           >
             <ChevronLeft size={16} />
             <span>Previous</span>
           </button>
-          <span className="mobile-step-pill">{activeSlideIndex + 1} / {slides.length}</span>
+          <span className="mobile-step-pill" aria-live="polite" aria-atomic="true">
+            {activeSlideIndex + 1} / {slides.length}
+          </span>
           <button
             type="button"
             className="btn-secondary"
             disabled={activeSlideIndex >= slides.length - 1}
             onClick={() => onSlideChange(Math.min(slides.length - 1, activeSlideIndex + 1))}
+            aria-label="Next Slide"
           >
             <span>Next</span>
             <ChevronRight size={16} />
@@ -387,7 +391,14 @@ export default function FrontendSlidesDeck({
 
       {/* 1920x1080 Fixed Canvas Stage Container */}
       <div className="frontend-slides-stage-container" ref={containerRef}>
-        <div className="frontend-slides-stage" id="deckStage" ref={stageRef}>
+        <div
+          className="frontend-slides-stage"
+          id="deckStage"
+          ref={stageRef}
+          role="region"
+          aria-label="Slide stage"
+          aria-roledescription="presentation slide stage"
+        >
           {slides.map((slide, idx) => {
             const isActive = idx === activeSlideIndex;
             return (
@@ -395,6 +406,10 @@ export default function FrontendSlidesDeck({
                 key={slide.id || idx}
                 className={`slide ${isActive ? "active visible" : ""}`}
                 data-slide-index={idx}
+                role="group"
+                aria-roledescription="slide"
+                aria-hidden={!isActive}
+                aria-label={`Slide ${idx + 1} of ${slides.length}: ${slide.title || ""}`}
               >
                 <PresentationSlideContent
                   slide={slide}
@@ -412,18 +427,19 @@ export default function FrontendSlidesDeck({
       </div>
 
       {/* Floating Presentation Controls */}
-      <div className="frontend-slides-controls">
+      <div className="frontend-slides-controls" role="toolbar" aria-label="Slide navigation controls">
         <button
           type="button"
           className="nav-btn"
           disabled={activeSlideIndex <= 0}
           onClick={() => onSlideChange(Math.max(0, activeSlideIndex - 1))}
           title="Previous Slide (Left Arrow / Page Up)"
+          aria-label="Previous Slide"
         >
           <ChevronLeft size={18} />
         </button>
 
-        <div className="slide-indicator">
+        <div className="slide-indicator" aria-live="polite" aria-atomic="true">
           {activeSlideIndex + 1} / {slides.length}
         </div>
 
@@ -433,6 +449,7 @@ export default function FrontendSlidesDeck({
           disabled={activeSlideIndex >= slides.length - 1}
           onClick={() => onSlideChange(Math.min(slides.length - 1, activeSlideIndex + 1))}
           title="Next Slide (Right Arrow / Space / Page Down)"
+          aria-label="Next Slide"
         >
           <ChevronRight size={18} />
         </button>
@@ -442,6 +459,11 @@ export default function FrontendSlidesDeck({
       <div
         className="frontend-slides-progress-bar"
         style={{ width: `${progressPct}%` }}
+        role="progressbar"
+        aria-valuenow={activeSlideIndex + 1}
+        aria-valuemin={1}
+        aria-valuemax={slides.length}
+        aria-label="Presentation deck progress"
       />
 
       {/* Acoustic Executive AI Orb Presenter */}

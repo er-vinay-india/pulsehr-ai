@@ -25,6 +25,7 @@ from .builders import (
     build_roadmap_slides,
     build_evidence_ledger_slides,
 )
+from ...core import config
 
 logger = logging.getLogger(__name__)
 
@@ -210,9 +211,9 @@ def generate_presentation_deck_spec(
     else:
         lead_cat = "Primary Operating Unit"
 
-    # Phase 2: Qwen Presentation Director (hierarchical bounded planning)
+    # Phase 2: Qwen Presentation Director (hierarchical bounded planning - primary path)
     slides: list[dict[str, Any]] = []
-    if scope.get("enable_ai_planner") or scope.get("use_presentation_director"):
+    if scope.get("enable_ai_planner", True) and not scope.get("force_legacy_builders", False):
         try:
             from .director import (
                 presentation_director,
@@ -439,10 +440,33 @@ def generate_presentation_deck_spec(
             if enh.get("subtitle"):
                 slides[idx]["subtitle"] = enh["subtitle"]
 
-    # Final assembly
+    # Final assembly & Phase 4 Visual Intelligence Materialization
     total_slide_count = len(slides)
-    for s in slides:
-        s["total_slides"] = total_slide_count
+    try:
+        from .visual import VisualIntelligenceEngine
+        v_engine = VisualIntelligenceEngine()
+        for idx, s in enumerate(slides):
+            s["total_slides"] = total_slide_count
+            v_spec = v_engine.process_slide(
+                s,
+                theme_id=theme_id,
+                sequence_number=idx + 1,
+                total_slides=total_slide_count
+            )
+            s["visual_spec"] = v_spec.model_dump()
+            # If slide didn't have chart but visual spec selected one
+            if v_spec.chart_spec and not s.get("chart"):
+                s["chart"] = {
+                    "type": v_spec.chart_spec.family.value.lower(),
+                    "title": v_spec.chart_spec.title,
+                    "subtitle": v_spec.chart_spec.subtitle,
+                    "categories": v_spec.chart_spec.categories,
+                    "series": [{"name": ser.name, "values": ser.data} for ser in v_spec.chart_spec.series]
+                }
+    except Exception as exc:
+        logger.warning(f"Visual Intelligence materialization encountered issue, preserving base slides: {exc}")
+        for s in slides:
+            s["total_slides"] = total_slide_count
 
     # Generate coverage manifest
     from ..shared_evidence_package import generate_coverage_manifest

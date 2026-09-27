@@ -25,7 +25,7 @@ export default function DeckGeneratingView({
 }) {
   return (
     <div className="pres-generating-body">
-      <div className="generating-header-card">
+      <div className="generating-header-card" role="status" aria-live="polite">
         <div className="pipeline-spinner-badge">
           {jobStage === "ready" || jobProgress >= 100 ? (
             <CheckCircle2 size={28} style={{ color: "var(--brand-400, #ffad85)" }} />
@@ -61,7 +61,14 @@ export default function DeckGeneratingView({
         )}
 
         {/* Progress bar */}
-        <div className="pipeline-progress-track">
+        <div
+          className="pipeline-progress-track"
+          role="progressbar"
+          aria-valuenow={jobProgress}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-label="Presentation generation progress"
+        >
           <div
             className="pipeline-progress-bar"
             style={{ width: `${Math.max(5, jobProgress)}%` }}
@@ -160,7 +167,7 @@ export default function DeckGeneratingView({
       </div>
 
       {jobError && (
-        <div className="pres-error-callout">
+        <div className="pres-error-callout" role="alert" aria-live="assertive">
           <AlertTriangle size={20} />
           <div className="error-callout-content">
             <strong>Generation Interrupted</strong>

@@ -50,8 +50,8 @@ export default function DeckConfigView({
         <div className="config-col">
           {/* PRESENTATION SCOPE SELECTION */}
           <div className="form-group">
-            <label className="section-label">Presentation Scope</label>
-            <div className="scope-selection-grid">
+            <label className="section-label" id="scope-selection-label">Presentation Scope</label>
+            <div className="scope-selection-grid" role="radiogroup" aria-labelledby="scope-selection-label">
               {[
                 {
                   id: "workspace",
@@ -84,6 +84,8 @@ export default function DeckConfigView({
                   <button
                     key={opt.id}
                     type="button"
+                    role="radio"
+                    aria-checked={isSelected}
                     className={`scope-option-card ${isSelected ? "selected" : ""}`}
                     onClick={() => setScopeType(opt.id)}
                   >
@@ -345,16 +347,26 @@ export default function DeckConfigView({
 
         {/* Right Column: Visual Theme Selection */}
         <div className="config-col">
-          <label className="section-label">Select Visual Presentation Theme</label>
-          <div className="themes-card-grid">
+          <label className="section-label" id="theme-selection-label">Select Visual Presentation Theme</label>
+          <div className="themes-card-grid" role="radiogroup" aria-labelledby="theme-selection-label">
             {themes.map(t => {
               const isSelected = t.id === selectedThemeId;
               return (
                 <div
                   key={t.id}
+                  role="radio"
+                  tabIndex={0}
+                  aria-checked={isSelected}
+                  aria-label={`${t.name} visual theme`}
                   className={`theme-card ${isSelected ? "selected" : ""}`}
                   style={{ backgroundColor: t.card_bg, borderColor: isSelected ? t.brand_color : t.card_border }}
                   onClick={() => setSelectedThemeId(t.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setSelectedThemeId(t.id);
+                    }
+                  }}
                 >
                   <div className="theme-card-top">
                     <span className="theme-name" style={{ color: t.primary_text }}>{t.name}</span>
@@ -383,7 +395,7 @@ export default function DeckConfigView({
           </div>
 
           {jobError && (
-            <div className="pres-error-callout">
+            <div className="pres-error-callout" role="alert" aria-live="assertive">
               <AlertTriangle size={16} />
               <span>{jobError}</span>
             </div>

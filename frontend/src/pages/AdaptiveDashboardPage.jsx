@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowRight, Info, X } from "lucide-react";
+import { ArrowRight, Info, X, Presentation } from "lucide-react";
 import SafeReactECharts from "../components/charts/SafeReactECharts";
 import ExecutiveBriefingCard from "../components/adaptive/ExecutiveBriefingCard";
 import ExceptionWatchCard from "../components/adaptive/ExceptionWatchCard";
@@ -1158,6 +1158,28 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
     );
   };
 
+  const handleCreatePresentationFromDashboard = () => {
+    if (!selectedSheetId) return;
+    const ctx = {
+      sheet_id: selectedSheetId,
+      sheet_name: manifest?.sheet_name || manifest?.display_name || `Source ${selectedSheetId}`,
+      domain: data?.contract?.domain || "workforce",
+      reporting_period: manifest?.date_range?.formatted || formattedReportingRange || "Current Period",
+      primary_metric: element?.glance?.label || "Key Metric",
+      primary_value: element?.glance?.formatted_value || "—",
+      quaternary_title: quaternaryElement?.title || "Strategic Priority",
+      quaternary_value: quaternaryElement?.prominent_number || "—",
+      filter_summary: formattedReportingRange ? `Period: ${formattedReportingRange}` : "",
+      instruction: `Executive presentation on ${manifest?.display_name || manifest?.sheet_name || "dataset"} (${formattedReportingRange || "active period"}). Highlight ${element?.glance?.label || "core metrics"} and strategic recommendations.`
+    };
+    try {
+      sessionStorage.setItem("presentation_dashboard_context", JSON.stringify(ctx));
+    } catch {}
+    if (onNavigateTab) {
+      onNavigateTab("presentation");
+    }
+  };
+
   return (
     <div className="adaptive-dashboard-page" role="region" aria-label="Dashboard">
       {/* Standardized Page Top Section */}
@@ -1168,6 +1190,18 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
             <p className="page-description">
               Automated spreadsheet intelligence, cross-functional KPI tracking, and decision discovery.
             </p>
+          </div>
+          <div className="header-actions-row">
+            <button
+              type="button"
+              className="btn-primary btn-sm"
+              onClick={handleCreatePresentationFromDashboard}
+              disabled={!selectedSheetId || calculating}
+              title="Generate a 16:9 executive presentation deck from active dashboard data and filters"
+            >
+              <Presentation size={14} />
+              <span>Create Presentation</span>
+            </button>
           </div>
         </div>
 
