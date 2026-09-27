@@ -33,6 +33,12 @@ export default function GlobalCopilotWidget({
   activeSheetName = '',
   onSelectEmployee
 }) {
+  const [presentationVoiceActive, setPresentationVoiceActive] = useState(false);
+  useEffect(() => {
+    const listener = event => setPresentationVoiceActive(Boolean(event.detail));
+    document.addEventListener("presentation-presenter", listener);
+    return () => document.removeEventListener("presentation-presenter", listener);
+  }, []);
   const [panelOpen, setPanelOpen] = useState(isOpen);
   const [minimized, setMinimized] = useState(false);
   const [hasPlayedIntro, setHasPlayedIntro] = useState(false);
@@ -356,6 +362,8 @@ export default function GlobalCopilotWidget({
       setLoading(false);
     }
   };
+
+  if (presentationVoiceActive) return null;
 
   return (
     <>

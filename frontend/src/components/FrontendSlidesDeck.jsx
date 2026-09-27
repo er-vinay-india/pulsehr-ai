@@ -42,7 +42,7 @@ export default function FrontendSlidesDeck({
   const touchStartY = useRef(null);
   const lastWheelTime = useRef(0);
 
-  const themeName = theme?.name || theme?.id || "bold_signal";
+  const themeName = theme?.id || theme?.name || "bold_signal";
 
   // Compute fixed 16:9 stage scaling (1920x1080 canvas)
   const computeStageScale = useCallback(() => {
@@ -121,7 +121,9 @@ export default function FrontendSlidesDeck({
       const target = e.target;
       if (
         target &&
-        (target.tagName === "INPUT" ||
+        (target.closest?.("[role=dialog]") ||
+          target.tagName === "BUTTON" || target.tagName === "SELECT" ||
+          target.tagName === "INPUT" ||
           target.tagName === "TEXTAREA" ||
           target.isContentEditable)
       ) {
@@ -185,7 +187,7 @@ export default function FrontendSlidesDeck({
 
   // Mouse wheel slide transitions (debounced 400ms)
   const handleWheel = (e) => {
-    if (forceMobileMode || isMobileViewport) return;
+    if (!isFullscreen || inlineEditActive || forceMobileMode || isMobileViewport) return;
     const now = Date.now();
     if (now - lastWheelTime.current < 400) return;
 
@@ -215,16 +217,24 @@ export default function FrontendSlidesDeck({
   const currentSlide = slides[activeSlideIndex] || slides[0];
   const progressPct = slides.length > 1 ? ((activeSlideIndex + 1) / slides.length) * 100 : 100;
 
-  const presenter = (deckId || deckSpec?.id) && (
-        <AcousticOrbPresenter
-          deckId={deckId || deckSpec?.id}
-          deckSpec={deckSpec}
-          currentSlideOrder={activeSlideIndex + 1}
-          totalSlides={slides.length}
-          onAdvanceSlide={() => onSlideChange(Math.min(slides.length - 1, activeSlideIndex + 1))}
-          onPrevSlide={() => onSlideChange(Math.max(0, activeSlideIndex - 1))}
-        />
-      );
+  const editor = isEditable && !readOnly && inlineEditActive && currentSlide && (
+    <div className="pres-slide-text-editor" key={currentSlide.id} role="region" aria-label="Edit slide text">
+      {[['title', 'Title'], ['subtitle', 'Subtitle'], ['narrative', 'Body'], ['bullets', 'Takeaways (one per line)']].map(([field, label]) => (
+        <label key={field}>{label}
+          <textarea aria-label={`Slide ${label}`} rows={field === "bullets" ? 3 : 2}
+            key={`${currentSlide.id}-${field}-${JSON.stringify(currentSlide[field])}`}
+            defaultValue={field === "bullets" ? (currentSlide.bullets || []).map(item => typeof item === "string" ? item : item.text).join("\n") : currentSlide[field] || ""}
+            onBlur={event => {
+              const value = field === "bullets" ? event.target.value.split("\n").filter(Boolean) : event.target.value;
+              if (JSON.stringify(value) === JSON.stringify(currentSlide[field] || (field === "bullets" ? [] : ""))) return;
+              const updated = { ...currentSlide, [field]: value, provenance: "USER_OVERRIDE" };
+              if (updated.visual_spec) updated.visual_spec = { ...updated.visual_spec, [field === "title" ? "headline" : field === "bullets" ? "insights" : field]: value };
+              onUpdateSlide(activeSlideIndex, updated);
+            }} />
+        </label>
+      ))}
+    </div>
+  );
 
   // Render Mobile Reflow View
   if (showMobileView) {
@@ -247,6 +257,8 @@ export default function FrontendSlidesDeck({
           </div>
         </div>
 
+        {isEditable && !readOnly && <button className="btn-secondary" onClick={() => setInlineEditActive(value => !value)}>Edit slide text</button>}
+        {editor}
         <div
           className="mobile-slide-card-container"
           onTouchStart={handleTouchStart}
@@ -258,7 +270,7 @@ export default function FrontendSlidesDeck({
               theme={theme}
               slideIndex={activeSlideIndex + 1}
               totalSlides={slides.length}
-              isEditable={!readOnly && (isEditable || inlineEditActive)}
+              isEditable={!readOnly && (isEditable && inlineEditActive)}
               onUpdate={updated => onUpdateSlide(activeSlideIndex, updated)}
               onViewEvidence={onViewEvidence}
             />
@@ -290,7 +302,7 @@ export default function FrontendSlidesDeck({
             <ChevronRight size={16} />
           </button>
         </div>
-        {presenter}
+
       </div>
     );
   }
@@ -389,6 +401,7 @@ export default function FrontendSlidesDeck({
         <span>{inlineEditActive ? "Editing active (press E to lock)" : "Click or press E to edit"}</span>
       </div></>}
 
+      {editor}
       {/* 1920x1080 Fixed Canvas Stage Container */}
       <div className="frontend-slides-stage-container" ref={containerRef}>
         <div
@@ -399,12 +412,15 @@ export default function FrontendSlidesDeck({
           aria-label="Slide stage"
           aria-roledescription="presentation slide stage"
         >
-          {slides.map((slide, idx) => {
+          {slides.slice(activeSlideIndex, activeSlideIndex + 1).map((slide) => {
+            const idx = activeSlideIndex;
             const isActive = idx === activeSlideIndex;
             return (
               <div
                 key={slide.id || idx}
                 className={`slide ${isActive ? "active visible" : ""}`}
+                data-transition={slide.transition || deckSpec?.metadata?.transition || "none"}
+                data-animation={slide.animation || "none"}
                 data-slide-index={idx}
                 role="group"
                 aria-roledescription="slide"
@@ -416,7 +432,7 @@ export default function FrontendSlidesDeck({
                   theme={theme}
                   slideIndex={idx + 1}
                   totalSlides={slides.length}
-                  isEditable={!readOnly && (isEditable || inlineEditActive) && isActive}
+                  isEditable={!readOnly && (isEditable && inlineEditActive) && isActive}
                   onUpdate={updated => onUpdateSlide(idx, updated)}
                   onViewEvidence={onViewEvidence}
                 />
@@ -467,7 +483,7 @@ export default function FrontendSlidesDeck({
       />
 
       {/* Acoustic Executive AI Orb Presenter */}
-      {presenter}
+
     </div>
   );
 }

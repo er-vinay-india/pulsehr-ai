@@ -1,3 +1,4 @@
+import { slideBackground } from "../../../utils/slideBackground";
 import React, { useState } from "react";
 import { ShieldCheck, ArrowRight, Edit3, Image as ImageIcon } from "lucide-react";
 import SlideChart from "../slides/SlideChart.jsx";
@@ -15,11 +16,11 @@ export default function VisualSlideRenderer({
   if (!spec) return null;
 
   const tokens = spec.design_tokens || {};
-  const primaryText = tokens.primary_text || theme.primary_text || "#f8fafc";
-  const secondaryText = tokens.secondary_text || theme.secondary_text || "#94a3b8";
-  const accentColor = tokens.accent || theme.accent_color || "#ff5722";
-  const cardBg = tokens.surface || theme.card_bg || "#1e293b";
-  const cardBorder = tokens.border || theme.card_border || "rgba(255, 255, 255, 0.08)";
+  const primaryText = theme.primary_text || tokens.primary_text || "#f8fafc";
+  const secondaryText = theme.secondary_text || tokens.secondary_text || "#94a3b8";
+  const accentColor = theme.accent_color || tokens.accent || "#ff5722";
+  const cardBg = theme.card_bg || tokens.surface || "#1e293b";
+  const cardBorder = theme.card_border || tokens.border || "rgba(255, 255, 255, 0.08)";
 
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [titleVal, setTitleVal] = useState(spec.headline || slide.title || "Executive Briefing");
@@ -224,7 +225,7 @@ export default function VisualSlideRenderer({
       className="presentation-runtime w-100 h-100 d-flex flex-column justify-content-between"
       style={{
         padding: "24px 32px",
-        background: tokens.background || theme.bg_color || "#0f172a",
+        ...slideBackground(slide, theme.bg_color || tokens.background || "#0f172a"),
         color: primaryText,
         overflow: "hidden"
       }}
@@ -472,7 +473,7 @@ export default function VisualSlideRenderer({
                       flex: 1,
                       overflowY: "auto",
                       display: hasVisual ? "block" : "grid",
-                      gridTemplateColumns: hasVisual ? "1fr" : "repeat(auto-fit, minmax(280px, 1fr))",
+                      gridTemplateColumns: hasVisual ? "1fr" : "repeat(auto-fit, minmax(min(100%, 260px), 1fr))",
                       gap: "10px"
                     }}>
                       {insights.map((item, idx) => (

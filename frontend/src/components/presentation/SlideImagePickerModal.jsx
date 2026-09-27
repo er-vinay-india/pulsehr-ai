@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Search, Image, X, Check, Sliders, Sparkles, ExternalLink } from "lucide-react";
+import { searchPresentationImages } from "../../api/client";
 
 const CATEGORIES = [
   { id: "all", label: "All Curated" },
@@ -22,21 +23,33 @@ export default function SlideImagePickerModal({
   const [selectedImage, setSelectedImage] = useState(null);
   const [scrimOpacity, setScrimOpacity] = useState(70); // 70% dark overlay for WCAG AAA text contrast
 
-  // Fetch free images
+  const dialogRef = useRef(null);
+  const requestRef = useRef(null);
+  const [error, setError] = useState("");
+
+  // Fetch and decode before showing selectable cards. Failed images leave no empty tile.
   const fetchImages = async (searchQuery, category) => {
+    requestRef.current?.abort();
+    const controller = new AbortController();
+    requestRef.current = controller;
     setLoading(true);
+    setSelectedImage(null);
+    setImages([]);
+    setError("");
     try {
-      const catParam = category && category !== "all" ? `&category=${encodeURIComponent(category)}` : "";
-      const qParam = encodeURIComponent(searchQuery || "workplace");
-      const res = await fetch(`/api/presentations/images/search?query=${qParam}${catParam}&page_size=12`);
-      if (res.ok) {
-        const data = await res.json();
-        setImages(data.images || []);
-      }
+      const data = await searchPresentationImages(searchQuery || "workplace", category, controller.signal);
+      const decoded = await Promise.all((data.images || []).map(img => new Promise(resolve => {
+        const preview = new window.Image();
+        const timer = setTimeout(() => resolve(null), 10000);
+        preview.onload = () => { clearTimeout(timer); resolve(img); };
+        preview.onerror = () => { clearTimeout(timer); resolve(null); };
+        preview.src = img.thumbnail || img.url;
+      })));
+      if (!controller.signal.aborted) setImages(decoded.filter(Boolean));
     } catch (err) {
-      console.error("Failed to fetch royalty-free images:", err);
+      if (!controller.signal.aborted) setError(err.message || "Image search failed");
     } finally {
-      setLoading(false);
+      if (!controller.signal.aborted) setLoading(false);
     }
   };
 
@@ -44,18 +57,25 @@ export default function SlideImagePickerModal({
     if (isOpen) {
       fetchImages(query, selectedCategory);
     }
+    return () => requestRef.current?.abort();
   }, [isOpen, selectedCategory]);
 
   useEffect(() => {
     if (!isOpen) return;
+    const previousFocus = document.activeElement;
+    dialogRef.current?.querySelector("button, input")?.focus();
     const handleKeyDown = (e) => {
-      if (e.key === "Escape") {
-        e.stopPropagation();
-        onClose();
+      if (e.key === "Escape") { e.stopPropagation(); onClose(); }
+      if (e.key === "Tab") {
+        const nodes = [...dialogRef.current.querySelectorAll('button:not(:disabled), input, [tabindex="0"]')];
+        const first = nodes[0], last = nodes[nodes.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last?.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus(); }
       }
     };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    const dialog = dialogRef.current;
+    dialog?.addEventListener("keydown", handleKeyDown);
+    return () => { dialog?.removeEventListener("keydown", handleKeyDown); previousFocus?.focus(); };
   }, [isOpen, onClose]);
 
   const handleSearchSubmit = (e) => {
@@ -81,6 +101,7 @@ export default function SlideImagePickerModal({
   return (
     <div className="pres-image-picker-overlay" onClick={onClose}>
       <div
+        ref={dialogRef}
         className="pres-image-picker-modal"
         role="dialog"
         aria-modal="true"
@@ -122,13 +143,12 @@ export default function SlideImagePickerModal({
             </button>
           </form>
 
-          <div className="category-pills" role="tablist" aria-label="Image Categories">
+          <div className="category-pills" role="group" aria-label="Image Categories">
             {CATEGORIES.map((cat) => (
               <button
                 key={cat.id}
                 type="button"
-                role="tab"
-                aria-selected={selectedCategory === cat.id}
+                aria-pressed={selectedCategory === cat.id}
                 onClick={() => setSelectedCategory(cat.id)}
                 className={`cat-pill ${selectedCategory === cat.id ? "active" : ""}`}
               >
@@ -165,6 +185,7 @@ export default function SlideImagePickerModal({
           )}
         </div>
 
+        {error && <p role="alert">{error}</p>}
         {/* Image Grid */}
         <div className="pres-image-grid" role="region" aria-label="Image search results">
           {loading ? (
@@ -178,7 +199,7 @@ export default function SlideImagePickerModal({
             </div>
           ) : (
             images.map((img) => {
-              const isSelected = selectedImage?.id === img.id || currentImageUrl === img.url;
+              const isSelected = selectedImage ? selectedImage.id === img.id : currentImageUrl === img.url;
               return (
                 <div
                   key={img.id}
@@ -196,7 +217,7 @@ export default function SlideImagePickerModal({
                   }}
                 >
                   <div className="image-wrapper">
-                    <img src={img.thumbnail} alt={img.title} loading="lazy" />
+                    <img src={img.thumbnail || img.url} alt={img.title} onError={() => { setImages(prev => prev.filter(item => item.id !== img.id)); if (selectedImage?.id === img.id) setSelectedImage(null); }} />
                     {/* Simulated live scrim */}
                     <div
                       className="image-scrim-preview"

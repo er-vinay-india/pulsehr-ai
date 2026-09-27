@@ -57,12 +57,16 @@ export default function DeckStudioView({
   selectedThemeId,
   onSetSlideImage,
   onSetTransition,
-  onOpenRegenerate
+  onOpenRegenerate,
+  onRefineSlide,
+  isBusy = false,
+  onApplyImage
 }) {
   const [isImagePickerOpen, setIsImagePickerOpen] = useState(false);
   const [isPresenterMode, setIsPresenterMode] = useState(false);
   const [curatePrompt, setCuratePrompt] = useState("");
   const [isCurating, setIsCurating] = useState(false);
+  const [curationError, setCurationError] = useState("");
   const [previousSlideSnapshot, setPreviousSlideSnapshot] = useState(null);
   const [showApprovalBanner, setShowApprovalBanner] = useState(false);
 
@@ -72,48 +76,20 @@ export default function DeckStudioView({
   // Handle Copilot Slide Curation
   const handleApplyCopilotCuration = async (promptText) => {
     const prompt = (promptText || curatePrompt).trim();
-    if (!prompt || !currentSlide) return;
+    if (!prompt || !currentSlide || isBusy) return;
 
     setIsCurating(true);
     // Snapshot current state for Revert capability
     setPreviousSlideSnapshot(JSON.parse(JSON.stringify(currentSlide)));
 
     try {
-      // Intelligent in-studio curation rule engine
-      const updated = JSON.parse(JSON.stringify(currentSlide));
-      const pLower = prompt.toLowerCase();
-
-      if (pLower.includes("condense") || pLower.includes("concise") || pLower.includes("2")) {
-        if (updated.bullets && updated.bullets.length > 2) {
-          updated.bullets = updated.bullets.slice(0, 2);
-        }
-        updated.narrative = updated.narrative
-          ? updated.narrative.split(".")[0] + ". Immediate leadership review recommended."
-          : updated.narrative;
-      } else if (pLower.includes("cfo") || pLower.includes("cost") || pLower.includes("financial")) {
-        updated.title = updated.title.includes("Financial") ? updated.title : `Financial Impact: ${updated.title}`;
-        updated.bullets = [
-          { text: "Primary Budget Exposure: Disparity concentration drives localized payroll expansion." },
-          { text: "Mitigation Mandate: Realign shift duty rosters before quarterly close." },
-        ];
-        updated.speaker_notes = `Financial briefing: Focusing on unit-level budget variance and remediation timeline.`;
-      } else if (pLower.includes("decisive") || pLower.includes("board")) {
-        updated.title = updated.title.toUpperCase();
-        updated.bullets = (updated.bullets || []).map((b) => ({
-          text: `Action Directive: ${typeof b === "string" ? b : b.text}`,
-        }));
-      } else if (pLower.includes("disparity") || pLower.includes("spread")) {
-        updated.subtitle = `Disparity Focus: Immediate normalization required across operational units`;
-      } else {
-        // General enrichment
-        updated.narrative = `${updated.narrative} [Curated: ${prompt}]`;
-      }
-
-      onUpdateSlide(activeSlideIndex, updated);
+      setCurationError("");
+      const result = await onRefineSlide(prompt);
+      if (!result) { setCurationError("HRIDAY could not refine this slide. Your content is unchanged. Please try again."); return; }
       setShowApprovalBanner(true);
       setCuratePrompt("");
     } catch (err) {
-      console.error("Copilot curation error:", err);
+      setCurationError(err.message || "HRIDAY could not refine this slide. Please try again.");
     } finally {
       setIsCurating(false);
     }
@@ -132,38 +108,25 @@ export default function DeckStudioView({
     }
   };
 
-  const handleSelectImage = ({ url, scrimOpacity, applyToAll }) => {
-    if (applyToAll) {
-      deckSpec.slides.forEach((s, idx) => {
-        const updated = {
-          ...s,
-          image_url: url,
-          background_image: url,
-          scrim_opacity: scrimOpacity,
-        };
-        onUpdateSlide(idx, updated);
-      });
-    } else {
-      const updated = {
-        ...currentSlide,
-        image_url: url,
-        background_image: url,
-        scrim_opacity: scrimOpacity,
-        layout: currentSlide.layout === "title_cover" ? currentSlide.layout : "image_story"
-      };
-      onUpdateSlide(activeSlideIndex, updated);
-      if (onSetSlideImage) onSetSlideImage(activeSlideIndex, url);
-    }
-  };
+  const handleSelectImage = (selection) => (onSetSlideImage || onApplyImage)?.(selection);
+
+  React.useEffect(() => {
+    document.dispatchEvent(new CustomEvent("presentation-presenter", { detail: isPresenterMode }));
+    return () => document.dispatchEvent(new CustomEvent("presentation-presenter", { detail: false }));
+  }, [isPresenterMode]);
+  React.useEffect(() => {
+    setShowApprovalBanner(false);
+    setPreviousSlideSnapshot(null);
+  }, [currentSlide?.id]);
 
   const handlePrintPdf = () => {
-    window.print();
+    exportStandaloneHtmlPresentation(deckSpec, selectedThemeId, true);
   };
 
   return (
     <div className={`pres-studio-body ${isPresenterMode ? "theater-presenter-mode" : ""}`}>
       {/* STUDIO SUB-TOOLBAR */}
-      <div className="studio-sub-toolbar">
+      <fieldset className="studio-sub-toolbar pres-editor-fieldset" disabled={isBusy}>
         <div className="toolbar-left">
           <span className="slide-counter-badge">
             Slide {activeSlideIndex + 1} of {deckSpec.slides.length}
@@ -196,7 +159,6 @@ export default function DeckStudioView({
                 value={currentSlide.transition || deckSpec.metadata?.transition || "none"}
                 onChange={(e) => {
                   const val = e.target.value;
-                  if (onSetTransition) onSetTransition(val);
                   onUpdateSlide(activeSlideIndex, { ...currentSlide, transition: val });
                 }}
                 aria-label="Slide Transition"
@@ -256,7 +218,7 @@ export default function DeckStudioView({
               aria-label={isPresenterMode ? "Exit Presenter Mode" : "Present with HRIDAY"}
             >
               <Sparkles size={14} />
-              <span className="btn-label-responsive">{isPresenterMode ? "Exit" : "HRIDAY"}</span>
+              <span className="btn-label-responsive">{isPresenterMode ? "Exit" : "Present with voice"}</span>
             </button>
             <span className="symbolic-tooltip">
               {isPresenterMode ? "Exit Fullscreen Presenter Mode" : "Present with Autonomous Acoustic HRIDAY Voiceover"}
@@ -317,7 +279,7 @@ export default function DeckStudioView({
               type="button"
               className="symbolic-action-btn"
               disabled={evidenceLocked}
-              onClick={onAddSlide}
+              onClick={() => onAddSlide("blank")}
               aria-label="Append a New Slide"
             >
               <Plus size={14} />
@@ -362,9 +324,9 @@ export default function DeckStudioView({
             </span>
           </div>
         </div>
-      </div>
+      </fieldset>
 
-      <div className="studio-main-grid">
+      <fieldset className="studio-main-grid pres-editor-fieldset" disabled={isBusy}>
         {/* LEFT: SLIDE THUMBNAIL RAIL */}
         {!isPresenterMode && (
           <div className="studio-thumbnails-rail" role="region" aria-label="Slide thumbnail navigation">
@@ -466,19 +428,19 @@ export default function DeckStudioView({
           )}
 
           {/* 16:9 Presentation Stage */}
-          <PresentationRevealDeck
+          {!isPresenterMode && <PresentationRevealDeck
             deckId={deckSpec.id}
             deckSpec={deckSpec}
             slides={deckSpec.slides}
             theme={currentTheme}
             activeSlideIndex={activeSlideIndex}
             onSlideChange={setActiveSlideIndex}
-            readOnly={evidenceLocked}
+            readOnly={evidenceLocked || isBusy}
             isEditable={!evidenceLocked}
             onUpdateSlide={onUpdateSlide}
             onViewEvidence={onOpenEvidence}
             onExportHtml={() => exportStandaloneHtmlPresentation(deckSpec, selectedThemeId)}
-          />
+          />}
 
           {/* HRIDAY CURATION PROMPT BAR (Below Active Slide) */}
           {!isPresenterMode && (
@@ -486,7 +448,7 @@ export default function DeckStudioView({
               <div className="copilot-bar-top">
                 <div className="copilot-badge hriday-badge">
                   <Sparkles size={13} />
-                  <span>HRIDAY Slide Curation:</span>
+                  <span>HRIDAY · Slide editor</span>
                 </div>
                 <div className="suggestion-pills">
                   {SUGGESTION_PROMPTS.map((sug, i) => (
@@ -503,6 +465,7 @@ export default function DeckStudioView({
                 </div>
               </div>
 
+              {curationError && <p role="alert">{curationError}</p>}
               <form
                 className="copilot-input-row"
                 onSubmit={(e) => {
@@ -565,7 +528,7 @@ export default function DeckStudioView({
             </div>
           )}
         </div>
-      </div>
+      </fieldset>
 
       {/* Royalty-Free Image Picker Modal */}
       <SlideImagePickerModal

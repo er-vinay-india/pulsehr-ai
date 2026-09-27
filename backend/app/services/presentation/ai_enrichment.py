@@ -146,6 +146,9 @@ def regenerate_single_slide(
         user_instructions=user_instructions
     )
 
+    prompt += "\nUse only the current slide and evidence below. Preserve numerical claims, dates and units; do not invent facts. Return JSON only.\n"
+    prompt += json.dumps({"slide": target_slide, "evidence": updated_deck.get("evidence_ledger", [])}, default=str)
+
     generated_title = None
     generated_narrative = None
     generated_subtitle = None
@@ -172,20 +175,16 @@ def regenerate_single_slide(
     except Exception as exc:
         logger.warning(f"AI slide regeneration call skipped or failed, using heuristic: {exc}")
 
-    clean_inst = (user_instructions or "").strip().capitalize()
+    if not any([generated_title, generated_narrative, generated_subtitle, generated_bullets]):
+        raise ValueError("HRIDAY could not produce a valid refinement. Your slide has not been changed. Please retry.")
     if generated_title:
         target_slide["title"] = format_display_label(generated_title)
-    elif clean_inst:
-        target_slide["title"] = f"{target_slide.get('title', 'Executive Briefing').split(':')[0]}: {clean_inst[:40]}"
 
     if generated_subtitle:
         target_slide["subtitle"] = generated_subtitle
 
     if generated_narrative:
         target_slide["narrative"] = sanitize_llm_text(generated_narrative)
-    elif clean_inst:
-        base_narrative = target_slide.get("narrative", "")
-        target_slide["narrative"] = f"{base_narrative.split('.')[0]}. Specific focus applied: {clean_inst}."
 
     if generated_bullets and isinstance(generated_bullets, list):
         target_slide["bullets"] = [str(b) for b in generated_bullets if b]

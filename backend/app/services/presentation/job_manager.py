@@ -127,7 +127,7 @@ class PresentationJobManager:
         extra: dict[str, Any] | None = None
     ):
         with self._lock:
-            if job_id not in self._jobs:
+            if job_id not in self._jobs or self._cancel_flags.get(job_id):
                 return
             job = self._jobs[job_id]
             job["stage"] = stage

@@ -265,8 +265,11 @@ export function buildSlideHtml(slide, index, total, theme) {
     `;
   }
 
+  const photo = slide.background_image;
+  const scrim = Math.max(0, Math.min(90, Number(slide.scrim_opacity ?? 70))) / 100;
+  const background = photo ? `background-image:linear-gradient(rgba(0,0,0,${scrim}),rgba(0,0,0,${scrim})),url(${escapeHtml(JSON.stringify(photo))});background-size:cover;background-position:center;` : "";
   return `
-    <div class="slide ${index === 0 ? "active visible" : ""}" data-index="${index}" style="position:absolute;inset:0;width:1920px;height:1080px;box-sizing:border-box;padding:64px 70px;background:${theme.slide_bg || "#0f172a"};color:${theme.primary_text || "#f8fafc"};">
+    <div class="slide ${index === 0 ? "active visible" : ""}" data-index="${index}" style="position:absolute;inset:0;width:1920px;height:1080px;box-sizing:border-box;padding:64px 70px;background:${theme.slide_bg || "#0f172a"};color:${theme.primary_text || "#f8fafc"};${background}">
       ${headerHtml}
       <div style="margin-top:10px;">${bodyHtml}</div>
       ${footerHtml}

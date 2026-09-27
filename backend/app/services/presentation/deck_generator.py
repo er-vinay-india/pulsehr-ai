@@ -34,7 +34,8 @@ def generate_presentation_deck_spec(
     scope: dict[str, Any],
     dataset_context: dict[str, Any],
     workspace_evidence: dict[str, Any] | None = None,
-    on_slide_progress: Any = None
+    on_slide_progress: Any = None,
+    on_phase_progress: Any = None
 ) -> dict[str, Any]:
     """Generates a complete, validated, evidence-driven PresentationDeckSpec.
 
@@ -440,6 +441,9 @@ def generate_presentation_deck_spec(
             if enh.get("subtitle"):
                 slides[idx]["subtitle"] = enh["subtitle"]
 
+    if on_phase_progress:
+        on_phase_progress("graphics", "Rendering slide graphics and chart specifications", 68)
+
     # Final assembly & Phase 4 Visual Intelligence Materialization
     total_slide_count = len(slides)
     try:
@@ -467,6 +471,9 @@ def generate_presentation_deck_spec(
         logger.warning(f"Visual Intelligence materialization encountered issue, preserving base slides: {exc}")
         for s in slides:
             s["total_slides"] = total_slide_count
+
+    if on_phase_progress:
+        on_phase_progress("text", "Checking populated slide text and evidence coverage", 69)
 
     # Generate coverage manifest
     from ..shared_evidence_package import generate_coverage_manifest

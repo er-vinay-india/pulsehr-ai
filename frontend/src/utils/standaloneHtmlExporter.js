@@ -18,18 +18,28 @@ import { generateFullPresentationHtml } from "./exporter/exportTemplate";
 /**
  * Exports a full presentation deck as a self-contained single HTML file.
  */
-export function exportStandaloneHtmlPresentation(deck, selectedTheme = "bold_signal") {
+export function exportStandaloneHtmlPresentation(deck, selectedTheme = "bold_signal", printPdf = false) {
   if (!deck || !deck.slides || deck.slides.length === 0) {
     alert("No slides found in the presentation to export.");
     return;
   }
 
-  const title = deck.title || "Executive Presentation";
+  const title = deck.metadata?.title || deck.title || "Executive Presentation";
   const slides = deck.slides;
-  const currentTheme = EXPORT_THEMES[selectedTheme] || EXPORT_THEMES.bold_signal;
+  const currentTheme = { ...(EXPORT_THEMES[deck.metadata?.theme_id || selectedTheme] || EXPORT_THEMES.bold_signal), ...(deck.theme || {}), slide_bg: deck.theme?.bg_color || EXPORT_THEMES[selectedTheme]?.slide_bg };
 
   const slidesHtml = slides.map((s, idx) => buildSlideHtml(s, idx, slides.length, currentTheme)).join("\n");
   const fullHtml = generateFullPresentationHtml(title, slidesHtml, slides.length, currentTheme);
+
+  if (printPdf) {
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) { alert("Allow the presentation print window to save the deck as PDF."); return; }
+    printWindow.document.open();
+    printWindow.document.write(fullHtml);
+    printWindow.document.close();
+    printWindow.addEventListener("load", () => { printWindow.focus(); printWindow.print(); }, { once: true });
+    return;
+  }
 
   // Trigger file download
   const blob = new Blob([fullHtml], { type: "text/html;charset=utf-8" });

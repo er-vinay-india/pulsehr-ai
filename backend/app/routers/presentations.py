@@ -32,13 +32,18 @@ class GeneratePresentationRequest(BaseModel):
     deck_style: Literal["standard", "decision_brief"] = "standard"
     objective: str | None = "Executive Leadership Review"
     audience: str | None = "C-Suite & Operations Leadership"
-    target_length: int | None = 6
+    target_length: int | None = None
     theme_id: str | None = "executive_dark"
     scope_type: str | None = "workspace"  # "workspace" | "connected_group" | "custom_sheets" | "single_sheet"
     sheet_id: int | None = None
     sheet_ids: list[int] | None = None
     group_id: str | None = None
     instructions: str | None = ""
+    source_mode: str = "dashboard_truth"
+    background_image: str | None = None
+    scrim_opacity: int = 70
+    transition: Literal["none", "fade", "slide", "scale", "reveal"] = "none"
+    animation: Literal["none", "fade"] = "none"
 
 
 class ScopePreviewRequest(BaseModel):
@@ -143,13 +148,18 @@ def start_presentation_generation(req: GeneratePresentationRequest):
         "deck_style": req.deck_style,
         "objective": req.objective or "Executive Leadership Review",
         "audience": req.audience or "C-Suite & Operations Leadership",
-        "target_length": req.target_length or 6,
+        "target_length": req.target_length,
         "theme_id": req.theme_id or "executive_dark",
         "scope_type": req.scope_type or "workspace",
         "sheet_id": req.sheet_id,
         "sheet_ids": req.sheet_ids or [],
         "group_id": req.group_id,
         "instructions": req.instructions or "",
+        "source_mode": req.source_mode,
+        "background_image": req.background_image,
+        "scrim_opacity": max(0, min(90, req.scrim_opacity)),
+        "transition": req.transition,
+        "animation": req.animation,
     }
     job_id = start_presentation_job(scope)
 

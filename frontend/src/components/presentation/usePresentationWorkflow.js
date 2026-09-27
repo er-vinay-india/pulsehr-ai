@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
   getPresentationThemes,
   startPresentationGeneration,
@@ -11,16 +11,19 @@ import {
   exportPresentationPptx,
   previewPresentationScope
 } from "../../api/client";
+import { exportStandaloneHtmlPresentation } from "../../utils/standaloneHtmlExporter";
 
 export const STAGES = [
-  { id: "reviewing_coverage", label: "Reviewing Coverage", desc: "Evaluating eligible datasets, boundaries & date ranges" },
-  { id: "validating_relationships", label: "Validating Relationships", desc: "Checking cross-sheet link integrity & foreign keys" },
-  { id: "collecting_findings", label: "Collecting Findings", desc: "Capturing executive findings & freezing evidence ledger" },
-  { id: "synthesizing_outcomes", label: "Synthesizing Outcomes", desc: "Computing macro operational outcomes & benchmarks" },
-  { id: "building_slides", label: "Building Slides", desc: "Assembling executive slide deck layouts & visual charts" },
-  { id: "verifying_claims", label: "Verifying Claims", desc: "Auditing deterministic claim numbers (±0.1%)" },
-  { id: "ready", label: "Ready to Review", desc: "Presentation sealed with cryptographic snapshot hash" }
+  { id: "layout", label: "Layout build up", desc: "Freezing snapshot and assembling layout wireframes" },
+  { id: "headings", label: "Title & subpage headings", desc: "Generating deck title, section titles, and slide headings" },
+  { id: "graphics", label: "Graphic content", desc: "Rendering charts, metric cards, and visual callouts" },
+  { id: "text", label: "Text content", desc: "Populating evidence-backed insights, takeaways, and findings" },
+  { id: "animation", label: "Animation", desc: "Configuring entrance, emphasis, and motion cues" },
+  { id: "transitions", label: "Transitions", desc: "Setting smooth slide-to-slide progression" },
+  { id: "transcript", label: "HRIDAY voiceover transcript", desc: "Synthesizing executive talking points and speech notes" },
+  { id: "formatting", label: "Final setup & PPTX/PDF formatting", desc: "Layout spatial audit, quality repair, and file generation" },
 ];
+
 
 export function usePresentationWorkflow({
   isOpen,
@@ -43,12 +46,12 @@ export function usePresentationWorkflow({
   // Core config form state
   const [objective, setObjective] = useState("Executive Leadership Review");
   const [audience, setAudience] = useState("C-Suite & Operations Leadership");
-  const [targetLength, setTargetLength] = useState(8);
+  const [targetLength, setTargetLength] = useState(null);
   const [deckStyle, setDeckStyle] = useState("standard");
-  const [selectedThemeId, setSelectedThemeId] = useState("bold_signal");
+  const [selectedThemeId, setSelectedThemeId] = useState("executive_dark");
   const [selectedSheetId, setSelectedSheetId] = useState("");
   const [instructions, setInstructions] = useState("");
-  const [autoDownload, setAutoDownload] = useState(true);
+  const [autoDownload, setAutoDownload] = useState(false);
 
   // Job progress state
   const [currentJobId, setCurrentJobId] = useState(activeJobId);
@@ -73,6 +76,19 @@ export function usePresentationWorkflow({
 
   // Poll timer
   const pollTimerRef = useRef(null);
+  const generationOptionsRef = useRef({});
+  const saveQueue = useRef(Promise.resolve());
+  const deckRef = useRef(deckSpec);
+  deckRef.current = deckSpec;
+  const commitDeck = (updated) => {
+    deckRef.current = updated;
+    setDeckSpec(updated);
+    onJobUpdate({ id: currentJobId, status: "ready", deck: updated });
+    if (updated.id) {
+      saveQueue.current = saveQueue.current.catch(() => {}).then(() => updatePresentationDeck(updated.id, updated))
+        .catch(err => setJobError(`Your changes remain in this session, but saving failed: ${err.message}`));
+    }
+  };
 
   // 1. Initial data fetch
   useEffect(() => {
@@ -88,9 +104,7 @@ export function usePresentationWorkflow({
       .then(res => {
         if (res.sheets && res.sheets.length > 0) {
           setSheets(res.sheets);
-          if (!selectedSheetId) {
-            setSelectedSheetId(String(res.sheets[0].id));
-          }
+          setSelectedSheetId(current => current || new URLSearchParams(window.location.search).get("sheet_id") || String(res.sheets[0].id));
           setCustomSheetIds(res.sheets.map(s => String(s.id)));
         }
       })
@@ -140,6 +154,22 @@ export function usePresentationWorkflow({
     } else if (activeJobId) {
       setCurrentJobId(activeJobId);
       setViewMode("generating");
+    } else {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const urlDeckId = params.get("deck_id");
+        if (urlDeckId) {
+          getPresentationDeck(urlDeckId)
+            .then(res => {
+              const d = res.deck || res;
+              if (d && d.slides) {
+                setDeckSpec(d);
+                setViewMode("studio");
+              }
+            })
+            .catch(console.error);
+        }
+      } catch {}
     }
   }, [initialDeck, activeJobId]);
 
@@ -172,7 +202,8 @@ export function usePresentationWorkflow({
           let deck = job.deck;
           if (!deck && job.deck_id) {
             try {
-              deck = await getPresentationDeck(job.deck_id);
+              const response = await getPresentationDeck(job.deck_id);
+              deck = response.deck || response;
             } catch (deckErr) {
               console.error("Failed to fetch ready deck:", deckErr);
             }
@@ -207,6 +238,7 @@ export function usePresentationWorkflow({
         pollTimerRef.current = setTimeout(poll, 1500);
       } catch (err) {
         console.error("Job polling error:", err);
+        setJobStageLabel("Connection interrupted. Reconnecting to the generation job…");
         if (isMounted) {
           pollTimerRef.current = setTimeout(poll, 2500);
         }
@@ -221,142 +253,150 @@ export function usePresentationWorkflow({
     };
   }, [viewMode, currentJobId, autoDownload]);
 
-  // Handlers
-  const handleStartGeneration = async () => {
+  // Handlers (Memoized for render performance and reliability)
+  const handleStartGeneration = useCallback(async (options = generationOptionsRef.current) => {
+    generationOptionsRef.current = options;
+    setViewMode("generating");
+    setCurrentJobId(null);
+    setJobStage("layout");
+    setJobProgress(0);
     setJobError(null);
-    setDeckSpec(null);
     setSlideProgressData(null);
     try {
       const scope = {
-        objective,
-        audience,
-        target_length: Number(targetLength),
+        objective: options.customPrompt || options.objective || objective,
+        audience: options.audience || audience,
+        target_length: options.targetLength ?? targetLength,
         deck_style: deckStyle,
-        theme_id: selectedThemeId,
-        scope_type: scopeType,
+        theme_id: options.themeId || selectedThemeId,
+        scope_type: options.scopeType || (selectedSheetId ? "single_sheet" : scopeType),
         sheet_id: selectedSheetId ? Number(selectedSheetId) : null,
         sheet_ids: scopeType === "custom_sheets" ? customSheetIds.map(Number) : [],
         group_id: scopeType === "connected_group" && selectedGroupId !== "" ? Number(selectedGroupId) : null,
-        instructions
+        instructions: [instructions, options.instructions].filter(Boolean).join("\n"),
+        source_mode: options.sourceMode || "dashboard_truth",
+        background_image: options.selectedImageUrl || null,
+        scrim_opacity: options.scrimOpacity ?? 70,
+        transition: options.transitionStyle || "none",
+        animation: options.animation || "none",
       };
       const res = await startPresentationGeneration(scope);
       setCurrentJobId(res.job_id);
       setJobProgress(5);
-      setJobStage("reviewing_coverage");
+      setJobStage("layout");
       setJobStageLabel("Initiating workspace presentation pipeline...");
       setViewMode("generating");
       onJobUpdate({ ...res, progress_pct: 5, deck: null, status: "in_progress" });
     } catch (err) {
       setJobError(err.message || "Failed to start presentation generation");
     }
-  };
+  }, [objective, audience, targetLength, deckStyle, selectedThemeId, selectedSheetId, scopeType, customSheetIds, selectedGroupId, instructions, onJobUpdate]);
 
-  const handleGoBackToConfig = () => {
+  const handleGoBackToConfig = useCallback((force = false) => {
+    if (force !== true && ((viewMode === "generating" && !jobError) || isRegeneratingSlide)) return;
     if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
     setJobError(null);
     setCurrentJobId(null);
     setSlideProgressData(null);
     setJobProgress(0);
-    setJobStage("reviewing_coverage");
+    setJobStage("layout");
     setViewMode("config");
-  };
+  }, [viewMode, jobError, isRegeneratingSlide]);
 
-  const handleResetAndStartGeneration = () => {
+  const handleResetAndStartGeneration = useCallback(() => {
     if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
     setJobError(null);
     setCurrentJobId(null);
-    setDeckSpec(null);
     setSlideProgressData(null);
     handleStartGeneration();
-  };
+  }, [handleStartGeneration]);
 
-  const handleCancelGeneration = async () => {
+  const handleCancelGeneration = useCallback(async () => {
     if (!currentJobId) {
       handleGoBackToConfig();
       return;
     }
     try {
       await cancelPresentationJob(currentJobId);
-      handleGoBackToConfig();
+      handleGoBackToConfig(true);
     } catch (err) {
-      console.error("Cancel job error:", err);
-      handleGoBackToConfig();
+      setJobError(`Cancellation failed: ${err.message}`);
     }
-  };
+  }, [currentJobId, handleGoBackToConfig]);
 
-  const handleSwitchTheme = (themeId) => {
-    if (!deckSpec) return;
+  const handleSwitchTheme = useCallback((themeId) => {
+    if (!deckRef.current) return;
+    setSelectedThemeId(themeId);
     const matchedTheme = themes.find(t => t.id === themeId);
     if (!matchedTheme) return;
 
     const updated = {
-      ...deckSpec,
-      metadata: { ...deckSpec.metadata, theme_id: themeId },
+      ...deckRef.current,
+      metadata: { ...deckRef.current.metadata, theme_id: themeId },
       theme: matchedTheme
     };
-    setDeckSpec(updated);
-    updatePresentationDeck(updated.id, updated).catch(console.error);
-  };
+    commitDeck(updated);
+  }, [themes]);
 
-  const handleUpdateSlide = (slideIndex, updatedSlide) => {
-    if (!deckSpec) return;
-    const newSlides = [...deckSpec.slides];
-    newSlides[slideIndex] = updatedSlide;
-    const updated = { ...deckSpec, slides: newSlides };
-    setDeckSpec(updated);
-    updatePresentationDeck(updated.id, updated).catch(console.error);
-  };
+  const handleUpdateSlide = useCallback((slideIndex, updatedSlide) => {
+    const latest = deckRef.current;
+    if (!latest?.slides[slideIndex]) return;
+    const slides = latest.slides.map((slide, idx) => idx === slideIndex
+      ? { ...updatedSlide, provenance: "USER_OVERRIDE" } : slide);
+    commitDeck({ ...latest, slides });
+  }, []);
 
-  const handleMoveSlide = (index, direction) => {
-    if (!deckSpec) return;
+  const handleMoveSlide = useCallback((index, direction) => {
+    const latest = deckRef.current;
+    if (!latest) return;
     const newIndex = index + direction;
-    if (newIndex < 0 || newIndex >= deckSpec.slides.length) return;
+    if (newIndex < 0 || newIndex >= latest.slides.length) return;
 
-    const newSlides = [...deckSpec.slides];
+    const newSlides = [...latest.slides];
     const temp = newSlides[index];
     newSlides[index] = newSlides[newIndex];
     newSlides[newIndex] = temp;
     newSlides.forEach((s, idx) => { s.order = idx + 1; });
 
-    const updated = { ...deckSpec, slides: newSlides };
-    setDeckSpec(updated);
+    const updated = { ...latest, slides: newSlides };
+    commitDeck(updated);
     setActiveSlideIndex(newIndex);
-    updatePresentationDeck(updated.id, updated).catch(console.error);
-  };
+  }, []);
 
-  const handleDeleteSlide = (index) => {
-    if (!deckSpec || deckSpec.slides.length <= 1) {
-      alert("A presentation must retain at least one slide.");
+  const handleDeleteSlide = useCallback((index) => {
+    const latest = deckRef.current;
+    if (!latest || latest.slides.length <= 1) {
+      setJobError("A presentation must retain at least one slide.");
       return;
     }
-    const newSlides = deckSpec.slides.filter((_, i) => i !== index);
+    const newSlides = latest.slides.filter((_, i) => i !== index);
     newSlides.forEach((s, idx) => { s.order = idx + 1; });
 
-    const updated = { ...deckSpec, slides: newSlides };
-    setDeckSpec(updated);
-    setActiveSlideIndex(Math.max(0, Math.min(activeSlideIndex, newSlides.length - 1)));
-    updatePresentationDeck(updated.id, updated).catch(console.error);
-  };
+    const updated = { ...latest, slides: newSlides };
+    commitDeck(updated);
+    setActiveSlideIndex(prev => Math.max(0, Math.min(prev, newSlides.length - 1)));
+  }, []);
 
-  const handleDuplicateSlide = (index) => {
-    if (!deckSpec) return;
-    const target = deckSpec.slides[index];
+  const handleDuplicateSlide = useCallback((index) => {
+    const latest = deckRef.current;
+    if (!latest) return;
+    const target = latest.slides[index];
     const duplicated = JSON.parse(JSON.stringify(target));
     duplicated.id = `slide_${Date.now()}`;
     duplicated.title = `${duplicated.title} (Copy)`;
 
-    const newSlides = [...deckSpec.slides];
+    const newSlides = [...latest.slides];
     newSlides.splice(index + 1, 0, duplicated);
     newSlides.forEach((s, idx) => { s.order = idx + 1; });
 
-    const updated = { ...deckSpec, slides: newSlides };
-    setDeckSpec(updated);
+    const updated = { ...latest, slides: newSlides };
+    commitDeck(updated);
     setActiveSlideIndex(index + 1);
-    updatePresentationDeck(updated.id, updated).catch(console.error);
-  };
+  }, []);
 
-  const handleAddSlide = (layoutFamily = "chart_narrative") => {
-    if (!deckSpec) return;
+  const handleAddSlide = useCallback((layoutFamily = "chart_narrative") => {
+    const latest = deckRef.current;
+    if (!latest) return;
     const isBlank = layoutFamily === "blank";
     const isTitle = layoutFamily === "title_cover";
     const isImage = layoutFamily === "image_story";
@@ -364,7 +404,7 @@ export function usePresentationWorkflow({
 
     const newSlide = {
       id: `slide_${Date.now()}`,
-      order: deckSpec.slides.length + 1,
+      order: latest.slides.length + 1,
       layout: isBlank ? "blank" : isTitle ? "title_cover" : isImage ? "image_story" : isComparison ? "comparison_split" : "chart_narrative",
       category: isTitle ? "EXECUTIVE OVERVIEW" : isImage ? "OPERATIONAL SNAPSHOT" : "OPERATIONAL HIGHLIGHT",
       title: isBlank ? "Blank Slide" : isTitle ? "Executive Overview" : "New Strategic Slide",
@@ -383,67 +423,122 @@ export function usePresentationWorkflow({
       evidence_sources: ["HighView Ground Truth Engine · Verified Provenance"]
     };
 
-    const newSlides = [...deckSpec.slides, newSlide];
-    const updated = { ...deckSpec, slides: newSlides };
-    setDeckSpec(updated);
+    const newSlides = [...latest.slides, newSlide];
+    const updated = { ...latest, slides: newSlides };
+    commitDeck(updated);
     setActiveSlideIndex(newSlides.length - 1);
-    updatePresentationDeck(updated.id, updated).catch(console.error);
-  };
+  }, []);
 
-  const handleSetSlideImage = (slideIndex, imageUrl, imageFit = "cover") => {
-    if (!deckSpec || !deckSpec.slides[slideIndex]) return;
-    const newSlides = [...deckSpec.slides];
-    const current = newSlides[slideIndex];
-    newSlides[slideIndex] = {
-      ...current,
-      image_url: imageUrl,
-      image_fit: imageFit,
-      layout: current.layout === "title_cover" ? current.layout : "image_story"
-    };
-    const updated = { ...deckSpec, slides: newSlides };
-    setDeckSpec(updated);
-    updatePresentationDeck(updated.id, updated).catch(console.error);
-  };
+  const handleSetSlideImage = useCallback(({ url, scrimOpacity = 70, applyToAll = false }) => {
+    const latest = deckRef.current;
+    if (!latest) return;
+    commitDeck({ ...latest, slides: latest.slides.map((slide, idx) =>
+      applyToAll || idx === activeSlideIndex
+        ? { ...slide, background_image: url, scrim_opacity: scrimOpacity, provenance: "USER_OVERRIDE" }
+        : slide) });
+  }, [activeSlideIndex]);
 
-  const handleSetTransition = (transitionType) => {
-    if (!deckSpec) return;
+  const handleSetTransition = useCallback((transitionType) => {
+    const latest = deckRef.current;
+    if (!latest) return;
     const updated = {
-      ...deckSpec,
-      metadata: { ...deckSpec.metadata, transition: transitionType }
+      ...latest,
+      metadata: { ...latest.metadata, transition: transitionType }
     };
-    setDeckSpec(updated);
-    updatePresentationDeck(updated.id, updated).catch(console.error);
-  };
+    commitDeck(updated);
+  }, []);
 
-  const handleRegenerateSlideSubmit = async () => {
-    if (!deckSpec || !regeneratePrompt.trim()) return;
-    const currentSlide = deckSpec.slides[activeSlideIndex];
-    if (!currentSlide) return;
+  const handleRegenerateSlideSubmit = useCallback(async (promptOverride) => {
+    const prompt = typeof promptOverride === "string" ? promptOverride : regeneratePrompt;
+    const latest = deckRef.current;
+    if (!latest || !prompt.trim() || isRegeneratingSlide) return null;
+    const currentSlide = latest.slides[activeSlideIndex];
+    if (!currentSlide) return null;
 
     setIsRegeneratingSlide(true);
     try {
-      const updated = await regenerateSlide(deckSpec, currentSlide.id, regeneratePrompt);
-      setDeckSpec(updated);
+      const updated = await regenerateSlide(latest, currentSlide.id, prompt);
+      commitDeck(updated);
       setShowRegenModal(false);
       setRegeneratePrompt("");
+      return updated;
     } catch (err) {
-      alert(`Regeneration failed: ${err.message}`);
+      setJobError(`Regeneration failed: ${err.message}`);
+      return null;
     } finally {
       setIsRegeneratingSlide(false);
     }
-  };
+  }, [regeneratePrompt, isRegeneratingSlide, activeSlideIndex]);
 
-  const handleExportPptx = async () => {
-    if (!deckSpec) return;
-    setIsExportingPptx(true);
-    try {
-      await exportPresentationPptx(deckSpec);
-    } catch (err) {
-      alert(`PowerPoint export failed: ${err.message}`);
-    } finally {
-      setIsExportingPptx(false);
+  const handleExportPptx = useCallback(async () => {
+    const latest = deckRef.current;
+    if (latest) {
+      setIsExportingPptx(true);
+      try {
+        await exportPresentationPptx(latest);
+      } catch (err) {
+        setJobError(`PowerPoint export failed: ${err.message}`);
+      } finally {
+        setIsExportingPptx(false);
+      }
+      return;
     }
-  };
+    if (currentJobId) {
+      try {
+        const job = await getPresentationJob(currentJobId);
+        const did = job?.deck_id;
+        if (did) window.open(`/api/presentations/download/${did}`, "_blank");
+      } catch (err) {
+        setJobError(`PowerPoint export failed: ${err.message}`);
+      }
+    }
+  }, [currentJobId]);
+
+  const handleOpenInStudio = useCallback(async () => {
+    if (deckRef.current) {
+      setViewMode("studio");
+      return;
+    }
+    if (currentJobId) {
+      try {
+        const job = await getPresentationJob(currentJobId);
+        if (job?.deck) {
+          commitDeck(job.deck);
+          setViewMode("studio");
+        } else if (job?.deck_id) {
+          const res = await getPresentationDeck(job.deck_id);
+          const d = res.deck || res;
+          if (d) {
+            commitDeck(d);
+            setViewMode("studio");
+          }
+        }
+      } catch (err) {
+        setJobError(`Unable to open studio: ${err.message}`);
+      }
+    }
+  }, [currentJobId]);
+
+  const handleExportHtml = useCallback(async () => {
+    const latest = deckRef.current;
+    if (latest) {
+      exportStandaloneHtmlPresentation(latest, selectedThemeId);
+      return;
+    }
+    if (currentJobId) {
+      try {
+        const job = await getPresentationJob(currentJobId);
+        const did = job?.deck_id;
+        if (did) {
+          const res = await getPresentationDeck(did);
+          const d = res.deck || res;
+          if (d) exportStandaloneHtmlPresentation(d, selectedThemeId);
+        }
+      } catch (err) {
+        setJobError(`HTML export failed: ${err.message}`);
+      }
+    }
+  }, [selectedThemeId, currentJobId]);
 
   const currentTheme = deckSpec?.theme || themes.find(t => t.id === selectedThemeId) || {
     bg_color: "#171412",
@@ -489,6 +584,7 @@ export function usePresentationWorkflow({
     jobStage,
     jobStageLabel,
     jobError,
+    setJobError,
     slideProgressData,
     deckSpec,
     setDeckSpec,
@@ -520,6 +616,8 @@ export function usePresentationWorkflow({
     handleSetSlideImage,
     handleSetTransition,
     handleRegenerateSlideSubmit,
-    handleExportPptx
+    handleExportPptx,
+    handleOpenInStudio,
+    handleExportHtml
   };
 }

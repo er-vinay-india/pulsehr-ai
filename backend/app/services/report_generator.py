@@ -84,6 +84,8 @@ def export_spec_to_pptx(deck_spec: dict) -> Path:
     for idx, slide_data in enumerate(slides):
         slide = prs.slides.add_slide(prs.slide_layouts[6])
         set_slide_background(slide, colors["bg"])
+        from .presentation.photo_background import add_photo_background
+        add_photo_background(slide, slide_data, prs.slide_width, prs.slide_height)
         add_header(
             slide,
             slide_data.get("title", ""),

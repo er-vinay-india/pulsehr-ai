@@ -1,3 +1,4 @@
+import { slideBackground } from "../utils/slideBackground";
 import React, { useState } from "react";
 import { ShieldCheck } from "lucide-react";
 import FormattedText from "./presentation/slides/FormattedText.jsx";
@@ -205,7 +206,7 @@ export default function PresentationSlideContent({
     <div
       className={`slide-card-wrapper layout-${layout}`}
       style={{
-        backgroundColor: theme.bg_color,
+        ...slideBackground(slide, theme.bg_color),
         color: theme.primary_text,
         "--brand-color": theme.brand_color,
         "--accent-color": theme.accent_color,

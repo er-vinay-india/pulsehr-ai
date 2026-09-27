@@ -24,7 +24,7 @@ def execute_presentation_pipeline_async(
     mgr = manager or job_manager
     try:
         # STAGE 1: Reviewing coverage & collecting findings (12%)
-        mgr.update_stage(job_id, "collecting_findings", "Freezing snapshot & gathering shared evidence package", 12)
+        mgr.update_stage(job_id, "layout", "Freezing snapshot & gathering shared evidence package", 12)
         if mgr.is_cancelled(job_id):
             return
 
@@ -52,12 +52,12 @@ def execute_presentation_pipeline_async(
             workspace_evidence["retrieved_context"] = {"status": "degraded", "results": [], "historical_decks": []}
 
         # STAGE 2: Planning coverage & prioritizing material findings (25%)
-        mgr.update_stage(job_id, "planning_coverage", "Planning coverage manifest & prioritizing material findings", 25)
+        mgr.update_stage(job_id, "layout", "Planning coverage manifest & prioritizing material findings", 25)
         if mgr.is_cancelled(job_id):
             return
 
         # STAGE 3: Planning presentation narrative & visual layout selection (40%)
-        mgr.update_stage(job_id, "planning_presentation", "Adapting presentation narrative & visual layout selection", 40)
+        mgr.update_stage(job_id, "headings", "Adapting presentation narrative & visual layout selection", 40)
         if mgr.is_cancelled(job_id):
             return
 
@@ -65,16 +65,17 @@ def execute_presentation_pipeline_async(
         def _on_slide_progress(slide_num: int, total_slides: int, slide_title: str, category: str = "", **kwargs):
             import time
             clean_title = slide_title.split(":")[0].strip()[:35]
-            pct = 45 + int((slide_num / max(1, total_slides)) * 22)
-            label = f"Constructed slide {slide_num} of {total_slides}: {clean_title}"
+            effective_total = max(total_slides, slide_num, 1)
+            pct = 45 + int((slide_num / effective_total) * 22)
+            label = f"Constructed slide {slide_num} of {effective_total}: {clean_title}"
             mgr.update_stage(
                 job_id,
-                "building_slides",
+                "headings",
                 label,
                 pct,
                 extra={
                     "current_slide": slide_num,
-                    "total_slides": total_slides,
+                    "total_slides": effective_total,
                     "current_slide_title": slide_title,
                     "current_slide_category": category,
                     "slide_status_list": [
@@ -82,16 +83,16 @@ def execute_presentation_pipeline_async(
                             "order": i + 1,
                             "status": "complete" if (i + 1) <= slide_num else ("building" if (i + 1) == slide_num + 1 else "pending")
                         }
-                        for i in range(total_slides)
+                        for i in range(effective_total)
                     ]
                 }
             )
             time.sleep(0.12)
 
-        target_total_slides = int(scope.get("target_length") or 8)
+        target_total_slides = int(scope.get("target_length") or 0)
         mgr.update_stage(
             job_id,
-            "building_slides",
+            "headings",
             "Planning slide blueprints & assembling layout components...",
             46,
             extra={
@@ -112,19 +113,42 @@ def execute_presentation_pipeline_async(
             scope,
             primary_ctx,
             workspace_evidence=workspace_evidence,
-            on_slide_progress=_on_slide_progress
+            on_slide_progress=_on_slide_progress,
+            on_phase_progress=lambda phase, label, pct: mgr.update_stage(job_id, phase, label, pct)
         )
 
         # STAGE 5: Auditing deterministic numbers & verifying claim ledger (±0.1%) (70%)
-        mgr.update_stage(job_id, "checking_evidence", "Auditing deterministic numbers & verifying claim ledger (±0.1%)", 70)
+        mgr.update_stage(job_id, "text", "Auditing deterministic numbers & verifying claim ledger (±0.1%)", 70)
         if mgr.is_cancelled(job_id):
             return
 
         verification_res = verify_presentation_claims(deck_spec, deck_spec["evidence_ledger"])
         deck_spec["metadata"]["validation_summary"] = verification_res
 
+        mgr.update_stage(job_id, "animation", "Applying content animation preferences", 73)
+        for slide in deck_spec["slides"]:
+            slide["animation"] = scope.get("animation", "none")
+            if scope.get("background_image"):
+                slide["background_image"] = scope["background_image"]
+                slide["scrim_opacity"] = scope.get("scrim_opacity", 70)
+        if mgr.is_cancelled(job_id):
+            return
+        mgr.update_stage(job_id, "transitions", "Applying slide transitions", 75)
+        deck_spec["metadata"]["transition"] = scope.get("transition", "none")
+        for slide in deck_spec["slides"]:
+            slide["transition"] = scope.get("transition", "none")
+        if mgr.is_cancelled(job_id):
+            return
+        mgr.update_stage(job_id, "transcript", "Preparing HRIDAY speaker transcripts from slide content", 78)
+        for slide in deck_spec["slides"]:
+            if not slide.get("speaker_notes"):
+                bullets = [item if isinstance(item, str) else item.get("text", "") for item in slide.get("bullets", [])]
+                slide["speaker_notes"] = "\n".join(filter(None, [slide.get("title"), slide.get("narrative"), *bullets]))
+        if mgr.is_cancelled(job_id):
+            return
+
         # STAGE 6: Auditing spatial bounding boxes, text density & chart geometry (80%)
-        mgr.update_stage(job_id, "checking_layout", "Auditing spatial bounding boxes, text density & chart geometry", 80)
+        mgr.update_stage(job_id, "formatting", "Auditing spatial bounding boxes, text density & chart geometry", 80)
         if mgr.is_cancelled(job_id):
             return
 
@@ -132,7 +156,7 @@ def execute_presentation_pipeline_async(
         deck_spec["quality_audit"] = audit_res
 
         # STAGE 7: Executing bounded repairs (layout tuning, concise rewriting, table splitting) (90%)
-        mgr.update_stage(job_id, "repairing_issues", "Executing bounded repairs (layout tuning, concise rewriting, table splitting)", 90)
+        mgr.update_stage(job_id, "formatting", "Executing bounded repairs (layout tuning, concise rewriting, table splitting)", 90)
         if mgr.is_cancelled(job_id):
             return
 
@@ -157,7 +181,7 @@ def execute_presentation_pipeline_async(
                 raise ValueError("Decision slide claims differ from the frozen overview evidence.")
 
         # STAGE 8: Generating verified native PPTX & persisting presentation deck (95% -> 100%)
-        mgr.update_stage(job_id, "finalizing_presentation", "Generating verified native PPTX & persisting presentation deck", 95)
+        mgr.update_stage(job_id, "formatting", "Generating verified native PPTX & persisting presentation deck", 95)
         if mgr.is_cancelled(job_id):
             return
 
@@ -187,7 +211,7 @@ def execute_presentation_pipeline_async(
                 )
                 conn.commit()
         except Exception as exc:
-            logger.warning(f"Could not persist presentation deck to database: {exc}")
+            raise RuntimeError("The deck was generated but could not be saved. Please retry.") from exc
 
         # Asynchronously index the newly generated presentation deck into memory (Phase 1)
         try:

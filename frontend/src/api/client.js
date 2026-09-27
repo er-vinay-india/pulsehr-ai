@@ -429,6 +429,28 @@ export async function cancelPresentationJob(jobId) {
   return res.json();
 }
 
+export async function searchPresentationImages(query = "workplace", category = "all", signal = null) {
+  const catParam = category && category !== "all" ? `&category=${encodeURIComponent(category)}` : "";
+  const res = await fetch(
+    `${API_BASE}/presentations/images/search?query=${encodeURIComponent(query || "workplace")}${catParam}&page_size=12`,
+    { signal }
+  );
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Image search is unavailable. Please try again.");
+  }
+  return res.json();
+}
+
+export async function getAdaptiveDashboardPrimaryElement(sheetId, signal = null) {
+  const res = await fetch(`${API_BASE}/adaptive-dashboard/primary-element?sheet_id=${sheetId}`, { signal });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Failed to load adaptive dashboard primary element");
+  }
+  return res.json();
+}
+
 export async function getPresentationDeck(deckId) {
   const res = await fetch(`${API_BASE}/presentations/decks/${deckId}`);
   if (!res.ok) throw new Error("Failed to load presentation deck");
