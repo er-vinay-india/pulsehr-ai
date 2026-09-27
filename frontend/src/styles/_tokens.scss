@@ -1,96 +1,154 @@
 :root {
   /* ========================================================================
-     HighView Design Tokens — WCAG AAA High-Contrast Color System
+     HighView & HRIDAY Unified Brand System Tokens
+     WCAG AAA Accessible Core Design System
      Single Source of Truth for the Entire Application
      ======================================================================== */
 
-  /* Surface & Canvas Tokens (Dark Obsidian / Slate Architecture) */
-  --bg-canvas: #080b11;
-  --bg-canvas-subtle: #0f1420;
-  --surface: #111827;
-  --surface-glass: rgba(17, 24, 39, 0.92);
-  --surface-card: #151e32;
-  --surface-card-hover: #1e2c44;
-  --surface-muted: #0d131f;
-  --surface-inset: #090e17;
-  --surface-header: #0b111c;
-  --surface-header-end: #070a10;
-  --surface-footer: #06090e;
-  --shell-edge: #1e293b;
+  /* ------------------------------------------------------------------------
+     1. HIGHVIEW CORE PALETTE (Analytical, Executive, Crisp, Data-Driven)
+     Ratio: 55% Navy/Blue, 35% Teal/Cyan, 10% Green
+     ------------------------------------------------------------------------ */
+  --hv-brand-primary: #0B1F3A;         /* Deep Navy: Main headings, nav, structural chrome */
+  --hv-brand-secondary: #005A6B;       /* Accessible Teal: Secondary buttons, active navigation */
+  --hv-brand-accent: #155EEF;          /* Royal Blue: Primary decorative accent & focus */
+  --hv-brand-navy: #0B1F3A;            /* Deep Navy */
+  --hv-brand-blue: #123B5D;            /* Deep Blue */
+  --hv-brand-cyan: #22C7F2;            /* Decorative Cyan */
+  --hv-brand-teal: #14B8A6;            /* Decorative Teal */
+  --hv-brand-green: #84CC16;           /* Decorative Bright Green */
 
-  /* Header Branding Specific Tokens (Clean, Borderless, Background-Free Logo) */
-  --header-bg: rgba(11, 17, 28, 0.96);
-  --header-border: rgba(255, 255, 255, 0.08);
+  /* HighView Accessible Foreground & Text Tokens (WCAG AAA >= 7:1) */
+  --hv-text-primary: #0B1F3A;          /* Deep Navy: 15.8:1 contrast on #F8FAFC (AAA) */
+  --hv-text-secondary: #334155;        /* Slate Text: 9.5:1 contrast on #F8FAFC (AAA) */
+  --hv-text-muted: #64748B;            /* Slate Muted: 4.8:1 contrast (AA) */
+  --hv-text-on-dark: #FFFFFF;          /* Pure White on #0B1F3A (16:1 AAA) */
+
+  /* HighView Accessible Background & Surface Tokens */
+  --hv-bg-page: #F8FAFC;               /* Light Canvas Background */
+  --hv-bg-surface: #FFFFFF;            /* Cards, Panels, Tables, Dialogs */
+  --hv-bg-surface-hover: #F1F5F9;      /* Subtle slate hover */
+  --hv-bg-mint: #E6F4F1;               /* Soft Mint Background */
+  --hv-bg-inset: #F8FAFC;              /* Inset wells */
+
+  /* HighView Borders */
+  --hv-border: #E2E8F0;                /* Clean subtle grey/blue border */
+  --hv-border-subtle: #F1F5F9;
+  --hv-border-strong: #CBD5E1;
+  --hv-border-focus: #155EEF;
+
+  /* HighView Semantic Status Tiers */
+  --hv-success: #365314;               /* Accessible Green Text */
+  --hv-success-bg: #E6F4F1;            /* Soft Mint Background */
+  --hv-info: #005A6B;                  /* Accessible Teal */
+  --hv-info-bg: #E6F4F1;
+
+  /* Preferred HighView Gradient (#155EEF -> #22C7F2 -> #14B8A6 -> #84CC16) */
+  --hv-gradient: linear-gradient(135deg, #155EEF 0%, #22C7F2 35%, #14B8A6 70%, #84CC16 100%);
+  --hv-gradient-subtle: linear-gradient(135deg, rgba(21, 94, 239, 0.08) 0%, rgba(34, 199, 242, 0.08) 50%, rgba(20, 184, 166, 0.08) 100%);
+
+  /* ------------------------------------------------------------------------
+     2. HRIDAY ASSISTANT PALETTE (Warm, Human, Intelligent, Supportive)
+     Ratio: 50% Navy, 30% Teal/Cyan, 15% Soft Warm Neutrals, 5% Gold/Green
+     ------------------------------------------------------------------------ */
+  --hriday-primary: #102A43;           /* Primary HRIDAY Navy: header & identity */
+  --hriday-secondary: #0F766E;         /* Human Teal: action buttons, interactive accent */
+  --hriday-accent: #0891B2;            /* Warm Cyan: AI activity / thinking states */
+  --hriday-warm: #B7791F;              /* Warm Gold Accent: subtle personality highlight */
+  --hriday-heart-green: #3F7D20;       /* Heart Green: positive recommendation */
+  --hriday-bg-soft: #E8F7F5;           /* Soft Aqua: assistant message background */
+  --hriday-bg-cream: #FFF9F0;          /* Soft Cream: warm assistant highlights */
+  --hriday-text: #1E293B;              /* HRIDAY Primary Text: assistant message copy */
+  --hriday-text-muted: #475569;        /* Assistant secondary text */
+  --hriday-success: #3F7D20;           /* Positive AI recommendation */
+
+  /* Preferred HRIDAY Assistant Gradient (#102A43 -> #0F766E -> #0891B2) */
+  --hriday-gradient: linear-gradient(135deg, #102A43 0%, #0F766E 50%, #0891B2 100%);
+  --hriday-gradient-hover: linear-gradient(135deg, #0b2034 0%, #0d645e 50%, #077995 100%);
+  --hriday-glow: rgba(15, 118, 110, 0.35);
+
+  /* ------------------------------------------------------------------------
+     3. GLOBAL SYSTEM ALIASES (Backward Compatibility & Universal Mapping)
+     ------------------------------------------------------------------------ */
+  --bg-canvas: var(--hv-bg-page);
+  --bg-canvas-subtle: #F1F5F9;
+  --surface: var(--hv-bg-surface);
+  --surface-glass: rgba(255, 255, 255, 0.96);
+  --surface-card: var(--hv-bg-surface);
+  --surface-card-hover: var(--hv-bg-surface-hover);
+  --surface-muted: #F1F5F9;
+  --surface-inset: #F8FAFC;
+  --surface-header: #0B1F3A;
+  --surface-header-end: #123B5D;
+  --surface-footer: #0B1F3A;
+  --shell-edge: #CBD5E1;
+
+  --header-bg: #0B1F3A;
+  --header-border: rgba(255, 255, 255, 0.12);
   --header-logo-bg: transparent;
   --header-logo-border: none;
   --header-logo-shadow: none;
 
-  /* Border Tokens */
-  --border: #1e293b;
-  --border-subtle: #151f30;
-  --border-strong: #334155;
-  --border-focus: #38bdf8;
-  --border-input: #475569;
+  --border: var(--hv-border);
+  --border-subtle: var(--hv-border-subtle);
+  --border-strong: var(--hv-border-strong);
+  --border-focus: var(--hv-brand-accent);
+  --border-input: #CBD5E1;
   --border-width: 1px;
 
-  /* Typography & Foreground Contrast Tokens (WCAG 2.1 AAA Compliant)
-     - Normal text contrast >= 7.0:1
-     - Large/Bold text contrast >= 4.5:1
-  */
-  --fg-primary: #f8fafc;       /* 19.8:1 contrast on #080b11 canvas */
-  --fg-secondary: #cbd5e1;     /* 13.5:1 contrast on #080b11 canvas, 9.1:1 on cards */
-  --fg-muted: #94a3b8;         /* 7.1:1 contrast on #080b11 canvas */
-  --fg-disabled: #64748b;
-  --fg-on-brand: #ffffff;
-  --fg-on-accent: #04131f;
+  --fg-primary: var(--hv-text-primary);
+  --fg-secondary: var(--hv-text-secondary);
+  --fg-muted: var(--hv-text-muted);
+  --fg-disabled: #94A3B8;
+  --fg-on-brand: #FFFFFF;
+  --fg-on-accent: #FFFFFF;
 
-  /* HighView Brand Palette (Electric Sky / Sapphire) */
-  --brand-400: #38bdf8;
-  --brand-500: #0ea5e9;
-  --brand-600: #0284c7;
-  --brand-700: #0369a1;
-  --brand-accent: var(--brand-400);
-  --brand-glow: rgba(56, 189, 248, 0.28);
-  --brand-subtle: rgba(56, 189, 248, 0.12);
-  --brand-subtle-border: rgba(56, 189, 248, 0.35);
-  --bg-brand: #0284c7;
-  --surface-elevated: var(--surface-card-hover);
+  /* Brand Palette Aliases */
+  --brand-400: var(--hv-brand-cyan);
+  --brand-500: var(--hv-brand-accent);
+  --brand-600: #0B1F3A;
+  --brand-700: #08172b;
+  --brand-accent: var(--hv-brand-accent);
+  --brand-glow: rgba(21, 94, 239, 0.22);
+  --brand-subtle: rgba(21, 94, 239, 0.08);
+  --brand-subtle-border: rgba(21, 94, 239, 0.25);
+  --bg-brand: var(--hv-brand-primary);
+  --surface-elevated: #FFFFFF;
 
-  /* Primary Interactive Gradient Tokens */
-  --btn-primary-bg: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
-  --btn-primary-hover: linear-gradient(135deg, #0369a1 0%, #075985 100%);
-  --btn-primary-fg: #ffffff;
-  --btn-primary-border: rgba(56, 189, 248, 0.4);
-  --btn-primary-shadow: 0 2px 10px rgba(2, 132, 199, 0.35);
+  /* Buttons */
+  --btn-primary-bg: #0B1F3A;
+  --btn-primary-hover: #123B5D;
+  --btn-primary-fg: #FFFFFF;
+  --btn-primary-border: #0B1F3A;
+  --btn-primary-shadow: 0 1px 3px rgba(11, 31, 58, 0.2);
 
-  /* Accent Tokens */
-  --accent-500: #38bdf8;
-  --accent-soft: #082f49;
-  --bg-accent: #38bdf8;
+  --btn-secondary-bg: #005A6B;
+  --btn-secondary-hover: #004552;
+  --btn-secondary-fg: #FFFFFF;
 
-  /* Semantic Status Tiers (Colorblind Safe & AAA Compliant) */
-  --emerald-tier: #34d399;
-  --emerald-bg: #064e3b;
-  --amber-tier: #fde047;
-  --amber-bg: #451a03;
-  --rose-tier: #f87171;
-  --rose-bg: #4c0519;
+  /* Semantic Status Tiers */
+  --emerald-tier: #365314;
+  --emerald-bg: #E6F4F1;
+  --amber-tier: #B7791F;
+  --amber-bg: #FFF9F0;
+  --rose-tier: #B91C1C;
+  --rose-bg: #FEF2F2;
 
-  /* Elevation Shadows */
-  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.35);
-  --shadow-md: 0 8px 24px -4px rgba(0, 0, 0, 0.5);
-  --shadow-lg: 0 20px 48px -8px rgba(0, 0, 0, 0.65);
-  --shadow-card: 0 12px 36px -6px rgba(0, 0, 0, 0.55);
+  /* Shadows (Restrained Executive Drop Shadows) */
+  --shadow-sm: 0 1px 3px rgba(11, 31, 58, 0.06), 0 1px 2px rgba(11, 31, 58, 0.04);
+  --shadow-md: 0 4px 14px -2px rgba(11, 31, 58, 0.09), 0 2px 6px -1px rgba(11, 31, 58, 0.05);
+  --shadow-lg: 0 12px 32px -4px rgba(11, 31, 58, 0.12), 0 4px 12px -2px rgba(11, 31, 58, 0.06);
+  --shadow-card: 0 2px 8px rgba(11, 31, 58, 0.06), 0 1px 3px rgba(11, 31, 58, 0.04);
 
   /* Radii */
   --radius-xs: 6px;
-  --radius-sm: 10px;
-  --radius-md: 14px;
-  --radius-lg: 20px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
   --radius-full: 9999px;
 
   /* Typography */
-  --font-sans: "Figtree", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-sans: "Figtree", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-mono: "JetBrains Mono", monospace;
 
   /* Layout & Whitespace Architecture (Single Source of Truth) */

@@ -1,11 +1,13 @@
 import React, { useEffect, useRef } from "react";
 
 /**
- * AnimatedAcousticOrb (HRIDAY Anatomical Human Heart Engine)
+ * AnimatedAcousticOrb (HRIDAY Intelligent Human Heart Engine)
  *
  * Renders an anatomically realistic human heart (aorta with 3 trunk branches,
  * pulmonary artery, superior vena cava, muscular atria and ventricles, tapered apex,
- * and branching coronary vascular tree) in arterial crimson red.
+ * and branching vascular tree) in the finalized HRIDAY warm intelligence palette
+ * (Deep Navy #102A43, Human Teal #0F766E, Warm Cyan #0891B2, Heart Green #3F7D20,
+ * and subtle Warm Gold #B7791F accents).
  *
  * Implements realistic dual-stroke (systole-diastole / lub-dub) biomechanical heartbeat
  * pulsation, synchronized with acoustic voice waveforms when isPlaying is active.
@@ -52,7 +54,7 @@ export default function AnimatedAcousticOrb({ isPlaying = false, compact = false
         const currentScale = (compact ? 0.88 : 1.15) * (1 + heartPulse);
         const speechAmp = isPlaying ? 0.4 + Math.sin(waveOffsetRef.current * 4) * 0.25 : 0;
 
-        // 2. Surrounding Acoustic Vascular Pulsation Rings (Red / Crimson)
+        // 2. Surrounding Acoustic Waveform Rings (Teal / Warm Cyan)
         const ringCount = compact ? 2 : 3;
         for (let r = 0; r < ringCount; r++) {
           const ringRadius = (compact ? 24 : 44) + r * (compact ? 7 : 12) + speechAmp * 15 * (r + 1);
@@ -76,12 +78,12 @@ export default function AnimatedAcousticOrb({ isPlaying = false, compact = false
           ctx.lineWidth = compact ? 1 : 1.5 + speechAmp * 1.5;
           ctx.strokeStyle =
             r === 0
-              ? `rgba(239, 68, 68, ${0.45 + speechAmp * 0.45})`
+              ? `rgba(8, 145, 178, ${0.45 + speechAmp * 0.45})`
               : r === 1
-              ? `rgba(220, 38, 38, ${0.3 + speechAmp * 0.35})`
-              : `rgba(185, 28, 28, ${0.2 + speechAmp * 0.3})`;
+              ? `rgba(15, 118, 110, ${0.3 + speechAmp * 0.35})`
+              : `rgba(16, 42, 67, ${0.25 + speechAmp * 0.3})`;
           ctx.shadowBlur = compact ? 6 : 14 + speechAmp * 15;
-          ctx.shadowColor = "#ef4444";
+          ctx.shadowColor = "#0891B2";
           ctx.stroke();
           ctx.restore();
         }
@@ -93,9 +95,9 @@ export default function AnimatedAcousticOrb({ isPlaying = false, compact = false
         // 3. Great Vessels: Aortic Arch, Pulmonary Trunk & Superior Vena Cava
         // A. Superior Vena Cava (Right superior vertical venous trunk)
         const svcGrad = ctx.createLinearGradient(12, -30, 24, -30);
-        svcGrad.addColorStop(0, "#4c0519");
-        svcGrad.addColorStop(0.5, "#881337");
-        svcGrad.addColorStop(1, "#3b0716");
+        svcGrad.addColorStop(0, "#102A43");
+        svcGrad.addColorStop(0.5, "#123B5D");
+        svcGrad.addColorStop(1, "#0B1F3A");
         ctx.fillStyle = svcGrad;
         ctx.beginPath();
         ctx.moveTo(13, -20);
@@ -107,14 +109,14 @@ export default function AnimatedAcousticOrb({ isPlaying = false, compact = false
 
         // B. Aortic Arch (Arteria Aorta with 3 branching arterial trunks)
         const aortaGrad = ctx.createLinearGradient(-15, -48, 10, -18);
-        aortaGrad.addColorStop(0, "#dc2626");
-        aortaGrad.addColorStop(0.4, "#ef4444");
-        aortaGrad.addColorStop(0.8, "#b91c1c");
-        aortaGrad.addColorStop(1, "#7f1d1d");
+        aortaGrad.addColorStop(0, "#0891B2");
+        aortaGrad.addColorStop(0.4, "#0F766E");
+        aortaGrad.addColorStop(0.8, "#14B8A6");
+        aortaGrad.addColorStop(1, "#102A43");
 
         ctx.fillStyle = aortaGrad;
         ctx.shadowBlur = 10 + speechAmp * 12;
-        ctx.shadowColor = "rgba(239, 68, 68, 0.6)";
+        ctx.shadowColor = "rgba(15, 118, 110, 0.6)";
 
         ctx.beginPath();
         // Aortic Arch main curvature
@@ -125,9 +127,9 @@ export default function AnimatedAcousticOrb({ isPlaying = false, compact = false
         ctx.closePath();
         ctx.fill();
 
-        // 3 Arterial Branches off the Aortic Arch (Brachiocephalic, Left Common Carotid, Left Subclavian)
+        // 3 Arterial Branches off the Aortic Arch (with subtle warm gold touch)
         ctx.lineWidth = compact ? 2 : 2.8;
-        ctx.strokeStyle = "#f87171";
+        ctx.strokeStyle = "#22C7F2";
         ctx.lineCap = "round";
 
         // Branch 1: Brachiocephalic
@@ -136,13 +138,15 @@ export default function AnimatedAcousticOrb({ isPlaying = false, compact = false
         ctx.lineTo(3, -56);
         ctx.stroke();
 
-        // Branch 2: Left Common Carotid
+        // Branch 2: Left Common Carotid (Warm Gold Accent)
+        ctx.strokeStyle = "#B7791F";
         ctx.beginPath();
         ctx.moveTo(11, -48);
         ctx.lineTo(12, -58);
         ctx.stroke();
 
         // Branch 3: Left Subclavian
+        ctx.strokeStyle = "#22C7F2";
         ctx.beginPath();
         ctx.moveTo(17, -46);
         ctx.lineTo(20, -56);
@@ -150,9 +154,9 @@ export default function AnimatedAcousticOrb({ isPlaying = false, compact = false
 
         // C. Pulmonary Trunk (crossing anterior to aorta)
         const pulmGrad = ctx.createLinearGradient(-18, -25, -2, -12);
-        pulmGrad.addColorStop(0, "#991b1b");
-        pulmGrad.addColorStop(0.6, "#dc2626");
-        pulmGrad.addColorStop(1, "#7f1d1d");
+        pulmGrad.addColorStop(0, "#102A43");
+        pulmGrad.addColorStop(0.6, "#0F766E");
+        pulmGrad.addColorStop(1, "#0891B2");
         ctx.fillStyle = pulmGrad;
         ctx.beginPath();
         ctx.moveTo(-16, -16);
@@ -162,16 +166,16 @@ export default function AnimatedAcousticOrb({ isPlaying = false, compact = false
         ctx.fill();
 
         // 4. Anatomical Human Heart Body (Myocardium & Ventricles)
-        // Realistic asymmetrical shape: Right Atrium shoulder, Right Ventricle, Left Ventricle with tilted Apex
+        // Realistic asymmetrical shape rendered in HRIDAY Human Teal & Deep Navy
         const heartBodyGrad = ctx.createRadialGradient(-8, -4, 4, -4, 6, 48);
-        heartBodyGrad.addColorStop(0, "#ef4444"); // Oxygenated anterior surface
-        heartBodyGrad.addColorStop(0.35, "#dc2626"); // Mid myocardial tissue
-        heartBodyGrad.addColorStop(0.7, "#991b1b"); // Deep muscle wall
-        heartBodyGrad.addColorStop(1, "#450a0a"); // Dark coronary border
+        heartBodyGrad.addColorStop(0, "#0891B2"); // Anterior Warm Cyan glow
+        heartBodyGrad.addColorStop(0.35, "#0F766E"); // Human Teal muscle wall
+        heartBodyGrad.addColorStop(0.7, "#3F7D20"); // Heart Green subtle resonance
+        heartBodyGrad.addColorStop(1, "#102A43"); // Deep Navy foundation
 
         ctx.fillStyle = heartBodyGrad;
         ctx.shadowBlur = 18 + speechAmp * 18;
-        ctx.shadowColor = isPlaying ? "rgba(239, 68, 68, 0.85)" : "rgba(185, 28, 28, 0.65)";
+        ctx.shadowColor = isPlaying ? "rgba(8, 145, 178, 0.85)" : "rgba(15, 118, 110, 0.65)";
 
         ctx.beginPath();
         // Base of heart (under great vessels)
@@ -191,20 +195,20 @@ export default function AnimatedAcousticOrb({ isPlaying = false, compact = false
         ctx.closePath();
         ctx.fill();
 
-        // 5. Anterior Interventricular Sulcus & Coronary Arteries (Vascular Network)
+        // 5. Anterior Interventricular Sulcus & Vascular Network (Soft Aqua & Warm Gold)
         ctx.shadowBlur = 0;
         ctx.lineCap = "round";
 
-        // Main Coronary Sulcus (Diagonal arterial branch heading toward apex)
-        ctx.strokeStyle = "rgba(254, 202, 202, 0.85)";
+        // Main Coronary Sulcus (Diagonal branch heading toward apex)
+        ctx.strokeStyle = "rgba(232, 247, 245, 0.9)";
         ctx.lineWidth = compact ? 1.2 : 1.8;
         ctx.beginPath();
         ctx.moveTo(-5, -12);
         ctx.bezierCurveTo(-3, 6, -6, 20, -14, 42);
         ctx.stroke();
 
-        // Branching Capillaries / Coronary Arteries
-        ctx.strokeStyle = "rgba(254, 202, 202, 0.65)";
+        // Branching Capillaries
+        ctx.strokeStyle = "rgba(183, 121, 31, 0.65)"; // Warm Gold personality touch
         ctx.lineWidth = compact ? 0.8 : 1.1;
 
         // Right ventricular branch 1
@@ -214,6 +218,7 @@ export default function AnimatedAcousticOrb({ isPlaying = false, compact = false
         ctx.stroke();
 
         // Right ventricular branch 2
+        ctx.strokeStyle = "rgba(232, 247, 245, 0.7)";
         ctx.beginPath();
         ctx.moveTo(-6, 18);
         ctx.bezierCurveTo(0, 24, 6, 28, 8, 34);
@@ -226,15 +231,16 @@ export default function AnimatedAcousticOrb({ isPlaying = false, compact = false
         ctx.stroke();
 
         // Left ventricular branch 2
+        ctx.strokeStyle = "rgba(183, 121, 31, 0.6)"; // Warm Gold
         ctx.beginPath();
         ctx.moveTo(-8, 16);
         ctx.bezierCurveTo(-16, 22, -22, 26, -24, 32);
         ctx.stroke();
 
-        // 6. Volumetric Muscular Specular Highlight (3D Curved Sheen)
+        // 6. Volumetric Muscular Specular Highlight (3D Curved Sheen in Soft Aqua)
         const sheenGrad = ctx.createLinearGradient(-30, -10, -5, 25);
-        sheenGrad.addColorStop(0, "rgba(255, 255, 255, 0.45)");
-        sheenGrad.addColorStop(0.4, "rgba(254, 202, 202, 0.18)");
+        sheenGrad.addColorStop(0, "rgba(255, 255, 255, 0.55)");
+        sheenGrad.addColorStop(0.4, "rgba(232, 247, 245, 0.25)");
         sheenGrad.addColorStop(1, "transparent");
 
         ctx.fillStyle = sheenGrad;
@@ -263,7 +269,7 @@ export default function AnimatedAcousticOrb({ isPlaying = false, compact = false
       ref={canvasRef}
       width={280}
       height={180}
-      aria-label="HRIDAY Realistic Human Heart Acoustic Engine"
+      aria-label="HRIDAY Warm Human Intelligence Acoustic Engine"
       style={compact ? { width: 72, height: 46, flexShrink: 0 } : { maxWidth: "100%", height: "auto" }}
     />
   );

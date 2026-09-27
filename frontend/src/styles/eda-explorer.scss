@@ -1,15 +1,16 @@
 // Exploratory Data Analysis (EDA) & Multi-Sheet Diagnostics Styling
+// HighView Design System
 
 .eda-dashboard {
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
   margin-top: 1rem;
-  color: var(--fg-primary, #fff9f2);
+  color: var(--hv-text-primary, #0B1F3A);
 
   .eda-hero-card {
-    background: linear-gradient(135deg, rgba(28, 24, 21, 0.95) 0%, rgba(38, 32, 28, 0.95) 100%);
-    border: 1px solid var(--border, #3d362f);
+    background: var(--hv-bg-surface, #ffffff);
+    border: 1px solid var(--hv-border, #e2e8f0);
     border-radius: var(--radius-md, 12px);
     padding: 1.5rem;
     display: flex;
@@ -17,7 +18,7 @@
     align-items: center;
     flex-wrap: wrap;
     gap: 1.5rem;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+    box-shadow: var(--shadow-card);
 
     .eda-score-box {
       display: flex;
@@ -37,21 +38,21 @@
         border: 3px solid;
 
         &.score-excellent {
-          background: rgba(46, 213, 115, 0.1);
-          border-color: #2ed573;
-          color: #2ed573;
+          background: #E6F4F1;
+          border-color: #365314;
+          color: #365314;
         }
 
         &.score-good {
-          background: rgba(255, 176, 137, 0.1);
-          border-color: #ffb089;
-          color: #ffb089;
+          background: #E6F4F1;
+          border-color: #005A6B;
+          color: #005A6B;
         }
 
         &.score-attention {
-          background: rgba(255, 107, 129, 0.1);
-          border-color: #ff6b81;
-          color: #ff6b81;
+          background: #FEF2F2;
+          border-color: #B91C1C;
+          color: #B91C1C;
         }
 
         span.score-label {
@@ -67,13 +68,13 @@
         h3 {
           margin: 0 0 0.25rem 0;
           font-size: 1.25rem;
-          color: #fff9f2;
+          color: var(--hv-text-primary, #0B1F3A);
         }
 
         p {
           margin: 0;
           font-size: 0.85rem;
-          color: var(--fg-secondary, #c9bdb0);
+          color: var(--hv-text-secondary, #334155);
         }
 
         .status-badge {
@@ -85,18 +86,18 @@
           font-weight: 600;
 
           &.status-excellent {
-            background: rgba(46, 213, 115, 0.2);
-            color: #2ed573;
+            background: #E6F4F1;
+            color: #365314;
           }
 
           &.status-good {
-            background: rgba(255, 176, 137, 0.2);
-            color: #ffb089;
+            background: #E6F4F1;
+            color: #005A6B;
           }
 
           &.status-attention {
-            background: rgba(255, 107, 129, 0.2);
-            color: #ff6b81;
+            background: #FEF2F2;
+            color: #B91C1C;
           }
         }
       }
@@ -108,15 +109,15 @@
       gap: 1rem;
 
       .summary-chip {
-        background: rgba(255, 255, 255, 0.03);
-        border: 1px solid rgba(255, 255, 255, 0.08);
+        background: #F8FAFC;
+        border: 1px solid var(--hv-border, #E2E8F0);
         border-radius: 8px;
         padding: 0.6rem 0.9rem;
         min-width: 105px;
 
         .chip-label {
           font-size: 0.72rem;
-          color: #a89f94;
+          color: var(--hv-text-muted, #64748B);
           text-transform: uppercase;
           letter-spacing: 0.04em;
           margin-bottom: 0.2rem;
@@ -125,23 +126,23 @@
         .chip-val {
           font-size: 1.2rem;
           font-weight: 700;
-          color: #fff9f2;
+          color: var(--hv-text-primary, #0B1F3A);
 
           &.val-accent {
-            color: #ffb089;
+            color: var(--hv-brand-secondary, #005A6B);
           }
 
           &.val-warning {
-            color: #ff6b81;
+            color: #B91C1C;
           }
         }
       }
     }
 
     .btn-rerun-eda {
-      background: rgba(255, 176, 137, 0.15);
-      border: 1px solid #ffb089;
-      color: #ffb089;
+      background: var(--hv-brand-secondary, #005A6B);
+      border: 1px solid var(--hv-brand-secondary, #005A6B);
+      color: #ffffff;
       padding: 0.5rem 1rem;
       border-radius: 6px;
       font-weight: 600;
@@ -150,22 +151,22 @@
       transition: all 0.2s ease;
 
       &:hover {
-        background: #ffb089;
-        color: #1c1815;
+        background: #004552;
+        border-color: #004552;
       }
     }
   }
 
   .eda-recs-card {
-    background: rgba(28, 24, 21, 0.6);
-    border: 1px solid rgba(255, 176, 137, 0.3);
+    background: #E6F4F1;
+    border: 1px solid rgba(0, 90, 107, 0.25);
     border-radius: 10px;
     padding: 1rem 1.25rem;
 
     h4 {
       margin: 0 0 0.6rem 0;
       font-size: 0.95rem;
-      color: #ffb089;
+      color: var(--hv-brand-secondary, #005A6B);
       display: flex;
       align-items: center;
       gap: 0.5rem;
@@ -177,7 +178,7 @@
 
       li {
         font-size: 0.85rem;
-        color: #e5dacd;
+        color: var(--hv-text-secondary, #334155);
         line-height: 1.5;
         margin-bottom: 0.3rem;
 
@@ -189,10 +190,11 @@
   }
 
   .eda-section-card {
-    background: #181412;
-    border: 1px solid var(--border, #3d362f);
+    background: var(--hv-bg-surface, #ffffff);
+    border: 1px solid var(--hv-border, #e2e8f0);
     border-radius: var(--radius-md, 12px);
     padding: 1.25rem;
+    box-shadow: var(--shadow-card);
 
     .section-header {
       margin-bottom: 1rem;
@@ -200,7 +202,7 @@
       h3 {
         margin: 0 0 0.25rem 0;
         font-size: 1.15rem;
-        color: #fff9f2;
+        color: var(--hv-text-primary, #0B1F3A);
         display: flex;
         align-items: center;
         gap: 0.5rem;
@@ -209,7 +211,7 @@
       p {
         margin: 0;
         font-size: 0.85rem;
-        color: #a89f94;
+        color: var(--hv-text-secondary, #334155);
       }
     }
   }
@@ -221,8 +223,8 @@
     margin-bottom: 1.5rem;
 
     .link-tile {
-      background: rgba(255, 255, 255, 0.02);
-      border: 1px solid #3d362f;
+      background: #F8FAFC;
+      border: 1px solid var(--hv-border, #E2E8F0);
       border-radius: 8px;
       padding: 0.85rem 1rem;
       display: flex;
@@ -232,7 +234,7 @@
       .link-title {
         font-weight: 600;
         font-size: 0.9rem;
-        color: #fff9f2;
+        color: var(--hv-text-primary, #0B1F3A);
         display: flex;
         align-items: center;
         gap: 0.4rem;
@@ -244,16 +246,16 @@
         font-size: 0.75rem;
 
         .badge-pill {
-          background: rgba(255, 176, 137, 0.15);
-          color: #ffb089;
+          background: #E6F4F1;
+          color: var(--hv-brand-secondary, #005A6B);
           padding: 0.15rem 0.5rem;
           border-radius: 4px;
           font-weight: 600;
         }
 
         .badge-cardinality {
-          background: rgba(255, 255, 255, 0.08);
-          color: #c9bdb0;
+          background: #F1F5F9;
+          color: var(--hv-text-secondary, #334155);
           padding: 0.15rem 0.5rem;
           border-radius: 4px;
         }
@@ -267,8 +269,8 @@
     gap: 1rem;
 
     .correlation-tile {
-      background: rgba(255, 255, 255, 0.02);
-      border: 1px solid #3d362f;
+      background: #F8FAFC;
+      border: 1px solid var(--hv-border, #E2E8F0);
       border-radius: 8px;
       padding: 1rem;
       display: flex;
@@ -277,7 +279,7 @@
       transition: border-color 0.2s ease;
 
       &:hover {
-        border-color: #5a5148;
+        border-color: var(--hv-brand-secondary, #005A6B);
       }
 
       .corr-top-row {
@@ -289,7 +291,7 @@
         .corr-metrics {
           font-weight: 600;
           font-size: 0.9rem;
-          color: #fff9f2;
+          color: var(--hv-text-primary, #0B1F3A);
         }
 
         .corr-badge {
@@ -300,29 +302,30 @@
           white-space: nowrap;
 
           &.negative {
-            background: rgba(255, 107, 129, 0.15);
-            color: #ff6b81;
-            border: 1px solid rgba(255, 107, 129, 0.3);
+            background: #FEF2F2;
+            color: #B91C1C;
+            border: 1px solid rgba(185, 28, 28, 0.3);
           }
 
           &.positive {
-            background: rgba(46, 213, 115, 0.15);
-            color: #2ed573;
-            border: 1px solid rgba(46, 213, 115, 0.3);
+            background: #E6F4F1;
+            color: #365314;
+            border: 1px solid rgba(54, 83, 20, 0.3);
           }
         }
       }
 
       .corr-sheets-label {
         font-size: 0.78rem;
-        color: #a89f94;
+        color: var(--hv-text-secondary, #334155);
       }
 
       .corr-narrative {
         font-size: 0.83rem;
-        color: #e5dacd;
+        color: var(--hv-text-secondary, #334155);
         line-height: 1.45;
-        background: rgba(0, 0, 0, 0.2);
+        background: #FFFFFF;
+        border: 1px solid var(--hv-border-subtle, #F1F5F9);
         padding: 0.5rem 0.7rem;
         border-radius: 6px;
       }
@@ -331,7 +334,7 @@
 
   .eda-table-container {
     overflow-x: auto;
-    border: 1px solid #3d362f;
+    border: 1px solid var(--hv-border, #E2E8F0);
     border-radius: 8px;
 
     table.eda-data-grid {
@@ -341,23 +344,24 @@
       text-align: left;
 
       th {
-        background: #201b17;
-        color: #c9bdb0;
+        background: #F8FAFC;
+        color: var(--hv-text-primary, #0B1F3A);
         padding: 0.7rem 0.9rem;
-        font-weight: 600;
-        border-bottom: 1px solid #3d362f;
+        font-weight: 700;
+        border-bottom: 2px solid var(--hv-border, #E2E8F0);
         white-space: nowrap;
       }
 
       td {
         padding: 0.65rem 0.9rem;
-        border-bottom: 1px solid #28221d;
-        color: #fff9f2;
+        border-bottom: 1px solid var(--hv-border-subtle, #F1F5F9);
+        color: var(--hv-text-secondary, #334155);
 
         &.type-cell {
-          color: #ffb089;
+          color: var(--hv-brand-secondary, #005A6B);
           font-family: monospace;
           font-size: 0.8rem;
+          font-weight: 600;
         }
 
         &.stat-cell {
@@ -366,7 +370,7 @@
       }
 
       tr:hover td {
-        background: rgba(255, 255, 255, 0.02);
+        background: var(--hv-bg-surface-hover, #F1F5F9);
       }
     }
   }
@@ -380,22 +384,22 @@
   flex-wrap: wrap;
   gap: 0.75rem;
   margin-bottom: 0.85rem;
-  background: rgba(28, 24, 21, 0.6);
+  background: var(--hv-bg-surface, #ffffff);
   padding: 0.5rem 0.85rem;
   border-radius: 8px;
-  border: 1px solid #3d362f;
+  border: 1px solid var(--hv-border, #e2e8f0);
 
   .version-pills {
     display: inline-flex;
-    background: #14100e;
+    background: #F1F5F9;
     padding: 3px;
     border-radius: 6px;
-    border: 1px solid #2e2823;
+    border: 1px solid var(--hv-border, #E2E8F0);
 
     button.version-pill {
       background: transparent;
       border: none;
-      color: #a89f94;
+      color: var(--hv-text-secondary, #334155);
       font-size: 0.8rem;
       font-weight: 500;
       padding: 0.35rem 0.75rem;
@@ -404,14 +408,14 @@
       transition: all 0.15s ease;
 
       &:hover {
-        color: #fff9f2;
+        color: var(--hv-brand-primary, #0B1F3A);
       }
 
       &.active {
-        background: #2a241f;
-        color: #ffb089;
+        background: var(--hv-brand-primary, #0B1F3A);
+        color: #ffffff;
         font-weight: 600;
-        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+        box-shadow: var(--shadow-sm);
       }
     }
   }
@@ -421,12 +425,12 @@
     align-items: center;
     gap: 0.5rem;
     font-size: 0.8rem;
-    color: #c9bdb0;
+    color: var(--hv-text-secondary, #334155);
 
     select {
-      background: #14100e;
-      border: 1px solid #3d362f;
-      color: #ffb089;
+      background: #FFFFFF;
+      border: 1px solid var(--hv-border-strong, #CBD5E1);
+      color: var(--hv-text-primary, #0B1F3A);
       padding: 0.3rem 0.6rem;
       border-radius: 4px;
       font-size: 0.8rem;

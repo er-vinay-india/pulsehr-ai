@@ -1,4 +1,6 @@
-export const palette = ['#ff8a62', '#34d399', '#60a5fa', '#fbbb27', '#c084fc', '#fb7185', '#38bdf8'];
+export const palette = ['#155EEF', '#22C7F2', '#14B8A6', '#84CC16', '#0B1F3A', '#005A6B', '#123B5D'];
+export const hridayPalette = ['#0F766E', '#0891B2', '#3F7D20', '#102A43', '#B7791F'];
+
 export const numeric = value => value == null || value === '' || !Number.isFinite(Number(value)) ? null : Number(value);
 const suffix = unit => !unit || /^(units?)$/i.test(unit) ? '' : unit === '%' ? '%' : ` ${unit}`;
 export const formatFullValue = (value, unit = '') => numeric(value) == null ? '—' : `${unit === '$' ? '$' : ''}${Number(value).toLocaleString('en-US', { maximumFractionDigits: 20 })}${unit === '$' ? '' : suffix(unit)}`;
@@ -18,11 +20,12 @@ export function cartesian(categories, series, horizontal = false, unit = '') {
     data: categories,
     inverse: horizontal,
     axisTick: { show: false },
+    axisLine: { lineStyle: { color: '#E2E8F0' } },
     axisLabel: {
       hideOverlap: true,
       width: horizontal ? 140 : 90,
       overflow: horizontal ? 'break' : 'truncate',
-      color: '#ded5cb',
+      color: '#334155',
       fontSize: 11
     }
   };
@@ -30,12 +33,12 @@ export function cartesian(categories, series, horizontal = false, unit = '') {
     type: 'value',
     axisLabel: {
       formatter: v => formatValue(v, unit),
-      color: '#ded5cb',
+      color: '#334155',
       fontSize: 11
     },
     splitLine: {
       lineStyle: {
-        color: '#524940',
+        color: '#E2E8F0',
         type: 'dashed'
       }
     }
@@ -46,15 +49,17 @@ export function cartesian(categories, series, horizontal = false, unit = '') {
     tooltip: {
       trigger: 'axis',
       valueFormatter: v => formatFullValue(v, unit),
-      backgroundColor: '#1c1815',
-      borderColor: '#524940',
-      textStyle: { color: '#fff9f2', fontSize: 12 }
+      backgroundColor: '#FFFFFF',
+      borderColor: '#CBD5E1',
+      borderWidth: 1,
+      textStyle: { color: '#0B1F3A', fontSize: 12 },
+      extraCssText: 'box-shadow: 0 4px 14px rgba(11, 31, 58, 0.12); border-radius: 8px;'
     },
     legend: {
       show: series.length > 1,
       type: 'scroll',
       top: 0,
-      textStyle: { color: '#ded5cb', fontSize: 11 }
+      textStyle: { color: '#0B1F3A', fontSize: 11, fontWeight: 600 }
     },
     xAxis: horizontal ? value : category,
     yAxis: horizontal ? category : value,

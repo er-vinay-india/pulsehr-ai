@@ -35,9 +35,9 @@ export default function DataTableToolbar({
               padding: "0.45rem 0.65rem 0.45rem 2rem",
               fontSize: "0.8rem",
               borderRadius: "6px",
-              border: "1px solid var(--border-subtle)",
-              background: "rgba(0,0,0,0.3)",
-              color: "var(--fg-primary)"
+              border: "1px solid var(--hv-border-strong, #cbd5e1)",
+              background: "var(--hv-bg-surface, #ffffff)",
+              color: "var(--hv-text-primary, #0b1f3a)"
             }}
           />
           {localFilter && (

@@ -86,7 +86,7 @@ body:has(.presentation-modal-backdrop) {
   padding: 24px 32px;
   max-width: 1280px;
   margin: 0 auto;
-  color: #fff9f2;
+  color: var(--hv-text-primary, #0B1F3A);
 
   @media (max-width: 768px) {
     padding: 16px;
@@ -103,9 +103,9 @@ body:has(.presentation-modal-backdrop) {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    background: var(--brand-subtle);
-    border: 1px solid var(--brand-subtle-border);
-    color: var(--brand-400);
+    background: #E6F4F1;
+    border: 1px solid rgba(0, 90, 107, 0.25);
+    color: var(--hv-brand-secondary, #005A6B);
     padding: 4px 10px;
     border-radius: 20px;
     font-size: 11px;
@@ -118,12 +118,12 @@ body:has(.presentation-modal-backdrop) {
     font-weight: 700;
     margin: 0;
     letter-spacing: -0.02em;
-    color: #fff9f2;
+    color: var(--hv-text-primary, #0B1F3A);
   }
 
   &__subtitle {
     font-size: 13px;
-    color: #a89d91;
+    color: var(--hv-text-secondary, #334155);
     margin: 0;
     max-width: 740px;
     line-height: 1.5;
@@ -147,13 +147,14 @@ body:has(.presentation-modal-backdrop) {
   }
 
   .pres-step-card {
-    background: #171412;
-    border: 1px solid #2d2621;
+    background: var(--hv-bg-surface, #ffffff);
+    border: 1px solid var(--hv-border, #e2e8f0);
     border-radius: 10px;
     padding: 16px 18px;
     display: flex;
     flex-direction: column;
     gap: 12px;
+    box-shadow: var(--shadow-sm);
 
     &__header {
       display: flex;
@@ -166,8 +167,8 @@ body:has(.presentation-modal-backdrop) {
     width: 24px;
     height: 24px;
     border-radius: 6px;
-    background: rgba(255, 138, 98, 0.15);
-    color: var(--brand-400);
+    background: #E6F4F1;
+    color: var(--hv-brand-secondary, #005A6B);
     font-size: 12px;
     font-weight: 700;
     display: flex;
@@ -180,12 +181,12 @@ body:has(.presentation-modal-backdrop) {
     font-size: 13px;
     font-weight: 600;
     margin: 0;
-    color: #fff9f2;
+    color: var(--hv-text-primary, #0B1F3A);
   }
 
   .pres-step-desc {
     font-size: 11px;
-    color: #8a7e72;
+    color: var(--hv-text-secondary, #334155);
     margin: 2px 0 0 0;
   }
 
@@ -200,8 +201,8 @@ body:has(.presentation-modal-backdrop) {
   }
 
   .pres-option-btn {
-    background: #100e0c;
-    border: 1px solid #2d2621;
+    background: #F8FAFC;
+    border: 1px solid var(--hv-border, #e2e8f0);
     border-radius: 8px;
     padding: 10px 8px;
     display: flex;
@@ -213,28 +214,28 @@ body:has(.presentation-modal-backdrop) {
     transition: all 150ms ease;
 
     &:hover {
-      background: #1f1a17;
-      border-color: #3d362f;
+      background: #F1F5F9;
+      border-color: var(--hv-border-strong, #cbd5e1);
     }
 
     &.active {
-      background: var(--brand-subtle);
-      border-color: rgba(255, 138, 98, 0.5);
+      background: #E6F4F1;
+      border-color: var(--hv-brand-secondary, #005A6B);
 
       .opt-label {
-        color: var(--brand-400);
+        color: var(--hv-brand-secondary, #005A6B);
       }
     }
 
     .opt-label {
       font-size: 12px;
       font-weight: 600;
-      color: #fff9f2;
+      color: var(--hv-text-primary, #0B1F3A);
     }
 
     .opt-sub {
       font-size: 10px;
-      color: #8a7e72;
+      color: var(--hv-text-muted, #64748B);
     }
   }
 
@@ -249,8 +250,8 @@ body:has(.presentation-modal-backdrop) {
   }
 
   .pres-theme-btn {
-    background: #100e0c;
-    border: 1px solid #2d2621;
+    background: #F8FAFC;
+    border: 1px solid var(--hv-border, #e2e8f0);
     border-radius: 8px;
     padding: 10px;
     display: flex;
@@ -261,31 +262,31 @@ body:has(.presentation-modal-backdrop) {
     transition: all 150ms ease;
 
     &:hover {
-      background: #1f1a17;
-      border-color: #3d362f;
+      background: #F1F5F9;
+      border-color: var(--hv-border-strong, #cbd5e1);
     }
 
     &.active {
-      background: rgba(255, 255, 255, 0.05);
-      border-color: var(--brand-500);
+      background: #E6F4F1;
+      border-color: var(--hv-brand-secondary, #005A6B);
     }
 
     .theme-swatch {
       width: 100%;
       height: 18px;
       border-radius: 4px;
-      border: 1px solid rgba(255, 255, 255, 0.15);
+      border: 1px solid var(--hv-border, #e2e8f0);
     }
 
     .theme-name {
       font-size: 11px;
       font-weight: 600;
-      color: #fff9f2;
+      color: var(--hv-text-primary, #0B1F3A);
     }
 
     .theme-tag {
       font-size: 9px;
-      color: #8a7e72;
+      color: var(--hv-text-muted, #64748B);
       text-transform: uppercase;
       letter-spacing: 0.04em;
     }
@@ -305,24 +306,24 @@ body:has(.presentation-modal-backdrop) {
     justify-content: center;
     gap: 8px;
     padding: 9px 12px;
-    background: #100e0c;
-    border: 1px solid #2d2621;
+    background: #F8FAFC;
+    border: 1px solid var(--hv-border, #e2e8f0);
     border-radius: 8px;
     font-size: 11px;
     font-weight: 600;
-    color: #ded5cb;
+    color: var(--hv-text-secondary, #334155);
     cursor: pointer;
     transition: all 150ms ease;
 
     &:hover {
-      background: #1f1a17;
-      border-color: #3d362f;
+      background: #F1F5F9;
+      border-color: var(--hv-border-strong, #cbd5e1);
     }
 
     &.active {
-      background: var(--brand-subtle);
-      border-color: rgba(255, 138, 98, 0.5);
-      color: var(--brand-400);
+      background: #E6F4F1;
+      border-color: var(--hv-brand-secondary, #005A6B);
+      color: var(--hv-brand-secondary, #005A6B);
     }
   }
 
@@ -330,8 +331,8 @@ body:has(.presentation-modal-backdrop) {
     display: flex;
     align-items: center;
     gap: 12px;
-    background: #100e0c;
-    border: 1px solid #2d2621;
+    background: #F8FAFC;
+    border: 1px solid var(--hv-border, #e2e8f0);
     border-radius: 8px;
     padding: 8px 12px;
     margin-top: 4px;
@@ -351,11 +352,11 @@ body:has(.presentation-modal-backdrop) {
       .title {
         font-size: 11px;
         font-weight: 600;
-        color: #fff9f2;
+        color: var(--hv-text-primary, #0B1F3A);
       }
       .author {
         font-size: 10px;
-        color: #8a7e72;
+        color: var(--hv-text-muted, #64748B);
       }
     }
   }
@@ -371,24 +372,24 @@ body:has(.presentation-modal-backdrop) {
     align-items: center;
     gap: 6px;
     padding: 7px 12px;
-    background: #100e0c;
-    border: 1px solid #2d2621;
+    background: #F8FAFC;
+    border: 1px solid var(--hv-border, #e2e8f0);
     border-radius: 6px;
     font-size: 11px;
     font-weight: 500;
-    color: #ded5cb;
+    color: var(--hv-text-secondary, #334155);
     cursor: pointer;
     transition: all 150ms ease;
 
     &:hover {
-      background: #1f1a17;
-      border-color: #3d362f;
+      background: #F1F5F9;
+      border-color: var(--hv-border-strong, #cbd5e1);
     }
 
     &.active {
-      background: var(--brand-subtle);
-      border-color: rgba(255, 138, 98, 0.4);
-      color: var(--brand-400);
+      background: #E6F4F1;
+      border-color: var(--hv-brand-secondary, #005A6B);
+      color: var(--hv-brand-secondary, #005A6B);
       font-weight: 600;
     }
   }
@@ -400,13 +401,14 @@ body:has(.presentation-modal-backdrop) {
   }
 
   .pres-blueprint-card {
-    background: #171412;
-    border: 1px solid #2d2621;
+    background: var(--hv-bg-surface, #ffffff);
+    border: 1px solid var(--hv-border, #e2e8f0);
     border-radius: 12px;
     padding: 20px;
     display: flex;
     flex-direction: column;
     gap: 16px;
+    box-shadow: var(--shadow-sm);
   }
 
   .pres-blueprint-header {
@@ -419,13 +421,13 @@ body:has(.presentation-modal-backdrop) {
       display: flex;
       align-items: center;
       gap: 8px;
-      color: var(--brand-400);
+      color: var(--hv-brand-secondary, #005A6B);
 
       h4 {
         margin: 0;
         font-size: 14px;
         font-weight: 600;
-        color: #fff9f2;
+        color: var(--hv-text-primary, #0B1F3A);
       }
     }
 
@@ -435,9 +437,9 @@ body:has(.presentation-modal-backdrop) {
       gap: 4px;
       font-size: 10px;
       font-weight: 600;
-      color: #34d399;
-      background: rgba(52, 211, 153, 0.12);
-      border: 1px solid rgba(52, 211, 153, 0.3);
+      color: #365314;
+      background: #E6F4F1;
+      border: 1px solid rgba(54, 83, 20, 0.3);
       padding: 2px 7px;
       border-radius: 4px;
     }
@@ -445,7 +447,7 @@ body:has(.presentation-modal-backdrop) {
 
   .blueprint-summary {
     font-size: 12px;
-    color: #a89d91;
+    color: var(--hv-text-secondary, #334155);
     margin: 0;
     line-height: 1.45;
   }
@@ -460,8 +462,8 @@ body:has(.presentation-modal-backdrop) {
     display: flex;
     align-items: center;
     gap: 12px;
-    background: #100e0c;
-    border: 1px solid #241e1b;
+    background: #F8FAFC;
+    border: 1px solid var(--hv-border, #e2e8f0);
     border-radius: 8px;
     padding: 8px 12px;
 
@@ -469,10 +471,10 @@ body:has(.presentation-modal-backdrop) {
       width: 20px;
       height: 20px;
       border-radius: 4px;
-      background: rgba(255, 255, 255, 0.06);
+      background: #E2E8F0;
       font-size: 11px;
       font-weight: 700;
-      color: #8a7e72;
+      color: var(--hv-text-secondary, #334155);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -489,12 +491,12 @@ body:has(.presentation-modal-backdrop) {
       strong {
         font-size: 11px;
         font-weight: 600;
-        color: #fff9f2;
+        color: var(--hv-text-primary, #0B1F3A);
       }
 
       span {
         font-size: 10px;
-        color: #8a7e72;
+        color: var(--hv-text-secondary, #334155);
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
@@ -508,19 +510,19 @@ body:has(.presentation-modal-backdrop) {
       letter-spacing: 0.04em;
       padding: 2px 6px;
       border-radius: 4px;
-      background: rgba(255, 255, 255, 0.06);
-      color: #8a7e72;
+      background: #F1F5F9;
+      color: var(--hv-text-secondary, #334155);
 
       &.highlight {
-        background: rgba(255, 138, 98, 0.15);
-        color: var(--brand-400);
-        border: 1px solid var(--brand-subtle-border);
+        background: #E6F4F1;
+        color: var(--hv-brand-secondary, #005A6B);
+        border: 1px solid rgba(0, 90, 107, 0.25);
       }
 
       &.alert {
-        background: rgba(251, 187, 39, 0.15);
-        color: #fbbb27;
-        border: 1px solid rgba(251, 187, 39, 0.3);
+        background: #FFF9F0;
+        color: #B7791F;
+        border: 1px solid rgba(183, 121, 31, 0.3);
       }
     }
   }
@@ -590,10 +592,10 @@ body:has(.presentation-modal-backdrop) {
   width: 100%;
   max-width: 860px;
   max-height: 85vh;
-  background: #171412;
-  border: 1px solid #2d2621;
+  background: var(--hv-bg-surface, #ffffff);
+  border: 1px solid var(--hv-border, #e2e8f0);
   border-radius: 12px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 8px 32px rgba(11, 31, 58, 0.18);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -601,7 +603,7 @@ body:has(.presentation-modal-backdrop) {
 
 .pres-image-picker-header {
   padding: 16px 20px;
-  border-bottom: 1px solid #2d2621;
+  border-bottom: 1px solid var(--hv-border, #e2e8f0);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -617,8 +619,8 @@ body:has(.presentation-modal-backdrop) {
     width: 36px;
     height: 36px;
     border-radius: 8px;
-    background: var(--brand-subtle);
-    color: var(--brand-400);
+    background: #E6F4F1;
+    color: var(--hv-brand-secondary, #005A6B);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -628,32 +630,32 @@ body:has(.presentation-modal-backdrop) {
   .header-title {
     font-size: 14px;
     font-weight: 700;
-    color: #fff9f2;
+    color: var(--hv-text-primary, #0B1F3A);
     margin: 0;
   }
 
   .header-sub {
     font-size: 11px;
-    color: #8a7e72;
+    color: var(--hv-text-secondary, #334155);
     margin: 2px 0 0 0;
   }
 
   .btn-close {
     background: transparent;
     border: none;
-    color: #8a7e72;
+    color: var(--hv-text-muted, #64748B);
     cursor: pointer;
     padding: 4px;
 
     &:hover {
-      color: #fff9f2;
+      color: var(--hv-text-primary, #0B1F3A);
     }
   }
 }
 
 .pres-image-picker-controls {
   padding: 12px 20px;
-  border-bottom: 1px solid #241e1b;
+  border-bottom: 1px solid var(--hv-border, #e2e8f0);
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -662,14 +664,14 @@ body:has(.presentation-modal-backdrop) {
     display: flex;
     align-items: center;
     gap: 8px;
-    background: #100e0c;
-    border: 1px solid #2d2621;
+    background: #F8FAFC;
+    border: 1px solid var(--hv-border, #cbd5e1);
     border-radius: 8px;
     padding: 6px 12px;
   }
 
   .search-icon {
-    color: #8a7e72;
+    color: var(--hv-text-muted, #64748B);
     flex-shrink: 0;
   }
 
@@ -677,19 +679,19 @@ body:has(.presentation-modal-backdrop) {
     flex: 1;
     background: transparent;
     border: none;
-    color: #fff9f2;
+    color: var(--hv-text-primary, #0B1F3A);
     font-size: 12px;
     outline: none;
 
     &::placeholder {
-      color: #8a7e72;
+      color: var(--hv-text-muted, #64748B);
     }
   }
 
   .btn-search {
-    background: #241e1b;
-    border: 1px solid #3d362f;
-    color: #fff9f2;
+    background: #F1F5F9;
+    border: 1px solid var(--hv-border, #cbd5e1);
+    color: var(--hv-text-primary, #0B1F3A);
     font-size: 11px;
     font-weight: 600;
     padding: 4px 10px;
@@ -697,8 +699,8 @@ body:has(.presentation-modal-backdrop) {
     cursor: pointer;
 
     &:hover {
-      background: var(--brand-500);
-      border-color: var(--brand-500);
+      background: var(--hv-brand-primary, #0B1F3A);
+      border-color: var(--hv-brand-primary, #0B1F3A);
       color: #fff;
     }
   }
@@ -710,24 +712,24 @@ body:has(.presentation-modal-backdrop) {
   }
 
   .cat-pill {
-    background: #100e0c;
-    border: 1px solid #2d2621;
+    background: #F8FAFC;
+    border: 1px solid var(--hv-border, #e2e8f0);
     border-radius: 6px;
     padding: 4px 10px;
     font-size: 10px;
     font-weight: 500;
-    color: #a89d91;
+    color: var(--hv-text-secondary, #334155);
     cursor: pointer;
 
     &:hover {
-      background: #1f1a17;
-      color: #fff9f2;
+      background: #F1F5F9;
+      color: var(--hv-text-primary, #0B1F3A);
     }
 
     &.active {
-      background: var(--brand-subtle);
-      border-color: rgba(255, 138, 98, 0.4);
-      color: var(--brand-400);
+      background: #E6F4F1;
+      border-color: var(--hv-brand-secondary, #005A6B);
+      color: var(--hv-brand-secondary, #005A6B);
       font-weight: 600;
     }
   }
@@ -735,8 +737,8 @@ body:has(.presentation-modal-backdrop) {
 
 .scrim-control-bar {
   padding: 8px 20px;
-  background: #120f0d;
-  border-bottom: 1px solid #241e1b;
+  background: #F8FAFC;
+  border-bottom: 1px solid var(--hv-border, #e2e8f0);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -748,7 +750,7 @@ body:has(.presentation-modal-backdrop) {
     display: flex;
     align-items: center;
     gap: 8px;
-    color: #a89d91;
+    color: var(--hv-text-secondary, #334155);
   }
 
   .scrim-label {
@@ -757,22 +759,22 @@ body:has(.presentation-modal-backdrop) {
 
   .scrim-slider {
     width: 100px;
-    accent-color: var(--brand-400);
+    accent-color: var(--hv-brand-secondary, #005A6B);
     cursor: pointer;
   }
 
   .scrim-value {
-    color: var(--brand-400);
+    color: var(--hv-brand-secondary, #005A6B);
     font-weight: 700;
   }
 
   .scrim-hint {
-    color: #665b50;
+    color: var(--hv-text-muted, #64748B);
     font-size: 10px;
   }
 
   .selected-preview-pill {
-    color: #34d399;
+    color: #365314;
     font-size: 10px;
   }
 }
@@ -794,18 +796,18 @@ body:has(.presentation-modal-backdrop) {
     align-items: center;
     justify-content: center;
     gap: 12px;
-    color: #8a7e72;
+    color: var(--hv-text-secondary, #334155);
     font-size: 12px;
   }
 
   .spin-icon {
-    color: var(--brand-400);
+    color: var(--hv-brand-secondary, #005A6B);
     animation: spin 1.5s linear infinite;
   }
 
   .image-card {
-    background: #100e0c;
-    border: 1px solid #241e1b;
+    background: #FFFFFF;
+    border: 1px solid var(--hv-border, #e2e8f0);
     border-radius: 8px;
     overflow: hidden;
     cursor: pointer;
@@ -814,13 +816,13 @@ body:has(.presentation-modal-backdrop) {
     transition: all 150ms ease;
 
     &:hover {
-      border-color: var(--brand-500);
+      border-color: var(--hv-brand-secondary, #005A6B);
       transform: translateY(-2px);
     }
 
     &.selected {
-      border-color: #34d399;
-      box-shadow: 0 0 0 2px rgba(52, 211, 153, 0.3);
+      border-color: #365314;
+      box-shadow: 0 0 0 2px rgba(54, 83, 20, 0.3);
     }
 
     .image-wrapper {
@@ -848,8 +850,8 @@ body:has(.presentation-modal-backdrop) {
         width: 24px;
         height: 24px;
         border-radius: 12px;
-        background: #34d399;
-        color: #171412;
+        background: #365314;
+        color: #ffffff;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -865,7 +867,7 @@ body:has(.presentation-modal-backdrop) {
       .image-title {
         font-size: 11px;
         font-weight: 600;
-        color: #fff9f2;
+        color: var(--hv-text-primary, #0B1F3A);
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
@@ -873,7 +875,7 @@ body:has(.presentation-modal-backdrop) {
 
       .image-creator {
         font-size: 9px;
-        color: #8a7e72;
+        color: var(--hv-text-muted, #64748B);
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
@@ -884,7 +886,7 @@ body:has(.presentation-modal-backdrop) {
 
 .pres-image-picker-footer {
   padding: 12px 20px;
-  border-top: 1px solid #2d2621;
+  border-top: 1px solid var(--hv-border, #e2e8f0);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -892,16 +894,16 @@ body:has(.presentation-modal-backdrop) {
 
   .btn-cancel {
     background: transparent;
-    border: 1px solid #2d2621;
-    color: #8a7e72;
+    border: 1px solid var(--hv-border, #cbd5e1);
+    color: var(--hv-text-secondary, #334155);
     padding: 6px 14px;
     border-radius: 6px;
     font-size: 11px;
     cursor: pointer;
 
     &:hover {
-      color: #fff9f2;
-      border-color: #3d362f;
+      color: var(--hv-text-primary, #0B1F3A);
+      border-color: var(--hv-border-strong, #94a3b8);
     }
   }
 
@@ -911,9 +913,9 @@ body:has(.presentation-modal-backdrop) {
   }
 
   .btn-apply-all {
-    background: #241e1b;
-    border: 1px solid #3d362f;
-    color: #ded5cb;
+    background: #F1F5F9;
+    border: 1px solid var(--hv-border, #cbd5e1);
+    color: var(--hv-text-secondary, #334155);
     padding: 6px 14px;
     border-radius: 6px;
     font-size: 11px;
@@ -921,8 +923,8 @@ body:has(.presentation-modal-backdrop) {
     cursor: pointer;
 
     &:hover:not(:disabled) {
-      background: #2f2723;
-      color: #fff9f2;
+      background: #E2E8F0;
+      color: var(--hv-text-primary, #0B1F3A);
     }
     &:disabled {
       opacity: 0.5;
@@ -931,9 +933,9 @@ body:has(.presentation-modal-backdrop) {
   }
 
   .btn-apply {
-    background: var(--brand-500);
+    background: var(--hv-brand-primary, #0B1F3A);
     border: none;
-    color: #171412;
+    color: #ffffff;
     padding: 6px 16px;
     border-radius: 6px;
     font-size: 11px;
@@ -941,7 +943,7 @@ body:has(.presentation-modal-backdrop) {
     cursor: pointer;
 
     &:hover:not(:disabled) {
-      filter: brightness(1.1);
+      background: var(--hv-brand-blue, #123B5D);
     }
     &:disabled {
       opacity: 0.5;
@@ -956,8 +958,8 @@ body:has(.presentation-modal-backdrop) {
 
 .studio-copilot-bar {
   margin-top: 12px;
-  background: #171412;
-  border: 1px solid #2d2621;
+  background: var(--hriday-bg-soft, #E8F7F5);
+  border: 1px solid rgba(15, 118, 110, 0.25);
   border-radius: 10px;
   padding: 12px 16px;
   display: flex;
@@ -977,7 +979,7 @@ body:has(.presentation-modal-backdrop) {
     gap: 5px;
     font-size: 11px;
     font-weight: 700;
-    color: var(--brand-400);
+    color: var(--hriday-secondary, #0F766E);
     text-transform: uppercase;
     letter-spacing: 0.04em;
   }
@@ -989,20 +991,20 @@ body:has(.presentation-modal-backdrop) {
   }
 
   .suggestion-pill {
-    background: #100e0c;
-    border: 1px solid #2d2621;
+    background: #FFFFFF;
+    border: 1px solid rgba(15, 118, 110, 0.3);
     border-radius: 4px;
     padding: 3px 8px;
     font-size: 10px;
     font-weight: 500;
-    color: #a89d91;
+    color: var(--hriday-secondary, #0F766E);
     cursor: pointer;
     transition: all 150ms ease;
 
     &:hover:not(:disabled) {
-      background: #1f1a17;
-      color: #fff9f2;
-      border-color: var(--brand-500);
+      background: rgba(15, 118, 110, 0.1);
+      color: #0d5c56;
+      border-color: var(--hriday-secondary, #0F766E);
     }
   }
 
@@ -1014,20 +1016,20 @@ body:has(.presentation-modal-backdrop) {
 
   .copilot-input {
     flex: 1;
-    background: #100e0c;
-    border: 1px solid #2d2621;
+    background: #FFFFFF;
+    border: 1px solid rgba(15, 118, 110, 0.35);
     border-radius: 6px;
     padding: 8px 12px;
-    color: #fff9f2;
+    color: var(--hriday-text, #1E293B);
     font-size: 12px;
     outline: none;
 
     &::placeholder {
-      color: #665b50;
+      color: #64748B;
     }
 
     &:focus {
-      border-color: var(--brand-500);
+      border-color: var(--hriday-secondary, #0F766E);
     }
   }
 
@@ -1035,23 +1037,19 @@ body:has(.presentation-modal-backdrop) {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    background: var(--brand-500);
+    background: var(--hriday-secondary, #0F766E);
     border: none;
     border-radius: 6px;
     padding: 8px 14px;
     font-size: 11px;
     font-weight: 700;
-    color: #171412;
+    color: #ffffff;
     cursor: pointer;
     transition: all 150ms ease;
     white-space: nowrap;
 
     &:hover:not(:disabled) {
-      filter: brightness(1.1);
-    }
-    &:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
+      background: #0d655e;
     }
   }
 }
@@ -1216,8 +1214,8 @@ body:has(.presentation-modal-backdrop) {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  background: #1e1b18;
-  border: 1px solid #3d362f;
+  background: #F1F5F9;
+  border: 1px solid var(--hv-border, #CBD5E1);
   padding: 4px;
   border-radius: 10px;
   margin-top: 16px;
@@ -1230,31 +1228,32 @@ body:has(.presentation-modal-backdrop) {
     border-radius: 7px;
     background: transparent;
     border: none;
-    color: #a89c8f;
+    color: var(--hv-text-secondary, #334155);
     font-size: 13px;
     font-weight: 600;
     cursor: pointer;
     transition: all 0.2s ease;
 
     &:hover {
-      color: #ded5cb;
+      color: var(--hv-brand-primary, #0B1F3A);
     }
 
     &.active {
-      background: var(--brand-500);
-      color: #171412;
-      box-shadow: 0 2px 8px rgba(255, 138, 98, 0.35);
+      background: var(--hv-brand-primary, #0B1F3A);
+      color: #ffffff;
+      box-shadow: var(--shadow-sm);
     }
   }
 }
 
 .pres-custom-prompt-card {
-  border-color: var(--brand-subtle-border) !important;
-  background: linear-gradient(135deg, rgba(255, 138, 98, 0.04), rgba(28, 24, 21, 0.95)) !important;
+  border-color: var(--hv-border, #E2E8F0) !important;
+  background: var(--hv-bg-surface, #FFFFFF) !important;
+  box-shadow: var(--shadow-sm);
 
   .pres-step-badge.highlight {
-    background: var(--brand-500);
-    color: #171412;
+    background: #E6F4F1;
+    color: var(--hv-brand-secondary, #005A6B);
   }
 
   .pres-prompt-input-wrap {
@@ -1265,10 +1264,10 @@ body:has(.presentation-modal-backdrop) {
 
     .pres-prompt-textarea {
       width: 100%;
-      background: #14110f;
-      border: 1px solid #3d362f;
+      background: #F8FAFC;
+      border: 1px solid var(--hv-border-strong, #CBD5E1);
       border-radius: 8px;
-      color: #f5eee6;
+      color: var(--hv-text-primary, #0B1F3A);
       font-size: 14px;
       line-height: 1.5;
       padding: 12px 14px;
@@ -1277,8 +1276,8 @@ body:has(.presentation-modal-backdrop) {
 
       &:focus {
         outline: none;
-        border-color: var(--brand-500);
-        box-shadow: 0 0 0 2px rgba(255, 138, 98, 0.2);
+        border-color: var(--hv-brand-secondary, #005A6B);
+        box-shadow: 0 0 0 2px rgba(0, 90, 107, 0.2);
       }
     }
 
@@ -1289,8 +1288,8 @@ body:has(.presentation-modal-backdrop) {
 
       .chips-label {
         font-size: 11px;
-        color: #8c827a;
-        font-weight: 500;
+        color: var(--hv-text-muted, #64748B);
+        font-weight: 600;
         text-transform: uppercase;
         letter-spacing: 0.05em;
       }
@@ -1301,9 +1300,9 @@ body:has(.presentation-modal-backdrop) {
         gap: 6px;
 
         .chip-btn {
-          background: #1e1b18;
-          border: 1px solid #3d362f;
-          color: #c9bfb5;
+          background: #F8FAFC;
+          border: 1px solid var(--hv-border, #CBD5E1);
+          color: var(--hv-text-secondary, #334155);
           padding: 5px 10px;
           border-radius: 6px;
           font-size: 12px;
@@ -1312,9 +1311,9 @@ body:has(.presentation-modal-backdrop) {
           text-align: left;
 
           &:hover {
-            border-color: var(--brand-500);
-            color: #fff;
-            background: #28231e;
+            border-color: var(--hv-brand-secondary, #005A6B);
+            color: var(--hv-brand-secondary, #005A6B);
+            background: #F1F5F9;
           }
         }
       }
