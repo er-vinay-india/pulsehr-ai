@@ -1,22 +1,32 @@
 import React, { useRef, useEffect, useState } from 'react';
 import * as echarts from 'echarts';
-import { palette } from './chartOptions';
+import { lightPalette, darkPalette, isCurrentThemeDark } from './chartOptions';
+import { useTheme } from '../../context/ThemeContext';
 import '../../styles/minimal-charts.scss';
 
-function minimalOptions(option) {
+function minimalOptions(option, isDark = false) {
+  const activePalette = isDark ? darkPalette : lightPalette;
+  const labelColor = isDark ? '#CBD5E1' : '#334155';
+  const axisLineColor = isDark ? '#26384D' : '#CBD5E1';
+  const splitLineColor = isDark ? 'rgba(248, 250, 252, 0.08)' : 'rgba(11, 31, 58, 0.08)';
+  const tooltipBg = isDark ? '#172A40' : '#FFFFFF';
+  const tooltipBorder = isDark ? '#26384D' : '#CBD5E1';
+  const tooltipText = isDark ? '#F8FAFC' : '#0B1F3A';
+  const baseTextColor = isDark ? '#F8FAFC' : '#0B1F3A';
+
   const mergeAxis = a => {
     if (!a) return a;
     return {
       ...a,
       axisLabel: {
-        color: '#cbd5e1',
+        color: labelColor,
         fontSize: 12,
         ...a?.axisLabel,
       },
       axisLine: {
         ...a?.axisLine,
         lineStyle: {
-          color: '#64748b',
+          color: axisLineColor,
           ...a?.axisLine?.lineStyle,
         },
       },
@@ -24,7 +34,7 @@ function minimalOptions(option) {
         show: a?.type === 'value',
         ...a?.splitLine,
         lineStyle: {
-          color: '#ffffff12',
+          color: splitLineColor,
           ...a?.splitLine?.lineStyle,
         },
       },
@@ -33,32 +43,32 @@ function minimalOptions(option) {
 
   const axes = axis => (Array.isArray(axis) ? axis.map(mergeAxis) : mergeAxis(axis));
 
-  // If legend is explicitly false or has show: false, honor that.
-  // If not provided in option at all, do not inject an unwanted default legend.
   let legendConfig = undefined;
   if (option.legend === false || (option.legend && option.legend.show === false)) {
     legendConfig = { show: false };
   } else if (option.legend) {
     legendConfig = {
-      pageTextStyle: { color: '#cbd5e1' },
+      pageTextStyle: { color: labelColor },
       ...option.legend,
-      textStyle: { color: '#cbd5e1', fontSize: 12, ...option.legend.textStyle },
+      textStyle: { color: labelColor, fontSize: 12, ...option.legend.textStyle },
     };
   }
 
   return {
-    color: palette,
+    color: activePalette,
     backgroundColor: 'transparent',
     animation: false,
     aria: { enabled: true },
-    textStyle: { color: '#e2e8f0', fontFamily: 'system-ui, sans-serif' },
+    textStyle: { color: baseTextColor, fontFamily: 'Figtree, system-ui, sans-serif' },
     ...option,
     tooltip: option.tooltip ? {
       confine: true,
-      backgroundColor: '#18212f',
-      borderColor: '#64748b',
+      backgroundColor: tooltipBg,
+      borderColor: tooltipBorder,
+      borderWidth: 1,
+      extraCssText: isDark ? 'box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4); border-radius: 8px;' : 'box-shadow: 0 4px 14px rgba(11, 31, 58, 0.12); border-radius: 8px;',
       ...option.tooltip,
-      textStyle: { color: '#f1f5f9', fontSize: 13, ...option.tooltip?.textStyle },
+      textStyle: { color: tooltipText, fontSize: 13, ...option.tooltip?.textStyle },
     } : undefined,
     ...(legendConfig !== undefined ? { legend: legendConfig } : {}),
     ...(option.xAxis ? { xAxis: axes(option.xAxis) } : {}),
@@ -68,7 +78,7 @@ function minimalOptions(option) {
       ...s,
       itemStyle: {
         shadowBlur: 0,
-        ...(s.type === 'bar' ? { color: palette[index % palette.length], borderRadius: 2 } : {}),
+        ...(s.type === 'bar' ? { color: activePalette[index % activePalette.length], borderRadius: 2 } : {}),
         ...s.itemStyle,
       },
       lineStyle: {
@@ -77,8 +87,8 @@ function minimalOptions(option) {
         ...s.lineStyle,
       },
       areaStyle: s.areaStyle ? {
-        opacity: 0.06,
-        color: palette[0],
+        opacity: isDark ? 0.15 : 0.08,
+        color: activePalette[0],
         ...s.areaStyle,
       } : undefined,
       emphasis: {
@@ -89,38 +99,59 @@ function minimalOptions(option) {
     })),
   };
 }
+
 export default function SafeReactECharts({ option = {}, style, onEvents, opts = {} }) {
   const container = useRef(null);
   const instance = useRef(null);
   const handlers = useRef(onEvents);
   handlers.current = onEvents;
   const [error, setError] = useState(false);
+
+  let themeContext;
+  try {
+    themeContext = useTheme();
+  } catch (e) {
+    themeContext = null;
+  }
+  const isDark = themeContext ? themeContext.isDark : isCurrentThemeDark();
+
   useEffect(() => {
     const node = container.current;
+    if (!node) return;
     const chart = echarts.init(node, null, { renderer: opts.renderer || 'canvas' });
     instance.current = chart;
     const observer = new ResizeObserver(() => { if (node.clientWidth && node.clientHeight) chart.resize(); });
     observer.observe(node);
     return () => { observer.disconnect(); chart.dispose(); instance.current = null; };
   }, []);
+
   useEffect(() => {
     try {
-      instance.current?.setOption(minimalOptions(option), true);
-      instance.current?.resize();
-      setError(false);
+      if (instance.current) {
+        instance.current.setOption(minimalOptions(option, isDark), true);
+        instance.current.resize();
+        setError(false);
+      }
+    } catch (err) {
+      console.warn('Chart rendering failed', err);
+      setError(true);
     }
-    catch (err) { console.warn('Chart rendering failed', err); setError(true); }
-  }, [option]);
+  }, [option, isDark]);
+
   const eventNames = Object.keys(onEvents || {}).sort().join('|');
   useEffect(() => {
     const chart = instance.current;
+    if (!chart) return;
     const events = eventNames ? eventNames.split('|') : [];
     const bindings = events.map(name => [name, params => handlers.current?.[name]?.(params)]);
     bindings.forEach(([name, callback]) => chart.on(name, callback));
     return () => bindings.forEach(([name, callback]) => chart.off(name, callback));
   }, [eventNames]);
-  return <div className="minimal-chart" style={{ minWidth: 0, width: '100%', maxWidth: '100%', overflow: 'hidden' }}>
-    <div ref={container} style={{ height: 300, width: '100%', maxWidth: '100%', overflow: 'hidden', ...style }} />
-    {error && <p role="status">Chart unavailable. Open the data table to inspect the values.</p>}
-  </div>;
+
+  return (
+    <div className="minimal-chart" style={{ minWidth: 0, width: '100%', maxWidth: '100%', overflow: 'hidden' }}>
+      <div ref={container} style={{ height: 300, width: '100%', maxWidth: '100%', overflow: 'hidden', ...style }} />
+      {error && <p role="status">Chart unavailable. Open the data table to inspect the values.</p>}
+    </div>
+  );
 }

@@ -344,7 +344,7 @@
       text-align: left;
 
       th {
-        background: #F8FAFC;
+        background: var(--hv-bg-surface-hover, #F8FAFC);
         color: var(--hv-text-primary, #0B1F3A);
         padding: 0.7rem 0.9rem;
         font-weight: 700;

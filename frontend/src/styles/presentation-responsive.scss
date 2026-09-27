@@ -201,7 +201,7 @@ body:has(.presentation-modal-backdrop) {
   }
 
   .pres-option-btn {
-    background: #F8FAFC;
+    background: var(--hv-bg-surface-hover, #F8FAFC);
     border: 1px solid var(--hv-border, #e2e8f0);
     border-radius: 8px;
     padding: 10px 8px;
@@ -214,12 +214,12 @@ body:has(.presentation-modal-backdrop) {
     transition: all 150ms ease;
 
     &:hover {
-      background: #F1F5F9;
+      background: var(--hv-bg-mint, #F1F5F9);
       border-color: var(--hv-border-strong, #cbd5e1);
     }
 
     &.active {
-      background: #E6F4F1;
+      background: var(--nav-active-bg, #E6F4F1);
       border-color: var(--hv-brand-secondary, #005A6B);
 
       .opt-label {
@@ -250,7 +250,7 @@ body:has(.presentation-modal-backdrop) {
   }
 
   .pres-theme-btn {
-    background: #F8FAFC;
+    background: var(--hv-bg-surface-hover, #F8FAFC);
     border: 1px solid var(--hv-border, #e2e8f0);
     border-radius: 8px;
     padding: 10px;
@@ -262,12 +262,12 @@ body:has(.presentation-modal-backdrop) {
     transition: all 150ms ease;
 
     &:hover {
-      background: #F1F5F9;
+      background: var(--hv-bg-mint, #F1F5F9);
       border-color: var(--hv-border-strong, #cbd5e1);
     }
 
     &.active {
-      background: #E6F4F1;
+      background: var(--nav-active-bg, #E6F4F1);
       border-color: var(--hv-brand-secondary, #005A6B);
     }
 
@@ -306,7 +306,7 @@ body:has(.presentation-modal-backdrop) {
     justify-content: center;
     gap: 8px;
     padding: 9px 12px;
-    background: #F8FAFC;
+    background: var(--hv-bg-surface-hover, #F8FAFC);
     border: 1px solid var(--hv-border, #e2e8f0);
     border-radius: 8px;
     font-size: 11px;
@@ -316,7 +316,7 @@ body:has(.presentation-modal-backdrop) {
     transition: all 150ms ease;
 
     &:hover {
-      background: #F1F5F9;
+      background: var(--hv-bg-mint, #F1F5F9);
       border-color: var(--hv-border-strong, #cbd5e1);
     }
 
@@ -372,7 +372,7 @@ body:has(.presentation-modal-backdrop) {
     align-items: center;
     gap: 6px;
     padding: 7px 12px;
-    background: #F8FAFC;
+    background: var(--hv-bg-surface-hover, #F8FAFC);
     border: 1px solid var(--hv-border, #e2e8f0);
     border-radius: 6px;
     font-size: 11px;
@@ -382,12 +382,12 @@ body:has(.presentation-modal-backdrop) {
     transition: all 150ms ease;
 
     &:hover {
-      background: #F1F5F9;
+      background: var(--hv-bg-mint, #F1F5F9);
       border-color: var(--hv-border-strong, #cbd5e1);
     }
 
     &.active {
-      background: #E6F4F1;
+      background: var(--nav-active-bg, #E6F4F1);
       border-color: var(--hv-brand-secondary, #005A6B);
       color: var(--hv-brand-secondary, #005A6B);
       font-weight: 600;
@@ -462,7 +462,7 @@ body:has(.presentation-modal-backdrop) {
     display: flex;
     align-items: center;
     gap: 12px;
-    background: #F8FAFC;
+    background: var(--hv-bg-surface-hover, #F8FAFC);
     border: 1px solid var(--hv-border, #e2e8f0);
     border-radius: 8px;
     padding: 8px 12px;
@@ -471,7 +471,7 @@ body:has(.presentation-modal-backdrop) {
       width: 20px;
       height: 20px;
       border-radius: 4px;
-      background: #E2E8F0;
+      background: var(--hv-border, #E2E8F0);
       font-size: 11px;
       font-weight: 700;
       color: var(--hv-text-secondary, #334155);
@@ -1214,7 +1214,7 @@ body:has(.presentation-modal-backdrop) {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  background: #F1F5F9;
+  background: var(--hv-bg-surface-hover, #F1F5F9);
   border: 1px solid var(--hv-border, #CBD5E1);
   padding: 4px;
   border-radius: 10px;

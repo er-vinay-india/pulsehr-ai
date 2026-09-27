@@ -112,7 +112,7 @@ export default function DataTableGrid({
                 <tr
                   key={rIdx}
                   style={{
-                    background: isEven ? "#FFFFFF" : "var(--hv-bg-page, #F8FAFC)",
+                    background: isEven ? "var(--hv-bg-surface, #FFFFFF)" : "var(--hv-bg-page, #F8FAFC)",
                     transition: "background 0.12s ease"
                   }}
                   className="datatable-row"
@@ -123,7 +123,7 @@ export default function DataTableGrid({
                       position: "sticky",
                       left: 0,
                       zIndex: 2,
-                      background: isEven ? "#FFFFFF" : "var(--hv-bg-page, #F8FAFC)",
+                      background: isEven ? "var(--hv-bg-surface, #FFFFFF)" : "var(--hv-bg-page, #F8FAFC)",
                       padding: "8px 12px",
                       textAlign: "center",
                       borderBottom: "1px solid var(--hv-border-subtle, #F1F5F9)",

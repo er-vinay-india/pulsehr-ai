@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 
 import highviewLogo from "../assets/highview-logo.png";
+import ThemeToggle from "./ThemeToggle";
 
 export default function Header({ activeTab, onSelectTab, onOpenUploadModal, activeJob, isUploadingBackground }) {
   const tabs = [
@@ -48,6 +49,7 @@ export default function Header({ activeTab, onSelectTab, onOpenUploadModal, acti
         </nav>
 
         <div className="header-actions">
+          <ThemeToggle />
           <button
             type="button"
             className={`btn-header-upload ${isUploadingBackground ? "is-processing" : ""}`}
