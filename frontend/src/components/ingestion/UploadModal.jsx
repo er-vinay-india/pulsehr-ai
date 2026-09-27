@@ -34,6 +34,8 @@ export default function UploadModal({
 
   // Track if upload was minimized to background
   const isBackgroundRef = useRef(false);
+  const modalRef = useRef(null);
+  const previouslyFocusedElementRef = useRef(null);
 
   // Reset state when modal is closed AND not uploading
   useEffect(() => {
@@ -48,17 +50,66 @@ export default function UploadModal({
     }
   }, [isOpen, uploading]);
 
-  // Handle ESC key to dismiss (even while uploading, minimizes to background)
+  // Handle focus trap, auto-focus entry, and ESC key to dismiss
   useEffect(() => {
     if (!isOpen) return;
+
+    previouslyFocusedElementRef.current = document.activeElement;
+
+    // Focus the first interactive element inside modal
+    const focusTimer = setTimeout(() => {
+      if (modalRef.current) {
+        const focusables = Array.from(
+          modalRef.current.querySelectorAll(
+            'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+          )
+        ).filter(el => !el.disabled && el.offsetParent !== null);
+        if (focusables.length > 0) {
+          focusables[0].focus();
+        }
+      }
+    }, 100);
+
     const handleKeyDown = (e) => {
       if (e.key === "Escape") {
         handleDismiss();
+        return;
+      }
+
+      if (e.key === "Tab" && modalRef.current) {
+        const focusables = Array.from(
+          modalRef.current.querySelectorAll(
+            'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+          )
+        ).filter(el => !el.disabled && el.offsetParent !== null);
+
+        if (focusables.length === 0) return;
+        const first = focusables[0];
+        const last = focusables[focusables.length - 1];
+
+        if (e.shiftKey) {
+          if (document.activeElement === first) {
+            e.preventDefault();
+            last.focus();
+          }
+        } else {
+          if (document.activeElement === last) {
+            e.preventDefault();
+            first.focus();
+          }
+        }
       }
     };
+
     window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, uploading]);
+    return () => {
+      clearTimeout(focusTimer);
+      window.removeEventListener("keydown", handleKeyDown);
+      if (previouslyFocusedElementRef.current && previouslyFocusedElementRef.current.focus) {
+        previouslyFocusedElementRef.current.focus();
+      }
+    };
+  }, [isOpen, step]);
 
   // Upload timer & step progression
   useEffect(() => {
@@ -188,6 +239,7 @@ export default function UploadModal({
       aria-labelledby="upload-modal-title"
     >
       <div
+        ref={modalRef}
         className="upload-modal-panel"
         onClick={(e) => e.stopPropagation()}
       >

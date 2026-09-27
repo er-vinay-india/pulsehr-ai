@@ -1249,7 +1249,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
       )}
 
       {/* Primary & Secondary Elements Container */}
-      <main className="adaptive-content-container">
+      <section className="adaptive-content-container" aria-label="Dashboard Content">
         {/* State A: Calculating Placeholder */}
         {calculating && (
           <div className="adaptive-tile-calculating" role="status" aria-live="polite">
@@ -1920,7 +1920,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
             infoButtonRef={enterpriseTriggerBtnRef}
           />
         )}
-      </main>
+      </section>
 
       {/* Layer 3: Inspect Modal Details Dialog / Sheet */}
       {inspectModalOpen && activeInspect && (

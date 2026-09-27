@@ -31,11 +31,12 @@ export default function DataTableGrid({
         </div>
       )}
 
-      <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: 0, fontSize: "0.78rem" }}>
+      <table aria-label="Dataset records table" style={{ width: "100%", borderCollapse: "separate", borderSpacing: 0, fontSize: "0.78rem" }}>
         <thead>
           <tr>
             {/* Sticky Source Row Index Header */}
             <th
+              scope="col"
               style={{
                 position: "sticky",
                 left: 0,
@@ -62,7 +63,8 @@ export default function DataTableGrid({
               return (
                 <th
                   key={col}
-                  onClick={() => onSort(col)}
+                  scope="col"
+                  aria-sort={isSorted ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
                   style={{
                     position: "sticky",
                     top: 0,
@@ -75,20 +77,39 @@ export default function DataTableGrid({
                     color: isSorted ? "var(--hv-brand-secondary, #005A6B)" : "var(--hv-text-primary, #0B1F3A)",
                     fontWeight: 700,
                     whiteSpace: "nowrap",
-                    cursor: "pointer",
                     userSelect: "none",
                     transition: "color 0.15s ease, background 0.15s ease"
                   }}
-                  title={`Click to sort by ${col}. Original field: ${col}`}
                 >
-                  <div style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                  <button
+                    type="button"
+                    onClick={() => onSort(col)}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      padding: 0,
+                      font: "inherit",
+                      color: "inherit",
+                      cursor: "pointer",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "6px",
+                      textAlign: "left"
+                    }}
+                    aria-label={`Sort by ${formatDisplayLabel(col)}${isSorted ? (sortDir === "asc" ? ", sorted ascending" : ", sorted descending") : ""}`}
+                    title={`Click to sort by ${col}. Original field: ${col}`}
+                  >
                     <span>{formatDisplayLabel(col)}</span>
                     {isSorted ? (
-                      sortDir === "asc" ? <ArrowUp size={13} color="var(--hv-brand-secondary, #005A6B)" /> : <ArrowDown size={13} color="var(--hv-brand-secondary, #005A6B)" />
+                      sortDir === "asc" ? (
+                        <ArrowUp size={13} color="var(--hv-brand-secondary, #005A6B)" aria-hidden="true" />
+                      ) : (
+                        <ArrowDown size={13} color="var(--hv-brand-secondary, #005A6B)" aria-hidden="true" />
+                      )
                     ) : (
-                      <ArrowUpDown size={12} color="var(--hv-text-muted, #64748B)" style={{ opacity: 0.5 }} />
+                      <ArrowUpDown size={12} color="var(--hv-text-muted, #64748B)" style={{ opacity: 0.5 }} aria-hidden="true" />
                     )}
-                  </div>
+                  </button>
                 </th>
               );
             })}

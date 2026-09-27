@@ -58,6 +58,7 @@ export default function GlobalCopilotWidget({
   
   const messagesEndRef = useRef(null);
   const launcherRef = useRef(null);
+  const chatInputRef = useRef(null);
   const abortControllerRef = useRef(null);
   const timerIntervalRef = useRef(null);
   const priorContextRef = useRef(null);
@@ -119,6 +120,16 @@ export default function GlobalCopilotWidget({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [panelOpen]);
+
+  // Focus management: shift focus to input when drawer opens
+  useEffect(() => {
+    if (panelOpen && !minimized) {
+      const timer = setTimeout(() => {
+        chatInputRef.current?.focus();
+      }, 150);
+      return () => clearTimeout(timer);
+    }
+  }, [panelOpen, minimized]);
 
   // Elapsed timer during loading
   useEffect(() => {
@@ -373,7 +384,7 @@ export default function GlobalCopilotWidget({
 
       {/* 2. Slide-out Copilot Panel */}
       {panelOpen && (
-        <aside
+        <section
           id="copilot-drawer-panel"
           className={`copilot-drawer-panel hriday-drawer-panel ${minimized ? 'minimized' : ''}`}
           role="dialog"
@@ -381,7 +392,7 @@ export default function GlobalCopilotWidget({
           aria-modal={!minimized}
         >
           {/* Header with robust flex-shrink rules preventing close button clipping */}
-          <header className="copilot-drawer-header hriday-drawer-header">
+          <div className="copilot-drawer-header hriday-drawer-header">
             {/* Top row: Brand on left, window controls on right */}
             <div className="hriday-header-main-row">
               <div className="copilot-header-brand">
@@ -454,7 +465,7 @@ export default function GlobalCopilotWidget({
                 {models.length === 0 && <option value="phi4-mini:latest">Phi-4 Mini (3.8B) · Fast</option>}
               </select>
             </div>
-          </header>
+          </div>
 
           {/* Body (Hidden when minimized) */}
           {!minimized && (
@@ -597,6 +608,7 @@ export default function GlobalCopilotWidget({
                 }}
               >
                 <input
+                  ref={chatInputRef}
                   type="text"
                   className="copilot-text-input"
                   placeholder="Ask HRIDAY about your spreadsheets, calculations, or slides…"
@@ -617,7 +629,7 @@ export default function GlobalCopilotWidget({
               </form>
             </div>
           )}
-        </aside>
+        </section>
       )}
     </>
   );

@@ -556,7 +556,7 @@ export default function PriorityInsightCard({
           <div className="adaptive-priority-callout adaptive-priority-callout--implication">
             <TrendingUp size={18} className="adaptive-priority-callout__icon adaptive-priority-callout__icon--brand" />
             <div className="adaptive-priority-callout__body">
-              <h4 className="adaptive-priority-callout__label">Operational Implication</h4>
+              <h3 className="adaptive-priority-callout__label">Operational Implication</h3>
               <p className="adaptive-priority-callout__text">{implication}</p>
             </div>
           </div>
@@ -566,9 +566,9 @@ export default function PriorityInsightCard({
             <ArrowRight size={18} className="adaptive-priority-callout__icon adaptive-priority-callout__icon--emerald" />
             <div className="adaptive-priority-callout__body">
               <div className="adaptive-priority-callout__header-row">
-                <h4 className="adaptive-priority-callout__label adaptive-priority-callout__label--emerald">
+                <h3 className="adaptive-priority-callout__label adaptive-priority-callout__label--emerald">
                   Recommended Action & Accountability
-                </h4>
+                </h3>
                 <span className="adaptive-priority-callout__role-badge">
                   <UserCheck size={12} aria-hidden="true" style={{ display: "inline-block", verticalAlign: "middle", marginRight: 4 }} />
                   <span>Suggested owner: {effectiveOwner}</span>

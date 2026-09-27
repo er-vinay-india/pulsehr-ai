@@ -240,12 +240,12 @@
     }
 
     .powered-text {
-      color: var(--fg-muted);
+      color: var(--hv-text-secondary, #334155);
       font-weight: 500;
     }
 
     .powered-brand {
-      color: var(--brand-400);
+      color: var(--hv-brand-secondary, #005A6B);
       font-weight: 700;
       letter-spacing: 0.04em;
     }
