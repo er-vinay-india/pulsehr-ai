@@ -1689,20 +1689,20 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
             </div>
 
             {/* Disparity Distribution Matrix List */}
-            <div className="disparity-matrix-body" role="region" aria-label={`Ranked distribution for ${quinaryElement.title}`}>
-              <div className="matrix-table-head">
-                <span className="col-rank">#</span>
-                <span className="col-segment">{quinaryElement.dimension_name || "Segment"}</span>
-                <span className="col-bar">Relative Reliability & Capacity</span>
-                <span className="col-primary">{quinaryElement.metric_name || "Value"}</span>
+            <div className="disparity-matrix-body" role="table" aria-label={`Ranked distribution for ${quinaryElement.title}`}>
+              <div className="matrix-table-head" role="row">
+                <span className="col-rank" role="columnheader" aria-label="Rank">#</span>
+                <span className="col-segment" role="columnheader">{quinaryElement.dimension_name || "Segment"}</span>
+                <span className="col-bar" role="columnheader">Relative Reliability & Capacity</span>
+                <span className="col-primary" role="columnheader">{quinaryElement.metric_name || "Value"}</span>
                 {quinaryElement.secondary_metric_name && (
-                  <span className="col-secondary">{quinaryElement.secondary_metric_name}</span>
+                  <span className="col-secondary" role="columnheader">{quinaryElement.secondary_metric_name}</span>
                 )}
-                <span className="col-relative">vs Benchmark</span>
-                <span className="col-tier">Operational Tier</span>
+                <span className="col-relative" role="columnheader">vs Benchmark</span>
+                <span className="col-tier" role="columnheader">Operational Tier</span>
               </div>
 
-              <div className="matrix-rows-list">
+              <div className="matrix-rows-list" role="rowgroup">
                 {quinaryElement.items.map((item, idx) => {
                   const maxVal = Math.max(...quinaryElement.items.map((i) => i.primary_value || 1));
                   const pctWidth = maxVal > 0 ? Math.min(100, Math.max(12, ((item.primary_value || 0) / maxVal) * 100)) : 50;
@@ -1713,33 +1713,41 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
                     <div
                       key={item.segment || idx}
                       className={`matrix-row-item ${isTop ? "is-top-tier" : isFriction ? "is-friction-tier" : "is-standard-tier"}`}
+                      role="row"
                     >
-                      <span className="cell-rank">#{idx + 1}</span>
-                      <div className="cell-segment">
+                      <span className="cell-rank" role="cell">#{idx + 1}</span>
+                      <div className="cell-segment" role="cell">
                         <strong className="segment-title">{item.segment}</strong>
                         <span className="segment-meta">{item.sample_label}</span>
                       </div>
-                      <div className="cell-bar-wrap">
+                      <div className="cell-bar-wrap" role="cell">
                         <div
                           className={`cell-bar-fill ${isTop ? "bar-top" : isFriction ? "bar-friction" : "bar-standard"}`}
                           style={{ width: `${pctWidth}%` }}
+                          aria-hidden="true"
                         />
                       </div>
-                      <span className="cell-primary">
+                      <span className="cell-primary" role="cell">
                         <strong>{item.formatted_primary}</strong>
                       </span>
                       {quinaryElement.secondary_metric_name && (
-                        <span className="cell-secondary">
+                        <span className="cell-secondary" role="cell">
                           {item.formatted_secondary || "—"}
                         </span>
                       )}
-                      <span className="cell-relative">
-                        <span className={`delta-pill ${item.formatted_relative_index?.startsWith("+") ? "delta-pos" : item.formatted_relative_index?.startsWith("-") ? "delta-neg" : "delta-neutral"}`}>
+                      <span className="cell-relative" role="cell">
+                        <span
+                          className={`delta-pill ${item.formatted_relative_index?.startsWith("+") ? "delta-pos" : item.formatted_relative_index?.startsWith("-") ? "delta-neg" : "delta-neutral"}`}
+                          aria-label={`${item.formatted_relative_index || "At benchmark"} compared to network benchmark`}
+                        >
                           {item.formatted_relative_index || "—"}
                         </span>
                       </span>
-                      <span className="cell-tier">
-                        <span className={`tier-badge tier-${item.tier}`}>
+                      <span className="cell-tier" role="cell">
+                        <span
+                          className={`tier-badge tier-${item.tier}`}
+                          aria-label={`Operational tier: ${item.tier === "top_tier" ? "Top Tier" : item.tier === "friction_tier" ? "Attention Required" : "Standard"}`}
+                        >
                           {item.tier === "top_tier" ? "Top Tier" : item.tier === "friction_tier" ? "Attention" : "Standard"}
                         </span>
                       </span>
