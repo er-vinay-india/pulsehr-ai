@@ -61,35 +61,43 @@ def upload_file(
                 industrial_res = run_ingestion_industrial_pipeline(conn, dataset_id)
                 linked = conn.execute("SELECT COUNT(*) FROM sheet_relationships WHERE status='linked' AND (left_sheet IN (SELECT id FROM sheets WHERE dataset_id=?) OR right_sheet IN (SELECT id FROM sheets WHERE dataset_id=?))", (dataset_id, dataset_id)).fetchone()[0]
 
-                # Immediate User Intent Reconciliation during Data Ingestion
-                analysis_ctx_dict = None
-                if user_objective and user_objective.strip():
-                    import pandas as pd
-                    from ..services.data_engine.semantic_classifier import SemanticClassifier
-                    from ..services.data_engine.analysis_context import IntentDataReconciler
-
-                    sheet_row = conn.execute('SELECT id, display_name, name FROM sheets WHERE dataset_id=? ORDER BY id ASC LIMIT 1', (dataset_id,)).fetchone()
-                    sheet_id = sheet_row['id'] if sheet_row else None
-                    df_first = pd.DataFrame(first['records'])
-                    profile = SemanticClassifier.profile_dataset(df_first, dataset_name=display_name)
-                    ctx = IntentDataReconciler.parse_and_reconcile(
-                        raw_text=user_objective.strip(),
-                        profile=profile,
-                        dataset_id=dataset_id,
-                        sheet_id=sheet_id,
-                        business_context=business_context
+                # Canonical Input & Context Intelligence Ingestion
+                ws_ctx_dict = None
+                try:
+                    from ..services.input_intelligence import InputIntelligenceService
+                    files_or_data = []
+                    for s in prepared:
+                        files_or_data.append({
+                            "id": str(s.get("sheet_id") or dataset_id),
+                            "filename": s.get("name") or original,
+                            "original_name": s.get("name") or original,
+                            "records": s.get("records") or [],
+                            "columns": s.get("columns") or []
+                        })
+                    ws_ctx = InputIntelligenceService.process_workspace_input(
+                        workspace_id=str(dataset_id),
+                        files_or_data=files_or_data,
+                        user_instruction=user_objective.strip() if user_objective else ""
                     )
-                    ctx_json = ctx.model_dump_json()
-                    conn.execute('UPDATE dataset_uploads SET analysis_context_json=? WHERE id=?', (ctx_json, dataset_id))
-                    conn.execute('UPDATE sheets SET analysis_context_json=? WHERE dataset_id=?', (ctx_json, dataset_id))
-                    analysis_ctx_dict = ctx.model_dump()
+                    ws_ctx_dict = ws_ctx.model_dump()
+                    ws_ctx_json = ws_ctx.model_dump_json()
+                    conn.execute('UPDATE dataset_uploads SET analysis_context_json=? WHERE id=?', (ws_ctx_json, dataset_id))
+                    conn.execute('UPDATE sheets SET analysis_context_json=? WHERE dataset_id=?', (ws_ctx_json, dataset_id))
+                except Exception as e:
+                    import logging
+                    logging.getLogger(__name__).warning(f"InputIntelligenceService ingestion warning: {e}")
+
+                # Legacy User Intent Compatibility (if present)
+                analysis_ctx_dict = ws_ctx_dict
 
             return {'status': 'success', 'dataset_id': dataset_id, 'filename': original,
-                    'display_name': display_name, 'domain': naming['domain'], 'description': naming['description'],
+                    'display_name': display_name, 'domain': (ws_ctx_dict.get('context_summary', {}).get('domain') if ws_ctx_dict else naming['domain']),
+                    'description': naming['description'],
                     'sheets': list(frames), 'total_rows': total, 'columns': first['columns'], 'sample_preview': first['records'][:5],
                     'indexed_chunks': total, 'vector_chunks': sum(len(s['vectors']) for s in prepared), 'linked_relationships': linked,
                     'industrial_analytics': industrial_res,
                     'analysis_context': analysis_ctx_dict,
+                    'workspace_context': ws_ctx_dict,
                     'user_objective': user_objective.strip() if user_objective else "",
                     'message': f'Indexed all {total} rows. Reconciled user intent into analytical evidence pipeline.' if analysis_ctx_dict else f'Indexed all {total} rows. Found {linked} exact key relationships and computed industrial analytics pipeline.'}
         except (ValueError, OSError, ImportError) as exc:

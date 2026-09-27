@@ -210,63 +210,75 @@ def generate_presentation_deck_spec(
     else:
         lead_cat = "Primary Operating Unit"
 
-    # Phase 1: Try dynamic AI-driven deck planning using Ollama model (if explicitly requested)
-    ai_deck_plan = None
-    if scope.get("enable_ai_planner"):
+    # Phase 2: Qwen Presentation Director (hierarchical bounded planning)
+    slides: list[dict[str, Any]] = []
+    if scope.get("enable_ai_planner") or scope.get("use_presentation_director"):
         try:
-            ai_deck_plan = plan_deck_with_ai(
+            from .director import (
+                presentation_director,
+                PresentationPlanningContext,
+                SlideCountConstraint,
+            )
+            constraint = SlideCountConstraint.from_inputs(
+                instructions=instructions,
+                target_length=scope.get("target_length"),
+                default_mode=getattr(config, "PRESENTATION_DEFAULT_SLIDE_COUNT_MODE", "ADAPTIVE")
+            )
+            planning_ctx = PresentationPlanningContext(
                 domain=domain,
                 objective=objective,
                 audience=audience,
                 instructions=instructions,
-                is_sales=is_sales,
-                is_hr=is_hr,
+                dataset_label=file_label,
                 total_records=total_eval_records,
-                file_label=file_label,
-                mean_val_str=mean_val_str,
-                dispersion_metric_str=dispersion_metric_str,
-                reporting_period_summary=reporting_period_summary,
                 completeness_pct=completeness_pct,
-                prioritized_facts=prioritized_facts,
-                industrial_models=industrial_models,
+                baseline_benchmark=mean_val_str,
+                dispersion_metric=dispersion_metric_str,
+                reporting_period=reporting_period_summary,
+                is_partial_year=is_partial_year,
+                dataset_profiles=[profiled_data] if profiled_data else [],
+                current_evidence=evidence_ledger,
+                historical_context=workspace_evidence.get("retrieved_context", {}) if workspace_evidence else {},
                 available_charts={
                     "line_chart": line_chart is not None,
                     "bar_chart": bar_chart is not None,
                     "donut_chart": donut_chart is not None,
                 },
-                evidence_ledger=evidence_ledger
+                industrial_models=industrial_models or {},
+                slide_count_constraint=constraint,
+                workspace_id=scope.get("workspace_id"),
+                theme_id=theme_id,
+                snapshot_hash=snapshot_hash
             )
+            # Phase 3: IBM Granite 4.0 Presentation Execution Orchestrator
+            if getattr(config, "PRESENTATION_ORCHESTRATOR_ENABLED", True):
+                from .orchestrator import presentation_orchestrator
+                plan_spec = presentation_director.plan_presentation(planning_ctx)
+                director_deck_spec, _ = presentation_orchestrator.orchestrate(
+                    plan_spec=plan_spec,
+                    ctx=planning_ctx,
+                    theme=theme,
+                    theme_id=theme_id,
+                    chart_pack=chart_pack,
+                    profiled_data=profiled_data,
+                    evidence_ledger=evidence_ledger,
+                    on_slide_progress=on_slide_progress
+                )
+            else:
+                director_deck_spec = presentation_director.plan_and_adapt(
+                    ctx=planning_ctx,
+                    theme=theme,
+                    theme_id=theme_id,
+                    chart_pack=chart_pack,
+                    profiled_data=profiled_data,
+                    evidence_ledger=evidence_ledger,
+                    on_slide_progress=on_slide_progress
+                )
+            if director_deck_spec and director_deck_spec.get("slides") and len(director_deck_spec["slides"]) >= 4:
+                slides = director_deck_spec["slides"]
+                logger.info(f"Presentation Orchestrator successfully generated {len(slides)} slides.")
         except Exception as exc:
-            logger.warning(f"AI deck planning encountered an issue, falling back to deterministic builders: {exc}")
-            ai_deck_plan = None
-
-    slides: list[dict[str, Any]] = []
-    if ai_deck_plan and ai_deck_plan.get("slides") and len(ai_deck_plan["slides"]) >= 8:
-        try:
-            slides = materialize_ai_deck(
-                ai_plan=ai_deck_plan,
-                dataset_context=dataset_context,
-                included_sheets=included_sheets,
-                source_summary=source_summary,
-                total_eval_records=total_eval_records,
-                completeness_pct=completeness_pct,
-                mean_val_str=mean_val_str,
-                dispersion_metric_str=dispersion_metric_str,
-                snapshot_hash=snapshot_hash,
-                reporting_period_summary=reporting_period_summary,
-                is_partial_year=is_partial_year,
-                line_chart=line_chart,
-                bar_chart=bar_chart,
-                donut_chart=donut_chart,
-                rel_chart=rel_chart,
-                industrial_models=industrial_models,
-                profiled_data=profiled_data,
-                evidence_ledger=evidence_ledger,
-                lead_cat=lead_cat,
-                on_slide_progress=on_slide_progress
-            )
-        except Exception as exc:
-            logger.warning(f"AI slide materialization encountered an issue, falling back to deterministic builders: {exc}")
+            logger.warning(f"Presentation Director / Orchestrator execution failed, falling back to deterministic builders: {exc}")
             slides = []
 
     if not slides:
@@ -475,5 +487,6 @@ def generate_presentation_deck_spec(
         },
         "slides": slides,
         "evidence_ledger": evidence_ledger,
-        "coverage_manifest": coverage_manifest
+        "coverage_manifest": coverage_manifest,
+        "retrieved_context": workspace_evidence.get("retrieved_context", {"status": "empty", "results": [], "historical_decks": []}) if workspace_evidence else {"status": "empty", "results": [], "historical_decks": []}
     }

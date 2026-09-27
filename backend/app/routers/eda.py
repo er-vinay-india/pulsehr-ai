@@ -34,6 +34,24 @@ def get_sheet_eda_report(sheet_id: int):
 
         report = json.loads(row["report_json"])
         report["created_at"] = row["created_at"]
+
+        # Attach canonical WorkspaceContext via EDAContextAdapter if available
+        try:
+            from ..services.input_intelligence import SnapshotManager, EDAContextAdapter
+            ws_id = str(row["dataset_id"])
+            ws_ctx = SnapshotManager.get_cached_context(ws_id) or SnapshotManager.get_cached_context(f"ws_{ws_id}")
+            if ws_ctx:
+                eda_ctx = EDAContextAdapter.adapt(ws_ctx)
+                report["eda_analysis_context"] = eda_ctx.model_dump()
+                report["domain"] = eda_ctx.domain
+                report["primary_dataset"] = eda_ctx.primary_dataset_name
+                report["semantic_roles"] = eda_ctx.semantic_roles
+                report["units"] = eda_ctx.units
+                report["readiness_status"] = eda_ctx.readiness_status
+                report["quality_warnings"] = eda_ctx.quality_warnings
+        except Exception:
+            pass
+
         return report
     finally:
         conn.close()

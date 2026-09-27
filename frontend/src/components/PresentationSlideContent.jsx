@@ -4,8 +4,9 @@ import FormattedText from "./presentation/slides/FormattedText.jsx";
 import SlideChart from "./presentation/slides/SlideChart.jsx";
 import { SlideTalent9BoxMatrix, SlideBurnoutStrainPanel } from "./presentation/slides/SlidePanels.jsx";
 import SlideLayoutViews from "./presentation/slides/SlideLayoutViews.jsx";
+import VisualSlideRenderer from "./presentation/visual/VisualSlideRenderer.jsx";
 
-export { FormattedText, SlideChart, SlideTalent9BoxMatrix, SlideBurnoutStrainPanel, SlideLayoutViews };
+export { FormattedText, SlideChart, SlideTalent9BoxMatrix, SlideBurnoutStrainPanel, SlideLayoutViews, VisualSlideRenderer };
 
 export default function PresentationSlideContent({
   slide,
@@ -171,6 +172,21 @@ export default function PresentationSlideContent({
       </div>
     );
   };
+
+  if (slide?.visual_spec && !isEditable) {
+    return (
+      <div className={`slide-card-wrapper layout-${layout} visual-spec-active`}>
+        <VisualSlideRenderer
+          slide={slide}
+          visualSpec={slide.visual_spec}
+          theme={theme}
+          isEditable={isEditable}
+          onUpdate={onUpdate}
+          onViewEvidence={onViewEvidence}
+        />
+      </div>
+    );
+  }
 
   return (
     <div

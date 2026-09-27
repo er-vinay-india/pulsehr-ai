@@ -118,8 +118,7 @@
 
 /* Default Executive Studio (Compatible with HighView theme) */
 .theme-executive_studio,
-[data-slide-theme="executive_studio"],
-:root {
+[data-slide-theme="executive_studio"] {
   --stage-bg: #090d16;
   --slide-bg: #0f172a;
   --text-primary: #f8fafc;
@@ -549,4 +548,8 @@
     transition: width 0.5s ease;
   }
 }
+
+/* Scoped Bootstrap layout and grid utilities for presentation canvas */
+@import './presentation-scoped-bootstrap.scss';
+
 

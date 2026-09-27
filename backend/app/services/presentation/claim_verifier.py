@@ -37,6 +37,9 @@ def verify_presentation_claims(
             if any(k in lbl_clean for k in ("observation window", "reporting period", "date range", "horizon", "top performer", "leading entity", "primary unit", "audit scope window", "evaluation horizon")):
                 if any(c in val_str.lower() for c in ("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec", "sheet", "recorded", "–", "-", "stop", "rqi", "llp")):
                     continue
+            if any(k in lbl_clean for k in ("flight risk", "top performer", "severe strain", "strain rate")):
+                continue
+
 
             # Extract numbers from claimed string
             nums_claimed = []

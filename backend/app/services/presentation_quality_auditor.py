@@ -218,7 +218,7 @@ class PresentationQualityAuditor:
             if num_val is not None and slide_idx and slide_idx <= len(slides):
                 target_slide = slides[slide_idx - 1]
                 found_match = False
-                for m in target_slide.get("metrics", []):
+                for m in target_slide.get("metrics") or []:
                     # Check if numerical claim in metric aligns within +/- 0.1%
                     raw_str = str(m.get("value", ""))
                     clean_str = re.sub(r"[^\d.]", "", raw_str)

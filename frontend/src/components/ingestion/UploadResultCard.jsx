@@ -1,10 +1,19 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { CheckCircle2, Download, Link2, Table } from "lucide-react";
 import { getDatasetDownloadUrl } from "../../api/client";
 import AnalysisBriefCard from "./AnalysisBriefCard";
+import ContextReviewCard from "./ContextReviewCard";
 
 export default function UploadResultCard({ uploadResult }) {
   if (!uploadResult) return null;
+
+  const [activeContext, setActiveContext] = useState(uploadResult.workspace_context || null);
+
+  useEffect(() => {
+    if (uploadResult.workspace_context) {
+      setActiveContext(uploadResult.workspace_context);
+    }
+  }, [uploadResult]);
 
   return (
     <div className="alert-box alert-success" style={{ flexDirection: "column" }}>
@@ -15,9 +24,9 @@ export default function UploadResultCard({ uploadResult }) {
             <strong style={{ fontSize: "1.1rem", color: "var(--brand-400)" }}>
               {uploadResult.display_name || uploadResult.filename}
             </strong>
-            {uploadResult.domain && (
+            {(activeContext?.context_summary?.domain || uploadResult.domain) && (
               <span className="filetype-badge" style={{ background: "rgba(224, 86, 36, 0.15)", color: "var(--brand-400)", borderColor: "rgba(224, 86, 36, 0.3)" }}>
-                {uploadResult.domain}
+                {activeContext?.context_summary?.domain || uploadResult.domain}
               </span>
             )}
           </div>
@@ -58,6 +67,15 @@ export default function UploadResultCard({ uploadResult }) {
           </div>
         </div>
       </div>
+
+      {/* Lightweight User Context Review & Override (Section 7, 8, 9) */}
+      {activeContext && (
+        <ContextReviewCard
+          workspaceContext={activeContext}
+          workspaceId={String(uploadResult.dataset_id)}
+          onContextUpdated={(updated) => setActiveContext(updated)}
+        />
+      )}
 
       {/* Analysis Brief & Business Intent Section */}
       <AnalysisBriefCard uploadResult={uploadResult} />

@@ -79,6 +79,55 @@ def get_themes():
     return {"themes": list(THEMES.values())}
 
 
+@router.get("/memory/stats")
+def get_presentation_memory_stats():
+    """Returns total indexed presentation memories and store health."""
+    from ..services.presentation.memory import memory_store
+    count = memory_store.count()
+    return {
+        "status": "healthy",
+        "total_memories": count,
+        "embedding_model": config.PRESENTATION_EMBEDDING_MODEL,
+        "memory_enabled": config.PRESENTATION_MEMORY_ENABLED
+    }
+
+
+@router.get("/memory/search")
+def search_presentation_memory(
+    query: str = Query(..., description="Semantic search query"),
+    domain: str | None = Query(None, description="Optional domain filter"),
+    audience: str | None = Query(None, description="Optional audience filter"),
+    top_k: int = Query(6, ge=1, le=20)
+):
+    """Performs semantic search across historical decks, slides, and dataset profiles."""
+    from ..services.presentation.memory import presentation_retrieval_service
+    res = presentation_retrieval_service.retrieve_presentation_context(
+        query=query,
+        domain=domain,
+        audience=audience,
+        top_k=top_k
+    )
+    return res.model_dump()
+
+
+@router.get("/memory/similar-decks")
+def get_similar_presentation_decks(
+    query: str = Query(..., description="Query describing presentation topic or title"),
+    domain: str | None = Query(None, description="Optional domain filter"),
+    audience: str | None = Query(None, description="Optional audience filter"),
+    top_k: int = Query(4, ge=1, le=10)
+):
+    """Retrieves similar past presentation decks for planning reference."""
+    from ..services.presentation.memory import presentation_retrieval_service
+    decks = presentation_retrieval_service.find_similar_presentations(
+        query=query,
+        domain=domain,
+        audience=audience,
+        top_k=top_k
+    )
+    return {"query": query, "similar_decks": [d.model_dump() for d in decks]}
+
+
 @router.post("/scope-preview")
 def get_scope_preview(req: ScopePreviewRequest):
     """Preflights presentation scope, reporting periods, partial-year status, and relationship coverage."""

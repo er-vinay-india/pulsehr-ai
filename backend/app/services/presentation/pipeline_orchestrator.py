@@ -35,6 +35,22 @@ def execute_presentation_pipeline_async(
             workspace_evidence = collect_workspace_evidence(conn, scope)
             primary_ctx = workspace_evidence["primary_ctx"]
 
+        # Retrieve relevant presentation memories & historical context (Phase 1)
+        try:
+            from .memory import presentation_retrieval_service
+            query = f"{scope.get('objective', '')} {scope.get('instructions', '')}".strip() or "Executive leadership presentation"
+            retrieved_context_pkg = presentation_retrieval_service.retrieve_presentation_context(
+                query=query,
+                workspace_id=scope.get("workspace_id"),
+                domain=primary_ctx.get("domain"),
+                audience=scope.get("audience"),
+                dataset_ids=[primary_ctx["target_sheet"]["id"]] if primary_ctx.get("target_sheet") else None
+            )
+            workspace_evidence["retrieved_context"] = retrieved_context_pkg.model_dump()
+        except Exception as exc:
+            logger.debug(f"Optional presentation memory retrieval skipped: {exc}")
+            workspace_evidence["retrieved_context"] = {"status": "degraded", "results": [], "historical_decks": []}
+
         # STAGE 2: Planning coverage & prioritizing material findings (25%)
         mgr.update_stage(job_id, "planning_coverage", "Planning coverage manifest & prioritizing material findings", 25)
         if mgr.is_cancelled(job_id):
@@ -172,6 +188,18 @@ def execute_presentation_pipeline_async(
                 conn.commit()
         except Exception as exc:
             logger.warning(f"Could not persist presentation deck to database: {exc}")
+
+        # Asynchronously index the newly generated presentation deck into memory (Phase 1)
+        try:
+            from .memory import memory_indexer
+            threading.Thread(
+                target=memory_indexer.index_presentation_deck,
+                args=(deck_spec,),
+                daemon=True,
+                name=f"pres-indexer-{deck_id}"
+            ).start()
+        except Exception as exc:
+            logger.debug(f"Async memory indexing skipped: {exc}")
 
         mgr.update_stage(job_id, "ready", "Presentation ready to review", 100, deck_id=deck_id)
 

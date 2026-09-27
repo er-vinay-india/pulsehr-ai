@@ -510,5 +510,83 @@ export async function generateDeckNarration(deckId, voice = "andrew") {
   return res.json();
 }
 
+// =============================================================================
+// Workspace Context & User Control API Methods
+// =============================================================================
+
+export async function getWorkspaceContext(workspaceId) {
+  const res = await fetch(`${API_BASE}/workspace/${workspaceId}/context`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Failed to fetch workspace context");
+  }
+  return res.json();
+}
+
+export async function patchWorkspaceContext(workspaceId, patch) {
+  const res = await fetch(`${API_BASE}/workspace/${workspaceId}/context`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch)
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Failed to update workspace context");
+  }
+  return res.json();
+}
+
+export async function revalidateWorkspaceContext(workspaceId) {
+  const res = await fetch(`${API_BASE}/workspace/${workspaceId}/context/revalidate`, {
+    method: "POST"
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Failed to revalidate workspace context");
+  }
+  return res.json();
+}
+
+export async function getWorkspaceQuestions(workspaceId) {
+  const res = await fetch(`${API_BASE}/workspace/${workspaceId}/context/questions`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Failed to fetch workspace questions");
+  }
+  return res.json();
+}
+
+export async function getWorkspaceEDAContext(workspaceId) {
+  const res = await fetch(`${API_BASE}/workspace/${workspaceId}/context/eda`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Failed to fetch EDA context");
+  }
+  return res.json();
+}
+
+export async function getWorkspaceDashboardContext(workspaceId) {
+  const res = await fetch(`${API_BASE}/workspace/${workspaceId}/context/dashboard`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Failed to fetch dashboard context");
+  }
+  return res.json();
+}
+
+export async function overrideCandidateJoin(workspaceId, relationshipId, accept) {
+  const res = await fetch(`${API_BASE}/workspace/${workspaceId}/context/join-override`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ relationship_id: relationshipId, accept })
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Failed to override join candidate");
+  }
+  return res.json();
+}
+
+
 
 
