@@ -136,53 +136,86 @@ def execute_presentation_pipeline_async(
             on_phase_progress=lambda phase, label, pct: mgr.update_stage(job_id, phase, label, pct)
         )
 
-        # STAGE 5: Auditing deterministic numbers & verifying claim ledger (±0.1%) (70%)
-        mgr.update_stage(job_id, "text", "Auditing deterministic numbers & verifying claim ledger (±0.1%)", 70)
+        # PHASE 3: Graphic content & visual asset generation (49% -> 62%)
+        total_slides = len(deck_spec.get("slides", []))
+        mgr.update_stage(job_id, "graphics", "Rendering charts, metric cards, and visual callouts", 49)
         if mgr.is_cancelled(job_id):
             return
+        import time
+        for idx, slide in enumerate(deck_spec.get("slides", [])):
+            if mgr.is_cancelled(job_id):
+                return
+            slide_title = slide.get("title", f"Slide {idx + 1}")
+            clean_title = slide_title.split(":")[0].strip() if ":" in slide_title else slide_title.strip()
+            pct = 49 + int(((idx + 1) / max(total_slides, 1)) * 13)
+            mgr.update_stage(
+                job_id,
+                "graphics",
+                f"Rendered visual analytics for slide {idx + 1} of {total_slides}: {clean_title[:32]}",
+                pct
+            )
+            time.sleep(0.18)
 
+        # PHASE 4: Text content & evidence validation (63% -> 76%)
+        mgr.update_stage(job_id, "text", "Populating evidence-backed findings and takeaways", 63)
+        if mgr.is_cancelled(job_id):
+            return
         verification_res = verify_presentation_claims(deck_spec, deck_spec["evidence_ledger"])
         deck_spec["metadata"]["validation_summary"] = verification_res
 
-        mgr.update_stage(job_id, "animation", "Applying content animation preferences", 73)
+        for idx, slide in enumerate(deck_spec.get("slides", [])):
+            if mgr.is_cancelled(job_id):
+                return
+            pct = 63 + int(((idx + 1) / max(total_slides, 1)) * 13)
+            mgr.update_stage(
+                job_id,
+                "text",
+                f"Validated claims & insights for slide {idx + 1} of {total_slides}",
+                pct
+            )
+            time.sleep(0.15)
+
+        # PHASE 5: Animation (77% -> 83%)
+        mgr.update_stage(job_id, "animation", "Configuring entrance, emphasis, and motion cues", 77)
+        if mgr.is_cancelled(job_id):
+            return
         for slide in deck_spec["slides"]:
             slide["animation"] = scope.get("animation", "none")
             if scope.get("background_image"):
                 slide["background_image"] = scope["background_image"]
                 slide["scrim_opacity"] = scope.get("scrim_opacity", 70)
+        time.sleep(0.35)
+
+        # PHASE 6: Transitions (84% -> 89%)
+        mgr.update_stage(job_id, "transitions", "Setting smooth slide-to-slide progression", 84)
         if mgr.is_cancelled(job_id):
             return
-        mgr.update_stage(job_id, "transitions", "Applying slide transitions", 75)
         deck_spec["metadata"]["transition"] = scope.get("transition", "none")
         for slide in deck_spec["slides"]:
             slide["transition"] = scope.get("transition", "none")
+        time.sleep(0.35)
+
+        # PHASE 7: HRIDAY voiceover transcript (90% -> 94%)
+        mgr.update_stage(job_id, "transcript", "Synthesizing executive talking points and speech notes", 90)
         if mgr.is_cancelled(job_id):
             return
-        mgr.update_stage(job_id, "transcript", "Preparing HRIDAY speaker transcripts from slide content", 78)
         for slide in deck_spec["slides"]:
             if not slide.get("speaker_notes"):
                 bullets = [item if isinstance(item, str) else item.get("text", "") for item in slide.get("bullets", [])]
                 slide["speaker_notes"] = "\n".join(filter(None, [slide.get("title"), slide.get("narrative"), *bullets]))
-        if mgr.is_cancelled(job_id):
-            return
+        time.sleep(0.4)
 
-        # STAGE 6: Auditing spatial bounding boxes, text density & chart geometry (80%)
-        mgr.update_stage(job_id, "formatting", "Auditing spatial bounding boxes, text density & chart geometry", 80)
+        # PHASE 8: Final setup & PPTX/PDF formatting (95% -> 99%)
+        mgr.update_stage(job_id, "formatting", "Auditing spatial bounding boxes, text density & chart geometry", 95)
         if mgr.is_cancelled(job_id):
             return
 
         audit_res = PresentationQualityAuditor.audit_deck_spec(deck_spec, deck_spec["evidence_ledger"])
         deck_spec["quality_audit"] = audit_res
 
-        # STAGE 7: Executing bounded repairs (layout tuning, concise rewriting, table splitting) (90%)
-        mgr.update_stage(job_id, "formatting", "Executing bounded repairs (layout tuning, concise rewriting, table splitting)", 90)
-        if mgr.is_cancelled(job_id):
-            return
-
         if audit_res.get("issues"):
             if audit_res.get("can_repair", True):
                 deck_spec = PresentationQualityAuditor.execute_bounded_repair(deck_spec, audit_res)
-                # Re-audit post-repair
                 audit_res_2 = PresentationQualityAuditor.audit_deck_spec(deck_spec, deck_spec["evidence_ledger"])
                 deck_spec["quality_audit"] = audit_res_2
                 if audit_res_2.get("critical_count", 0) > 0:
@@ -192,15 +225,13 @@ def execute_presentation_pipeline_async(
                 critical_msgs = [i["message"] for i in audit_res["issues"] if i["severity"] == "critical"]
                 raise ValueError(f"Presentation quality audit failed: {'; '.join(critical_msgs)}")
 
-        # Revalidate after any bounded layout repairs; never publish changed claims.
         if scope.get("deck_style") == "decision_brief":
             verified = verify_presentation_claims(deck_spec, deck_spec["evidence_ledger"])
             deck_spec["metadata"]["validation_summary"] = verified
             if verified["status"] != "PASSED":
                 raise ValueError("Decision slide claims differ from the frozen overview evidence.")
 
-        # STAGE 8: Generating verified native PPTX & persisting presentation deck (95% -> 100%)
-        mgr.update_stage(job_id, "formatting", "Generating verified native PPTX & persisting presentation deck", 95)
+        mgr.update_stage(job_id, "formatting", "Generating verified native PPTX & persisting presentation deck", 98)
         if mgr.is_cancelled(job_id):
             return
 
@@ -208,7 +239,6 @@ def execute_presentation_pipeline_async(
         pptx_path = export_spec_to_pptx(deck_spec)
         deck_spec["pptx_filename"] = pptx_path.name
 
-        # Persist deck specification to database
         deck_id = deck_spec["id"]
         now = datetime.datetime.now(datetime.timezone.utc).isoformat()
         try:

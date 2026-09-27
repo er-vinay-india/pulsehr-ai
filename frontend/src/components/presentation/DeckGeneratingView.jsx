@@ -149,7 +149,7 @@ export default function DeckGeneratingView({
                   {isCurrent && jobStageLabel ? jobStageLabel : (st.desc || st.label)}
                 </span>
 
-                {/* Sequential Slide Generation Progress - strictly on Slide Synthesis Phase (Phase 2) */}
+                {/* Slide Pills with symbolic tick on Slide Synthesis Phase (Phase 2) */}
                 {st.id === "headings" && (isCurrent || isPassed) && slideProgressData?.total_slides > 0 && (
                   <div className="stage-slide-sequential-container">
                     <div className="stage-slide-pills-row">
@@ -167,47 +167,6 @@ export default function DeckGeneratingView({
                           </span>
                         );
                       })}
-                    </div>
-
-                    {/* Sequential Log displaying which slides got generated */}
-                    <div className="sequential-slide-generation-list">
-                      {slideProgressData.slide_status_list && slideProgressData.slide_status_list.length > 0
-                        ? slideProgressData.slide_status_list
-                            .filter((s) => s.status === "complete" || (isCurrent && s.status === "building"))
-                            .map((s) => (
-                              <div key={s.order} className={`sequential-slide-row ${s.status}`}>
-                                <span className="seq-slide-icon">
-                                  {s.status === "complete" ? (
-                                    <CheckCircle2 size={13} className="icon-success" />
-                                  ) : (
-                                    <RotateCw size={13} className="spin-icon icon-active" />
-                                  )}
-                                </span>
-                                <span className="seq-slide-title">
-                                  <strong>Slide {s.order}:</strong> {s.title || (s.status === "building" ? "Synthesizing content..." : `Slide ${s.order}`)}
-                                </span>
-                                {s.category && <span className="seq-slide-cat">{s.category}</span>}
-                                <span className={`seq-slide-status-badge ${s.status}`}>
-                                  {s.status === "complete" ? "Generated" : "Synthesizing"}
-                                </span>
-                              </div>
-                            ))
-                        : (
-                          Array.from({ length: Math.min(slideProgressData.total_slides, (slideProgressData.current_slide || 0)) }, (_, i) => {
-                            const slideNum = i + 1;
-                            return (
-                              <div key={slideNum} className="sequential-slide-row complete">
-                                <span className="seq-slide-icon">
-                                  <CheckCircle2 size={13} className="icon-success" />
-                                </span>
-                                <span className="seq-slide-title">
-                                  <strong>Slide {slideNum}:</strong> {slideNum === slideProgressData.current_slide && slideProgressData.current_slide_title ? slideProgressData.current_slide_title : `Slide ${slideNum}`}
-                                </span>
-                                <span className="seq-slide-status-badge complete">Generated</span>
-                              </div>
-                            );
-                          })
-                        )}
                     </div>
                   </div>
                 )}

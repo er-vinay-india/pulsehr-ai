@@ -238,16 +238,19 @@ export function usePresentationWorkflow({
 
           if (deck) {
             setDeckSpec(deck);
-            setViewMode("studio");
+            setJobProgress(100);
+            setJobStage("ready");
+            setJobStageLabel("Presentation deck verified & ready");
             onJobUpdate({ ...job, deck });
 
-            if (autoDownload) {
-              try {
-                await exportPresentationPptx(deck);
-              } catch (dlErr) {
-                console.warn("Auto-download PowerPoint failed:", dlErr);
+            setTimeout(() => {
+              if (isMounted) {
+                setViewMode("studio");
+                if (autoDownload) {
+                  exportPresentationPptx(deck).catch((dlErr) => console.warn("Auto-download PowerPoint failed:", dlErr));
+                }
               }
-            }
+            }, 800);
             return;
           }
         }
@@ -262,7 +265,7 @@ export function usePresentationWorkflow({
           return;
         }
 
-        pollTimerRef.current = setTimeout(poll, 1500);
+        pollTimerRef.current = setTimeout(poll, 450);
       } catch (err) {
         console.error("Job polling error:", err);
         setJobStageLabel("Connection interrupted. Reconnecting to the generation job…");
