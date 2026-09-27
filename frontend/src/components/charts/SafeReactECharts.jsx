@@ -4,38 +4,60 @@ import { lightPalette, darkPalette, isCurrentThemeDark } from './chartOptions';
 import { useTheme } from '../../context/ThemeContext';
 import '../../styles/minimal-charts.scss';
 
+const LEGACY_COLORS = new Set([
+  '#ff8a62', '#1c1815', '#524940', '#ded5cb', '#fff9f2', '#171412', '#3d362f',
+  '#201b18', '#beb2a6', '#7ee7d9', '#8ef0c8', '#a78bfa', '#ff8ca0',
+  '#22c7f2', '#84cc16'
+]);
+
+function sanitizeColor(c, fallback) {
+  if (!c || typeof c !== 'string') return fallback;
+  const lower = c.trim().toLowerCase();
+  if (LEGACY_COLORS.has(lower)) {
+    return fallback;
+  }
+  return c;
+}
+
 function minimalOptions(option, isDark = false) {
   const activePalette = isDark ? darkPalette : lightPalette;
   const labelColor = isDark ? '#CBD5E1' : '#334155';
+  const headingColor = isDark ? '#F8FAFC' : '#0B1F3A';
   const axisLineColor = isDark ? '#26384D' : '#CBD5E1';
   const splitLineColor = isDark ? 'rgba(248, 250, 252, 0.08)' : 'rgba(11, 31, 58, 0.08)';
   const tooltipBg = isDark ? '#172A40' : '#FFFFFF';
   const tooltipBorder = isDark ? '#26384D' : '#CBD5E1';
   const tooltipText = isDark ? '#F8FAFC' : '#0B1F3A';
-  const baseTextColor = isDark ? '#F8FAFC' : '#0B1F3A';
+  const baseTextColor = isDark ? '#CBD5E1' : '#334155';
 
   const mergeAxis = a => {
     if (!a) return a;
     return {
       ...a,
       axisLabel: {
-        color: labelColor,
-        fontSize: 12,
+        fontSize: 11,
         ...a?.axisLabel,
+        color: sanitizeColor(a?.axisLabel?.color, labelColor),
+      },
+      nameTextStyle: {
+        fontSize: 11,
+        fontWeight: 600,
+        ...a?.nameTextStyle,
+        color: sanitizeColor(a?.nameTextStyle?.color, headingColor),
       },
       axisLine: {
         ...a?.axisLine,
         lineStyle: {
-          color: axisLineColor,
           ...a?.axisLine?.lineStyle,
+          color: sanitizeColor(a?.axisLine?.lineStyle?.color, axisLineColor),
         },
       },
       splitLine: {
         show: a?.type === 'value',
         ...a?.splitLine,
         lineStyle: {
-          color: splitLineColor,
           ...a?.splitLine?.lineStyle,
+          color: sanitizeColor(a?.splitLine?.lineStyle?.color, splitLineColor),
         },
       },
     };
@@ -50,9 +72,93 @@ function minimalOptions(option, isDark = false) {
     legendConfig = {
       pageTextStyle: { color: labelColor },
       ...option.legend,
-      textStyle: { color: labelColor, fontSize: 12, ...option.legend.textStyle },
+      textStyle: {
+        fontSize: 11,
+        fontWeight: 600,
+        ...option.legend.textStyle,
+        color: sanitizeColor(option.legend.textStyle?.color, headingColor),
+      },
     };
   }
+
+  const sanitizedSeries = (option.series || []).map((s, index) => {
+    const fallbackColor = activePalette[index % activePalette.length];
+    const seriesColor = sanitizeColor(s.itemStyle?.color, fallbackColor);
+
+    let sanitizedData = s.data;
+    if (Array.isArray(s.data)) {
+      sanitizedData = s.data.map((d, dIdx) => {
+        if (d && typeof d === 'object' && !Array.isArray(d)) {
+          const itemColor = d.color ? sanitizeColor(d.color, activePalette[dIdx % activePalette.length]) : undefined;
+          const itemStyleColor = d.itemStyle?.color ? sanitizeColor(d.itemStyle.color, activePalette[dIdx % activePalette.length]) : undefined;
+          const itemBorderColor = d.itemStyle?.borderColor ? sanitizeColor(d.itemStyle.borderColor, isDark ? '#0F1B2D' : '#FFFFFF') : undefined;
+          return {
+            ...d,
+            ...(itemColor ? { color: itemColor } : {}),
+            itemStyle: {
+              ...d.itemStyle,
+              ...(itemStyleColor ? { color: itemStyleColor } : {}),
+              ...(itemBorderColor ? { borderColor: itemBorderColor } : {}),
+            },
+          };
+        }
+        return d;
+      });
+    }
+
+    return {
+      smooth: s.smooth ?? false,
+      ...s,
+      itemStyle: {
+        shadowBlur: 0,
+        borderRadius: s.type === 'bar' ? 2 : undefined,
+        ...s.itemStyle,
+        color: seriesColor,
+        borderColor: sanitizeColor(s.itemStyle?.borderColor, isDark ? '#0F1B2D' : '#FFFFFF'),
+      },
+      lineStyle: {
+        width: 2,
+        shadowBlur: 0,
+        ...s.lineStyle,
+        color: sanitizeColor(s.lineStyle?.color, seriesColor),
+      },
+      label: s.label ? {
+        ...s.label,
+        color: sanitizeColor(s.label?.color, isDark ? '#CBD5E1' : '#334155'),
+      } : undefined,
+      areaStyle: s.areaStyle ? {
+        opacity: isDark ? 0.15 : 0.08,
+        color: seriesColor,
+        ...s.areaStyle,
+      } : undefined,
+      emphasis: {
+        scale: false,
+        ...s.emphasis,
+        itemStyle: { shadowBlur: 0, ...s.emphasis?.itemStyle },
+      },
+      data: sanitizedData,
+    };
+  });
+
+  const sanitizedDataZoom = option.dataZoom ? option.dataZoom.map(dz => {
+    if (dz.type === 'slider') {
+      return {
+        ...dz,
+        borderColor: isDark ? '#26384D' : '#CBD5E1',
+        fillerColor: isDark ? 'rgba(94, 234, 212, 0.2)' : 'rgba(0, 90, 107, 0.15)',
+        handleStyle: {
+          color: isDark ? '#5EEAD4' : '#005A6B',
+          ...dz.handleStyle,
+        },
+        textStyle: {
+          color: isDark ? '#CBD5E1' : '#334155',
+          fontSize: 10,
+          ...dz.textStyle,
+        },
+      };
+    }
+    return dz;
+  }) : undefined;
 
   return {
     color: activePalette,
@@ -63,40 +169,23 @@ function minimalOptions(option, isDark = false) {
     ...option,
     tooltip: option.tooltip ? {
       confine: true,
+      borderWidth: 1,
+      ...option.tooltip,
       backgroundColor: tooltipBg,
       borderColor: tooltipBorder,
-      borderWidth: 1,
+      textStyle: {
+        fontSize: 12,
+        fontFamily: 'Figtree, system-ui, sans-serif',
+        ...option.tooltip?.textStyle,
+        color: tooltipText,
+      },
       extraCssText: isDark ? 'box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4); border-radius: 8px;' : 'box-shadow: 0 4px 14px rgba(11, 31, 58, 0.12); border-radius: 8px;',
-      ...option.tooltip,
-      textStyle: { color: tooltipText, fontSize: 13, ...option.tooltip?.textStyle },
     } : undefined,
     ...(legendConfig !== undefined ? { legend: legendConfig } : {}),
     ...(option.xAxis ? { xAxis: axes(option.xAxis) } : {}),
     ...(option.yAxis ? { yAxis: axes(option.yAxis) } : {}),
-    series: (option.series || []).map((s, index) => ({
-      smooth: false,
-      ...s,
-      itemStyle: {
-        shadowBlur: 0,
-        ...(s.type === 'bar' ? { color: activePalette[index % activePalette.length], borderRadius: 2 } : {}),
-        ...s.itemStyle,
-      },
-      lineStyle: {
-        width: 2,
-        shadowBlur: 0,
-        ...s.lineStyle,
-      },
-      areaStyle: s.areaStyle ? {
-        opacity: isDark ? 0.15 : 0.08,
-        color: activePalette[0],
-        ...s.areaStyle,
-      } : undefined,
-      emphasis: {
-        scale: false,
-        ...s.emphasis,
-        itemStyle: { shadowBlur: 0, ...s.emphasis?.itemStyle },
-      },
-    })),
+    ...(sanitizedDataZoom ? { dataZoom: sanitizedDataZoom } : {}),
+    series: sanitizedSeries,
   };
 }
 

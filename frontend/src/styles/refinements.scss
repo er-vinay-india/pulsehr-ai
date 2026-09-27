@@ -8083,8 +8083,8 @@ textarea:focus-visible,
 .adaptive-priority-density-pills {
   display: inline-flex;
   align-items: center;
-  background: #181411;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: var(--hv-bg-page, #F8FAFC);
+  border: 1px solid var(--hv-border-strong, #CBD5E1);
   border-radius: 6px;
   padding: 2px;
   gap: 2px;
@@ -8092,7 +8092,7 @@ textarea:focus-visible,
   .density-pill-btn {
     background: transparent;
     border: none;
-    color: var(--fg-muted, #aa9f95);
+    color: var(--hv-text-secondary, #334155);
     font-size: 0.72rem;
     font-weight: 500;
     padding: 2px 8px;
@@ -8101,15 +8101,16 @@ textarea:focus-visible,
     transition: all 0.15s ease;
 
     &:hover {
-      color: #fff9f2;
-      background: rgba(255, 255, 255, 0.06);
+      color: var(--hv-text-primary, #0B1F3A);
+      background: var(--hv-bg-surface-hover, #F1F5F9);
     }
 
     &.active {
-      background: var(--surface-card-hover);
-      color: var(--brand-400);
+      background: var(--hv-bg-surface, #FFFFFF);
+      color: var(--hv-brand-secondary, #005A6B);
       font-weight: 600;
-      border: 1px solid var(--brand-subtle-border);
+      border: 1px solid var(--hv-border-strong, #CBD5E1);
+      box-shadow: var(--shadow-sm);
     }
   }
 }
@@ -8148,7 +8149,7 @@ textarea:focus-visible,
         font-weight: 600;
         text-transform: uppercase;
         letter-spacing: 0.04em;
-        color: var(--fg-secondary, #ded5cb);
+        color: var(--hv-text-secondary, #334155);
       }
     }
 
@@ -8164,14 +8165,33 @@ textarea:focus-visible,
   .adaptive-priority-seg-control {
     min-height: 28px;
     padding: 2px;
-    background: #14110e;
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: var(--hv-bg-page, #F8FAFC);
+    border: 1px solid var(--hv-border-strong, #CBD5E1);
     border-radius: 6px;
 
     .adaptive-priority-seg-btn {
       padding: 3px 8px;
       font-size: 0.72rem;
       min-height: 22px;
+      background: transparent;
+      border: none;
+      border-radius: 4px;
+      color: var(--hv-text-secondary, #334155);
+      cursor: pointer;
+      transition: all 0.15s ease;
+
+      &:hover {
+        color: var(--hv-text-primary, #0B1F3A);
+        background: var(--hv-bg-surface-hover, #F1F5F9);
+      }
+
+      &--active {
+        background: var(--hv-bg-surface, #FFFFFF);
+        color: var(--hv-brand-secondary, #005A6B);
+        font-weight: 600;
+        border: 1px solid var(--hv-border-strong, #CBD5E1);
+        box-shadow: var(--shadow-sm);
+      }
     }
   }
 

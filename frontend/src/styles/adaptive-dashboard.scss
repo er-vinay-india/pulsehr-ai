@@ -3808,8 +3808,8 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
-    background: var(--surface-card, #1c1815);
-    border: 1px solid var(--border-subtle, #2c2722);
+    background: var(--hv-bg-surface, #FFFFFF);
+    border: 1px solid var(--hv-border, #E2E8F0);
     border-radius: var(--radius-sm, 8px);
     padding: 12px 14px;
     max-height: 280px;
@@ -3824,12 +3824,12 @@
       align-items: center;
       justify-content: space-between;
       padding-bottom: 8px;
-      border-bottom: 1px solid var(--border-subtle, #2c2722);
+      border-bottom: 1px solid var(--hv-border-subtle, #F1F5F9);
       font-size: 11px;
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.04em;
-      color: var(--fg-muted, #8a7e72);
+      color: var(--hv-text-secondary, #334155);
     }
 
     &__col-unit {
@@ -3855,13 +3855,13 @@
       padding-top: 8px;
       max-height: 230px;
       scrollbar-width: thin;
-      scrollbar-color: var(--border-default, #3d362f) transparent;
+      scrollbar-color: var(--hv-border, #CBD5E1) transparent;
 
       &::-webkit-scrollbar {
         width: 4px;
       }
       &::-webkit-scrollbar-thumb {
-        background: var(--border-default, #3d362f);
+        background: var(--hv-border, #CBD5E1);
         border-radius: 2px;
       }
     }
@@ -3877,7 +3877,7 @@
       transition: background 150ms ease;
 
       &:hover {
-        background: rgba(255, 255, 255, 0.04);
+        background: var(--hv-bg-surface-hover, rgba(0, 0, 0, 0.04));
       }
     }
 
@@ -3897,7 +3897,7 @@
     }
 
     &__name {
-      color: var(--fg-primary, #fff9f2);
+      color: var(--hv-text-primary, #0B1F3A);
       font-weight: 500;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -3907,7 +3907,7 @@
     &__val {
       width: 78px;
       text-align: right;
-      color: #fbbb27;
+      color: var(--hv-text-primary, #0B1F3A);
       font-weight: 600;
       font-size: 11px;
       white-space: nowrap;
@@ -3916,12 +3916,12 @@
     &__pct {
       width: 46px;
       text-align: right;
-      color: var(--fg-secondary, #c9bdb0);
+      color: var(--hv-text-secondary, #334155);
       font-size: 11px;
-      background: var(--surface-inset, #100e0c);
+      background: var(--hv-bg-page, #F8FAFC);
       padding: 1px 4px;
       border-radius: 3px;
-      border: 1px solid var(--border-subtle, #2c2722);
+      border: 1px solid var(--hv-border, #E2E8F0);
       white-space: nowrap;
     }
   }

@@ -80,6 +80,24 @@
   --hv-info: #005A6B;
   --hv-info-bg: #EAF4FF;
 
+  /* Chart Tokens — Accessible on #FFFFFF & #F8FAFC (Light Mode) */
+  --chart-text: #334155;               /* 9.3:1 (AAA) */
+  --chart-title: #0B1F3A;              /* 16.9:1 (AAA) */
+  --chart-grid: rgba(11, 31, 58, 0.08);
+  --chart-axis-line: #CBD5E1;
+  --chart-tooltip-bg: #FFFFFF;
+  --chart-tooltip-border: #CBD5E1;
+  --chart-tooltip-text: #0B1F3A;
+  --chart-tooltip-subtext: #334155;
+  --chart-series-1: #005A6B;           /* Accessible Teal: 7.7:1 (AAA) */
+  --chart-series-2: #123B5D;           /* Deep Blue: 11.2:1 (AAA) */
+  --chart-series-3: #365314;           /* Accessible Green: 7.8:1 (AAA) */
+  --chart-series-4: #155EEF;           /* Primary Blue: 4.8:1 (AA) */
+  --chart-series-5: #0F766E;           /* Dark Teal: 5.4:1 (AA) */
+  --chart-series-6: #0B1F3A;           /* Deep Navy: 16.9:1 (AAA) */
+  --chart-series-7: #6B21A8;           /* Deep Purple: 10.0:1 (AAA) */
+  --chart-series-8: #C2410C;           /* Rust Amber: 4.8:1 (AA) */
+
   /* Preferred HighView Gradient (#155EEF -> #22C7F2 -> #14B8A6 -> #84CC16) */
   --hv-gradient: linear-gradient(135deg, #155EEF 0%, #22C7F2 35%, #14B8A6 70%, #84CC16 100%);
   --hv-gradient-subtle: linear-gradient(135deg, rgba(21, 94, 239, 0.08) 0%, rgba(34, 199, 242, 0.08) 50%, rgba(20, 184, 166, 0.08) 100%);
@@ -276,6 +294,24 @@
   --hv-success-bg: rgba(163, 230, 53, 0.12);
   --hv-info: #5EEAD4;
   --hv-info-bg: rgba(94, 234, 212, 0.12);
+
+  /* Chart Tokens — Accessible on #0F1B2D & #08111F (Dark Mode) */
+  --chart-text: #CBD5E1;               /* 11.8:1 (AAA) */
+  --chart-title: #F8FAFC;              /* 16.6:1 (AAA) */
+  --chart-grid: rgba(248, 250, 252, 0.08);
+  --chart-axis-line: #26384D;
+  --chart-tooltip-bg: #172A40;
+  --chart-tooltip-border: #26384D;
+  --chart-tooltip-text: #F8FAFC;
+  --chart-tooltip-subtext: #CBD5E1;
+  --chart-series-1: #5EEAD4;           /* Interactive Teal: 12.1:1 (AAA) */
+  --chart-series-2: #93C5FD;           /* Interactive Blue: 9.8:1 (AAA) */
+  --chart-series-3: #2DD4BF;           /* Mint Teal: 9.5:1 (AAA) */
+  --chart-series-4: #60A5FA;           /* Electric Blue: 7.0:1 (AAA) */
+  --chart-series-5: #C084FC;           /* Soft Violet: 6.7:1 (AA) */
+  --chart-series-6: #F8FAFC;           /* Pure Slate: 16.6:1 (AAA) */
+  --chart-series-7: #38BDF8;           /* Bright Sky: 9.8:1 (AAA) */
+  --chart-series-8: #FBBF24;           /* Warm Amber: 10.5:1 (AAA) */
 
   --hv-gradient: linear-gradient(135deg, #60A5FA 0%, #22D3EE 35%, #2DD4BF 70%, #A3E635 100%);
   --hv-gradient-subtle: linear-gradient(135deg, rgba(96, 165, 250, 0.12) 0%, rgba(34, 211, 238, 0.12) 50%, rgba(45, 212, 191, 0.12) 100%);

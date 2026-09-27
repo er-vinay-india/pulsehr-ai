@@ -18,6 +18,8 @@ import {
   Layers,
 } from "lucide-react";
 import SafeReactECharts from "../charts/SafeReactECharts";
+import { useTheme } from "../../context/ThemeContext";
+import { getChartPalette } from "../charts/chartOptions";
 
 /**
  * Intelligent number formatting with currency, SI prefixes (K, M, B) or standard rounding.
@@ -74,23 +76,14 @@ function buildDonutData(
   title,
   unit = "",
   dimensionName = "",
-  densityMode = "top10"
+  densityMode = "all",
+  isDark = false
 ) {
   if (!baseOption) return null;
   const { categories, values } = getCategoriesAndValues(baseOption, dimensionName);
   if (!categories.length) return null;
 
-  const palette = [
-    "#ff8a62",
-    "#34d399",
-    "#60a5fa",
-    "#fbbb27",
-    "#c084fc",
-    "#38bdf8",
-    "#fb7185",
-    "#a3e635",
-  ];
-
+  const activePalette = getChartPalette(isDark);
   const paired = categories.map((cat, i) => ({
     name: formatCategoryLabel(cat, dimensionName),
     value: values[i] || 0,
@@ -100,6 +93,9 @@ function buildDonutData(
   const totalSum = paired.reduce((sum, p) => sum + (p.value || 0), 0);
   let pieData = [];
 
+  const sliceBorderColor = isDark ? "#0F1B2D" : "#FFFFFF";
+  const otherColor = isDark ? "#475569" : "#64748B";
+
   if (categories.length > 7) {
     const sliceCount = densityMode === "all" ? 8 : 6;
     const topSlices = paired.slice(0, sliceCount);
@@ -108,24 +104,24 @@ function buildDonutData(
     pieData = topSlices.map((p, i) => ({
       name: p.name,
       value: p.value,
-      color: palette[i % palette.length],
-      itemStyle: { color: palette[i % palette.length], borderColor: "#171412", borderWidth: 2 },
+      color: activePalette[i % activePalette.length],
+      itemStyle: { color: activePalette[i % activePalette.length], borderColor: sliceBorderColor, borderWidth: 2 },
     }));
 
     if (otherVal > 0) {
       pieData.push({
         name: `Other (${categories.length - sliceCount} units)`,
         value: otherVal,
-        color: "#524940",
-        itemStyle: { color: "#524940", borderColor: "#171412", borderWidth: 2 },
+        color: otherColor,
+        itemStyle: { color: otherColor, borderColor: sliceBorderColor, borderWidth: 2 },
       });
     }
   } else {
     pieData = paired.map((p, i) => ({
       name: p.name,
       value: p.value,
-      color: palette[i % palette.length],
-      itemStyle: { color: palette[i % palette.length], borderColor: "#171412", borderWidth: 2 },
+      color: activePalette[i % activePalette.length],
+      itemStyle: { color: activePalette[i % activePalette.length], borderColor: sliceBorderColor, borderWidth: 2 },
     }));
   }
 
@@ -135,17 +131,23 @@ function buildDonutData(
     d.formattedVal = formatCompactNumber(d.value, unit);
   });
 
+  const tooltipBg = isDark ? "#172A40" : "#FFFFFF";
+  const tooltipBorder = isDark ? "#26384D" : "#CBD5E1";
+  const tooltipText = isDark ? "#F8FAFC" : "#0B1F3A";
+  const heroTextColor = isDark ? "#F8FAFC" : "#0B1F3A";
+  const subTextColor = isDark ? "#CBD5E1" : "#334155";
+
   const option = {
     backgroundColor: "transparent",
     animation: false,
     tooltip: {
       trigger: "item",
       confine: true,
-      backgroundColor: "#1c1815",
-      borderColor: "#524940",
+      backgroundColor: tooltipBg,
+      borderColor: tooltipBorder,
       borderWidth: 1,
       padding: [8, 12],
-      textStyle: { color: "#fff9f2", fontSize: 12, fontFamily: "system-ui, sans-serif" },
+      textStyle: { color: tooltipText, fontSize: 12, fontFamily: "Figtree, system-ui, sans-serif" },
       formatter: (params) => {
         const valFmt = formatCompactNumber(params.value, unit);
         return `${params.name}: <strong>${valFmt}</strong> (${params.percent}%)`;
@@ -160,7 +162,7 @@ function buildDonutData(
         avoidLabelOverlap: false,
         itemStyle: {
           borderRadius: 4,
-          borderColor: "#171412",
+          borderColor: sliceBorderColor,
           borderWidth: 2,
         },
         label: {
@@ -170,14 +172,14 @@ function buildDonutData(
           rich: {
             sub: {
               fontSize: 11,
-              color: "#ded5cb",
+              color: subTextColor,
               lineHeight: 18,
               fontWeight: 500,
             },
           },
           fontSize: 18,
           fontWeight: 700,
-          color: "#fff9f2",
+          color: heroTextColor,
         },
         emphasis: {
           scale: true,
@@ -194,17 +196,22 @@ function buildDonutData(
 /**
  * Builds a density-bounded ECharts Bar Option for executive display.
  */
-function buildBoundedBarOption(baseOption, densityMode, unit = "", dimensionName = "") {
+function buildBoundedBarOption(baseOption, densityMode, unit = "", dimensionName = "", isDark = false) {
   if (!baseOption) return null;
   const { categories, values, isHoriz } = getCategoriesAndValues(baseOption, dimensionName);
   if (!categories.length) return baseOption;
+
+  const activePalette = getChartPalette(isDark);
+  const textColor = isDark ? "#CBD5E1" : "#334155";
+  const titleColor = isDark ? "#F8FAFC" : "#0B1F3A";
+  const axisLineColor = isDark ? "#26384D" : "#CBD5E1";
+  const splitLineColor = isDark ? "rgba(248, 250, 252, 0.08)" : "rgba(11, 31, 58, 0.08)";
 
   let filteredCats = categories;
   let filteredVals = values;
 
   if (densityMode === "top10" && categories.length > 10) {
     if (isHoriz) {
-      // For horizontal bar (bottom-to-top rendering), the highest values are at the end of the array
       filteredCats = categories.slice(-10);
       filteredVals = values.slice(-10);
     } else {
@@ -237,42 +244,67 @@ function buildBoundedBarOption(baseOption, densityMode, unit = "", dimensionName
       opt.yAxis.name = dimensionName || "Store";
       opt.yAxis.nameLocation = "end";
       opt.yAxis.nameTextStyle = {
-        color: "#ded5cb",
+        color: titleColor,
         fontSize: 11,
         fontWeight: 600,
         padding: [0, 0, 6, 0],
       };
+      opt.yAxis.axisLabel = {
+        ...opt.yAxis.axisLabel,
+        color: textColor,
+      };
+      opt.yAxis.axisLine = { lineStyle: { color: axisLineColor } };
     }
     if (opt.xAxis) {
       opt.xAxis.axisLabel = {
         ...opt.xAxis.axisLabel,
+        color: textColor,
         formatter: (val) => formatCompactNumber(val, unit),
       };
+      opt.xAxis.splitLine = { lineStyle: { color: splitLineColor, type: "dashed" } };
     }
   } else {
     if (opt.xAxis) {
       opt.xAxis.data = filteredCats;
       opt.xAxis.name = dimensionName || "Store";
+      opt.xAxis.nameTextStyle = { color: titleColor, fontSize: 11, fontWeight: 600 };
+      opt.xAxis.axisLabel = { ...opt.xAxis.axisLabel, color: textColor };
+      opt.xAxis.axisLine = { lineStyle: { color: axisLineColor } };
     }
     if (opt.yAxis) {
       opt.yAxis.axisLabel = {
         ...opt.yAxis.axisLabel,
+        color: textColor,
         formatter: (val) => formatCompactNumber(val, unit),
       };
+      opt.yAxis.splitLine = { lineStyle: { color: splitLineColor, type: "dashed" } };
     }
   }
 
   if (opt.series && opt.series[0]) {
     opt.series[0].data = filteredVals;
+    opt.series[0].itemStyle = {
+      ...opt.series[0].itemStyle,
+      color: activePalette[0],
+      borderColor: isDark ? "#0F1B2D" : "#FFFFFF",
+      borderWidth: 1,
+      borderRadius: isHoriz ? [0, 4, 4, 0] : [4, 4, 0, 0],
+    };
     opt.series[0].label = {
       ...opt.series[0].label,
       show: true,
+      color: textColor,
+      fontSize: 10,
       formatter: (params) => formatCompactNumber(params.value, unit),
     };
   }
 
   opt.tooltip = {
     ...opt.tooltip,
+    backgroundColor: isDark ? "#172A40" : "#FFFFFF",
+    borderColor: isDark ? "#26384D" : "#CBD5E1",
+    borderWidth: 1,
+    textStyle: { color: isDark ? "#F8FAFC" : "#0B1F3A", fontSize: 12 },
     formatter: (params) => {
       const item = Array.isArray(params) ? params[0] : params;
       const valFmt = formatCompactNumber(item.value, unit);
@@ -299,10 +331,10 @@ function buildBoundedBarOption(baseOption, densityMode, unit = "", dimensionName
         bottom: !isHoriz ? 4 : undefined,
         width: isHoriz ? 12 : undefined,
         height: !isHoriz ? 12 : undefined,
-        borderColor: "#524940",
-        fillerColor: "rgba(255, 138, 98, 0.25)",
-        handleStyle: { color: "#ff8a62" },
-        textStyle: { color: "#ded5cb", fontSize: 10 },
+        borderColor: isDark ? "#26384D" : "#CBD5E1",
+        fillerColor: isDark ? "rgba(94, 234, 212, 0.2)" : "rgba(0, 90, 107, 0.15)",
+        handleStyle: { color: isDark ? "#5EEAD4" : "#005A6B" },
+        textStyle: { color: textColor, fontSize: 10 },
       },
     ];
   }
@@ -387,6 +419,8 @@ export default function PriorityInsightCard({
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
+  const { isDark } = useTheme();
+
   // Dynamic Donut Data (pure chart option + structured React legend)
   const donutData = useMemo(() => {
     return buildDonutData(
@@ -396,14 +430,15 @@ export default function PriorityInsightCard({
       short_business_title,
       unit,
       effectiveDimension,
-      densityMode
+      densityMode,
+      isDark
     );
-  }, [echarts_option, displayVal, unitSuffix, short_business_title, unit, effectiveDimension, densityMode]);
+  }, [echarts_option, displayVal, unitSuffix, short_business_title, unit, effectiveDimension, densityMode, isDark]);
 
   // Dynamic Bounded Bar Option
   const boundedBarOption = useMemo(() => {
-    return buildBoundedBarOption(echarts_option, densityMode, unit, effectiveDimension);
-  }, [echarts_option, densityMode, unit, effectiveDimension]);
+    return buildBoundedBarOption(echarts_option, densityMode, unit, effectiveDimension, isDark);
+  }, [echarts_option, densityMode, unit, effectiveDimension, isDark]);
 
   // Dynamic Bar Height
   const barChartHeight = useMemo(() => {

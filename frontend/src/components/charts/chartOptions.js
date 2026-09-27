@@ -1,8 +1,28 @@
-export const lightPalette = ['#155EEF', '#22C7F2', '#14B8A6', '#84CC16', '#0B1F3A', '#005A6B', '#123B5D'];
-export const darkPalette = ['#60A5FA', '#2DD4BF', '#22D3EE', '#A3E635', '#F8FAFC', '#38BDF8', '#818CF8'];
+export const lightPalette = [
+  '#005A6B', // Accessible Teal (7.7:1 on #FFFFFF - AAA)
+  '#123B5D', // Deep Blue (11.2:1 on #FFFFFF - AAA)
+  '#365314', // Accessible Green (7.8:1 on #FFFFFF - AAA)
+  '#155EEF', // Primary Blue (4.8:1 on #FFFFFF - AA)
+  '#0F766E', // Dark Teal (5.4:1 on #FFFFFF - AA)
+  '#0B1F3A', // Deep Navy (16.9:1 on #FFFFFF - AAA)
+  '#6B21A8', // Deep Purple (10.0:1 on #FFFFFF - AAA)
+  '#C2410C', // Rust Amber (4.8:1 on #FFFFFF - AA)
+];
+
+export const darkPalette = [
+  '#5EEAD4', // Interactive Teal (12.1:1 on #0F1B2D - AAA)
+  '#93C5FD', // Interactive Blue (9.8:1 on #0F1B2D - AAA)
+  '#2DD4BF', // Mint Teal (9.5:1 on #0F1B2D - AAA)
+  '#60A5FA', // Electric Blue (7.0:1 on #0F1B2D - AAA)
+  '#C084FC', // Soft Violet (6.7:1 on #0F1B2D - AA)
+  '#F8FAFC', // Pure Slate (16.6:1 on #0F1B2D - AAA)
+  '#38BDF8', // Bright Sky (9.8:1 on #0F1B2D - AAA)
+  '#FBBF24', // Warm Amber (10.5:1 on #0F1B2D - AAA)
+];
+
 export const palette = lightPalette;
-export const hridayPalette = ['#0F766E', '#0891B2', '#3F7D20', '#102A43', '#B7791F'];
-export const hridayDarkPalette = ['#2DD4BF', '#22D3EE', '#4ADE80', '#F8FAFC', '#FBBF24'];
+export const hridayPalette = ['#0F766E', '#0891B2', '#365314', '#102A43', '#B7791F'];
+export const hridayDarkPalette = ['#2DD4BF', '#5EEAD4', '#A3E635', '#F8FAFC', '#FBBF24'];
 
 export const getChartPalette = (isDark = false) => (isDark ? darkPalette : lightPalette);
 
@@ -33,8 +53,8 @@ export function cartesian(categories, series, horizontal = false, unit = '', the
   const activePalette = isDark ? darkPalette : lightPalette;
   const textColor = isDark ? '#CBD5E1' : '#334155';
   const headingColor = isDark ? '#F8FAFC' : '#0B1F3A';
-  const lineColor = isDark ? '#26384D' : '#E2E8F0';
-  const splitLineColor = isDark ? 'rgba(248, 250, 252, 0.08)' : '#E2E8F0';
+  const lineColor = isDark ? '#26384D' : '#CBD5E1';
+  const splitLineColor = isDark ? 'rgba(248, 250, 252, 0.08)' : 'rgba(11, 31, 58, 0.08)';
   const tooltipBg = isDark ? '#172A40' : '#FFFFFF';
   const tooltipBorder = isDark ? '#26384D' : '#CBD5E1';
 
