@@ -196,13 +196,13 @@ export default function DeckStudioView({
               type="button"
               className={`symbolic-action-btn btn-present-orb ${isPresenterMode ? "active" : ""}`}
               onClick={() => setIsPresenterMode(!isPresenterMode)}
-              aria-label={isPresenterMode ? "Exit Presenter Mode" : "Present with AI Orb"}
+              aria-label={isPresenterMode ? "Exit Presenter Mode" : "Present with HRIDAY"}
             >
               <Sparkles size={14} />
-              <span className="btn-label-responsive">{isPresenterMode ? "Exit" : "AI Orb"}</span>
+              <span className="btn-label-responsive">{isPresenterMode ? "Exit" : "HRIDAY"}</span>
             </button>
             <span className="symbolic-tooltip">
-              {isPresenterMode ? "Exit Fullscreen Presenter Mode" : "Present with Autonomous Acoustic AI Orb Voiceover"}
+              {isPresenterMode ? "Exit Fullscreen Presenter Mode" : "Present with Autonomous Acoustic HRIDAY Voiceover"}
             </span>
           </div>
 
@@ -379,7 +379,7 @@ export default function DeckStudioView({
             <div className="pres-approval-banner">
               <div className="banner-left">
                 <Sparkles size={14} className="sparkle-anim" />
-                <span>AI Copilot refined this slide. Review the adjustments:</span>
+                <span>HRIDAY refined this slide. Review the adjustments:</span>
               </div>
               <div className="banner-actions">
                 <button type="button" className="btn-approve" onClick={handleAcceptChanges}>
@@ -409,13 +409,13 @@ export default function DeckStudioView({
             onExportHtml={() => exportStandaloneHtmlPresentation(deckSpec, selectedThemeId)}
           />
 
-          {/* COPILOT CURATION PROMPT BAR (Below Active Slide) */}
+          {/* HRIDAY CURATION PROMPT BAR (Below Active Slide) */}
           {!isPresenterMode && (
-            <div className="studio-copilot-bar">
+            <div className="studio-copilot-bar hriday-curation-bar">
               <div className="copilot-bar-top">
-                <div className="copilot-badge">
+                <div className="copilot-badge hriday-badge">
                   <Sparkles size={13} />
-                  <span>AI Copilot Slide Curation:</span>
+                  <span>HRIDAY Slide Curation:</span>
                 </div>
                 <div className="suggestion-pills">
                   {SUGGESTION_PROMPTS.map((sug, i) => (
@@ -443,14 +443,14 @@ export default function DeckStudioView({
                   type="text"
                   value={curatePrompt}
                   onChange={(e) => setCuratePrompt(e.target.value)}
-                  placeholder="Ask AI Copilot to refine this slide (e.g. 'Rephrase for the CFO', 'Make bullet points sharper')..."
+                  placeholder="Ask HRIDAY to refine this slide (e.g. 'Rephrase for the CFO', 'Make bullet points sharper')..."
                   className="copilot-input"
                   disabled={isCurating}
                 />
                 <button
                   type="submit"
                   disabled={isCurating || !curatePrompt.trim()}
-                  className="btn-curate"
+                  className="btn-curate btn-hriday-curate"
                 >
                   {isCurating ? (
                     <>
@@ -460,7 +460,7 @@ export default function DeckStudioView({
                   ) : (
                     <>
                       <Sparkles size={14} />
-                      <span>Refine Slide</span>
+                      <span>Refine with HRIDAY</span>
                     </>
                   )}
                 </button>

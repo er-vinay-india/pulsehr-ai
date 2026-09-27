@@ -2214,45 +2214,114 @@ label { min-width: 0; }
   z-index: 1200;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 18px;
-  background: linear-gradient(135deg, #6366f1 0%, #3b82f6 100%);
+  gap: 10px;
+  padding: 8px 18px 8px 12px;
+  background: linear-gradient(135deg, #b91c1c 0%, #dc2626 50%, #991b1b 100%);
   color: #ffffff;
-  border: none;
+  border: 1px solid rgba(254, 202, 202, 0.35);
   border-radius: 9999px;
-  box-shadow: 0 4px 20px rgba(99, 102, 241, 0.45), 0 2px 6px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 4px 24px rgba(220, 38, 38, 0.55), 0 2px 8px rgba(0, 0, 0, 0.4);
   cursor: pointer;
   font-size: 0.88rem;
   font-weight: 600;
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+
+  &:hover {
+    transform: translateY(-2px) scale(1.02);
+    box-shadow: 0 6px 30px rgba(239, 68, 68, 0.7), 0 4px 14px rgba(0, 0, 0, 0.5);
+    border-color: #fca5a5;
+  }
+
+  &:active {
+    transform: translateY(0) scale(0.98);
+  }
+
+  .hriday-launcher-heart {
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .launcher-text-col {
+    display: flex;
+    flex-direction: column;
+    text-align: left;
+    line-height: 1.15;
+
+    .launcher-label {
+      font-size: 14px;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      color: #fff;
+    }
+
+    .launcher-sub {
+      font-size: 10px;
+      font-weight: 500;
+      color: #fecaca;
+      opacity: 0.9;
+    }
+  }
+
+  .launcher-pulse {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: #ef4444;
+    box-shadow: 0 0 10px #ef4444;
+    animation: heartPulseDot 1.4s infinite;
+  }
 }
 
-.global-copilot-launcher:hover {
-  transform: translateY(-2px) scale(1.02);
-  box-shadow: 0 6px 24px rgba(99, 102, 241, 0.6), 0 4px 12px rgba(0, 0, 0, 0.3);
+@keyframes heartPulseDot {
+  0% { transform: scale(0.9); opacity: 0.8; }
+  15% { transform: scale(1.35); opacity: 1; }
+  30% { transform: scale(1.05); opacity: 0.85; }
+  45% { transform: scale(1.2); opacity: 0.95; }
+  100% { transform: scale(0.9); opacity: 0.8; }
 }
 
-.global-copilot-launcher:active {
-  transform: translateY(0) scale(0.98);
-}
-
-.global-copilot-launcher .launcher-icon {
+.hriday-header-heart-wrap {
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
 }
 
-.global-copilot-launcher .launcher-pulse {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background-color: #34d399;
-  box-shadow: 0 0 8px #34d399;
-  animation: pulseDot 2s infinite;
+.btn-hriday-voice-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: #fca5a5;
+  padding: 3px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+
+  &:hover {
+    background: #ef4444;
+    color: #fff;
+  }
 }
 
-@keyframes pulseDot {
-  0% { transform: scale(0.95); opacity: 0.8; }
-  50% { transform: scale(1.3); opacity: 1; }
-  100% { transform: scale(0.95); opacity: 0.8; }
+.hriday-motto-subtitle {
+  font-size: 10px;
+  color: #a89c8f;
+  line-height: 1.2;
+  margin-top: 2px;
+  max-width: 260px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 @media (max-width: 760px) {
@@ -2356,6 +2425,115 @@ label { min-width: 0; }
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   flex-shrink: 0;
   min-height: 56px;
+}
+
+.hriday-drawer-header {
+  flex-direction: column !important;
+  align-items: stretch !important;
+  gap: 8px !important;
+  min-height: auto !important;
+  padding: 12px 14px !important;
+  background: #171412 !important;
+  border-bottom: 1px solid rgba(220, 38, 38, 0.25) !important;
+
+  .hriday-header-main-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    width: 100%;
+  }
+
+  .copilot-header-brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  .hriday-header-heart-wrap {
+    width: 44px;
+    height: 38px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .copilot-title-group {
+    min-width: 0;
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .copilot-title-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    h3 {
+      font-size: 0.95rem;
+      font-weight: 800;
+      color: #fff;
+      letter-spacing: 0.03em;
+      margin: 0;
+    }
+  }
+
+  .btn-hriday-voice-trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 7px;
+    background: rgba(220, 38, 38, 0.16);
+    border: 1px solid rgba(239, 68, 68, 0.4);
+    border-radius: 9999px;
+    color: #fca5a5;
+    font-size: 0.68rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+
+    &:hover {
+      background: rgba(220, 38, 38, 0.3);
+      color: #fff;
+      border-color: #ef4444;
+    }
+  }
+
+  .hriday-motto-subtitle {
+    font-size: 0.64rem;
+    color: #a8a29e;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.2;
+  }
+
+  .copilot-model-select-row {
+    width: 100%;
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 6px;
+    padding: 4px 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+
+    .model-dropdown-mini {
+      flex: 1;
+      min-width: 0;
+      font-size: 0.72rem;
+      color: #d4c8bd;
+      background: transparent;
+      border: none;
+      outline: none;
+      cursor: pointer;
+    }
+  }
 }
 
 .copilot-header-brand {

@@ -13,11 +13,14 @@ import {
   RefreshCw,
   Square,
   AlertCircle,
-  Clock
+  Clock,
+  Volume2
 } from 'lucide-react';
 import MarkdownView from './MarkdownView';
 import { askCopilot, streamCopilotQuery, getCopilotSuggestions, getAvailableModels } from '../api/client';
 import CopilotTools from './CopilotTools';
+import AnimatedAcousticOrb from './presentation/AnimatedAcousticOrb.jsx';
+import { speakHridayIntro, HRIDAY_ACRONYM, HRIDAY_INTRO_SCRIPT } from '../utils/hridayVoice';
 
 export default function GlobalCopilotWidget({
   isOpen = false,
@@ -32,12 +35,16 @@ export default function GlobalCopilotWidget({
 }) {
   const [panelOpen, setPanelOpen] = useState(isOpen);
   const [minimized, setMinimized] = useState(false);
+  const [hasPlayedIntro, setHasPlayedIntro] = useState(false);
+  const [isVoiceSpeaking, setIsVoiceSpeaking] = useState(false);
+  const stopVoiceRef = useRef(null);
+
   const [messages, setMessages] = useState([
     {
       role: 'assistant',
-      content: 'Hello! Ask me about your **uploaded spreadsheets**, calculations, or cross-sheet relationships.\n\nUse **Calculate from data** for exact totals, or **Create sheet PowerPoint** for presentations.',
+      content: 'Hi, I’m **HRIDAY** — *Human Reasoning Intelligence, Dedicated to Assisting You*.\n\nI’m here to make your work a little easier, help you find clarity when things get complex, and support you whenever you need it.\n\n**Think. Act. Achieve Together.**\n\nAsk me about your **uploaded spreadsheets**, calculations, anomaly detection, or **boardroom presentations**.',
       citations: [],
-      model_used: 'System'
+      model_used: 'HRIDAY'
     }
   ]);
   const [input, setInput] = useState('');
@@ -54,6 +61,27 @@ export default function GlobalCopilotWidget({
   const abortControllerRef = useRef(null);
   const timerIntervalRef = useRef(null);
   const priorContextRef = useRef(null);
+
+  const handleOpen = () => {
+    setPanelOpen(true);
+    setMinimized(false);
+    onToggle?.(true);
+    if (!hasPlayedIntro) {
+      setHasPlayedIntro(true);
+      stopVoiceRef.current = speakHridayIntro(
+        () => setIsVoiceSpeaking(true),
+        () => setIsVoiceSpeaking(false)
+      );
+    }
+  };
+
+  const handleReplayVoiceIntro = () => {
+    if (stopVoiceRef.current) stopVoiceRef.current();
+    stopVoiceRef.current = speakHridayIntro(
+      () => setIsVoiceSpeaking(true),
+      () => setIsVoiceSpeaking(false)
+    );
+  };
 
   // Invalidate prior context on dataset or sheet scope switch
   useEffect(() => {
@@ -153,11 +181,6 @@ export default function GlobalCopilotWidget({
     }, 50);
   };
 
-  const handleOpen = () => {
-    setPanelOpen(true);
-    setMinimized(false);
-    if (onToggle) onToggle(true);
-  };
 
   const handleStopWaiting = () => {
     if (abortControllerRef.current) {
@@ -330,15 +353,20 @@ export default function GlobalCopilotWidget({
         <button
           ref={launcherRef}
           type="button"
-          className="global-copilot-launcher"
+          className="global-copilot-launcher hriday-global-launcher"
           onClick={handleOpen}
-          aria-label="Open AI Analytics Copilot"
-          title="Open AI Copilot (Ask questions about your data)"
+          aria-label="Open HRIDAY AI Assistant"
+          title="Open HRIDAY (Human Reasoning Intelligence, Dedicated to Assisting You)"
           aria-expanded={false}
           aria-controls="copilot-drawer-panel"
         >
-          <BrainCircuit size={22} className="launcher-icon" aria-hidden="true" />
-          <span className="launcher-label">Ask Copilot</span>
+          <div className="hriday-launcher-heart">
+            <AnimatedAcousticOrb compact isPlaying={isVoiceSpeaking} />
+          </div>
+          <div className="launcher-text-col">
+            <span className="launcher-label">HRIDAY</span>
+            <span className="launcher-sub">Human Intelligence</span>
+          </div>
           <span className="launcher-pulse" aria-hidden="true" />
         </button>
       )}
@@ -347,67 +375,84 @@ export default function GlobalCopilotWidget({
       {panelOpen && (
         <aside
           id="copilot-drawer-panel"
-          className={`copilot-drawer-panel ${minimized ? 'minimized' : ''}`}
+          className={`copilot-drawer-panel hriday-drawer-panel ${minimized ? 'minimized' : ''}`}
           role="dialog"
-          aria-label="AI Analytics Copilot"
+          aria-label="HRIDAY AI Intelligence"
           aria-modal={!minimized}
         >
           {/* Header with robust flex-shrink rules preventing close button clipping */}
-          <header className="copilot-drawer-header">
-            <div className="copilot-header-brand">
-              <div className="copilot-icon-wrap" aria-hidden="true">
-                <BrainCircuit size={18} />
+          <header className="copilot-drawer-header hriday-drawer-header">
+            {/* Top row: Brand on left, window controls on right */}
+            <div className="hriday-header-main-row">
+              <div className="copilot-header-brand">
+                <div className="hriday-header-heart-wrap" aria-hidden="true">
+                  <AnimatedAcousticOrb compact isPlaying={isVoiceSpeaking} />
+                </div>
+                <div className="copilot-title-group">
+                  <div className="copilot-title-row">
+                    <h3>HRIDAY</h3>
+                    <button
+                      type="button"
+                      className="btn-hriday-voice-trigger"
+                      onClick={handleReplayVoiceIntro}
+                      title="Play HRIDAY Spoken Voice Introduction"
+                    >
+                      <Volume2 size={12} />
+                      <span>{isVoiceSpeaking ? "Speaking…" : "Voice Intro"}</span>
+                    </button>
+                    {activeSheetName && (
+                      <span className="copilot-context-badge" title={`Context: ${activeSheetName}`}>
+                        <FileSpreadsheet size={11} aria-hidden="true" />
+                        <span className="context-name">{activeSheetName}</span>
+                      </span>
+                    )}
+                  </div>
+                  <div className="hriday-motto-subtitle" title={HRIDAY_ACRONYM}>
+                    Human Reasoning Intelligence, Dedicated to Assisting You
+                  </div>
+                </div>
               </div>
-              <div className="copilot-title-group">
-                <div className="copilot-title-row">
-                  <h3>AI Copilot</h3>
-                  {activeSheetName && (
-                    <span className="copilot-context-badge" title={`Context: ${activeSheetName}`}>
-                      <FileSpreadsheet size={11} aria-hidden="true" />
-                      <span className="context-name">{activeSheetName}</span>
-                    </span>
-                  )}
-                </div>
-                <div className="copilot-model-select-row">
-                  <Cpu size={12} color="var(--fg-secondary, #d4c8bd)" aria-hidden="true" />
-                  <select
-                    value={selectedModel}
-                    onChange={(e) => handleModelChange(e.target.value)}
-                    className="model-dropdown-mini"
-                    aria-label="Active Model"
-                    title={`Model: ${selectedModel}`}
-                  >
-                    {models.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.name}
-                      </option>
-                    ))}
-                    {models.length === 0 && <option value="phi4-mini:latest">Phi-4 Mini (3.8B) · Fast</option>}
-                  </select>
-                </div>
+
+              {/* Header Controls */}
+              <div className="copilot-header-actions">
+                <button
+                  type="button"
+                  className="header-ctrl-btn"
+                  onClick={() => setMinimized(!minimized)}
+                  title={minimized ? 'Expand Copilot' : 'Minimize Copilot'}
+                  aria-label={minimized ? 'Expand Copilot' : 'Minimize Copilot'}
+                >
+                  {minimized ? <Maximize2 size={16} aria-hidden="true" /> : <Minimize2 size={16} aria-hidden="true" />}
+                </button>
+                <button
+                  type="button"
+                  className="header-ctrl-btn close"
+                  onClick={handleClose}
+                  title="Close Copilot (Esc)"
+                  aria-label="Close Copilot (Esc)"
+                >
+                  <X size={18} aria-hidden="true" />
+                </button>
               </div>
             </div>
 
-            {/* Header Controls: Guaranteed flex-shrink: 0 and high-contrast accessible buttons */}
-            <div className="copilot-header-actions">
-              <button
-                type="button"
-                className="header-ctrl-btn"
-                onClick={() => setMinimized(!minimized)}
-                title={minimized ? 'Expand Copilot' : 'Minimize Copilot'}
-                aria-label={minimized ? 'Expand Copilot' : 'Minimize Copilot'}
+            {/* Bottom row: Model selector */}
+            <div className="copilot-model-select-row">
+              <Cpu size={12} color="var(--fg-secondary, #d4c8bd)" aria-hidden="true" />
+              <select
+                value={selectedModel}
+                onChange={(e) => handleModelChange(e.target.value)}
+                className="model-dropdown-mini"
+                aria-label="Active Model"
+                title={`Model: ${selectedModel}`}
               >
-                {minimized ? <Maximize2 size={16} aria-hidden="true" /> : <Minimize2 size={16} aria-hidden="true" />}
-              </button>
-              <button
-                type="button"
-                className="header-ctrl-btn close"
-                onClick={handleClose}
-                title="Close Copilot (Esc)"
-                aria-label="Close Copilot (Esc)"
-              >
-                <X size={18} aria-hidden="true" />
-              </button>
+                {models.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name}
+                  </option>
+                ))}
+                {models.length === 0 && <option value="phi4-mini:latest">Phi-4 Mini (3.8B) · Fast</option>}
+              </select>
             </div>
           </header>
 
@@ -554,7 +599,7 @@ export default function GlobalCopilotWidget({
                 <input
                   type="text"
                   className="copilot-text-input"
-                  placeholder="Ask a question about your sheets…"
+                  placeholder="Ask HRIDAY about your spreadsheets, calculations, or slides…"
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   disabled={loading}

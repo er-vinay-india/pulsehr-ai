@@ -441,13 +441,13 @@ export default function PromptStudioScreen({
                   </>
                 ) : (
                   <>
-                    <span>Build Slides with Copilot Studio</span>
+                    <span>Build Slides with HRIDAY Studio</span>
                     <ArrowRight size={18} />
                   </>
                 )}
               </button>
               <p className="launch-subtext">
-                Slides will be loaded into the 16:9 interactive studio with full Copilot curation, Acoustic AI Orb voiceover, and editable PPTX export.
+                Slides will be loaded into the 16:9 interactive studio with full HRIDAY curation, HRIDAY heart voiceover, and editable PPTX export.
               </p>
             </div>
           </div>

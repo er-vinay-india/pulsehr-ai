@@ -68,7 +68,7 @@ export default function SlideLayoutViews({
                 type="button"
                 className="btn-ai-title-suggest"
                 onClick={() => setShowTitleSuggestions(!showTitleSuggestions)}
-                title="Explore intelligent title suggestions from AI Copilot"
+                title="Explore intelligent title suggestions from HRIDAY"
               >
                 <Sparkles size={15} />
                 <span>AI Title Suggestions</span>
