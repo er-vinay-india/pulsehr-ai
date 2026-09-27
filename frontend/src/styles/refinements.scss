@@ -17,6 +17,57 @@
   --fg-muted: var(--color-text-muted, #94a3b8);
   --fg-primary: var(--color-text-primary, #f8fafc);
   --fg-secondary: var(--color-text-secondary, #cbd5e1);
+
+  .btn-secondary {
+    background: var(--color-bg-subtle, #132238);
+    color: var(--color-text-primary, #F8FAFC);
+    border: 1px solid var(--color-border-strong, #334960);
+
+    &:hover {
+      background: var(--color-bg-elevated, #172A40);
+      border-color: #60A5FA;
+      color: #FFFFFF;
+    }
+  }
+
+  .view-mode-pill-toggle {
+    background: var(--color-bg-page, #08111F);
+    border-color: var(--color-border, #26384D);
+
+    .toggle-btn {
+      color: var(--color-text-secondary, #CBD5E1);
+
+      &:hover {
+        color: #FFFFFF;
+        background: rgba(255, 255, 255, 0.08);
+      }
+
+      &.active {
+        background: #172A40;
+        color: #F8FAFC;
+        border: 1px solid #60A5FA;
+      }
+    }
+  }
+
+  .version-pill-group {
+    background: var(--color-bg-page, #08111F) !important;
+    border-color: var(--color-border, #26384D) !important;
+
+    .version-pill {
+      color: var(--color-text-secondary, #CBD5E1) !important;
+
+      &:hover {
+        color: #FFFFFF !important;
+      }
+
+      &.active {
+        background: #172A40 !important;
+        color: #F8FAFC !important;
+        border: 1px solid #60A5FA !important;
+      }
+    }
+  }
 }
 html { scroll-padding-top: 150px; }
 body { background: var(--hv-bg-page, #f8fafc); color: var(--hv-text-secondary, #334155); }

@@ -255,9 +255,11 @@ export default function DataExplorerPage() {
           </div>
 
           {/* View Mode Toggle */}
-          <div className="view-mode-pill-toggle">
+          <div className="view-mode-pill-toggle" role="tablist" aria-label="Explorer View Modes">
             <button
               type="button"
+              role="tab"
+              aria-selected={viewMode === 'table'}
               className={`toggle-btn ${viewMode === 'table' ? 'active' : ''}`}
               onClick={() => setViewMode('table')}
             >
@@ -265,6 +267,8 @@ export default function DataExplorerPage() {
             </button>
             <button
               type="button"
+              role="tab"
+              aria-selected={viewMode === 'eda'}
               className={`toggle-btn ${viewMode === 'eda' ? 'active' : ''}`}
               onClick={() => setViewMode('eda')}
             >
@@ -294,6 +298,7 @@ export default function DataExplorerPage() {
             <select
               value={selected}
               disabled={!!selectedDerivedId}
+              aria-label="Select spreadsheet sheet"
               onChange={(e) => {
                 setSelected(e.target.value);
                 setSelectedDerivedId('');
@@ -338,6 +343,7 @@ export default function DataExplorerPage() {
               <GitMerge size={14} color="#ffb089" style={{ flexShrink: 0 }} />
               <select
                 value={selectedDerivedId}
+                aria-label="Select derived table or relational join"
                 onChange={(e) => {
                   setSelectedDerivedId(e.target.value);
                   setRelation('');
@@ -368,6 +374,8 @@ export default function DataExplorerPage() {
             <>
               <div
                 className="version-pill-group"
+                role="radiogroup"
+                aria-label="Table Data Version"
                 style={{
                   display: 'inline-flex',
                   background: 'var(--hv-bg-inset, #F1F5F9)',
@@ -379,6 +387,8 @@ export default function DataExplorerPage() {
               >
                 <button
                   type="button"
+                  role="radio"
+                  aria-checked={dataVersion === 'curated'}
                   className={`version-pill ${dataVersion === 'curated' ? 'active' : ''}`}
                   onClick={() => {
                     setDataVersion('curated');
@@ -389,8 +399,6 @@ export default function DataExplorerPage() {
                     fontSize: '0.78rem',
                     border: 'none',
                     borderRadius: '5px',
-                    background: dataVersion === 'curated' ? 'var(--hv-brand-primary, #0B1F3A)' : 'transparent',
-                    color: dataVersion === 'curated' ? '#FFFFFF' : 'var(--hv-text-secondary, #334155)',
                     fontWeight: 600,
                     cursor: 'pointer'
                   }}
@@ -399,6 +407,8 @@ export default function DataExplorerPage() {
                 </button>
                 <button
                   type="button"
+                  role="radio"
+                  aria-checked={dataVersion === 'raw'}
                   className={`version-pill ${dataVersion === 'raw' ? 'active' : ''}`}
                   onClick={() => {
                     setDataVersion('raw');
@@ -409,8 +419,6 @@ export default function DataExplorerPage() {
                     fontSize: '0.78rem',
                     border: 'none',
                     borderRadius: '5px',
-                    background: dataVersion === 'raw' ? 'var(--hv-brand-primary, #0B1F3A)' : 'transparent',
-                    color: dataVersion === 'raw' ? '#FFFFFF' : 'var(--hv-text-secondary, #334155)',
                     fontWeight: 600,
                     cursor: 'pointer'
                   }}

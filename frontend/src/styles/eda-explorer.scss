@@ -60,7 +60,8 @@
           text-transform: uppercase;
           letter-spacing: 0.05em;
           margin-top: -2px;
-          opacity: 0.85;
+          opacity: 1;
+          font-weight: 700;
         }
       }
 
@@ -166,10 +167,11 @@
     h4 {
       margin: 0 0 0.6rem 0;
       font-size: 0.95rem;
-      color: var(--hv-brand-secondary, #005A6B);
+      color: #005A6B;
       display: flex;
       align-items: center;
       gap: 0.5rem;
+      font-weight: 700;
     }
 
     ul {
@@ -178,13 +180,48 @@
 
       li {
         font-size: 0.85rem;
-        color: var(--hv-text-secondary, #334155);
+        color: #0B1F3A;
         line-height: 1.5;
         margin-bottom: 0.3rem;
 
         &:last-child {
           margin-bottom: 0;
         }
+      }
+    }
+  }
+
+  .eda-subtabs-bar {
+    display: flex;
+    gap: 0.5rem;
+    border-bottom: 1px solid var(--hv-border, #E2E8F0);
+    padding-bottom: 0.75rem;
+    flex-wrap: wrap;
+
+    .toggle-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 12px;
+      border-radius: 6px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--hv-text-secondary, #334155);
+      background: transparent;
+      border: 1px solid transparent;
+      cursor: pointer;
+      transition: all 0.15s ease;
+
+      &:hover {
+        color: var(--hv-text-primary, #0B1F3A);
+        background: var(--hv-bg-surface-hover, #F1F5F9);
+      }
+
+      &.active {
+        background: #EAF4FF;
+        color: #005A6B;
+        border: 1px solid #BAE6FD;
+        box-shadow: var(--shadow-sm);
       }
     }
   }
@@ -322,10 +359,10 @@
 
       .corr-narrative {
         font-size: 0.83rem;
-        color: var(--hv-text-secondary, #334155);
+        color: var(--hv-text-primary, #0B1F3A);
         line-height: 1.45;
         background: #FFFFFF;
-        border: 1px solid var(--hv-border-subtle, #F1F5F9);
+        border: 1px solid var(--hv-border, #E2E8F0);
         padding: 0.5rem 0.7rem;
         border-radius: 6px;
       }
@@ -435,6 +472,267 @@
       border-radius: 4px;
       font-size: 0.8rem;
       outline: none;
+    }
+  }
+}
+
+/* ==========================================================================
+   EDA Dashboard — DARK THEME PARITY & WCAG AAA ACCESSIBILITY
+   ========================================================================== */
+[data-theme="dark"] {
+  .eda-dashboard {
+    color: var(--color-text-primary, #F8FAFC);
+
+    .eda-hero-card {
+      background: var(--color-bg-surface, #0F1B2D);
+      border-color: var(--color-border, #26384D);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+
+      .eda-score-box {
+        .score-circle {
+          span.score-label {
+            opacity: 1;
+            font-weight: 700;
+          }
+
+          &.score-excellent {
+            background: rgba(34, 197, 94, 0.16);
+            border-color: #4ADE80;
+            color: #4ADE80;
+            span.score-label { color: #86EFAC; }
+          }
+
+          &.score-good {
+            background: rgba(96, 165, 250, 0.16);
+            border-color: #60A5FA;
+            color: #60A5FA;
+            span.score-label { color: #BFDBFE; }
+          }
+
+          &.score-attention {
+            background: rgba(239, 68, 68, 0.16);
+            border-color: #F87171;
+            color: #F87171;
+            span.score-label { color: #FECACA; }
+          }
+        }
+
+        .score-text {
+          h3 {
+            color: var(--color-text-primary, #F8FAFC);
+          }
+
+          p {
+            color: var(--color-text-secondary, #CBD5E1);
+          }
+
+          .status-badge {
+            &.status-excellent {
+              background: rgba(34, 197, 94, 0.16);
+              color: #4ADE80;
+              border: 1px solid rgba(74, 222, 128, 0.35);
+            }
+
+            &.status-good {
+              background: rgba(96, 165, 250, 0.16);
+              color: #60A5FA;
+              border: 1px solid rgba(96, 165, 250, 0.35);
+            }
+
+            &.status-attention {
+              background: rgba(239, 68, 68, 0.16);
+              color: #F87171;
+              border: 1px solid rgba(248, 113, 113, 0.35);
+            }
+          }
+        }
+      }
+
+      .eda-summary-chips {
+        .summary-chip {
+          background: var(--color-bg-subtle, #132238);
+          border-color: var(--color-border, #26384D);
+
+          .chip-label {
+            color: var(--color-text-secondary, #CBD5E1);
+          }
+
+          .chip-val {
+            color: var(--color-text-primary, #F8FAFC);
+
+            &.val-accent {
+              color: #60A5FA;
+            }
+
+            &.val-warning {
+              color: #F87171;
+            }
+          }
+        }
+      }
+
+      .btn-rerun-eda {
+        background: #005A6B;
+        border-color: #BAE6FD;
+        color: #FFFFFF;
+
+        &:hover {
+          background: #007A91;
+          border-color: #60A5FA;
+          color: #FFFFFF;
+        }
+      }
+    }
+
+    .eda-recs-card {
+      background: rgba(45, 212, 191, 0.1);
+      border-color: rgba(45, 212, 191, 0.3);
+
+      h4 {
+        color: #5EEAD4;
+      }
+
+      ul li {
+        color: var(--color-text-primary, #F8FAFC);
+      }
+    }
+
+    .eda-subtabs-bar {
+      border-bottom-color: var(--color-border, #26384D);
+
+      .toggle-btn {
+        color: var(--color-text-secondary, #CBD5E1);
+
+        &:hover {
+          color: #FFFFFF;
+          background: var(--color-bg-subtle, #132238);
+        }
+
+        &.active {
+          background: var(--color-bg-subtle, #132238);
+          color: #60A5FA;
+          border: 1px solid #334960;
+        }
+      }
+    }
+
+    .eda-section-card {
+      background: var(--color-bg-surface, #0F1B2D);
+      border-color: var(--color-border, #26384D);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+
+      .section-header {
+        h3 {
+          color: var(--color-text-primary, #F8FAFC);
+        }
+
+        p {
+          color: var(--color-text-secondary, #CBD5E1);
+        }
+      }
+    }
+
+    .eda-links-grid .link-tile {
+      background: var(--color-bg-subtle, #132238);
+      border-color: var(--color-border, #26384D);
+
+      .link-title {
+        color: var(--color-text-primary, #F8FAFC);
+      }
+
+      .link-meta {
+        .badge-pill {
+          background: rgba(96, 165, 250, 0.16);
+          color: #60A5FA;
+        }
+
+        .badge-cardinality {
+          background: rgba(148, 163, 184, 0.15);
+          color: var(--color-text-secondary, #CBD5E1);
+        }
+      }
+    }
+
+    .eda-correlations-grid .correlation-tile {
+      background: var(--color-bg-subtle, #132238);
+      border-color: var(--color-border, #26384D);
+
+      &:hover {
+        border-color: #60A5FA;
+      }
+
+      .corr-top-row .corr-metrics {
+        color: var(--color-text-primary, #F8FAFC);
+      }
+
+      .corr-sheets-label {
+        color: var(--color-text-secondary, #CBD5E1);
+      }
+
+      .corr-narrative {
+        background: var(--color-bg-page, #08111F);
+        border-color: var(--color-border, #26384D);
+        color: var(--color-text-primary, #F8FAFC);
+      }
+    }
+
+    .eda-table-container {
+      border-color: var(--color-border, #26384D);
+
+      table.eda-data-grid {
+        th {
+          background: var(--color-bg-subtle, #132238);
+          color: var(--color-text-secondary, #CBD5E1);
+          border-bottom-color: var(--color-border, #26384D);
+        }
+
+        td {
+          border-bottom-color: rgba(38, 56, 77, 0.4);
+          color: var(--color-text-primary, #F8FAFC);
+
+          &.type-cell {
+            color: #60A5FA;
+          }
+        }
+
+        tr:hover td {
+          background: var(--color-bg-subtle, #132238);
+        }
+      }
+    }
+  }
+
+  .table-version-toggle-bar {
+    background: var(--color-bg-surface, #0F1B2D);
+    border-color: var(--color-border, #26384D);
+
+    .version-pills {
+      background: var(--color-bg-page, #08111F);
+      border-color: var(--color-border, #26384D);
+
+      button.version-pill {
+        color: var(--color-text-secondary, #CBD5E1);
+
+        &:hover {
+          color: #FFFFFF;
+        }
+
+        &.active {
+          background: #172A40;
+          color: #F8FAFC;
+          border: 1px solid #60A5FA;
+        }
+      }
+    }
+
+    .derived-views-picker {
+      color: var(--color-text-secondary, #CBD5E1);
+
+      select {
+        background: var(--color-bg-subtle, #132238);
+        border-color: var(--color-border, #26384D);
+        color: var(--color-text-primary, #F8FAFC);
+      }
     }
   }
 }

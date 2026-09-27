@@ -484,7 +484,7 @@ export default function VisualEdaDashboard({
             <span className="score-label">Health</span>
           </div>
           <div className="score-text">
-            <h3>{edaReport.sheet_name}</h3>
+            <h2>{edaReport.sheet_name}</h2>
             <p>Tabular data hygiene score computed across missingness, IQR anomalies, and type coercions.</p>
             <span
               className={`status-badge ${
@@ -535,10 +535,10 @@ export default function VisualEdaDashboard({
       {/* 2. Plain-Language Recommendations & Domain Points */}
       {edaReport.recommendations && edaReport.recommendations.length > 0 && (
         <div className="eda-recs-card">
-          <h4>
+          <h3>
             <Sparkles size={16} />
             HR Executive Analytical Insights & Next Steps
-          </h4>
+          </h3>
           <ul>
             {edaReport.recommendations.map((rec, idx) => (
               <li key={idx}>{rec}</li>
@@ -635,7 +635,7 @@ export default function VisualEdaDashboard({
 
             {correlationMatrix.pairs?.length > 0 && (
               <div style={{ marginTop: '1.25rem' }}>
-                <h4 style={{ color: '#c9bdb0', fontSize: '0.85rem', marginBottom: '0.6rem' }}>
+                <h4 style={{ color: 'var(--color-text-secondary, #334155)', fontSize: '0.85rem', marginBottom: '0.6rem' }}>
                   Top Ranked Metric Associations ($p &lt; 0.05$)
                 </h4>
                 <div className="eda-correlations-grid">
@@ -682,8 +682,10 @@ export default function VisualEdaDashboard({
 
               {availableMetrics.length > 0 && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <label style={{ fontSize: '0.8rem', color: 'var(--fg-secondary)' }}>Select Metric:</label>
+                  <label htmlFor="eda-metric-select" style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary, #334155)', fontWeight: 600 }}>Select Metric:</label>
                   <select
+                    id="eda-metric-select"
+                    aria-label="Select metric for distribution analysis"
                     value={currentMetric}
                     onChange={(e) => setSelectedMetric(e.target.value)}
                     style={{
@@ -781,7 +783,7 @@ export default function VisualEdaDashboard({
               {/* Temporal Correlations Grid */}
               {temporalAnalysis.temporal_correlations?.length > 0 && (
                 <div style={{ marginTop: '1.25rem' }}>
-                  <h4 style={{ color: '#c9bdb0', fontSize: '0.85rem', marginBottom: '0.6rem' }}>
+                  <h4 style={{ color: 'var(--color-text-secondary, #334155)', fontSize: '0.85rem', marginBottom: '0.6rem' }}>
                     Week-over-Week Leave Persistence ($p &lt; 0.05$)
                   </h4>
                   <div className="eda-correlations-grid">
@@ -829,8 +831,10 @@ export default function VisualEdaDashboard({
 
               {predictiveModeling.linear_models?.length > 1 && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <label style={{ fontSize: '0.8rem', color: 'var(--fg-secondary)' }}>Select Model:</label>
+                  <label htmlFor="eda-linear-model-select" style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary, #334155)', fontWeight: 600 }}>Select Model:</label>
                   <select
+                    id="eda-linear-model-select"
+                    aria-label="Select linear regression model"
                     value={selectedLinearIndex}
                     onChange={(e) => setSelectedLinearIndex(Number(e.target.value))}
                     style={{
@@ -948,14 +952,14 @@ export default function VisualEdaDashboard({
                 {/* Sigmoid Curve + Confusion Matrix Grid */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem', alignItems: 'center' }}>
                   <div>
-                    <h4 style={{ color: '#c9bdb0', fontSize: '0.85rem', marginBottom: '0.5rem' }}>
+                    <h4 style={{ color: 'var(--color-text-secondary, #334155)', fontSize: '0.85rem', marginBottom: '0.5rem' }}>
                       Probability Sigmoid Curve (P(Risk = 1 | X))
                     </h4>
                     <ReactECharts option={logisticChartOption} style={{ height: '260px', width: '100%' }} />
                   </div>
 
                   <div>
-                    <h4 style={{ color: '#c9bdb0', fontSize: '0.85rem', marginBottom: '0.5rem' }}>
+                    <h4 style={{ color: 'var(--color-text-secondary, #334155)', fontSize: '0.85rem', marginBottom: '0.5rem' }}>
                       2×2 Model Confusion Matrix
                     </h4>
                     <div
@@ -1036,7 +1040,7 @@ export default function VisualEdaDashboard({
           {/* Entity Links */}
           {edaReport.cross_sheet_intelligence?.entity_links?.length > 0 ? (
             <>
-              <h4 style={{ color: '#c9bdb0', fontSize: '0.85rem', marginBottom: '0.6rem' }}>
+              <h4 style={{ color: 'var(--color-text-secondary, #334155)', fontSize: '0.85rem', marginBottom: '0.6rem' }}>
                 Discovered Entity Linkages
               </h4>
               <div className="eda-links-grid">
@@ -1059,7 +1063,7 @@ export default function VisualEdaDashboard({
               </div>
             </>
           ) : (
-            <p style={{ color: '#a89f94', fontSize: '0.85rem' }}>
+            <p style={{ color: 'var(--color-text-secondary, #334155)', fontSize: '0.85rem' }}>
               No cross-sheet links detected for this sheet yet.
             </p>
           )}
@@ -1067,7 +1071,7 @@ export default function VisualEdaDashboard({
           {/* Cross-Sheet Correlations */}
           {edaReport.cross_sheet_intelligence?.correlations?.length > 0 && (
             <>
-              <h4 style={{ color: '#c9bdb0', fontSize: '0.85rem', marginBottom: '0.6rem', marginTop: '1.25rem' }}>
+              <h4 style={{ color: 'var(--color-text-secondary, #334155)', fontSize: '0.85rem', marginBottom: '0.6rem', marginTop: '1.25rem' }}>
                 Cross-Sheet Statistical Correlations ($p &lt; 0.05$)
               </h4>
               <div className="eda-correlations-grid">

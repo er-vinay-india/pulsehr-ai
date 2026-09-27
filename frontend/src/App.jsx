@@ -10,9 +10,10 @@ import UploadModal from "./components/ingestion/UploadModal.jsx";
 import { CheckCircle2, X, Table } from "lucide-react";
 
 function parseHash() {
-  const hash = window.location.hash.replace("#", "").trim();
+  const hash = window.location.hash.replace(/^#\/?/, "").trim();
   const valid = ["adaptive", "explorer", "presentation"];
   if (valid.includes(hash)) return hash;
+  if (hash === "data" || hash === "dataset" || hash === "sheets" || hash === "tables") return "explorer";
   if (hash === "presentations") return "presentation";
   if (hash === "ingestion" || hash === "upload") return "explorer";
   if (hash === "report" || hash === "overview" || hash === "reference") {
@@ -47,7 +48,7 @@ export default function App() {
 
   useEffect(() => {
     const handleHashChange = () => {
-      const h = window.location.hash.replace("#", "").trim();
+      const h = window.location.hash.replace(/^#\/?/, "").trim();
       if (h === "copilot") {
         setCopilotOpen(true);
         setActiveTab("adaptive");
