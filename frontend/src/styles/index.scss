@@ -19,8 +19,11 @@
   padding: 0.75rem 1.5rem;
 
   .header-inner {
-    max-width: 1440px;
+    max-width: var(--content-max-width, 1140px);
+    width: 100%;
     margin: 0 auto;
+    padding: 0 var(--content-padding-x, 20px);
+    box-sizing: border-box;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -159,21 +162,25 @@
 
 .app-main {
   flex: 1;
-  max-width: 1440px;
+  max-width: var(--content-max-width, 1140px);
   width: 100%;
   margin: 0 auto;
-  padding: 1.75rem 1.5rem 4rem;
+  padding: 1.75rem var(--content-padding-x, 20px) 4rem;
+  box-sizing: border-box;
 }
 
 .app-footer {
   border-top: 1px solid var(--border);
   background: var(--surface-footer);
-  padding: 1.5rem;
+  padding: 1.5rem 0;
   margin-top: auto;
 
   .footer-inner {
-    max-width: 1440px;
+    max-width: var(--content-max-width, 1140px);
+    width: 100%;
     margin: 0 auto;
+    padding: 0 var(--content-padding-x, 20px);
+    box-sizing: border-box;
     display: flex;
     align-items: center;
     justify-content: space-between;

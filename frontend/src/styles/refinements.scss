@@ -9,7 +9,7 @@
 html { scroll-padding-top: 150px; }
 body { background: #100e0c; }
 .app { background: radial-gradient(ellipse at 80% 0, #251b15 0, transparent 44%), #100e0c; }
-.app-main { max-width: 1480px; padding: 32px clamp(16px, 3vw, 48px) 64px; }
+.app-main { max-width: var(--content-max-width, 1140px); margin: 0 auto; padding: 32px var(--content-padding-x, 20px) 64px; box-sizing: border-box; }
 .app-main > *, .card-panel, .visual-card, .chart-box, .message-content, .dataset-details { min-width: 0; }
 h2, h3, h4 { letter-spacing: -.025em; text-wrap: balance; }
 h2 { font-size: clamp(1.5rem, 2.6vw, 2.15rem); line-height: 1.2; }
@@ -25,9 +25,18 @@ button svg { flex-shrink: 0; }
 .skip-link:focus { top: 12px; }
 .nav-label-short { display: none; }
 .app-header {
-  padding: 18px clamp(16px, 3vw, 48px) 0;
+  padding: 18px 0 0;
   background: rgba(11, 17, 28, .96); backdrop-filter: blur(18px); box-shadow: 0 1px 0 rgba(255, 255, 255, 0.08);
-  .header-inner { display: grid; grid-template-columns: 1fr auto; gap: 18px; max-width: 1384px; }
+  .header-inner {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 18px;
+    max-width: var(--content-max-width, 1140px);
+    width: 100%;
+    margin: 0 auto;
+    padding: 0 var(--content-padding-x, 20px);
+    box-sizing: border-box;
+  }
   .brand-group {
     display: flex;
     align-items: center;
@@ -147,8 +156,17 @@ label { min-width: 0; }
 .dataset-card > button { flex-shrink: 0; width: 44px; height: 44px; }
 .upload-dropzone { border-radius: 18px; }
 .upload-dropzone:focus-within { outline: 2px solid var(--accent-500); outline-offset: 4px; }
-.alert-box, .error-banner { overflow-wrap: anywhere; }
-.app-footer { background: transparent; padding: 24px clamp(16px, 3vw, 48px); }
+.app-footer {
+  background: transparent;
+  padding: 24px 0;
+  .footer-inner {
+    max-width: var(--content-max-width, 1140px);
+    width: 100%;
+    margin: 0 auto;
+    padding: 0 var(--content-padding-x, 20px);
+    box-sizing: border-box;
+  }
+}
 .app-footer .footer-badge { background: transparent; border-color: var(--border); color: var(--fg-secondary); }
 
 @media (max-width: 1100px) {
@@ -6989,7 +7007,8 @@ textarea:focus-visible,
 /* 6. Breakpoint: 1025px - 1439px (Laptops & Desktops) */
 @media screen and (min-width: 1025px) and (max-width: 1439px) {
   .app-main {
-    padding: 28px clamp(16px, 3vw, 48px);
+    max-width: var(--content-max-width, 1140px);
+    padding: 28px var(--content-padding-x, 20px) 64px;
   }
 
   .kpi-grid {
@@ -6997,7 +7016,7 @@ textarea:focus-visible,
   }
 
   .presentation-modal-shell {
-    max-width: 1280px;
+    max-width: 100%;
     height: 92vh;
   }
 }
@@ -7005,26 +7024,28 @@ textarea:focus-visible,
 /* 7. Breakpoint: >= 1440px (Widescreen Desktops) */
 @media screen and (min-width: 1440px) {
   .app-main {
-    max-width: 1480px;
+    max-width: var(--content-max-width, 1140px);
     margin-left: auto;
     margin-right: auto;
-    padding: 32px clamp(16px, 3vw, 48px) 64px;
+    padding: 32px var(--content-padding-x, 20px) 64px;
   }
 
   .header-inner {
-    max-width: 1384px;
+    max-width: var(--content-max-width, 1140px);
     margin-left: auto;
     margin-right: auto;
+    padding: 0 var(--content-padding-x, 20px);
   }
 
   .footer-inner {
-    max-width: 1384px;
+    max-width: var(--content-max-width, 1140px);
     margin-left: auto;
     margin-right: auto;
+    padding: 0 var(--content-padding-x, 20px);
   }
 
   .presentation-modal-shell.mode-studio {
-    max-width: 1440px;
+    max-width: 100%;
     height: 94vh;
   }
 
