@@ -633,9 +633,21 @@ def build_forward_outlook_element(
             )
         )
 
-    # Next period label
+    # Next period label & natural grammatical phrasing
     last_pt = usable_points[-1]
-    next_period_label = f"Next {grain.title()}"
+    grain_lower = grain.lower() if grain else "period"
+    period_phrase = (
+        "the next week" if grain_lower == "weekly"
+        else ("the next month" if grain_lower == "monthly"
+        else ("the next day" if grain_lower == "daily"
+        else f"the next {grain_lower} period"))
+    )
+    next_period_label = (
+        "Next Week" if grain_lower == "weekly"
+        else ("Next Month" if grain_lower == "monthly"
+        else ("Next Day" if grain_lower == "daily"
+        else f"Next {grain.title()}"))
+    )
     next_period_key = f"{last_pt.period}+1"
 
     points.append(
@@ -656,7 +668,7 @@ def build_forward_outlook_element(
     range_phrase = f"{formatted_lower}–{formatted_upper}"
 
     why = (
-        f"The selected model ({val_result.model_label}) estimates {formatted_forecast} for {next_period_label.lower()}, "
+        f"The selected model ({val_result.model_label}) estimates {formatted_forecast} for {period_phrase}, "
         f"with an empirical forecast range of {range_phrase} based on {val_result.fold_count} rolling-origin validation folds."
     )
     if clamp_note:

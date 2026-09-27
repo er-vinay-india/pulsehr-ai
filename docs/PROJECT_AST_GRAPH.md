@@ -1,6 +1,6 @@
 # PulseHR-AI Architectural AST Graph & Structural Code Map
 
-> **Generated**: 2026-09-27T09:18:25.413Z  
+> **Generated**: 2026-09-27T09:29:08.140Z  
 > **Total Parsed Codebase**: **Backend (170 modules)** | **Frontend (83 modules)**  
 > **Total Endpoints**: 65 | **Backend Classes**: 174 | **Backend Functions**: 361 | **React Components**: 70  
 > **Evaluation Standard**: Verified AST Syntax Tree Mapping with Direct File Links

@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { Info, ShieldCheck, Target, TrendingUp, AlertCircle, Table } from "lucide-react";
 import SafeReactECharts from "../charts/SafeReactECharts";
+import { useTheme } from "../../context/ThemeContext";
 
 /**
  * Intelligent compact number formatter for metrics, ticks, tooltips, and data tables.
@@ -34,6 +35,7 @@ export default function ForwardOutlookCard({
   onInspect,
 }) {
   const [showAccessibleTable, setShowAccessibleTable] = useState(false);
+  const { isDark } = useTheme();
 
   if (!outlook) {
     return null;
@@ -61,14 +63,27 @@ export default function ForwardOutlookCard({
     caption,
   } = outlook;
 
+  // Accessible theme-aware foreground/background colors
+  const actualLineColor = isDark ? "#38BDF8" : "#005A6B"; // Teal on light (7.4:1 AAA), Cyan on dark (6.8:1)
+  const actualAreaStart = isDark ? "rgba(56, 189, 248, 0.2)" : "rgba(0, 90, 107, 0.14)";
+  const forecastLineColor = isDark ? "#FBBF24" : "#B45309"; // Amber on light (5.5:1 AA), Gold on dark (7.2:1)
+  const forecastRangeArea = isDark ? "rgba(251, 191, 36, 0.22)" : "rgba(180, 83, 9, 0.16)";
+
+  const labelColor = isDark ? "#CBD5E1" : "#334155";
+  const headingColor = isDark ? "#F8FAFC" : "#0B1F3A";
+  const axisLineColor = isDark ? "#26384D" : "#CBD5E1";
+  const splitLineColor = isDark ? "rgba(248, 250, 252, 0.08)" : "rgba(11, 31, 58, 0.08)";
+  const tooltipBg = isDark ? "#172A40" : "#FFFFFF";
+  const tooltipBorder = isDark ? "#26384D" : "#CBD5E1";
+  const tooltipText = isDark ? "#F8FAFC" : "#0B1F3A";
+
   // Build ECharts option for statistical forecast
   const chartOption = useMemo(() => {
     if (kind !== "statistical_forecast" || !points || points.length === 0) {
       return {};
     }
 
-    // For visual clarity and preventing 140+ overlapping label collisions, window chart to recent 16 periods + forecast.
-    // The complete historical series is preserved in the underlying dataset and full data table below.
+    // For visual clarity and preventing label collisions, window chart to recent 16 periods + forecast.
     const displayPoints = points.length > 20 ? points.slice(-16) : points;
     const periods = displayPoints.map((p) => p.period_label || p.period);
     
@@ -100,26 +115,27 @@ export default function ForwardOutlookCard({
       backgroundColor: "transparent",
       tooltip: {
         trigger: "axis",
-        backgroundColor: "#1c1815",
-        borderColor: "#524940",
-        textStyle: { color: "#fff9f2", fontSize: 12 },
+        backgroundColor: tooltipBg,
+        borderColor: tooltipBorder,
+        textStyle: { color: tooltipText, fontSize: 12 },
+        extraCssText: "box-shadow: 0 4px 14px rgba(11, 31, 58, 0.12); border-radius: 6px;",
         formatter: (params) => {
           if (!params || params.length === 0) return "";
           const pIdx = params[0].dataIndex;
           const pt = displayPoints[pIdx];
           if (!pt) return "";
           const isForecast = pt.forecast_value != null;
-          let html = `<div style="font-weight:600;margin-bottom:4px;color:#fff9f2;">${pt.period_label || pt.period}</div>`;
+          let html = `<div style="font-weight:700;margin-bottom:4px;color:${headingColor};">${pt.period_label || pt.period}</div>`;
           if (isForecast) {
-            html += `<div style="color:#fbbb27;">Forecast: <strong>${formatCompactNumber(pt.forecast_value, unit)}</strong></div>`;
+            html += `<div style="color:${forecastLineColor};">Forecast: <strong>${formatCompactNumber(pt.forecast_value, unit)}</strong></div>`;
             if (pt.lower_bound != null && pt.upper_bound != null) {
-              html += `<div style="color:#ded5cb;font-size:11px;">Empirical range: ${formatCompactNumber(pt.lower_bound, unit)}–${formatCompactNumber(pt.upper_bound, unit)}</div>`;
+              html += `<div style="color:${labelColor};font-size:11px;">Empirical range: ${formatCompactNumber(pt.lower_bound, unit)}–${formatCompactNumber(pt.upper_bound, unit)}</div>`;
             }
-            html += `<div style="color:#ded5cb;font-size:11px;margin-top:2px;">Model: ${validation?.model_label || "Validated Model"}</div>`;
+            html += `<div style="color:${labelColor};font-size:11px;margin-top:2px;">Model: ${validation?.model_label || "Validated Model"}</div>`;
           } else if (pt.actual_value != null) {
-            html += `<div style="color:#38bdf8;">Observed actual: <strong>${formatCompactNumber(pt.actual_value, unit)}</strong></div>`;
+            html += `<div style="color:${actualLineColor};">Observed actual: <strong>${formatCompactNumber(pt.actual_value, unit)}</strong></div>`;
             if (pt.is_partial) {
-              html += `<div style="color:#fbbb27;font-size:11px;">Partial period (excluded from training)</div>`;
+              html += `<div style="color:${forecastLineColor};font-size:11px;">Partial period (excluded from training)</div>`;
             }
           }
           return html;
@@ -128,7 +144,7 @@ export default function ForwardOutlookCard({
       legend: {
         show: true,
         bottom: 2,
-        textStyle: { color: "#ded5cb", fontSize: 11 },
+        textStyle: { color: labelColor, fontSize: 11, fontWeight: 600 },
         data: ["Historical actuals", "Statistical forecast", "Forecast range"],
       },
       grid: {
@@ -141,10 +157,11 @@ export default function ForwardOutlookCard({
       xAxis: {
         type: "category",
         data: periods,
-        axisLine: { lineStyle: { color: "#3d362f" } },
+        axisLine: { lineStyle: { color: axisLineColor } },
         axisLabel: {
-          color: "#ded5cb",
+          color: labelColor,
           fontSize: 10,
+          fontWeight: 500,
           rotate: periods.length > 8 ? 30 : 0,
           margin: 8,
           interval: (idx) => {
@@ -161,11 +178,12 @@ export default function ForwardOutlookCard({
         splitNumber: 4,
         axisLine: { show: false },
         axisLabel: {
-          color: "#ded5cb",
+          color: labelColor,
           fontSize: 10,
+          fontWeight: 500,
           formatter: (val) => formatCompactNumber(val, unit),
         },
-        splitLine: { lineStyle: { color: "#524940", type: "dashed" } },
+        splitLine: { lineStyle: { color: splitLineColor, type: "dashed" } },
       },
       series: [
         {
@@ -175,8 +193,8 @@ export default function ForwardOutlookCard({
           smooth: false,
           showSymbol: true,
           symbolSize: 6,
-          itemStyle: { color: "#38bdf8" },
-          lineStyle: { width: 2.5, color: "#38bdf8" },
+          itemStyle: { color: actualLineColor },
+          lineStyle: { width: 2.5, color: actualLineColor },
           areaStyle: {
             color: {
               type: "linear",
@@ -185,8 +203,8 @@ export default function ForwardOutlookCard({
               x2: 0,
               y2: 1,
               colorStops: [
-                { offset: 0, color: "rgba(56, 189, 248, 0.2)" },
-                { offset: 1, color: "rgba(56, 189, 248, 0.0)" },
+                { offset: 0, color: actualAreaStart },
+                { offset: 1, color: "rgba(0, 0, 0, 0.0)" },
               ],
             },
           },
@@ -199,8 +217,8 @@ export default function ForwardOutlookCard({
           showSymbol: true,
           symbol: "diamond",
           symbolSize: 8,
-          itemStyle: { color: "#fbbb27" },
-          lineStyle: { width: 2.5, color: "#fbbb27", type: "dashed" },
+          itemStyle: { color: forecastLineColor },
+          lineStyle: { width: 2.5, color: forecastLineColor, type: "dashed" },
         },
         {
           name: "Forecast range",
@@ -215,13 +233,29 @@ export default function ForwardOutlookCard({
           type: "line",
           data: lowerSeries.map((low, i) => (upperSeries[i] != null && low != null ? upperSeries[i] - low : null)),
           lineStyle: { opacity: 0 },
-          areaStyle: { color: "rgba(251, 187, 39, 0.22)" },
+          areaStyle: { color: forecastRangeArea },
           stack: "confidence-band",
           symbol: "none",
         },
       ],
     };
-  }, [kind, points, unit, validation]);
+  }, [
+    kind,
+    points,
+    unit,
+    validation,
+    actualLineColor,
+    actualAreaStart,
+    forecastLineColor,
+    forecastRangeArea,
+    labelColor,
+    headingColor,
+    axisLineColor,
+    splitLineColor,
+    tooltipBg,
+    tooltipBorder,
+    tooltipText,
+  ]);
 
   return (
     <section
