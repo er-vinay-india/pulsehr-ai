@@ -2,7 +2,6 @@ import React from "react";
 import {
   CheckCircle2,
   RotateCw,
-  Sparkles,
   AlertTriangle,
   Presentation,
   Download
@@ -67,6 +66,7 @@ export default function DeckGeneratingView({
             : `Phase ${index + 1} of ${stages.length}: ${currentStage?.label || "Processing"}`}
         </h4>
 
+        {/* Unified progress message with zero duplication */}
         <p className="generating-detail-label">
           {jobStageLabel || "Synthesizing executive briefing from ground-truth data..."}
         </p>
@@ -86,22 +86,6 @@ export default function DeckGeneratingView({
           />
         </div>
         <span className="pipeline-progress-pct">{jobProgress}% Complete</span>
-
-        {/* Active Slide Indicator if slide building info available */}
-        {slideProgressData?.current_slide_title && (
-          <div className="active-slide-info-card">
-            <span className="active-slide-badge">
-              <Sparkles size={12} />
-              <span>Building Slide {slideProgressData.current_slide} of {slideProgressData.total_slides}</span>
-            </span>
-            <div className="active-slide-title-text">
-              <span className="active-slide-name">{slideProgressData.current_slide_title}</span>
-              {slideProgressData.current_slide_category && (
-                <span className="active-slide-category-tag">{slideProgressData.current_slide_category}</span>
-              )}
-            </div>
-          </div>
-        )}
 
         {(jobStage === "ready" || jobProgress >= 100) && onOpenInStudio && (
           <div style={{ display: "flex", gap: "10px", marginTop: "16px", justifyContent: "center" }}>
@@ -165,9 +149,9 @@ export default function DeckGeneratingView({
                   {isCurrent && jobStageLabel ? jobStageLabel : (st.desc || st.label)}
                 </span>
 
-                {/* Slide Pills on Slide-building phase */}
-                {(st.id === "headings" || st.id === "layout") && (isCurrent || isPassed) && slideProgressData?.total_slides > 0 && (
-                  <div className="stage-slide-pills-container">
+                {/* Sequential Slide Generation Progress - strictly on Slide Synthesis Phase (Phase 2) */}
+                {st.id === "headings" && (isCurrent || isPassed) && slideProgressData?.total_slides > 0 && (
+                  <div className="stage-slide-sequential-container">
                     <div className="stage-slide-pills-row">
                       {Array.from({ length: slideProgressData.total_slides }, (_, i) => {
                         const slideNum = i + 1;
@@ -183,6 +167,47 @@ export default function DeckGeneratingView({
                           </span>
                         );
                       })}
+                    </div>
+
+                    {/* Sequential Log displaying which slides got generated */}
+                    <div className="sequential-slide-generation-list">
+                      {slideProgressData.slide_status_list && slideProgressData.slide_status_list.length > 0
+                        ? slideProgressData.slide_status_list
+                            .filter((s) => s.status === "complete" || (isCurrent && s.status === "building"))
+                            .map((s) => (
+                              <div key={s.order} className={`sequential-slide-row ${s.status}`}>
+                                <span className="seq-slide-icon">
+                                  {s.status === "complete" ? (
+                                    <CheckCircle2 size={13} className="icon-success" />
+                                  ) : (
+                                    <RotateCw size={13} className="spin-icon icon-active" />
+                                  )}
+                                </span>
+                                <span className="seq-slide-title">
+                                  <strong>Slide {s.order}:</strong> {s.title || (s.status === "building" ? "Synthesizing content..." : `Slide ${s.order}`)}
+                                </span>
+                                {s.category && <span className="seq-slide-cat">{s.category}</span>}
+                                <span className={`seq-slide-status-badge ${s.status}`}>
+                                  {s.status === "complete" ? "Generated" : "Synthesizing"}
+                                </span>
+                              </div>
+                            ))
+                        : (
+                          Array.from({ length: Math.min(slideProgressData.total_slides, (slideProgressData.current_slide || 0)) }, (_, i) => {
+                            const slideNum = i + 1;
+                            return (
+                              <div key={slideNum} className="sequential-slide-row complete">
+                                <span className="seq-slide-icon">
+                                  <CheckCircle2 size={13} className="icon-success" />
+                                </span>
+                                <span className="seq-slide-title">
+                                  <strong>Slide {slideNum}:</strong> {slideNum === slideProgressData.current_slide && slideProgressData.current_slide_title ? slideProgressData.current_slide_title : `Slide ${slideNum}`}
+                                </span>
+                                <span className="seq-slide-status-badge complete">Generated</span>
+                              </div>
+                            );
+                          })
+                        )}
                     </div>
                   </div>
                 )}
@@ -239,4 +264,3 @@ export default function DeckGeneratingView({
     </div>
   );
 }
-

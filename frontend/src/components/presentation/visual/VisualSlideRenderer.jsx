@@ -1,6 +1,6 @@
 import { slideBackground } from "../../../utils/slideBackground";
 import React, { useState } from "react";
-import { ShieldCheck, ArrowRight, Edit3, Image as ImageIcon } from "lucide-react";
+import { ArrowRight, Edit3, Image as ImageIcon } from "lucide-react";
 import SlideChart from "../slides/SlideChart.jsx";
 import FormattedText from "../slides/FormattedText.jsx";
 
@@ -239,18 +239,6 @@ export default function VisualSlideRenderer({
           >
             {spec.visual_story?.primary_message ? "Strategic Analysis" : "Executive Briefing"}
           </span>
-          {slide.evidence_id && (
-            <button
-              type="button"
-              className="slide-evidence-badge-btn"
-              onClick={() => onViewEvidence && onViewEvidence(slide)}
-              aria-label={`Inspect evidence audit trail for ${slide.evidence_id}`}
-              title="Inspect ground-truth evidence audit trail"
-            >
-              <ShieldCheck size={12} />
-              <span>{slide.evidence_id}</span>
-            </button>
-          )}
         </div>
         {isEditable && isEditingTitle ? (
           <input
@@ -528,20 +516,7 @@ export default function VisualSlideRenderer({
         style={{ borderTop: `1px solid ${cardBorder}`, fontSize: "11px", color: secondaryText }}
       >
         <div className="d-flex align-items-center gap-2">
-          <span>{footer.confidence_statement || "Audited Ground Truth Engine"}</span>
-          {slide.evidence_id && (
-            <span
-              style={{
-                background: "rgba(255, 255, 255, 0.06)",
-                padding: "2px 6px",
-                borderRadius: "4px",
-                color: accentColor,
-                fontWeight: 600
-              }}
-            >
-              [{slide.evidence_id}]
-            </span>
-          )}
+          <span>{footer.confidence_statement || "HighView Presentation Studio"}</span>
         </div>
         <div>
           Slide {slide.order || 1} of {slide.total_slides || 8}

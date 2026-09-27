@@ -189,12 +189,39 @@ export function usePresentationWorkflow({
         setJobStage(job.stage);
         setJobStageLabel(job.stage_label || "Processing...");
         if (job.current_slide || job.total_slides) {
-          setSlideProgressData({
-            current_slide: job.current_slide || 0,
-            total_slides: job.total_slides || 0,
-            current_slide_title: job.current_slide_title || "",
-            current_slide_category: job.current_slide_category || "",
-            slide_status_list: job.slide_status_list || []
+          setSlideProgressData((prev) => {
+            const currentList = Array.isArray(job.slide_status_list) && job.slide_status_list.length > 0
+              ? job.slide_status_list
+              : (prev?.slide_status_list || []);
+
+            let updatedList = [...currentList];
+            if (job.current_slide && job.current_slide_title) {
+              const existingIdx = updatedList.findIndex((s) => s.order === job.current_slide);
+              if (existingIdx >= 0) {
+                updatedList[existingIdx] = {
+                  ...updatedList[existingIdx],
+                  title: job.current_slide_title,
+                  category: job.current_slide_category || updatedList[existingIdx].category,
+                  status: "complete",
+                };
+              } else {
+                updatedList.push({
+                  order: job.current_slide,
+                  title: job.current_slide_title,
+                  category: job.current_slide_category || "",
+                  status: "complete",
+                });
+                updatedList.sort((a, b) => a.order - b.order);
+              }
+            }
+
+            return {
+              current_slide: job.current_slide || prev?.current_slide || 0,
+              total_slides: job.total_slides || prev?.total_slides || 0,
+              current_slide_title: job.current_slide_title || prev?.current_slide_title || "",
+              current_slide_category: job.current_slide_category || prev?.current_slide_category || "",
+              slide_status_list: updatedList,
+            };
           });
         }
 

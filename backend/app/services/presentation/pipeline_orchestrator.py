@@ -61,13 +61,38 @@ def execute_presentation_pipeline_async(
         if mgr.is_cancelled(job_id):
             return
 
-        # STAGE 4: Assembling slide layouts & design system (45% -> 68%)
+        slide_history: dict[int, dict[str, Any]] = {}
+
         def _on_slide_progress(slide_num: int, total_slides: int, slide_title: str, category: str = "", **kwargs):
             import time
-            clean_title = slide_title.split(":")[0].strip()[:35]
+            clean_title = slide_title.strip()
             effective_total = max(total_slides, slide_num, 1)
             pct = 45 + int((slide_num / effective_total) * 22)
-            label = f"Constructed slide {slide_num} of {effective_total}: {clean_title}"
+            label = f"Generated slide {slide_num} of {effective_total}: {clean_title[:35]}"
+            slide_history[slide_num] = {
+                "order": slide_num,
+                "title": clean_title,
+                "category": category,
+                "status": "complete"
+            }
+            slide_status_list = []
+            for i in range(1, effective_total + 1):
+                if i in slide_history:
+                    slide_status_list.append(slide_history[i])
+                elif i == slide_num + 1:
+                    slide_status_list.append({
+                        "order": i,
+                        "title": f"Slide {i}",
+                        "category": "",
+                        "status": "building"
+                    })
+                else:
+                    slide_status_list.append({
+                        "order": i,
+                        "title": f"Slide {i}",
+                        "category": "",
+                        "status": "pending"
+                    })
             mgr.update_stage(
                 job_id,
                 "headings",
@@ -76,32 +101,26 @@ def execute_presentation_pipeline_async(
                 extra={
                     "current_slide": slide_num,
                     "total_slides": effective_total,
-                    "current_slide_title": slide_title,
+                    "current_slide_title": clean_title,
                     "current_slide_category": category,
-                    "slide_status_list": [
-                        {
-                            "order": i + 1,
-                            "status": "complete" if (i + 1) <= slide_num else ("building" if (i + 1) == slide_num + 1 else "pending")
-                        }
-                        for i in range(effective_total)
-                    ]
+                    "slide_status_list": slide_status_list
                 }
             )
             time.sleep(0.12)
 
-        target_total_slides = int(scope.get("target_length") or 0)
+        target_total_slides = int(scope.get("target_length") or 8)
         mgr.update_stage(
             job_id,
             "headings",
-            "Planning slide blueprints & assembling layout components...",
+            "Synthesizing slide layouts & analytical narrative...",
             46,
             extra={
-                "current_slide": 1,
+                "current_slide": 0,
                 "total_slides": target_total_slides,
-                "current_slide_title": "Slide 1: Executive Architecture",
+                "current_slide_title": "Initializing slide architecture...",
                 "current_slide_category": "Executive",
                 "slide_status_list": [
-                    {"order": i + 1, "status": "building" if i == 0 else "pending"}
+                    {"order": i + 1, "title": f"Slide {i + 1}", "status": "pending"}
                     for i in range(target_total_slides)
                 ]
             }

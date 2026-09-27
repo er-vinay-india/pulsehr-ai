@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import {
   Palette,
-  ShieldCheck,
   Clock,
   FileText,
   Plus,
@@ -197,15 +196,6 @@ export default function DeckStudioView({
             </div>
             <span className="symbolic-tooltip">Slide Layout Variant</span>
           </div>
-
-          {/* Audit Verification Seal */}
-          <div className="symbolic-btn-wrap">
-            <div className="validation-summary-chip verified" title="Simpson's Paradox & Empirical Audit Verified">
-              <ShieldCheck size={13} />
-              <span className="seal-text-responsive">S01–S20 Audit</span>
-            </div>
-            <span className="symbolic-tooltip">Audit Governance: Verified against aggregate distortion & Simpson&apos;s Paradox</span>
-          </div>
         </div>
 
         <div className="toolbar-right">
@@ -238,22 +228,6 @@ export default function DeckStudioView({
             </button>
             <span className="symbolic-tooltip">
               Slide Photography: Browse free commercial photos with dark contrast scrim
-            </span>
-          </div>
-
-          {/* Audit Evidence Drawer Toggle */}
-          <div className="symbolic-btn-wrap">
-            <button
-              type="button"
-              className={`symbolic-action-btn ${isEvidenceDrawerOpen ? "active" : ""}`}
-              onClick={() => onOpenEvidence(deckSpec.slides[activeSlideIndex])}
-              aria-label="Audit Calculation Methodology & Board Evidence"
-            >
-              <ShieldCheck size={14} />
-              <span className="btn-label-responsive">Audit</span>
-            </button>
-            <span className="symbolic-tooltip">
-              Audit Evidence: S01–S20 verifiable calculation ledger & methodology
             </span>
           </div>
 

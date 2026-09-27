@@ -1,6 +1,5 @@
 import { slideBackground } from "../utils/slideBackground";
 import React, { useState } from "react";
-import { ShieldCheck } from "lucide-react";
 import FormattedText from "./presentation/slides/FormattedText.jsx";
 import SlideChart from "./presentation/slides/SlideChart.jsx";
 import { SlideTalent9BoxMatrix, SlideBurnoutStrainPanel } from "./presentation/slides/SlidePanels.jsx";
@@ -73,23 +72,6 @@ export default function PresentationSlideContent({
             <div className="slide-category-tag" style={{ color: theme.brand_color }}>
               {slide.category || "EXECUTIVE REVIEW"}
             </div>
-            {slide.evidence_id && (
-              <button
-                type="button"
-                className="slide-evidence-badge-btn"
-                onClick={() => onViewEvidence && onViewEvidence(slide)}
-                aria-label={`Inspect calculation methodology and evidence for ${slide.evidence_id}`}
-                title="Inspect calculation methodology, evidence sources & board scrutiny briefing"
-              >
-                <ShieldCheck size={12} />
-                <span>{slide.evidence_id}</span>
-                {slide.finding_type && (
-                  <span className="finding-type-subtag">
-                    · {slide.finding_type.replace("_", " ").toUpperCase()}
-                  </span>
-                )}
-              </button>
-            )}
           </div>
         </div>
       );
@@ -101,23 +83,6 @@ export default function PresentationSlideContent({
           <div className="slide-category-tag" style={{ color: theme.brand_color }}>
             {slide.category || "EXECUTIVE REVIEW"}
           </div>
-          {slide.evidence_id && (
-            <button
-              type="button"
-              className="slide-evidence-badge-btn"
-              onClick={() => onViewEvidence && onViewEvidence(slide)}
-              aria-label={`Inspect calculation methodology and evidence for ${slide.evidence_id}`}
-              title="Inspect calculation methodology, evidence sources & board scrutiny briefing"
-            >
-              <ShieldCheck size={12} />
-              <span>{slide.evidence_id}</span>
-              {slide.finding_type && (
-                <span className="finding-type-subtag">
-                  · {slide.finding_type.replace("_", " ").toUpperCase()}
-                </span>
-              )}
-            </button>
-          )}
         </div>
         {isEditable && isEditingTitle ? (
           <input
@@ -163,20 +128,11 @@ export default function PresentationSlideContent({
     const totalCount = slide.total_slides || totalSlides || 8;
     return (
       <div className="slide-footer-block" style={{ color: theme.secondary_text }}>
-        <button
-          type="button"
-          className="footer-left clickable-evidence btn-unstyled"
-          onClick={() => onViewEvidence && onViewEvidence(slide)}
-          title="Click to inspect verifiable evidence & board briefing"
-          aria-label={`Inspect verifiable evidence for ${slide.evidence_id || "this slide"}`}
-        >
-          <ShieldCheck size={13} style={{ color: theme.success_color }} />
+        <div className="footer-left">
           <span>
-            {slide.evidence_id ? `[${slide.evidence_id}] ` : ""}
-            {sources.length > 0 ? `Evidence: ${sources.join(" · ")}` : "Verified Deterministic Ground Truth Engine"}
+            {sources.length > 0 ? `Sources: ${sources.join(" · ")}` : "HighView Executive Briefing"}
           </span>
-          <span className="footer-inspect-cta">View Evidence &rarr;</span>
-        </button>
+        </div>
         <div className="footer-right">
           {limitations && <span className="footer-scope">Scope: {limitations}</span>}
           <span className="footer-slide-number" style={{ color: theme.brand_color }}>
