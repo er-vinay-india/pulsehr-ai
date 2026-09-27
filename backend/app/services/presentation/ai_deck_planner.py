@@ -75,7 +75,7 @@ def plan_deck_with_ai(
         for f in prioritized_facts[:8]
     ]
 
-    prompt = f"""You are the Lead Executive Presentation Strategist for PulseHR AI.
+    prompt = f"""You are the Lead Executive Presentation Strategist for HighView (powered by HRIDAY).
 Your objective: Generate a complete, multi-slide executive presentation plan in valid JSON.
 
 ## Presentation Metadata:

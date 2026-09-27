@@ -104,7 +104,7 @@ def _render_footer(slide, slide_data, colors, slide_num: int = 1, total_slides: 
     if limitations:
         parts.append(f"Scope: {limitations}")
     if not parts:
-        parts.append("PulseHR Analytics · Verified Deterministic Data Engine")
+        parts.append("HighView · Clarity From Every Sheet. · Powered by HRIDAY")
     
     footer_box = slide.shapes.add_textbox(Inches(0.8), Inches(6.82), Inches(9.6), Inches(0.35))
     tf = footer_box.text_frame

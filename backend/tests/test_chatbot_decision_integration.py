@@ -261,7 +261,7 @@ def test_correlation_vs_causation_refusal(test_db):
     assert "Spearman rank correlation" in res["answer"]
     assert "Refusal of Causal Inference" in res["answer"]
     assert "does **NOT** establish" in res["answer"]
-    assert "PulseHR AI strictly separates descriptive statistical associations from causal explanations" in res["answer"]
+    assert "HighView (powered by HRIDAY) strictly separates descriptive statistical associations from causal explanations" in res["answer"]
     conn.close()
 
 

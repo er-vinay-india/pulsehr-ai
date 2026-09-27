@@ -377,7 +377,7 @@ export function usePresentationWorkflow({
       chart: null,
       table: null,
       speaker_notes: "Add key talking points and presentation remarks here.",
-      evidence_sources: ["PulseHR Ground Truth Engine"]
+      evidence_sources: ["HighView Ground Truth Engine · Powered by HRIDAY"]
     };
 
     const newSlides = [...deckSpec.slides, newSlide];

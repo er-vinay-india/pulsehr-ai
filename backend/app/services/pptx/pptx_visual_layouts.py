@@ -205,7 +205,7 @@ def _table_slide(prs, title, headers, rows, source):
     """Bounded tables keep dynamically generated reports readable."""
     slide = prs.slides.add_slide(prs.slide_layouts[6])
     set_slide_background(slide)
-    add_header(slide, title, "PulseHR / Calculated workforce report")
+    add_header(slide, title, "HighView / Clarity From Every Sheet · Powered by HRIDAY")
     table = slide.shapes.add_table(len(rows) + 1, len(headers), Inches(.8), Inches(1.8), Inches(11.7), Inches(.48 * (len(rows) + 1))).table
     display_headers = [format_display_label(h) for h in headers]
     for ri, values in enumerate([display_headers, *rows]):

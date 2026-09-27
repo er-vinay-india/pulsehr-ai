@@ -247,7 +247,7 @@ export async function triggerPresentationGeneration() {
   const url = window.URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `PulseHR_Executive_Presentation_${Date.now()}.pptx`;
+  a.download = `HighView_Executive_Presentation_${Date.now()}.pptx`;
   document.body.appendChild(a);
   a.click();
   a.remove();

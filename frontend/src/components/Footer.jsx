@@ -8,12 +8,12 @@ export default function Footer() {
         <div className="footer-brand">
           <BrainCircuit size={20} />
           <div className="footer-copy">
-            <strong>PulseHR AI</strong> · Executive Workforce Analytics & RAG Tabular Intelligence
+            <strong>HighView</strong> · Clarity From Every Sheet. · Powered by HRIDAY
           </div>
         </div>
         <div className="footer-badge">
           <span className="dot" />
-          <span>Spreadsheet analytics · Source-linked answers</span>
+          <span>Automated spreadsheet analysis · Executive insights · Powered by HRIDAY</span>
         </div>
       </div>
     </footer>

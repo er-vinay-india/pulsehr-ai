@@ -490,7 +490,7 @@ def plan_analytical_query(
             clarification = (
                 f"To identify the {label_dir}-performing **{disp_dim}**, please specify which metric you would like to evaluate "
                 f"(for example: {measures_str}). Different metrics represent different operational dimensions, "
-                f"so PulseHR AI does not assume a default metric or combine measures into an unverified composite score."
+                f"so HighView (powered by HRIDAY) does not assume a default metric or combine measures into an unverified composite score."
             )
             return AnalyticalQueryPlan(
                 intent='ambiguity_clarification',
@@ -759,7 +759,7 @@ def _execute_summary_positives_query(
         lines.append(
             "> **Evidentiary Notice**: Under verified statistical evaluation, **no segments currently exhibit positive variance** "
             "meeting statistical criteria (all observed segments are either at baseline, display adverse gaps, have incomplete coverage, "
-            "or have unresolved definitions like leave accounting balances). PulseHR AI does not invent or assume positive findings."
+            "or have unresolved definitions like leave accounting balances). HighView (powered by HRIDAY) does not invent or assume positive findings."
         )
     else:
         for idx, f in enumerate(positives, start=1):
@@ -1079,7 +1079,7 @@ def _execute_followup_why_query(
             lines.append(f"- **Calculation Basis**: {method}")
         lines.append(
             "\n> **Refusal of Causal Inference**:\n"
-            "> PulseHR AI strictly refuses unverified causal claims. Observational data shows *what* occurred, "
+            "> HighView (powered by HRIDAY) strictly refuses unverified causal claims. Observational data shows *what* occurred, "
             "but cannot establish cause-and-effect (such as employee motivation, managerial competence, or external pressures). "
             "Differences in workload, shift allocation, record completeness, or employee mix may account for this pattern."
         )
@@ -1181,7 +1181,7 @@ def _execute_correlation_causation_query(
 
         lines.append(
             f"\n> **Refusal of Causal Inference**:\n"
-            f"> PulseHR AI strictly separates descriptive statistical associations from causal explanations. "
+            f"> HighView (powered by HRIDAY) strictly separates descriptive statistical associations from causal explanations. "
             f"A rank correlation of **{rho:+.2f}** does **NOT** establish that changes in {label(matched_pair['x'])} "
             f"cause changes in {label(matched_pair['y'])}. Unmeasured confounders, exposure differences, external economic factors, "
             f"or population composition may explain this pattern."
@@ -1198,7 +1198,7 @@ def _execute_correlation_causation_query(
             f"A reliable rank correlation between **{label(m_a or 'the requested metric')}** and other measures could not be computed: {reason}"
         )
         lines.append(
-            f"\n> **Governance Statement**: PulseHR AI refuses unverified causal claims and does not infer cause-and-effect relationships from observational data."
+            f"\n> **Governance Statement**: HighView (powered by HRIDAY) refuses unverified causal claims and does not infer cause-and-effect relationships from observational data."
         )
 
     answer_text = "\n".join(lines)

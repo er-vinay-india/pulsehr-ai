@@ -1160,9 +1160,15 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
 
   return (
     <div className="adaptive-dashboard-page" role="region" aria-label="Dashboard">
-      {/* Quiet Local Page Header */}
+      {/* Homepage Hero Branding Header */}
       <header className="adaptive-page-header">
-        <h1 className="adaptive-page-title">Dashboard</h1>
+        <div className="adaptive-hero-brand-block">
+          <div className="adaptive-hero-title-row">
+            <h1 className="adaptive-page-title">HighView</h1>
+            <span className="adaptive-hero-badge">Powered by HRIDAY</span>
+          </div>
+          <p className="adaptive-page-tagline">Clarity From Every Sheet.</p>
+        </div>
 
         {/* Scope Bar: Source Control, Reporting Period, Latest Data, Refresh */}
         <div className="adaptive-scope-bar">

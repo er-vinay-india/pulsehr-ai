@@ -150,7 +150,7 @@ class CriticAgent:
             for f in valid_findings
         ]
 
-        prompt = f"""You are the Chief Auditor & Senior Factual Critic for PulseHR AI.
+        prompt = f"""You are the Chief Auditor & Senior Factual Critic for HighView (powered by HRIDAY).
 Audit every sentence in the generated slide narrative against the provided verified evidence.
 
 CRITICAL AUDIT RULES:
@@ -372,7 +372,7 @@ Return ONLY valid JSON matching this schema:
             for item in ambiguous_items
         ]
 
-        prompt = f"""You are the Senior Factual Critic for PulseHR AI.
+        prompt = f"""You are the Senior Factual Critic for HighView (powered by HRIDAY).
 Audit the following qualitative claim(s) against the verified evidence strictly:
 Task: semantic_validation
 

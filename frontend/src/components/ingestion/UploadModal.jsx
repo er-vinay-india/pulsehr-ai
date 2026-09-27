@@ -295,7 +295,7 @@ export default function UploadModal({
                 </div>
                 <p className="expectations-description">
                   Specify what you want this analysis to answer, corporate targets, policy rules, or key questions.
-                  PulseHR AI will prioritize your intent across autonomous findings.
+                  HighView will prioritize your intent across autonomous findings.
                   If you prefer automatic exploratory discovery, simply choose <strong>Skip & Ingest</strong>.
                 </p>
 
@@ -303,13 +303,13 @@ export default function UploadModal({
                   rows={4}
                   value={userIntent}
                   onChange={(e) => setUserIntent(e.target.value)}
-                  placeholder="e.g. Employees must work from office at least 3 days per week. Compare department compliance, identify outlier teams, and audit attendance vs leave ledgers."
+                  placeholder="e.g. Compare department compliance, identify outlier teams, and audit variance across sheets."
                   className="expectations-textarea"
                 />
 
                 {userIntent.trim() && (
                   <div className="intent-confirmed-badge">
-                    <span>✓ PulseHR AI will prioritize this intent during analytical reasoning.</span>
+                    <span>✓ HighView will prioritize this intent during analytical reasoning.</span>
                   </div>
                 )}
               </div>

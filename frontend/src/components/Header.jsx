@@ -23,8 +23,11 @@ export default function Header({ activeTab, onSelectTab, onOpenUploadModal, acti
             <BrainCircuit size={24} />
           </div>
           <div>
-            <h1>PulseHR AI</h1>
-            <p className="subtitle">Tabular Workforce & Attendance Intelligence</p>
+            <div className="brand-title-row">
+              <h1>HighView</h1>
+              <span className="brand-ai-attribution">Powered by HRIDAY</span>
+            </div>
+            <p className="subtitle">Clarity From Every Sheet.</p>
           </div>
         </div>
 

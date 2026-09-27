@@ -149,7 +149,7 @@ def search_free_images(query: str = "workplace", category: str | None = None, pa
         req = urllib.request.Request(
             url,
             headers={
-                "User-Agent": "PulseHR-AI/1.0 (Executive Presentation Studio)",
+                "User-Agent": "HighView/1.0 (Executive Presentation Studio; powered by HRIDAY)",
                 "Accept": "application/json",
             },
         )

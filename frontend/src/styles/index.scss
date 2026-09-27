@@ -45,6 +45,24 @@
       color: var(--brand-500);
     }
 
+    .brand-title-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .brand-ai-attribution {
+      font-size: 0.68rem;
+      font-weight: 700;
+      padding: 1px 7px;
+      border-radius: 9999px;
+      background: rgba(220, 38, 38, 0.16);
+      border: 1px solid rgba(239, 68, 68, 0.4);
+      color: #fca5a5;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+    }
+
     h1 {
       font-size: 1.25rem;
       font-weight: 800;

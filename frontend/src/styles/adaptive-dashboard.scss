@@ -174,16 +174,52 @@
       margin-bottom: 12px;
     }
 
-    h1.adaptive-page-title {
-      font-size: clamp(24px, 3vw, 32px);
-      letter-spacing: -0.02em;
-      margin: 0 0 16px;
-      color: var(--fg-primary, #fff9f2);
-      font-weight: 700;
+    .adaptive-hero-brand-block {
+      margin-bottom: 20px;
 
-      @media (max-width: 640px) {
-        font-size: 18px;
-        margin: 0 0 8px;
+      .adaptive-hero-title-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+
+        h1.adaptive-page-title {
+          font-size: clamp(26px, 3.2vw, 36px);
+          letter-spacing: -0.025em;
+          margin: 0;
+          color: var(--fg-primary, #fff9f2);
+          font-weight: 800;
+
+          @media (max-width: 640px) {
+            font-size: 20px;
+          }
+        }
+
+        .adaptive-hero-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+          padding: 3px 10px;
+          font-size: 0.72rem;
+          font-weight: 700;
+          letter-spacing: 0.03em;
+          border-radius: 9999px;
+          background: rgba(220, 38, 38, 0.16);
+          border: 1px solid rgba(239, 68, 68, 0.4);
+          color: #fca5a5;
+        }
+      }
+
+      .adaptive-page-tagline {
+        font-size: 1.05rem;
+        font-weight: 500;
+        color: var(--fg-secondary, #c9bdb0);
+        margin: 4px 0 0 0;
+        letter-spacing: -0.01em;
+
+        @media (max-width: 640px) {
+          font-size: 0.88rem;
+        }
       }
     }
 

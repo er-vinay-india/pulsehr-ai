@@ -12,18 +12,18 @@ from .routers import decision_brief, adaptive_dashboard, eda
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup sequence
-    print("[PulseHR AI] Initializing database and vector tables...")
+    print("[HighView] Initializing database and vector tables...")
     init_db()
     migrate_existing()
     backfill_display_names()
     job_manager.cleanup_stale_jobs()
-    print("[PulseHR AI] Startup completed. System ready on port", config.PORT)
+    print("[HighView] Startup completed. System ready on port", config.PORT)
     yield
-    print("[PulseHR AI] Shutting down...")
+    print("[HighView] Shutting down...")
 
 app = FastAPI(
-    title="PulseHR AI API",
-    description="Intelligent Tabular & HR Attendance Analytics Platform with RAG Vector Inference & Presentations",
+    title="HighView API",
+    description="Spreadsheet Analysis, Executive Insights & Presentation Automation · Powered by HRIDAY",
     version="1.0.0",
     lifespan=lifespan
 )
