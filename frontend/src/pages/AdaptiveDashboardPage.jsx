@@ -1160,22 +1160,19 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
 
   return (
     <div className="adaptive-dashboard-page" role="region" aria-label="Dashboard">
-      {/* Homepage Hero Branding Header */}
-      <header className="adaptive-page-header">
-        <div className="adaptive-hero-brand-block">
-          <div className="adaptive-hero-title-row">
-            <img src="/highview-logo-192.png" alt="HighView Logo" className="hero-logo-img" />
-            <div className="adaptive-hero-text-col">
-              <div className="adaptive-hero-name-badge-row">
-                <h1 className="adaptive-page-title">HighView</h1>
-              </div>
-              <p className="adaptive-page-tagline">Clarity From Every Sheet.</p>
-            </div>
+      {/* Standardized Page Top Section */}
+      <header className="page-top-header adaptive-page-header">
+        <div className="page-title-row">
+          <div className="page-title-group">
+            <h1 className="page-heading">Executive Dashboard</h1>
+            <p className="page-description">
+              Automated spreadsheet intelligence, cross-functional KPI tracking, and decision discovery.
+            </p>
           </div>
         </div>
 
         {/* Scope Bar: Source Control, Reporting Period, Latest Data, Refresh */}
-        <div className="adaptive-scope-bar">
+        <div className="adaptive-scope-bar page-command-bar">
           <div className="scope-control-group">
             <label htmlFor="source-selector">Source</label>
             <select

@@ -7860,23 +7860,95 @@ textarea:focus-visible,
    ========================================================================== */
 .presentation-page-container {
   width: 100%;
-  max-width: 1440px;
-  margin: 0 auto;
-  padding: 16px 20px 48px;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
   box-sizing: border-box;
 
   .presentation-page-shell {
     max-height: none !important;
-    min-height: calc(100vh - 140px);
+    min-height: calc(100vh - 220px);
+    border-radius: 16px;
+    background: var(--surface-card);
+    border: 1px solid var(--border);
     box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+    overflow: hidden;
   }
 
   @media (max-width: 768px) {
-    padding: 10px 10px 40px;
+    padding: 0;
 
     .presentation-page-shell {
       border-radius: 12px;
     }
+  }
+}
+
+/* ==========================================================================
+   Unified Page Top Section & Layout Rhythm (Dashboard, Explorer, Presentation)
+   ========================================================================== */
+.page-top-header {
+  width: 100%;
+  margin-bottom: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+
+  .page-title-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 1rem;
+    width: 100%;
+
+    .page-title-group {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-width: 0;
+
+      .page-heading {
+        font-size: clamp(1.4rem, 2.2vw, 1.85rem);
+        font-weight: 800;
+        letter-spacing: -0.03em;
+        color: var(--fg-primary);
+        margin: 0;
+        line-height: 1.2;
+      }
+
+      .page-description {
+        font-size: 0.85rem;
+        color: var(--fg-secondary);
+        margin: 0;
+        line-height: 1.45;
+        max-width: 72ch;
+      }
+    }
+
+    .header-actions-row,
+    .view-mode-pill-toggle {
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+      flex-wrap: wrap;
+      flex-shrink: 0;
+    }
+  }
+
+  .page-command-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    background: var(--surface-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 0.65rem 1rem;
+    box-shadow: var(--shadow-sm);
+    width: 100%;
+    box-sizing: border-box;
   }
 }
 

@@ -244,58 +244,37 @@ export default function DataExplorerPage() {
 
   return (
     <div className="explorer-page">
-      {/* 1. Header & Primary View Mode Pill Switcher */}
-      <div
-        className="explorer-hero-bar"
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          gap: '1rem',
-          marginBottom: '1rem'
-        }}
-      >
-        <div>
-          <h2 style={{ fontSize: '1.5rem', margin: 0, letterSpacing: '-0.025em' }}>Data Explorer & Workbench</h2>
-          <p className="subtitle" style={{ margin: '4px 0 0', fontSize: '0.85rem' }}>
-            Dual-version tabular inspection (Raw vs. Post-EDA Curated), correlation discovery, and predictive analytics.
-          </p>
+      {/* Standardized Page Top Section */}
+      <header className="page-top-header explorer-page-header">
+        <div className="page-title-row">
+          <div className="page-title-group">
+            <h1 className="page-heading">Data Explorer</h1>
+            <p className="page-description">
+              Dual-version tabular inspection (Raw vs. Post-EDA Curated), correlation discovery, and predictive analytics.
+            </p>
+          </div>
+
+          {/* View Mode Toggle */}
+          <div className="view-mode-pill-toggle">
+            <button
+              type="button"
+              className={`toggle-btn ${viewMode === 'table' ? 'active' : ''}`}
+              onClick={() => setViewMode('table')}
+            >
+              📋 Data Table
+            </button>
+            <button
+              type="button"
+              className={`toggle-btn ${viewMode === 'eda' ? 'active' : ''}`}
+              onClick={() => setViewMode('eda')}
+            >
+              🔬 Exploratory Data Analysis & Predictive Analytics
+            </button>
+          </div>
         </div>
 
-        {/* View Mode Toggle */}
-        <div className="view-mode-pill-toggle">
-          <button
-            className={`toggle-btn ${viewMode === 'table' ? 'active' : ''}`}
-            onClick={() => setViewMode('table')}
-          >
-            📋 Data Table
-          </button>
-          <button
-            className={`toggle-btn ${viewMode === 'eda' ? 'active' : ''}`}
-            onClick={() => setViewMode('eda')}
-          >
-            🔬 Exploratory Data Analysis & Predictive Analytics
-          </button>
-        </div>
-      </div>
-
-      {/* 2. Unified, Compact Command & Filter Bar */}
-      <div
-        className="explorer-compact-toolbar"
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          gap: '0.75rem',
-          background: 'var(--surface-card)',
-          border: '1px solid var(--border)',
-          borderRadius: '12px',
-          padding: '0.65rem 1rem',
-          marginBottom: '1.25rem'
-        }}
-      >
+        {/* Unified Command & Filter Toolbar */}
+        <div className="explorer-compact-toolbar page-command-bar">
         {/* Left Controls: Sheet, Derived View, Table Version, Search */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', flexWrap: 'wrap', flex: 1, minWidth: 0 }}>
           {/* Sheet Selector */}
@@ -634,6 +613,7 @@ export default function DataExplorerPage() {
           )}
         </div>
       </div>
+      </header>
 
       {error && (
         <div className="alert-box alert-error" style={{ marginBottom: '1rem' }}>

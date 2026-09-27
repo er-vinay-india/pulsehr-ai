@@ -256,8 +256,11 @@
       align-items: center;
       gap: 16px;
       flex-wrap: wrap;
-      padding-bottom: 16px;
-      border-bottom: 1px solid var(--border-subtle, #2c2722);
+      padding: 10px 16px;
+      background: var(--surface-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      box-shadow: var(--shadow-sm);
 
       .scope-control-group {
         display: flex;

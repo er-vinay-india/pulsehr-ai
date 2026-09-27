@@ -154,25 +154,20 @@ export default function PresentationPage({
 
   return (
     <div className="presentation-page-container">
-      <div className={`presentation-modal-shell presentation-page-shell mode-${viewMode}`}>
-        {/* PAGE HEADER / TOOLBAR */}
-        <div className="pres-modal-header">
-          <div className="header-title-wrap">
-            <div className="icon-badge">
-              <Presentation size={20} />
-            </div>
-            <div>
-              <h3>
-                {viewMode === "config" && "Create AI-Assisted Presentation"}
-                {viewMode === "generating" && "Generating Presentation Deck"}
-                {viewMode === "studio" && (deckSpec?.metadata?.title || "Presentation Studio")}
-              </h3>
-              <p className="sub-hint">
-                {viewMode === "config" && "Use the executive overview findings, with editable charts and evidence notes"}
-                {viewMode === "generating" && "Running 6-stage background analytical intelligence pipeline"}
-                {viewMode === "studio" && `${deckSpec?.slides?.length || 0} slides · ${currentTheme?.name || "Theme"} · Frontend Slides 16:9 Stage`}
-              </p>
-            </div>
+      {/* Standardized Page Top Section */}
+      <header className="page-top-header presentation-page-header">
+        <div className="page-title-row">
+          <div className="page-title-group">
+            <h1 className="page-heading">
+              {viewMode === "config" && "Presentation Studio"}
+              {viewMode === "generating" && "Generating Presentation Deck"}
+              {viewMode === "studio" && (deckSpec?.metadata?.title || "Presentation Studio")}
+            </h1>
+            <p className="page-description">
+              {viewMode === "config" && "AI-assisted slide deck generation from ground-truth sheet findings and executive insights."}
+              {viewMode === "generating" && "Running 6-stage background analytical intelligence pipeline..."}
+              {viewMode === "studio" && `${deckSpec?.slides?.length || 0} slides · ${currentTheme?.name || "Theme"} · Frontend Slides 16:9 Stage`}
+            </p>
           </div>
 
           <div className="header-actions-row">
@@ -245,6 +240,9 @@ export default function PresentationPage({
             )}
           </div>
         </div>
+      </header>
+
+      <div className={`presentation-modal-shell presentation-page-shell mode-${viewMode}`}>
 
         {/* VIEW 1: PROMPT STUDIO SCREEN (AI Dashboard-to-Deck) */}
         {viewMode === "config" && !useAdvancedScopeForm && (
