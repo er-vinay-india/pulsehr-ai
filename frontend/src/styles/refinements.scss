@@ -6989,7 +6989,7 @@ textarea:focus-visible,
 /* 6. Breakpoint: 1025px - 1439px (Laptops & Desktops) */
 @media screen and (min-width: 1025px) and (max-width: 1439px) {
   .app-main {
-    padding: 28px clamp(20px, 3vw, 40px);
+    padding: 28px clamp(16px, 3vw, 48px);
   }
 
   .kpi-grid {
@@ -7005,14 +7005,20 @@ textarea:focus-visible,
 /* 7. Breakpoint: >= 1440px (Widescreen Desktops) */
 @media screen and (min-width: 1440px) {
   .app-main {
-    max-width: 1540px;
+    max-width: 1480px;
     margin-left: auto;
     margin-right: auto;
-    padding: 32px clamp(24px, 4vw, 56px);
+    padding: 32px clamp(16px, 3vw, 48px) 64px;
   }
 
   .header-inner {
-    max-width: 1540px;
+    max-width: 1384px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .footer-inner {
+    max-width: 1384px;
     margin-left: auto;
     margin-right: auto;
   }
