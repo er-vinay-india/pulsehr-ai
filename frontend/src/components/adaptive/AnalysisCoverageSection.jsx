@@ -29,34 +29,34 @@ const HR_PILLARS = {
     id: "all",
     label: "All HR Playbooks",
     icon: Layers,
-    color: "#ff8a62",
+    color: "#005A6B",
   },
   workforce: {
     id: "workforce",
     label: "Workforce & Operations",
     icon: Users,
-    color: "#ff8a62",
+    color: "#9A3412",
     description: "Shift attendance, scheduled obligations, staffing capacity, and operational footprint.",
   },
   talent: {
     id: "talent",
     label: "Talent, Retention & Cohorts",
     icon: Target,
-    color: "#38bdf8",
+    color: "#005A6B",
     description: "Tenure dynamics, cohort attrition risk, recurring performance dips, and target adherence.",
   },
   economics: {
     id: "economics",
     label: "Compensation & Economics",
     icon: DollarSign,
-    color: "#34d399",
+    color: "#166534",
     description: "Payroll variance, overtime leakage, tail concentration, and unit labor productivity.",
   },
   governance: {
     id: "governance",
     label: "HR Governance & Simpson's Guardrails",
     icon: ShieldCheck,
-    color: "#c084fc",
+    color: "#6B21A8",
     description: "Subgroup bias detection, Simpson's Paradox reversal checks, SLA aging, and predictive defensibility.",
   },
 };
@@ -322,8 +322,18 @@ export default function AnalysisCoverageSection({ coverage, sheetId, onNavigateT
 
         {/* Header Right: Readiness Meter & Expand Action */}
         <div className="adaptive-coverage-drawer__actions">
-          <div className="adaptive-coverage-header-meter" title={`Capability Readiness: ${activePct}% Active, ${unlockablePct}% Unlockable, ${gapsPct}% Schema Gaps`}>
-            <div className="adaptive-coverage-header-meter__bar">
+          <div
+            className="adaptive-coverage-header-meter"
+            title={`Capability Readiness: ${activePct}% Active, ${unlockablePct}% Unlockable, ${gapsPct}% Schema Gaps`}
+          >
+            <div
+              className="adaptive-coverage-header-meter__bar"
+              role="meter"
+              aria-label="Executive HR strategy capability readiness"
+              aria-valuenow={effectiveCompleted}
+              aria-valuemin={0}
+              aria-valuemax={total_strategies}
+            >
               <div
                 className="adaptive-coverage-header-meter__slice adaptive-coverage-header-meter__slice--active"
                 style={{ width: `${activePct}%` }}
@@ -339,10 +349,10 @@ export default function AnalysisCoverageSection({ coverage, sheetId, onNavigateT
             </div>
             <div className="adaptive-coverage-header-meter__labels">
               <span className="adaptive-coverage-header-meter__txt active">
-                <CheckCircle2 size={10} /> {effectiveCompleted} Active
+                <CheckCircle2 size={10} aria-hidden="true" /> {effectiveCompleted} Active
               </span>
               <span className="adaptive-coverage-header-meter__txt unlockable">
-                <Sparkles size={10} /> {needs_inputs_count} Unlockable
+                <Sparkles size={10} aria-hidden="true" /> {needs_inputs_count} Unlockable
               </span>
               <span className="adaptive-coverage-header-meter__txt gaps">
                 {gapsCount} Schema Gaps
@@ -355,17 +365,18 @@ export default function AnalysisCoverageSection({ coverage, sheetId, onNavigateT
             onClick={() => setIsExpanded(!isExpanded)}
             className="adaptive-coverage-expand-btn"
             aria-expanded={isExpanded}
+            aria-controls="hr-strategy-audit-content"
             aria-label="Toggle full executive HR strategy audit"
           >
             {isExpanded ? "Collapse HR Audit" : "Review HR Strategy Audit"}
-            {isExpanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+            {isExpanded ? <ChevronUp size={15} aria-hidden="true" /> : <ChevronDown size={15} aria-hidden="true" />}
           </button>
         </div>
       </div>
 
       {/* Expanded Executive Audit Console */}
       {isExpanded && (
-        <div className="adaptive-coverage-drawer__content">
+        <div id="hr-strategy-audit-content" className="adaptive-coverage-drawer__content">
           {/* Executive KPI Metric Cards */}
           <div className="adaptive-coverage-kpi-grid">
             <div className="adaptive-coverage-kpi-card adaptive-coverage-kpi-card--active">
@@ -427,7 +438,7 @@ export default function AnalysisCoverageSection({ coverage, sheetId, onNavigateT
                   onClick={() => setSelectedPillar(pillar.id)}
                   className={`adaptive-coverage-pillar-btn ${isActive ? "adaptive-coverage-pillar-btn--active" : ""}`}
                 >
-                  <Icon size={14} style={{ color: pillar.color }} />
+                  <Icon size={14} className="adaptive-coverage-pillar-btn__icon" aria-hidden="true" />
                   <span>{pillar.label}</span>
                   <span className="adaptive-coverage-pillar-btn__count">{count}</span>
                 </button>
@@ -439,7 +450,7 @@ export default function AnalysisCoverageSection({ coverage, sheetId, onNavigateT
           <div className="adaptive-coverage-controls">
             <div className="adaptive-coverage-controls__filters">
               <span className="adaptive-coverage-controls__label">
-                <Filter size={12} /> Status:
+                <Filter size={12} aria-hidden="true" /> Status:
               </span>
               {[
                 { id: "all", label: "All Statuses" },
@@ -519,8 +530,7 @@ export default function AnalysisCoverageSection({ coverage, sheetId, onNavigateT
                         <div className="adaptive-coverage-card__top-meta">
                           <span className="adaptive-coverage-card__code">{s.strategy_code}</span>
                           <span
-                            className="adaptive-coverage-card__pillar-badge"
-                            style={{ color: pillarDef.color, borderColor: `${pillarDef.color}40`, background: `${pillarDef.color}15` }}
+                            className={`adaptive-coverage-card__pillar-badge adaptive-coverage-card__pillar-badge--${pillarDef.id}`}
                           >
                             {pillarDef.label.split("&")[0].trim()}
                           </span>
