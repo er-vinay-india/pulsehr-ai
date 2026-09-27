@@ -20,7 +20,7 @@ import DeckGeneratingView from "../components/presentation/DeckGeneratingView.js
 import DeckStudioView from "../components/presentation/DeckStudioView.jsx";
 import PromptStudioScreen from "../components/presentation/PromptStudioScreen.jsx";
 import SlideRegenModal from "../components/presentation/SlideRegenModal.jsx";
-import { transformDashboardToDeck } from "../utils/dashboardToPresentation";
+import { transformDashboardToDeck, transformCustomPromptToDeck } from "../utils/dashboardToPresentation";
 import { usePresentationWorkflow, STAGES } from "../components/presentation/usePresentationWorkflow";
 
 export default function PresentationPage({
@@ -130,6 +130,15 @@ export default function PresentationPage({
   }, [selectedSheetId, sheets]);
 
   const handleGenerateFromDashboard = (options) => {
+    if (options?.sourceMode === "custom_prompt" && options?.customPrompt) {
+      const generatedDeck = transformCustomPromptToDeck(options.customPrompt, options, dashboardData);
+      if (generatedDeck) {
+        setDeckSpec(generatedDeck);
+        setViewMode("studio");
+        setActiveSlideIndex(0);
+        return;
+      }
+    }
     if (dashboardData) {
       const generatedDeck = transformDashboardToDeck(dashboardData, options);
       if (generatedDeck) {

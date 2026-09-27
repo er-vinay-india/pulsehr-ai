@@ -302,55 +302,69 @@ export default function FrontendSlidesDeck({
     >
       {/* Top Header Bar */}
       <div className="frontend-slides-top-bar">
-        <div className="deck-brand-pill">
-          <span>16:9 Stage (Frontend Slides)</span>
-          <span style={{ opacity: 0.6 }}>•</span>
-          <span style={{ textTransform: "capitalize" }}>{themeName.replace(/_/g, " ")}</span>
+        <div className="symbolic-brand-wrap" title={`16:9 Fixed Stage · Theme: ${themeName.replace(/_/g, " ")}`}>
+          <div className="symbolic-brand-pill">
+            <Monitor size={13} />
+            <span className="brand-dot" />
+            <span className="brand-label-responsive">{themeName.replace(/_/g, " ")}</span>
+          </div>
+          <span className="symbolic-tooltip">16:9 Stage · Theme: {themeName.replace(/_/g, " ")}</span>
         </div>
 
         <div className="deck-actions">
           {onExportHtml && (
-            <button
-              type="button"
-              className="btn-ghost-sm"
-              onClick={onExportHtml}
-              title="Download Standalone HTML Presentation (Offline Zero-Dependency)"
-            >
-              <Download size={14} />
-              <span>HTML Deck</span>
-            </button>
+            <div className="symbolic-btn-wrap">
+              <button
+                type="button"
+                className="symbolic-action-btn"
+                onClick={onExportHtml}
+                aria-label="Download Standalone HTML Presentation"
+              >
+                <Download size={14} />
+                <span className="btn-label-responsive">HTML</span>
+              </button>
+              <span className="symbolic-tooltip">Download Standalone HTML Deck (Zero-Dependency)</span>
+            </div>
           )}
 
-          <button
-            type="button"
-            className="btn-ghost-sm"
-            onClick={() => !readOnly && setInlineEditActive(prev => !prev)}
-            disabled={readOnly}
-            title={readOnly ? "Verified findings are fixed; regenerate from source to change them" : "Toggle Inline Slide Text Editing (Shortcut: E)"}
-            style={inlineEditActive ? { background: "rgba(255, 87, 34, 0.15)", color: "var(--accent-color)" } : {}}
-          >
-            <Edit3 size={14} />
-            <span>{readOnly ? "Evidence locked" : inlineEditActive ? "Editing Mode" : "Edit Slide"}</span>
-          </button>
+          <div className="symbolic-btn-wrap">
+            <button
+              type="button"
+              className={`symbolic-action-btn ${inlineEditActive ? "active" : ""}`}
+              onClick={() => !readOnly && setInlineEditActive(prev => !prev)}
+              disabled={readOnly}
+              aria-label="Toggle Inline Edit"
+            >
+              <Edit3 size={14} />
+              <span className="btn-label-responsive">{readOnly ? "Locked" : inlineEditActive ? "Editing" : "Edit"}</span>
+            </button>
+            <span className="symbolic-tooltip">{readOnly ? "Evidence Locked by Governance" : "Inline Text Editing (Shortcut: E)"}</span>
+          </div>
 
-          <button
-            type="button"
-            className="btn-ghost-sm"
-            onClick={() => setForceMobileMode(true)}
-            title="Switch to Mobile Reflow View"
-          >
-            <Smartphone size={14} />
-            <span>Reflow View</span>
-          </button>
+          <div className="symbolic-btn-wrap">
+            <button
+              type="button"
+              className="symbolic-action-btn"
+              onClick={() => setForceMobileMode(true)}
+              aria-label="Switch to Mobile Reflow View"
+            >
+              <Smartphone size={14} />
+              <span className="btn-label-responsive">Reflow</span>
+            </button>
+            <span className="symbolic-tooltip">Mobile Reflow View: Vertical scrolling responsive deck</span>
+          </div>
 
-          <button
-            type="button"
-            className="btn-ghost-sm"
-            onClick={toggleFullscreen}
-            title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen (Shortcut: F)"}
-          >
-            {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
-          </button>
+          <div className="symbolic-btn-wrap">
+            <button
+              type="button"
+              className="symbolic-action-btn"
+              onClick={toggleFullscreen}
+              aria-label={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
+            >
+              {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+            </button>
+            <span className="symbolic-tooltip">{isFullscreen ? "Exit Fullscreen" : "Fullscreen Stage (Shortcut: F)"}</span>
+          </div>
         </div>
       </div>
 

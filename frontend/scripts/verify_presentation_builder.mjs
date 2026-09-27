@@ -23,7 +23,6 @@ async function run() {
   if (presTabBtn) {
     await presTabBtn.click();
   } else {
-    // Fallback: evaluate tab click
     await page.evaluate(() => {
       const btns = Array.from(document.querySelectorAll('nav button, .app-nav button, header button'));
       const pBtn = btns.find(b => b.innerText.includes('Presentation'));
@@ -32,64 +31,84 @@ async function run() {
   }
   await new Promise(r => setTimeout(r, 1500));
 
-  // 2. Capture Prompt Studio Screen
-  console.log('Capturing Prompt Studio Screen...');
-  const promptStudio = await page.$('.pres-prompt-studio');
-  if (promptStudio) {
+  // 2. Test Custom Topic & Executive Briefing Tab
+  console.log('Testing Custom Topic & Executive Briefing Tab in Prompt Studio...');
+  const customTabBtn = await page.$('.source-tab-btn:nth-child(2)');
+  if (customTabBtn) {
+    await customTabBtn.click();
+    await new Promise(r => setTimeout(r, 600));
+
+    // Click first inspiration chip
+    const firstChip = await page.$('.chip-btn:first-child');
+    if (firstChip) {
+      await firstChip.click();
+      await new Promise(r => setTimeout(r, 400));
+    }
+
+    // Capture Custom Prompt Studio Screen
     await page.screenshot({
-      path: path.join(ARTIFACT_DIR, 'verify_presentation_prompt_studio.png'),
-      fullPage: true
-    });
-  } else {
-    await page.screenshot({
-      path: path.join(ARTIFACT_DIR, 'verify_presentation_prompt_studio.png'),
+      path: path.join(ARTIFACT_DIR, 'verify_presentation_custom_prompt_studio.png'),
       fullPage: true
     });
   }
 
-  // 3. Open Royalty-Free Image Picker Modal
-  console.log('Testing Royalty-Free Image Picker Modal...');
-  const browsePhotosBtn = await page.$('.pres-bg-btn:nth-child(2)');
-  if (browsePhotosBtn) {
-    await browsePhotosBtn.click();
-    await new Promise(r => setTimeout(r, 800));
-    await page.screenshot({
-      path: path.join(ARTIFACT_DIR, 'verify_presentation_image_picker.png')
-    });
-
-    // Close image picker modal
-    const closeBtn = await page.$('.pres-image-picker-modal .btn-close, .pres-image-picker-modal .btn-cancel');
-    if (closeBtn) await closeBtn.click();
-    await new Promise(r => setTimeout(r, 400));
-  }
-
-  // 4. Click "Build Slides with Copilot Studio"
-  console.log('Building slides into Studio View...');
+  // 3. Click "Build Slides with Copilot Studio"
+  console.log('Building slides into Studio View (Step 1 Centered Title Slide)...');
   const buildBtn = await page.waitForSelector('.btn-launch-presentation');
   if (buildBtn) {
     await buildBtn.click();
-    await new Promise(r => setTimeout(r, 1500));
+    await new Promise(r => setTimeout(r, 1800));
 
-    // Capture Deck Studio View with Copilot Curation Bar
+    // Capture Step 1 Centered Title Slide
+    console.log('Capturing Step 1 Centered Title Slide...');
     await page.screenshot({
-      path: path.join(ARTIFACT_DIR, 'verify_presentation_studio_copilot.png')
+      path: path.join(ARTIFACT_DIR, 'verify_presentation_step1_centered_title.png')
     });
 
-    // 5. Test "Present with AI Orb"
-    console.log('Testing Present with AI Orb...');
-    const presentOrbBtn = await page.$('.btn-present-orb');
-    if (presentOrbBtn) {
-      await presentOrbBtn.click();
-      await new Promise(r => setTimeout(r, 800));
+    // 4. Test AI Title Suggestions Trigger
+    console.log('Testing AI Title Suggestions Trigger...');
+    const aiTitleBtn = await page.$('.btn-ai-title-suggest');
+    if (aiTitleBtn) {
+      await aiTitleBtn.click();
+      await new Promise(r => setTimeout(r, 600));
 
+      // Capture AI Title Suggestions Popover
       await page.screenshot({
-        path: path.join(ARTIFACT_DIR, 'verify_presentation_orb_presenter.png')
+        path: path.join(ARTIFACT_DIR, 'verify_presentation_ai_title_suggestions.png')
       });
+
+      // Click the first title suggestion
+      const firstSug = await page.$('.suggestion-tile-btn:first-child');
+      if (firstSug) {
+        await firstSug.click();
+        await new Promise(r => setTimeout(r, 500));
+      }
     }
+
+    // 5. Capture Studio with Symbolic Toolbar and Tooltip hover
+    console.log('Hovering over symbolic toolbar button...');
+    const photoBtn = await page.$('.symbolic-action-btn[aria-label*="Photo"], .symbolic-btn-wrap:nth-child(2)');
+    if (photoBtn) {
+      await photoBtn.hover();
+      await new Promise(r => setTimeout(r, 400));
+    }
+
+    await page.screenshot({
+      path: path.join(ARTIFACT_DIR, 'verify_presentation_symbolic_toolbar.png')
+    });
+
+    // 6. Test Mobile Viewport Responsiveness
+    console.log('Testing Mobile Viewport (375x812)...');
+    await page.setViewport({ width: 375, height: 812 });
+    await new Promise(r => setTimeout(r, 800));
+
+    await page.screenshot({
+      path: path.join(ARTIFACT_DIR, 'verify_presentation_mobile_responsive.png')
+    });
   }
 
   await browser.close();
-  console.log('All presentation audits completed successfully!');
+  console.log('All presentation verification audits completed successfully!');
 }
 
 run().catch(err => {

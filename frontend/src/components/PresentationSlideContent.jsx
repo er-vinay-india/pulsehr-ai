@@ -54,63 +54,94 @@ export default function PresentationSlideContent({
     }
   };
 
-  const renderHeader = () => (
-    <div className="slide-header-block">
-      <div className="slide-header-top-line">
-        <div className="slide-category-tag" style={{ color: theme.brand_color }}>
-          {slide.category || "EXECUTIVE REVIEW"}
-        </div>
-        {slide.evidence_id && (
-          <button
-            type="button"
-            className="slide-evidence-badge-btn"
-            onClick={() => onViewEvidence && onViewEvidence(slide)}
-            title="Inspect calculation methodology, evidence sources & board scrutiny briefing"
-          >
-            <ShieldCheck size={12} />
-            <span>{slide.evidence_id}</span>
-            {slide.finding_type && (
-              <span className="finding-type-subtag">
-                · {slide.finding_type.replace("_", " ").toUpperCase()}
-              </span>
+  const renderHeader = () => {
+    // For title_cover layout, title is centered in the hero body
+    if (layout === "title_cover") {
+      return (
+        <div className="slide-header-block title-cover-header">
+          <div className="slide-header-top-line">
+            <div className="slide-category-tag" style={{ color: theme.brand_color }}>
+              {slide.category || "EXECUTIVE REVIEW"}
+            </div>
+            {slide.evidence_id && (
+              <button
+                type="button"
+                className="slide-evidence-badge-btn"
+                onClick={() => onViewEvidence && onViewEvidence(slide)}
+                title="Inspect calculation methodology, evidence sources & board scrutiny briefing"
+              >
+                <ShieldCheck size={12} />
+                <span>{slide.evidence_id}</span>
+                {slide.finding_type && (
+                  <span className="finding-type-subtag">
+                    · {slide.finding_type.replace("_", " ").toUpperCase()}
+                  </span>
+                )}
+              </button>
             )}
-          </button>
-        )}
-      </div>
-      {isEditable && isEditingTitle ? (
-        <input
-          type="text"
-          className="slide-title-input"
-          value={titleVal}
-          onChange={e => setTitleVal(e.target.value)}
-          onBlur={handleTitleBlur}
-          onKeyDown={e => e.key === "Enter" && handleTitleBlur()}
-          autoFocus
-        />
-      ) : (
-        <h2
-          className={`slide-main-title ${isEditable ? "editable-cursor" : ""}`}
-          style={{ color: theme.primary_text }}
-          onClick={() => isEditable && setIsEditingTitle(true)}
-          title={isEditable ? "Click to edit title" : undefined}
-        >
-          {slide.title}
-        </h2>
-      )}
-      <div className="slide-subtitle-row">
-        {slide.subtitle && (
-          <div className="slide-subtitle" style={{ color: theme.accent_color }}>
-            {slide.subtitle}
           </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="slide-header-block">
+        <div className="slide-header-top-line">
+          <div className="slide-category-tag" style={{ color: theme.brand_color }}>
+            {slide.category || "EXECUTIVE REVIEW"}
+          </div>
+          {slide.evidence_id && (
+            <button
+              type="button"
+              className="slide-evidence-badge-btn"
+              onClick={() => onViewEvidence && onViewEvidence(slide)}
+              title="Inspect calculation methodology, evidence sources & board scrutiny briefing"
+            >
+              <ShieldCheck size={12} />
+              <span>{slide.evidence_id}</span>
+              {slide.finding_type && (
+                <span className="finding-type-subtag">
+                  · {slide.finding_type.replace("_", " ").toUpperCase()}
+                </span>
+              )}
+            </button>
+          )}
+        </div>
+        {isEditable && isEditingTitle ? (
+          <input
+            type="text"
+            className="slide-title-input"
+            value={titleVal}
+            onChange={e => setTitleVal(e.target.value)}
+            onBlur={handleTitleBlur}
+            onKeyDown={e => e.key === "Enter" && handleTitleBlur()}
+            autoFocus
+          />
+        ) : (
+          <h2
+            className={`slide-main-title ${isEditable ? "editable-cursor" : ""}`}
+            style={{ color: theme.primary_text }}
+            onClick={() => isEditable && setIsEditingTitle(true)}
+            title={isEditable ? "Click to edit title" : undefined}
+          >
+            {slide.title}
+          </h2>
         )}
-        {(slide.is_partial_year || slide.limitations?.includes("Partial Year")) && (
-          <span className="slide-partial-year-badge" title="Covers fewer than 330 days in annual cycle">
-            Partial Year Data
-          </span>
-        )}
+        <div className="slide-subtitle-row">
+          {slide.subtitle && (
+            <div className="slide-subtitle" style={{ color: theme.accent_color }}>
+              {slide.subtitle}
+            </div>
+          )}
+          {(slide.is_partial_year || slide.limitations?.includes("Partial Year")) && (
+            <span className="slide-partial-year-badge" title="Covers fewer than 330 days in annual cycle">
+              Partial Year Data
+            </span>
+          )}
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const renderFooter = () => {
     const sources = slide.evidence_sources || [];
@@ -167,6 +198,12 @@ export default function PresentationSlideContent({
         narrativeVal={narrativeVal}
         setNarrativeVal={setNarrativeVal}
         handleNarrativeBlur={handleNarrativeBlur}
+        isEditingTitle={isEditingTitle}
+        setIsEditingTitle={setIsEditingTitle}
+        titleVal={titleVal}
+        setTitleVal={setTitleVal}
+        handleTitleBlur={handleTitleBlur}
+        onUpdate={onUpdate}
       />
 
       {renderFooter()}

@@ -160,103 +160,150 @@ export default function DeckStudioView({
             Slide {activeSlideIndex + 1} of {deckSpec.slides.length}
           </span>
 
-          <div className="theme-quick-dropdown">
-            <Palette size={14} />
-            <select
-              className="select-theme-inline"
-              value={deckSpec.theme?.id || deckSpec.metadata?.theme_id || "executive_dark"}
-              onChange={(e) => onSwitchTheme(e.target.value)}
-            >
-              {themes.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-            </select>
+          <div className="symbolic-btn-wrap">
+            <div className="theme-quick-dropdown">
+              <Palette size={14} />
+              <select
+                className="select-theme-inline"
+                value={deckSpec.theme?.id || deckSpec.metadata?.theme_id || "executive_dark"}
+                onChange={(e) => onSwitchTheme(e.target.value)}
+                aria-label="Switch Theme"
+              >
+                {themes.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <span className="symbolic-tooltip">Visual Theme Palette</span>
           </div>
 
           {/* Audit Verification Seal */}
-          <div className="validation-summary-chip verified" title="Simpson's Paradox & Empirical Audit Verified">
-            <ShieldCheck size={13} />
-            <span>S01–S20 Audit Verified</span>
+          <div className="symbolic-btn-wrap">
+            <div className="validation-summary-chip verified" title="Simpson's Paradox & Empirical Audit Verified">
+              <ShieldCheck size={13} />
+              <span className="seal-text-responsive">S01–S20 Audit</span>
+            </div>
+            <span className="symbolic-tooltip">Audit Governance: Verified against aggregate distortion & Simpson&apos;s Paradox</span>
           </div>
         </div>
 
         <div className="toolbar-right">
           {/* Executive AI Orb Launcher */}
-          <button
-            type="button"
-            className="btn-present-orb"
-            onClick={() => setIsPresenterMode(!isPresenterMode)}
-            title="Present directly on web with Autonomous AI Orb Voiceover"
-          >
-            <Sparkles size={14} />
-            <span>{isPresenterMode ? "Exit Presenter Mode" : "Present with AI Orb"}</span>
-          </button>
+          <div className="symbolic-btn-wrap">
+            <button
+              type="button"
+              className={`symbolic-action-btn btn-present-orb ${isPresenterMode ? "active" : ""}`}
+              onClick={() => setIsPresenterMode(!isPresenterMode)}
+              aria-label={isPresenterMode ? "Exit Presenter Mode" : "Present with AI Orb"}
+            >
+              <Sparkles size={14} />
+              <span className="btn-label-responsive">{isPresenterMode ? "Exit" : "AI Orb"}</span>
+            </button>
+            <span className="symbolic-tooltip">
+              {isPresenterMode ? "Exit Fullscreen Presenter Mode" : "Present with Autonomous Acoustic AI Orb Voiceover"}
+            </span>
+          </div>
 
           {/* Royalty-Free Image Picker Trigger */}
-          <button
-            type="button"
-            className="btn-ghost-sm"
-            onClick={() => setIsImagePickerOpen(true)}
-            title="Browse royalty-free commercial photography with dark contrast scrim"
-          >
-            <Image size={14} />
-            <span>Slide Photo</span>
-          </button>
+          <div className="symbolic-btn-wrap">
+            <button
+              type="button"
+              className="symbolic-action-btn"
+              onClick={() => setIsImagePickerOpen(true)}
+              aria-label="Browse Royalty-Free Commercial Photography"
+            >
+              <Image size={14} />
+              <span className="btn-label-responsive">Photo</span>
+            </button>
+            <span className="symbolic-tooltip">
+              Slide Photography: Browse free commercial photos with dark contrast scrim
+            </span>
+          </div>
 
-          <button
-            type="button"
-            className={`btn-ghost-sm ${isEvidenceDrawerOpen ? "active" : ""}`}
-            onClick={() => onOpenEvidence(deckSpec.slides[activeSlideIndex])}
-            title="Audit calculation methodology, board briefing & reproducible audit ledger"
-          >
-            <ShieldCheck size={14} />
-            <span>Audit Evidence</span>
-          </button>
+          {/* Audit Evidence Drawer Toggle */}
+          <div className="symbolic-btn-wrap">
+            <button
+              type="button"
+              className={`symbolic-action-btn ${isEvidenceDrawerOpen ? "active" : ""}`}
+              onClick={() => onOpenEvidence(deckSpec.slides[activeSlideIndex])}
+              aria-label="Audit Calculation Methodology & Board Evidence"
+            >
+              <ShieldCheck size={14} />
+              <span className="btn-label-responsive">Audit</span>
+            </button>
+            <span className="symbolic-tooltip">
+              Audit Evidence: S01–S20 verifiable calculation ledger & methodology
+            </span>
+          </div>
 
-          <button
-            type="button"
-            className={`btn-ghost-sm ${speakerNotesOpen ? "active" : ""}`}
-            onClick={() => setSpeakerNotesOpen(!speakerNotesOpen)}
-          >
-            <FileText size={14} />
-            <span>Speaker Notes</span>
-          </button>
+          {/* Speaker Notes Drawer Toggle */}
+          <div className="symbolic-btn-wrap">
+            <button
+              type="button"
+              className={`symbolic-action-btn ${speakerNotesOpen ? "active" : ""}`}
+              onClick={() => setSpeakerNotesOpen(!speakerNotesOpen)}
+              aria-label="Toggle Speaker Notes"
+            >
+              <FileText size={14} />
+              <span className="btn-label-responsive">Notes</span>
+            </button>
+            <span className="symbolic-tooltip">
+              Speaker Notes: Executive talking points and speech script
+            </span>
+          </div>
 
-          <button
-            type="button"
-            className="btn-ghost-sm"
-            disabled={evidenceLocked}
-            onClick={onAddSlide}
-            title="Add a new slide to deck"
-          >
-            <Plus size={14} />
-            <span>Add Slide</span>
-          </button>
+          {/* Add Slide */}
+          <div className="symbolic-btn-wrap">
+            <button
+              type="button"
+              className="symbolic-action-btn"
+              disabled={evidenceLocked}
+              onClick={onAddSlide}
+              aria-label="Append a New Slide"
+            >
+              <Plus size={14} />
+              <span className="btn-label-responsive">Add</span>
+            </button>
+            <span className="symbolic-tooltip">
+              Add Slide: Append a new executive slide to current deck
+            </span>
+          </div>
 
           {/* Export Options */}
           {onExportPptx && (
-            <button
-              type="button"
-              className="btn-export-pptx"
-              onClick={onExportPptx}
-              title="Download editable PowerPoint presentation"
-            >
-              <Download size={14} />
-              <span>PPTX</span>
-            </button>
+            <div className="symbolic-btn-wrap">
+              <button
+                type="button"
+                className="symbolic-action-btn btn-export-pptx"
+                onClick={onExportPptx}
+                aria-label="Download PowerPoint PPTX"
+              >
+                <Download size={14} />
+                <span className="btn-label-responsive">PPTX</span>
+              </button>
+              <span className="symbolic-tooltip">
+                Export PPTX: Native PowerPoint presentation with editable charts
+              </span>
+            </div>
           )}
 
-          <button
-            type="button"
-            className="btn-ghost-sm"
-            onClick={handlePrintPdf}
-            title="Print or Save as PDF"
-          >
-            <Printer size={14} />
-            <span>PDF</span>
-          </button>
+          {/* PDF Export */}
+          <div className="symbolic-btn-wrap">
+            <button
+              type="button"
+              className="symbolic-action-btn"
+              onClick={handlePrintPdf}
+              aria-label="Export PDF"
+            >
+              <Printer size={14} />
+              <span className="btn-label-responsive">PDF</span>
+            </button>
+            <span className="symbolic-tooltip">
+              Export PDF: Print or save presentation as PDF document
+            </span>
+          </div>
         </div>
       </div>
 

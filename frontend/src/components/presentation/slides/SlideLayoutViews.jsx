@@ -1,8 +1,9 @@
-import React from "react";
-import { TrendingUp, Award, ChevronRight } from "lucide-react";
+import React, { useState } from "react";
+import { TrendingUp, Award, ChevronRight, Sparkles, Layers, Check } from "lucide-react";
 import FormattedText from "./FormattedText.jsx";
 import SlideChart from "./SlideChart.jsx";
 import { SlideTalent9BoxMatrix, SlideBurnoutStrainPanel } from "./SlidePanels.jsx";
+import { getTitleSuggestions } from "../../../utils/dashboardToPresentation.js";
 
 export default function SlideLayoutViews({
   layout,
@@ -13,10 +14,131 @@ export default function SlideLayoutViews({
   setIsEditingNarrative,
   narrativeVal,
   setNarrativeVal,
-  handleNarrativeBlur
+  handleNarrativeBlur,
+  isEditingTitle,
+  setIsEditingTitle,
+  titleVal,
+  setTitleVal,
+  handleTitleBlur,
+  onUpdate
 }) {
+  const [showTitleSuggestions, setShowTitleSuggestions] = useState(false);
+
   return (
     <div className="slide-body-content">
+      {/* LAYOUT: title_cover (Centered Executive Title Slide in Step 1) */}
+      {layout === "title_cover" && (
+        <div className="title-cover-canvas">
+          <div className="title-cover-center-content">
+            <div className="title-cover-top-badge">
+              <span className="cover-badge-dot" style={{ backgroundColor: theme.brand_color }} />
+              <span>{slide.category || "EXECUTIVE BOARDROOM BRIEFING"}</span>
+            </div>
+
+            {isEditable && isEditingTitle ? (
+              <input
+                type="text"
+                className="title-cover-input"
+                value={titleVal !== undefined ? titleVal : slide.title}
+                onChange={e => setTitleVal && setTitleVal(e.target.value)}
+                onBlur={handleTitleBlur}
+                onKeyDown={e => e.key === "Enter" && handleTitleBlur && handleTitleBlur()}
+                autoFocus
+              />
+            ) : (
+              <h1
+                className={`title-cover-heading ${isEditable ? "editable-cursor" : ""}`}
+                style={{ color: theme.primary_text }}
+                onClick={() => isEditable && setIsEditingTitle && setIsEditingTitle(true)}
+                title={isEditable ? "Click to edit title" : undefined}
+              >
+                {titleVal || slide.title}
+              </h1>
+            )}
+
+            {slide.subtitle && (
+              <p className="title-cover-subtitle" style={{ color: theme.accent_color }}>
+                {slide.subtitle}
+              </p>
+            )}
+
+            {/* AI Title Suggestions Trigger Button */}
+            <div className="title-cover-ai-actions">
+              <button
+                type="button"
+                className="btn-ai-title-suggest"
+                onClick={() => setShowTitleSuggestions(!showTitleSuggestions)}
+                title="Explore intelligent title suggestions from AI Copilot"
+              >
+                <Sparkles size={15} />
+                <span>AI Title Suggestions</span>
+              </button>
+
+              {/* AI Title Suggestions Popover / Panel */}
+              {showTitleSuggestions && (
+                <div className="title-suggestions-popover">
+                  <div className="popover-header">
+                    <div className="popover-title-row">
+                      <Sparkles size={14} />
+                      <span>Intelligent AI Title Alternatives</span>
+                    </div>
+                    <button
+                      type="button"
+                      className="popover-close-btn"
+                      onClick={() => setShowTitleSuggestions(false)}
+                      aria-label="Close suggestions"
+                    >
+                      &times;
+                    </button>
+                  </div>
+                  <div className="popover-suggestions-list">
+                    {getTitleSuggestions(slide).map((sug, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        className="suggestion-tile-btn"
+                        onClick={() => {
+                          if (setTitleVal) setTitleVal(sug);
+                          if (onUpdate) onUpdate({ ...slide, title: sug });
+                          setShowTitleSuggestions(false);
+                        }}
+                      >
+                        <span className="sug-index">{idx + 1}</span>
+                        <span className="sug-label">{sug}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {slide.narrative && (
+              <p className="title-cover-narrative-p" style={{ color: theme.secondary_text }}>
+                <FormattedText text={slide.narrative} defaultColor={theme.secondary_text} />
+              </p>
+            )}
+
+            {/* Executive Focus Pillars / Highlights */}
+            {slide.bullets && slide.bullets.length > 0 && (
+              <div className="title-cover-pillars-grid">
+                {slide.bullets.map((b, i) => (
+                  <div
+                    key={i}
+                    className="title-pillar-card"
+                    style={{ backgroundColor: theme.card_bg, borderColor: theme.card_border }}
+                  >
+                    <span className="pillar-indicator" style={{ backgroundColor: theme.brand_color }} />
+                    <span className="pillar-body" style={{ color: theme.primary_text }}>
+                      {typeof b === "string" ? b : b.text}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* LAYOUT 1: title_hero */}
       {layout === "title_hero" && (
         <div className="layout-grid title-hero-grid">
