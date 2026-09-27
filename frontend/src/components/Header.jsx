@@ -8,6 +8,8 @@ import {
   Presentation
 } from "lucide-react";
 
+import highviewLogo from "../assets/highview-logo.png";
+
 export default function Header({ activeTab, onSelectTab, onOpenUploadModal, activeJob, isUploadingBackground }) {
   const tabs = [
     { id: "adaptive", label: "Executive Dashboard", short: "Dashboard", icon: LayoutDashboard },
@@ -20,7 +22,7 @@ export default function Header({ activeTab, onSelectTab, onOpenUploadModal, acti
       <div className="header-inner">
         <div className="brand-group">
           <div className="brand-logo-wrap">
-            <BrainCircuit size={24} />
+            <img src={highviewLogo} alt="HighView Logo" className="brand-logo-img" />
           </div>
           <div>
             <div className="brand-title-row">

@@ -1,0 +1,21 @@
+{
+  "name": "HighView",
+  "short_name": "HighView",
+  "description": "HighView transforms departmental spreadsheets into clear insights, executive summaries, and presentation-ready stories, powered by HRIDAY.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#120f0d",
+  "theme_color": "#0284c7",
+  "icons": [
+    {
+      "src": "/highview-logo-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/highview-logo-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

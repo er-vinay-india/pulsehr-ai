@@ -1164,10 +1164,15 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
       <header className="adaptive-page-header">
         <div className="adaptive-hero-brand-block">
           <div className="adaptive-hero-title-row">
-            <h1 className="adaptive-page-title">HighView</h1>
-            <span className="adaptive-hero-badge">Powered by HRIDAY</span>
+            <img src="/highview-logo-192.png" alt="HighView Logo" className="hero-logo-img" />
+            <div className="adaptive-hero-text-col">
+              <div className="adaptive-hero-name-badge-row">
+                <h1 className="adaptive-page-title">HighView</h1>
+                <span className="adaptive-hero-badge">Powered by HRIDAY</span>
+              </div>
+              <p className="adaptive-page-tagline">Clarity From Every Sheet.</p>
+            </div>
           </div>
-          <p className="adaptive-page-tagline">Clarity From Every Sheet.</p>
         </div>
 
         {/* Scope Bar: Source Control, Reporting Period, Latest Data, Refresh */}
