@@ -18,7 +18,9 @@ import { exportStandaloneHtmlPresentation } from "../utils/standaloneHtmlExporte
 import DeckConfigView from "../components/presentation/DeckConfigView.jsx";
 import DeckGeneratingView from "../components/presentation/DeckGeneratingView.jsx";
 import DeckStudioView from "../components/presentation/DeckStudioView.jsx";
+import PromptStudioScreen from "../components/presentation/PromptStudioScreen.jsx";
 import SlideRegenModal from "../components/presentation/SlideRegenModal.jsx";
+import { transformDashboardToDeck } from "../utils/dashboardToPresentation";
 import { usePresentationWorkflow, STAGES } from "../components/presentation/usePresentationWorkflow";
 
 export default function PresentationPage({
@@ -98,6 +100,48 @@ export default function PresentationPage({
     initialScopeType,
     onJobUpdate
   });
+
+  // Active Dashboard Truth Fetching
+  const [dashboardData, setDashboardData] = React.useState(null);
+  const [dashboardLoading, setDashboardLoading] = React.useState(false);
+  const [useAdvancedScopeForm, setUseAdvancedScopeForm] = React.useState(false);
+
+  React.useEffect(() => {
+    let sheetId = selectedSheetId;
+    if (!sheetId) {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        sheetId = params.get("sheet_id");
+      } catch {}
+    }
+    if (!sheetId && sheets && sheets.length > 0) {
+      sheetId = String(sheets[0].id);
+    }
+    if (sheetId) {
+      setDashboardLoading(true);
+      fetch(`/api/adaptive-dashboard/primary-element?sheet_id=${sheetId}`)
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data) setDashboardData(data);
+        })
+        .catch((err) => console.debug("Failed to fetch dashboard data for presentation:", err))
+        .finally(() => setDashboardLoading(false));
+    }
+  }, [selectedSheetId, sheets]);
+
+  const handleGenerateFromDashboard = (options) => {
+    if (dashboardData) {
+      const generatedDeck = transformDashboardToDeck(dashboardData, options);
+      if (generatedDeck) {
+        setDeckSpec(generatedDeck);
+        setViewMode("studio");
+        setActiveSlideIndex(0);
+        return;
+      }
+    }
+    // Fallback if no dashboard data available
+    handleStartGeneration();
+  };
 
   return (
     <div className="presentation-page-container">
@@ -193,8 +237,18 @@ export default function PresentationPage({
           </div>
         </div>
 
-        {/* VIEW 1: CONFIGURATION FORM */}
-        {viewMode === "config" && (
+        {/* VIEW 1: PROMPT STUDIO SCREEN (AI Dashboard-to-Deck) */}
+        {viewMode === "config" && !useAdvancedScopeForm && (
+          <PromptStudioScreen
+            dashboardData={dashboardData}
+            onGenerateDeck={handleGenerateFromDashboard}
+            isGenerating={dashboardLoading}
+            themes={themes}
+          />
+        )}
+
+        {/* LEGACY VIEW 1 FALLBACK: ADVANCED SCOPE FORM */}
+        {viewMode === "config" && useAdvancedScopeForm && (
           <DeckConfigView
             themes={themes}
             selectedThemeId={selectedThemeId}
@@ -304,6 +358,7 @@ export default function PresentationPage({
             onDuplicateSlide={handleDuplicateSlide}
             onDeleteSlide={handleDeleteSlide}
             onUpdateSlide={handleUpdateSlide}
+            onExportPptx={handleExportPptx}
             selectedThemeId={selectedThemeId}
           />
         )}

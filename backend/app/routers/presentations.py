@@ -23,6 +23,8 @@ from ..services.report_generator import export_spec_to_pptx
 
 logger = logging.getLogger(__name__)
 
+from ..services.presentation.image_provider import search_free_images
+
 router = APIRouter(prefix="/api/presentations", tags=["presentations"])
 
 
@@ -58,6 +60,17 @@ class RegenerateSlideRequest(BaseModel):
 
 class ExportPptxRequest(BaseModel):
     deck_spec: dict[str, Any]
+
+
+@router.get("/images/search")
+def get_free_images(
+    query: str = Query("workplace", description="Search keyword for free royalty-free images"),
+    category: str | None = Query(None, description="Category filter (executive, operations, team, analytics)"),
+    page_size: int = Query(12, ge=1, le=30),
+):
+    """Searches commercial royalty-free workplace and enterprise photography with zero API key required."""
+    images = search_free_images(query=query, category=category, page_size=page_size)
+    return {"images": images, "total": len(images), "query": query}
 
 
 @router.get("/themes")
