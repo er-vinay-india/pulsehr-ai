@@ -130,18 +130,18 @@ export default function App() {
             alignItems: "center",
             gap: "12px",
             padding: "12px 18px",
-            background: "#1c1815",
-            border: "1px solid rgba(46, 213, 115, 0.4)",
+            background: "var(--hv-bg-surface, #ffffff)",
+            border: "1px solid var(--hv-status-success, #365314)",
             borderRadius: "12px",
-            boxShadow: "0 8px 32px rgba(0, 0, 0, 0.5), 0 0 12px rgba(46, 213, 115, 0.15)",
-            color: "#fff9f2",
+            boxShadow: "var(--shadow-lg, 0 8px 32px rgba(0, 0, 0, 0.2))",
+            color: "var(--hv-text-primary, #0b1f3a)",
             fontSize: "0.88rem",
             animation: "slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1)"
           }}
         >
-          <CheckCircle2 size={20} color="#2ed573" style={{ flexShrink: 0 }} />
+          <CheckCircle2 size={20} color="var(--hv-status-success, #365314)" style={{ flexShrink: 0 }} />
           <div style={{ marginRight: "6px" }}>
-            <strong style={{ color: "#2ed573" }}>Ingestion Complete:</strong>{" "}
+            <strong style={{ color: "var(--hv-status-success, #365314)" }}>Ingestion Complete:</strong>{" "}
             <span>{bgNotification.fileName} ({bgNotification.sheetsCount} sheets, {bgNotification.totalRows} rows)</span>
           </div>
 
@@ -172,7 +172,7 @@ export default function App() {
             style={{
               background: "none",
               border: "none",
-              color: "var(--fg-muted)",
+              color: "var(--hv-text-secondary, #334155)",
               cursor: "pointer",
               padding: "4px",
               display: "flex",

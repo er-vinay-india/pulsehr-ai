@@ -31,8 +31,8 @@ export default function PromptStudioScreen({
   const [transitionStyle, setTransitionStyle] = useState("dissolve"); // "dissolve" | "sweep" | "none"
 
   // Dashboard context tokens
-  const priorityElement = dashboardData?.quaternary_element;
-  const heroSpread = priorityElement?.prominent_number || "—";
+  const priorityElement = dashboardData?.primary_element || dashboardData?.quaternary_element;
+  const heroSpread = priorityElement?.prominent_number || priorityElement?.prominent_metric?.value || "";
   const priorityTitle = priorityElement?.title || "Strategic Priority Disparity";
   const exceptionData = dashboardData?.exception_watch;
   const coverageData = dashboardData?.analysis_coverage;
@@ -370,7 +370,7 @@ export default function PromptStudioScreen({
                   <div className="outline-item">
                     <span className="item-num">2</span>
                     <div className="item-body">
-                      <strong>Strategic Priority Spread ({heroSpread})</strong>
+                      <strong>Strategic Priority Spread{heroSpread && heroSpread !== "—" ? ` (${heroSpread})` : ""}</strong>
                       <span>Donut / Bounded Bar chart translated directly from dashboard</span>
                     </div>
                     <span className="item-badge highlight">Donut Embed</span>

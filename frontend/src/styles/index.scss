@@ -3377,9 +3377,9 @@
     }
 
     &.active {
-      background: var(--surface-card-hover);
-      color: var(--brand-400);
-      border-color: var(--border-strong);
+      background: var(--hv-info-bg, #EAF4FF);
+      color: var(--hv-brand-primary, #0B1F3A);
+      border-color: var(--hv-border-strong, #CBD5E1);
       box-shadow: var(--shadow-sm);
     }
   }

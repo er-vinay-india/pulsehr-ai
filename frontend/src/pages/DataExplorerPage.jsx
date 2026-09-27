@@ -370,8 +370,8 @@ export default function DataExplorerPage() {
                 className="version-pill-group"
                 style={{
                   display: 'inline-flex',
-                  background: 'rgba(0, 0, 0, 0.25)',
-                  border: '1px solid var(--border-subtle)',
+                  background: 'var(--hv-bg-inset, #F1F5F9)',
+                  border: '1px solid var(--hv-border-strong, #CBD5E1)',
                   borderRadius: '7px',
                   padding: '2px',
                   gap: '2px'
@@ -389,8 +389,8 @@ export default function DataExplorerPage() {
                     fontSize: '0.78rem',
                     border: 'none',
                     borderRadius: '5px',
-                    background: dataVersion === 'curated' ? 'var(--brand-500)' : 'transparent',
-                    color: dataVersion === 'curated' ? '#100e0c' : 'var(--fg-secondary)',
+                    background: dataVersion === 'curated' ? 'var(--hv-brand-primary, #0B1F3A)' : 'transparent',
+                    color: dataVersion === 'curated' ? '#FFFFFF' : 'var(--hv-text-secondary, #334155)',
                     fontWeight: 600,
                     cursor: 'pointer'
                   }}
@@ -409,8 +409,8 @@ export default function DataExplorerPage() {
                     fontSize: '0.78rem',
                     border: 'none',
                     borderRadius: '5px',
-                    background: dataVersion === 'raw' ? 'var(--brand-500)' : 'transparent',
-                    color: dataVersion === 'raw' ? '#100e0c' : 'var(--fg-secondary)',
+                    background: dataVersion === 'raw' ? 'var(--hv-brand-primary, #0B1F3A)' : 'transparent',
+                    color: dataVersion === 'raw' ? '#FFFFFF' : 'var(--hv-text-secondary, #334155)',
                     fontWeight: 600,
                     cursor: 'pointer'
                   }}

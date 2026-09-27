@@ -77,6 +77,9 @@
   /* HighView Semantic Status Tiers */
   --hv-success: #365314;
   --hv-success-bg: #E6F4F1;
+  --hv-status-success: #365314;
+  --hv-status-warning: #B7791F;
+  --hv-status-error: #B91C1C;
   --hv-info: #005A6B;
   --hv-info-bg: #EAF4FF;
 
@@ -198,6 +201,9 @@
   --bg-brand: var(--hv-primary);
   --surface-elevated: var(--color-bg-elevated);
 
+  --accent-500: var(--hv-brand-secondary); /* Accessible Teal #005A6B */
+  --accent-soft: rgba(0, 90, 107, 0.1);
+
   --emerald-tier: var(--color-success);
   --emerald-bg: var(--hv-success-bg);
   --amber-tier: var(--color-warning);
@@ -292,6 +298,9 @@
 
   --hv-success: #A3E635;
   --hv-success-bg: rgba(163, 230, 53, 0.12);
+  --hv-status-success: #2DD4BF;
+  --hv-status-warning: #FBBF24;
+  --hv-status-error: #F87171;
   --hv-info: #5EEAD4;
   --hv-info-bg: rgba(94, 234, 212, 0.12);
 
@@ -411,6 +420,9 @@
   --brand-subtle-border: rgba(96, 165, 250, 0.3);
   --bg-brand: var(--hv-primary);
   --surface-elevated: var(--color-bg-elevated);
+
+  --accent-500: var(--hv-brand-secondary); /* Interactive Teal #5EEAD4 */
+  --accent-soft: rgba(94, 234, 212, 0.14);
 
   --emerald-tier: var(--color-success);
   --emerald-bg: var(--hv-success-bg);

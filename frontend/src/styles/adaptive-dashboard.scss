@@ -64,16 +64,16 @@
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      color: #34d399;
-      font-weight: 500;
+      color: var(--hv-status-success, #365314);
+      font-weight: 600;
       font-size: 12px;
 
       .scope-live-dot {
         width: 6px;
         height: 6px;
         border-radius: 50%;
-        background: #34d399;
-        box-shadow: 0 0 8px rgba(52, 211, 153, 0.6);
+        background: var(--hv-status-success, #365314);
+        box-shadow: 0 0 6px var(--hv-status-success, #365314);
       }
     }
   }
@@ -319,10 +319,10 @@
 
       .scope-persona-badge {
         font-size: 13px;
-        font-weight: 500;
-        color: #ffb089;
-        background: rgba(255, 176, 137, 0.1);
-        border: 1px solid rgba(255, 176, 137, 0.3);
+        font-weight: 600;
+        color: var(--hv-text-primary, #0B1F3A);
+        background: var(--hv-info-bg, #EAF4FF);
+        border: 1px solid var(--hv-border-strong, #CBD5E1);
         padding: 8px 14px;
         border-radius: var(--radius-xs, 6px);
         white-space: nowrap;
@@ -334,7 +334,7 @@
           width: 7px;
           height: 7px;
           border-radius: 50%;
-          background: #ffb089;
+          background: var(--hv-brand-secondary, #005A6B);
           display: inline-block;
         }
       }
@@ -1721,7 +1721,7 @@
             font-weight: 700;
             text-transform: uppercase;
             letter-spacing: 0.08em;
-            color: #fbbf24;
+            color: var(--hv-brand-secondary, #005A6B);
           }
 
           .briefing-title {
@@ -1932,7 +1932,7 @@
         font-weight: 700;
         text-transform: uppercase;
         letter-spacing: 0.05em;
-        color: var(--accent, #d97706);
+        color: var(--hv-brand-secondary, #005A6B);
       }
 
       .exception-caption-tag {
@@ -3475,7 +3475,7 @@
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.06em;
-    color: var(--brand-400, #ffb089);
+    color: var(--hv-brand-secondary, #005A6B);
   }
 
   &__badges {

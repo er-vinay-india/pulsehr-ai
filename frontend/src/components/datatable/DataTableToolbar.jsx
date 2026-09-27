@@ -100,9 +100,7 @@ export default function DataTableToolbar({
             alignItems: "center",
             gap: "6px",
             fontSize: "0.78rem",
-            padding: "0.4rem 0.75rem",
-            color: "var(--accent-500)",
-            borderColor: "rgba(126, 231, 217, 0.3)"
+            padding: "0.4rem 0.75rem"
           }}
           title="Download visible columns and rows as CSV"
         >
