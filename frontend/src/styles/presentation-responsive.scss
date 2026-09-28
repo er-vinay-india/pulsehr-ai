@@ -3988,48 +3988,13 @@ body:has(.presentation-modal-backdrop) {
 .pres-prompt-studio.pres-minimal-studio {
   max-width: 900px;
   margin: 0 auto;
-  padding: 32px 20px 60px;
+  padding: 16px 20px 48px;
   box-sizing: border-box;
 
-  /* Hero & Stepper Header */
+  /* Stepper Header */
   .pres-studio-hero {
     text-align: center;
-    margin-bottom: 32px;
-
-    .pres-hero-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 7px;
-      padding: 5px 14px;
-      background: rgba(15, 118, 110, 0.08);
-      border: 1px solid rgba(15, 118, 110, 0.25);
-      border-radius: 20px;
-      font-size: 12px;
-      font-weight: 700;
-      color: #0F766E;
-      margin-bottom: 12px;
-
-      .hero-sparkle {
-        color: #0F766E;
-      }
-    }
-
-    .pres-hero-title {
-      font-size: 28px;
-      font-weight: 800;
-      color: var(--hv-text-primary, #0F172A);
-      margin: 0 0 10px;
-      letter-spacing: -0.02em;
-      line-height: 1.25;
-    }
-
-    .pres-hero-subtitle {
-      font-size: 14.5px;
-      color: var(--hv-text-secondary, #475569);
-      max-width: 600px;
-      margin: 0 auto 28px;
-      line-height: 1.5;
-    }
+    margin-bottom: 24px;
 
     /* Stepper Navigation */
     .pres-stepper-nav {
@@ -4080,6 +4045,14 @@ body:has(.presentation-modal-backdrop) {
             font-size: 13px;
             font-weight: 700;
             color: var(--hv-text-secondary, #475569);
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+
+            .step-label-icon {
+              opacity: 0.7;
+              transition: opacity 150ms ease;
+            }
           }
 
           .step-desc {
@@ -4103,6 +4076,11 @@ body:has(.presentation-modal-backdrop) {
 
           .step-label {
             color: #043A35;
+
+            .step-label-icon {
+              opacity: 1;
+              color: #0F766E;
+            }
           }
 
           .step-desc {
@@ -4851,16 +4829,6 @@ body:has(.presentation-modal-backdrop) {
      ========================================================================= */
   [data-theme="dark"] & {
     .pres-studio-hero {
-      .pres-hero-badge {
-        background: rgba(94, 234, 212, 0.12);
-        border-color: rgba(94, 234, 212, 0.3);
-        color: #5EEAD4;
-        .hero-sparkle { color: #5EEAD4; }
-      }
-
-      .pres-hero-title { color: #F8FAFC; }
-      .pres-hero-subtitle { color: #94A3B8; }
-
       .pres-stepper-nav {
         background: #0F1B2D;
         border-color: #26384D;
@@ -4871,13 +4839,19 @@ body:has(.presentation-modal-backdrop) {
             color: #94A3B8;
           }
           .step-meta {
-            .step-label { color: #CBD5E1; }
+            .step-label {
+              color: #CBD5E1;
+              .step-label-icon { color: #94A3B8; }
+            }
             .step-desc { color: #64748B; }
           }
           &.active {
             background: rgba(94, 234, 212, 0.1);
             .step-num { background: #5EEAD4; color: #08111F; }
-            .step-label { color: #F8FAFC; }
+            .step-label {
+              color: #F8FAFC;
+              .step-label-icon { color: #5EEAD4; }
+            }
             .step-desc { color: #5EEAD4; }
           }
           &.completed {

@@ -184,17 +184,8 @@ export default function PromptStudioScreen({
 
   return (
     <div className="pres-prompt-studio pres-minimal-studio">
-      {/* Studio Header & Visual Breath */}
+      {/* Studio Header & Stepper */}
       <div className="pres-studio-hero">
-        <div className="pres-hero-badge">
-          <Sparkles size={14} className="hero-sparkle" aria-hidden="true" />
-          <span>Zero-Scope AI Studio · Bound to Data Truth</span>
-        </div>
-        <h1 className="pres-hero-title">Build Boardroom Presentation</h1>
-        <p className="pres-hero-subtitle">
-          Transform raw metrics, disparity models, and audit evidence into an executive-ready slide deck in seconds.
-        </p>
-
         {/* 3-Step Guided Stepper Bar */}
         <nav className="pres-stepper-nav" aria-label="Presentation creation steps">
           <button
@@ -205,7 +196,10 @@ export default function PromptStudioScreen({
           >
             <span className="step-num">{currentStep > 1 ? <Check size={13} /> : "1"}</span>
             <div className="step-meta">
-              <span className="step-label">Source & Focus</span>
+              <span className="step-label">
+                <Database size={13} className="step-label-icon" aria-hidden="true" />
+                <span>Source & Focus</span>
+              </span>
               <span className="step-desc">
                 {sourceMode === "dashboard_truth" ? "Active Data Truth" : "Custom Briefing"}
               </span>
@@ -222,9 +216,12 @@ export default function PromptStudioScreen({
           >
             <span className="step-num">{currentStep > 2 ? <Check size={13} /> : "2"}</span>
             <div className="step-meta">
-              <span className="step-label">Narrative Depth</span>
+              <span className="step-label">
+                <Sliders size={13} className="step-label-icon" aria-hidden="true" />
+                <span>Narrative Depth</span>
+              </span>
               <span className="step-desc">
-                {slideCount === null ? "Adaptive (Auto)" : `${slideCount} Slides`}
+                {slideCount === null ? "Adaptive" : `${slideCount} Slides`}
               </span>
             </div>
           </button>
@@ -239,7 +236,10 @@ export default function PromptStudioScreen({
           >
             <span className="step-num">3</span>
             <div className="step-meta">
-              <span className="step-label">Theme & Polish</span>
+              <span className="step-label">
+                <Palette size={13} className="step-label-icon" aria-hidden="true" />
+                <span>Theme & Polish</span>
+              </span>
               <span className="step-desc">{currentThemeObj.name}</span>
             </div>
           </button>
@@ -289,9 +289,9 @@ export default function PromptStudioScreen({
                     </span>
                   )}
                 </div>
-                <h3 className="mode-card-title">Website & Dashboard Truth</h3>
+                <h3 className="mode-card-title">Active Dataset Truth</h3>
                 <p className="mode-card-desc">
-                  Directly translates active dashboard disparity models, baseline metrics, and audit evidence into executive slides.
+                  Directly translates verified metrics, disparity models, and audit evidence into executive slides.
                 </p>
               </button>
 
@@ -312,9 +312,9 @@ export default function PromptStudioScreen({
                     </span>
                   )}
                 </div>
-                <h3 className="mode-card-title">Custom Topic & Executive Briefing</h3>
+                <h3 className="mode-card-title">Custom Objective & Memo</h3>
                 <p className="mode-card-desc">
-                  Present on a custom operational objective, executive memo, or prompt idea while grounded in available data.
+                  Present on a custom operational objective, executive memo, or briefing grounded in data.
                 </p>
               </button>
             </div>
@@ -343,7 +343,7 @@ export default function PromptStudioScreen({
                       ))}
                     </select>
                     <span className="pres-field-hint">
-                      HRIDAY extracts baseline facts and disparity models directly from this sheet.
+                      Extracts baseline facts and disparity models directly from this sheet.
                     </span>
                   </div>
 
@@ -505,7 +505,7 @@ export default function PromptStudioScreen({
                 Choose narrative pacing and depth
               </h2>
               <p className="step-card-subtitle">
-                Select how deep the boardroom story should go, or let HRIDAY decide dynamically based on data signals.
+                Select how deep the boardroom story should go, or calibrate dynamically based on data signals.
               </p>
             </div>
 

@@ -43,16 +43,18 @@ export default function PresentationPageHeader({
       }
       case "config":
       default:
-        return "Create, review and improve your slides with HRIDAY.";
+        return "";
     }
   };
+
+  const description = getDescription();
 
   return (
     <header className="page-top-header presentation-page-header">
       <div className="page-title-row">
         <div className="page-title-group">
           <h1 className="page-heading">{getTitle()}</h1>
-          <p className="page-description">{getDescription()}</p>
+          {description ? <p className="page-description">{description}</p> : null}
         </div>
 
         <div className="header-actions-row">
