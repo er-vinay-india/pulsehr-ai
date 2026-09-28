@@ -38,11 +38,9 @@ def test_workflow_orchestrator_end_to_end(enterprise_df):
     assert result.profile.row_count == 20
     assert result.finding_count >= 1
 
-    # Verify ReportPlan and Narrative
-    assert result.plan is not None
-    assert len(result.plan.sections) >= 1
-    assert result.report is not None
-    assert len(result.report.sections) >= 1
+    # Verify Interpretation (replaces legacy ReportPlan/NarrativeReport)
+    assert result.interpretation is not None
+    assert len(result.interpretation.insights) >= 1
 
     # Verify Evidence-Aware Slide Deck
     assert "slides" in result.deck_spec
@@ -67,6 +65,6 @@ def test_workflow_orchestrator_halts_on_bad_data():
     empty_df = pd.DataFrame()
     result = WorkflowOrchestrator.execute(empty_df, dataset_name="Corrupt CSV")
     assert result.status == "DATA_QUALITY_REJECTED"
-    assert result.plan is None
-    assert result.report is None
+    assert result.interpretation is None
+    assert result.deck_spec == {}
     assert "0 rows" in result.error_message

@@ -45,13 +45,13 @@ class GenericCopilotEngine:
         if any(w in q_lower for w in ["trend", "trajectory", "over time", "progression"]):
             return "TREND"
 
-        # 4. Highest / Lowest Ranking query
-        if any(w in q_lower for w in ["which", "highest", "lowest", "top", "rank", "maximum", "minimum"]):
-            return "RANKING"
-
-        # 5. Surprise me / Summary / Top findings
+        # 4. Surprise me / Summary / Top findings — BEFORE RANKING (these phrases contain "top")
         if any(w in q_lower for w in ["surprise me", "top findings", "most interesting", "key facts", "strongest findings", "overview", "summary"]):
             return "SURPRISE_ME"
+
+        # 5. Highest / Lowest Ranking query
+        if any(w in q_lower for w in ["which", "highest", "lowest", "top", "rank", "maximum", "minimum"]):
+            return "RANKING"
 
         # 6. Interpretation / "Why"
         if any(w in q_lower for w in ["why", "causes", "reason for", "explain why", "driver of"]):

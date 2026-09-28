@@ -63,7 +63,8 @@ def sqlite_test_db(tmp_path):
             dataset_id INTEGER,
             name TEXT,
             row_count INTEGER,
-            columns_json TEXT
+            columns_json TEXT,
+            profile_json TEXT DEFAULT '[]'
         );
         CREATE TABLE sheet_rows (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
