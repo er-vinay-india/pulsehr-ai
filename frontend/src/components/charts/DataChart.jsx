@@ -1,19 +1,21 @@
 import React from 'react';
 import SafeReactECharts from './SafeReactECharts';
-import { cartesian, numeric, formatValue, formatFullValue, metricUnit, getChartPalette } from './chartOptions';
-import { useTheme } from '../../context/ThemeContext';
+import { cartesian, numeric, formatValue, formatFullValue, metricUnit } from './chartOptions';
+import { useChartTheme } from '../../theme/useChartTheme';
 
 export default function DataChart({ items = [], type = 'bar', metric = 'Value', unit = '', onSelect, baseline, height = 300 }) {
-  const { isDark } = useTheme();
-  const activePalette = getChartPalette(isDark);
+  const {
+    isDark,
+    palette: activePalette,
+    labelColor: textColor,
+    headingColor,
+    tooltipBg,
+    tooltipBorder,
+    colors,
+  } = useChartTheme();
+  const borderColor = colors.surface;
   unit = metricUnit(metric, unit);
   if (!items.length) return <p className="executive-chart-empty">No chart data available.</p>;
-
-  const textColor = isDark ? '#CBD5E1' : '#334155';
-  const headingColor = isDark ? '#F8FAFC' : '#0B1F3A';
-  const tooltipBg = isDark ? '#172A40' : '#FFFFFF';
-  const tooltipBorder = isDark ? '#26384D' : '#CBD5E1';
-  const borderColor = isDark ? '#0F1B2D' : '#FFFFFF';
 
   const pie = type === 'donut' || type === 'pie';
   const option = pie ? {

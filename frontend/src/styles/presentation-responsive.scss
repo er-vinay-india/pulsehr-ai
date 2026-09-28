@@ -241,7 +241,7 @@ body:has(.presentation-modal-backdrop) {
 
       &:focus {
         outline: none;
-        background: #FFFFFF;
+        background: var(--hv-bg-surface, #FFFFFF);
         border-color: var(--hv-brand-secondary, #005A6B);
         box-shadow: 0 0 0 2px rgba(0, 90, 107, 0.15);
       }
@@ -457,7 +457,7 @@ body:has(.presentation-modal-backdrop) {
     outline: none;
 
     &:hover {
-      background: #FFFFFF;
+      background: var(--hv-bg-surface, #FFFFFF);
       border-color: var(--hv-border-strong, #CBD5E1);
       box-shadow: 0 4px 12px rgba(11, 31, 58, 0.05);
     }
@@ -467,7 +467,7 @@ body:has(.presentation-modal-backdrop) {
     }
 
     &.active {
-      background: #FFFFFF;
+      background: var(--hv-bg-surface, #FFFFFF);
       border-color: var(--hv-brand-primary, #0B1F3A);
       box-shadow: 0 4px 16px rgba(11, 31, 58, 0.1);
 
@@ -1570,7 +1570,7 @@ body:has(.presentation-modal-backdrop) {
   }
 
   .image-card {
-    background: #FFFFFF;
+    background: var(--hv-bg-surface, #FFFFFF);
     border: 1px solid var(--hv-border, #e2e8f0);
     border-radius: 8px;
     overflow: hidden;
@@ -1763,7 +1763,7 @@ body:has(.presentation-modal-backdrop) {
   }
 
   .suggestion-pill {
-    background: #FFFFFF;
+    background: var(--hv-bg-surface, #FFFFFF);
     border: 1px solid #527770;
     border-radius: 6px;
     padding: 5px 11px;
@@ -1820,7 +1820,7 @@ body:has(.presentation-modal-backdrop) {
     min-width: 0;
     min-height: 44px;
     box-sizing: border-box;
-    background: #FFFFFF;
+    background: var(--hv-bg-surface, #FFFFFF);
     border: 1px solid #527770;
     border-radius: 6px;
     padding: 8px 12px;
@@ -2237,7 +2237,7 @@ body:has(.presentation-modal-backdrop) {
 
       &:focus {
         outline: none;
-        background: #FFFFFF;
+        background: var(--hv-bg-surface, #FFFFFF);
         border-color: var(--hv-brand-secondary, #005A6B);
         box-shadow: 0 0 0 2px rgba(0, 90, 107, 0.15);
       }
@@ -2291,7 +2291,7 @@ body:has(.presentation-modal-backdrop) {
           outline: none;
 
           &:hover {
-            background: #FFFFFF;
+            background: var(--hv-bg-surface, #FFFFFF);
             border-color: var(--hv-brand-secondary, #005A6B);
             box-shadow: 0 2px 8px rgba(0, 90, 107, 0.08);
           }
@@ -2301,7 +2301,7 @@ body:has(.presentation-modal-backdrop) {
           }
 
           &.active {
-            background: #FFFFFF;
+            background: var(--hv-bg-surface, #FFFFFF);
             border-color: var(--hv-brand-primary, #0B1F3A);
             box-shadow: 0 3px 12px rgba(11, 31, 58, 0.1);
           }

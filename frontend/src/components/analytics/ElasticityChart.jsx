@@ -1,21 +1,22 @@
 import React from 'react';
 import SafeReactECharts from '../charts/SafeReactECharts';
 import { numeric } from '../charts/chartOptions';
-import { useTheme } from '../../context/ThemeContext';
+import { useChartTheme } from '../../theme/useChartTheme';
 
 export default function ElasticityChart({ data, onInvestigate }) {
-  const { isDark } = useTheme();
+  const {
+    isDark,
+    labelColor: textColor,
+    headingColor,
+    axisLineColor,
+    splitLineColor,
+    tooltipBg,
+    tooltipBorder,
+    primaryDot: pointColor,
+  } = useChartTheme();
+  const thresholdColor = isDark ? '#FBBF24' : '#B7791F';
   const points = (data?.scatter_points || []).filter(p => numeric(p.absent_days) != null && numeric(p.performance) != null);
   if (!points.length) return <p>No paired observations available.</p>;
-
-  const textColor = isDark ? '#CBD5E1' : '#334155';
-  const headingColor = isDark ? '#F8FAFC' : '#0B1F3A';
-  const axisLineColor = isDark ? '#26384D' : '#CBD5E1';
-  const splitLineColor = isDark ? 'rgba(248, 250, 252, 0.08)' : 'rgba(11, 31, 58, 0.08)';
-  const tooltipBg = isDark ? '#172A40' : '#FFFFFF';
-  const tooltipBorder = isDark ? '#26384D' : '#CBD5E1';
-  const pointColor = isDark ? '#5EEAD4' : '#005A6B';
-  const thresholdColor = isDark ? '#FBBF24' : '#B7791F';
 
   return <div><p style={{ color: textColor }}>Slope: <strong>{data?.beta_coefficient ?? '—'}</strong> · R²: <strong>{data?.r_squared ?? '—'}</strong></p>
     <SafeReactECharts option={{

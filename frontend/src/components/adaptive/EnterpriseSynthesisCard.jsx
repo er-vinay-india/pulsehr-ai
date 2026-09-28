@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { Info, Network, ExternalLink, AlertCircle, Table } from "lucide-react";
 import SafeReactECharts from "../charts/SafeReactECharts";
-import { useTheme } from "../../context/ThemeContext";
+import { useChartTheme } from "../../theme/useChartTheme";
 
 /**
  * EnterpriseSynthesisCard — Adaptive Dashboard Element 10 (Gate 10).
@@ -47,33 +47,21 @@ export default function EnterpriseSynthesisCard({
     caption,
   } = enterprise;
 
-  const { isDark } = useTheme();
+  const {
+    isDark,
+    primaryDot,
+    secondaryDot,
+    labelColor,
+    headingColor,
+    axisLineColor,
+    splitLineColor,
+    tooltipBg,
+    tooltipBorder,
+    tooltipText,
+    lifecycleColors,
+  } = useChartTheme();
   const isCoverageOnly = kind === "coverage_only" || !visual || visual.kind === "none";
   const points = visual?.points || [];
-
-  // Theme-aware accessible foreground/background colors calibrated for WCAG AAA
-  const primaryDot = isDark ? "#2DD4BF" : "#0F766E";
-  const secondaryDot = isDark ? "#60A5FA" : "#0284C7";
-  const labelColor = isDark ? "#F1F5F9" : "#0F172A";
-  const headingColor = isDark ? "#FFFFFF" : "#0F172A";
-  const axisLineColor = isDark ? "#64748B" : "#94A3B8";
-  const splitLineColor = isDark ? "rgba(241, 245, 249, 0.12)" : "rgba(15, 23, 42, 0.10)";
-  const tooltipBg = isDark ? "#0F1B2D" : "#FFFFFF";
-  const tooltipBorder = isDark ? "#334960" : "#CBD5E1";
-  const tooltipText = isDark ? "#F8FAFC" : "#0F172A";
-
-  // Dedicated accessible semantic palette for lifecycle progression stages
-  const lifecycleColors = useMemo(() => (isDark ? [
-    "#2DD4BF", // Primary records: mint teal (9.5:1 on #0F1B2D)
-    "#60A5FA", // Matched cohort: electric blue (7.0:1 on #0F1B2D)
-    "#34D399", // Agreed records: emerald (9.1:1 on #0F1B2D)
-    "#FBBF24", // Sibling only / exceptions: amber gold (10.5:1 on #0F1B2D)
-  ] : [
-    "#0F766E", // Primary records: deep teal (5.3:1 on #FFFFFF)
-    "#0284C7", // Matched cohort: deep sky (3.9:1 on #FFFFFF)
-    "#047857", // Agreed records: deep emerald (5.1:1 on #FFFFFF)
-    "#C2410C", // Sibling only / exceptions: rust amber (4.8:1 on #FFFFFF)
-  ]), [isDark]);
 
   // Build ECharts option based on visual kind
   const chartOption = useMemo(() => {

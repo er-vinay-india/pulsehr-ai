@@ -1,24 +1,7 @@
-export const lightPalette = [
-  '#005A6B', // Accessible Teal (7.7:1 on #FFFFFF - AAA)
-  '#123B5D', // Deep Blue (11.2:1 on #FFFFFF - AAA)
-  '#365314', // Accessible Green (7.8:1 on #FFFFFF - AAA)
-  '#155EEF', // Primary Blue (4.8:1 on #FFFFFF - AA)
-  '#0F766E', // Dark Teal (5.4:1 on #FFFFFF - AA)
-  '#0B1F3A', // Deep Navy (16.9:1 on #FFFFFF - AAA)
-  '#6B21A8', // Deep Purple (10.0:1 on #FFFFFF - AAA)
-  '#C2410C', // Rust Amber (4.8:1 on #FFFFFF - AA)
-];
+import { lightTokens, darkTokens, getThemeTokens } from '../../theme/tokens';
 
-export const darkPalette = [
-  '#5EEAD4', // Interactive Teal (12.1:1 on #0F1B2D - AAA)
-  '#93C5FD', // Interactive Blue (9.8:1 on #0F1B2D - AAA)
-  '#2DD4BF', // Mint Teal (9.5:1 on #0F1B2D - AAA)
-  '#60A5FA', // Electric Blue (7.0:1 on #0F1B2D - AAA)
-  '#C084FC', // Soft Violet (6.7:1 on #0F1B2D - AA)
-  '#F8FAFC', // Pure Slate (16.6:1 on #0F1B2D - AAA)
-  '#38BDF8', // Bright Sky (9.8:1 on #0F1B2D - AAA)
-  '#FBBF24', // Warm Amber (10.5:1 on #0F1B2D - AAA)
-];
+export const lightPalette = lightTokens.chart.palette;
+export const darkPalette = darkTokens.chart.palette;
 
 export const palette = lightPalette;
 export const hridayPalette = ['#0F766E', '#0891B2', '#365314', '#102A43', '#B7791F'];
@@ -50,13 +33,14 @@ export const metricUnit = (metric, unit = '') => unit || (/%|\bpercent(?:age)?\b
 
 export function cartesian(categories, series, horizontal = false, unit = '', themeDark) {
   const isDark = isCurrentThemeDark(themeDark);
-  const activePalette = isDark ? darkPalette : lightPalette;
-  const textColor = isDark ? '#CBD5E1' : '#334155';
-  const headingColor = isDark ? '#F8FAFC' : '#0B1F3A';
-  const lineColor = isDark ? '#26384D' : '#CBD5E1';
-  const splitLineColor = isDark ? 'rgba(248, 250, 252, 0.08)' : 'rgba(11, 31, 58, 0.08)';
-  const tooltipBg = isDark ? '#172A40' : '#FFFFFF';
-  const tooltipBorder = isDark ? '#26384D' : '#CBD5E1';
+  const chartTokens = getThemeTokens(isDark).chart;
+  const activePalette = chartTokens.palette;
+  const textColor = chartTokens.text;
+  const headingColor = chartTokens.title;
+  const lineColor = chartTokens.axisLine;
+  const splitLineColor = chartTokens.splitLine;
+  const tooltipBg = chartTokens.tooltipBg;
+  const tooltipBorder = chartTokens.tooltipBorder;
 
   const category = {
     type: 'category',

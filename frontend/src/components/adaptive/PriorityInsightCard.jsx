@@ -20,6 +20,7 @@ import {
 import SafeReactECharts from "../charts/SafeReactECharts";
 import { useTheme } from "../../context/ThemeContext";
 import { getChartPalette } from "../charts/chartOptions";
+import { getThemeTokens } from "../../theme/tokens";
 
 /**
  * Intelligent number formatting with currency, SI prefixes (K, M, B) or standard rounding.
@@ -131,11 +132,12 @@ function buildDonutData(
     d.formattedVal = formatCompactNumber(d.value, unit);
   });
 
-  const tooltipBg = isDark ? "#172A40" : "#FFFFFF";
-  const tooltipBorder = isDark ? "#26384D" : "#CBD5E1";
-  const tooltipText = isDark ? "#F8FAFC" : "#0B1F3A";
-  const heroTextColor = isDark ? "#F8FAFC" : "#0B1F3A";
-  const subTextColor = isDark ? "#CBD5E1" : "#334155";
+  const chartTokens = getThemeTokens(isDark).chart;
+  const tooltipBg = chartTokens.tooltipBg;
+  const tooltipBorder = chartTokens.tooltipBorder;
+  const tooltipText = chartTokens.tooltipText;
+  const heroTextColor = chartTokens.title;
+  const subTextColor = chartTokens.text;
 
   const option = {
     backgroundColor: "transparent",
@@ -201,11 +203,12 @@ function buildBoundedBarOption(baseOption, densityMode, unit = "", dimensionName
   const { categories, values, isHoriz } = getCategoriesAndValues(baseOption, dimensionName);
   if (!categories.length) return baseOption;
 
-  const activePalette = getChartPalette(isDark);
-  const textColor = isDark ? "#CBD5E1" : "#334155";
-  const titleColor = isDark ? "#F8FAFC" : "#0B1F3A";
-  const axisLineColor = isDark ? "#26384D" : "#CBD5E1";
-  const splitLineColor = isDark ? "rgba(248, 250, 252, 0.08)" : "rgba(11, 31, 58, 0.08)";
+  const chartTokens = getThemeTokens(isDark).chart;
+  const activePalette = chartTokens.palette;
+  const textColor = chartTokens.text;
+  const titleColor = chartTokens.title;
+  const axisLineColor = chartTokens.axisLine;
+  const splitLineColor = chartTokens.splitLine;
 
   let filteredCats = categories;
   let filteredVals = values;

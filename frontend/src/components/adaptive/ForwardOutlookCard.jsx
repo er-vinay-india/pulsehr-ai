@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { Info, ShieldCheck, Target, TrendingUp, AlertCircle, Table } from "lucide-react";
 import SafeReactECharts from "../charts/SafeReactECharts";
-import { useTheme } from "../../context/ThemeContext";
+import { useChartTheme } from "../../theme/useChartTheme";
 
 /**
  * Intelligent compact number formatter for metrics, ticks, tooltips, and data tables.
@@ -35,7 +35,16 @@ export default function ForwardOutlookCard({
   onInspect,
 }) {
   const [showAccessibleTable, setShowAccessibleTable] = useState(false);
-  const { isDark } = useTheme();
+  const {
+    isDark,
+    labelColor,
+    headingColor,
+    axisLineColor,
+    splitLineColor,
+    tooltipBg,
+    tooltipBorder,
+    tooltipText,
+  } = useChartTheme();
 
   if (!outlook) {
     return null;
@@ -64,18 +73,10 @@ export default function ForwardOutlookCard({
   } = outlook;
 
   // Accessible theme-aware foreground/background colors
-  const actualLineColor = isDark ? "#38BDF8" : "#005A6B"; // Teal on light (7.4:1 AAA), Cyan on dark (6.8:1)
+  const actualLineColor = isDark ? "#38BDF8" : "#005A6B";
   const actualAreaStart = isDark ? "rgba(56, 189, 248, 0.2)" : "rgba(0, 90, 107, 0.14)";
-  const forecastLineColor = isDark ? "#FBBF24" : "#B45309"; // Amber on light (5.5:1 AA), Gold on dark (7.2:1)
+  const forecastLineColor = isDark ? "#FBBF24" : "#B45309";
   const forecastRangeArea = isDark ? "rgba(251, 191, 36, 0.22)" : "rgba(180, 83, 9, 0.16)";
-
-  const labelColor = isDark ? "#CBD5E1" : "#334155";
-  const headingColor = isDark ? "#F8FAFC" : "#0B1F3A";
-  const axisLineColor = isDark ? "#26384D" : "#CBD5E1";
-  const splitLineColor = isDark ? "rgba(248, 250, 252, 0.08)" : "rgba(11, 31, 58, 0.08)";
-  const tooltipBg = isDark ? "#172A40" : "#FFFFFF";
-  const tooltipBorder = isDark ? "#26384D" : "#CBD5E1";
-  const tooltipText = isDark ? "#F8FAFC" : "#0B1F3A";
 
   // Build ECharts option for statistical forecast
   const chartOption = useMemo(() => {

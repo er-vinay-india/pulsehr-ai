@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useState } from 'react';
 import * as echarts from 'echarts';
 import { lightPalette, darkPalette, isCurrentThemeDark } from './chartOptions';
+import { getThemeTokens } from '../../theme/tokens';
 import { useTheme } from '../../context/ThemeContext';
 import '../../styles/minimal-charts.scss';
 
@@ -20,15 +21,17 @@ function sanitizeColor(c, fallback) {
 }
 
 function minimalOptions(option, isDark = false) {
-  const activePalette = isDark ? darkPalette : lightPalette;
-  const labelColor = isDark ? '#CBD5E1' : '#334155';
-  const headingColor = isDark ? '#F8FAFC' : '#0B1F3A';
-  const axisLineColor = isDark ? '#26384D' : '#CBD5E1';
-  const splitLineColor = isDark ? 'rgba(248, 250, 252, 0.08)' : 'rgba(11, 31, 58, 0.08)';
-  const tooltipBg = isDark ? '#172A40' : '#FFFFFF';
-  const tooltipBorder = isDark ? '#26384D' : '#CBD5E1';
-  const tooltipText = isDark ? '#F8FAFC' : '#0B1F3A';
-  const baseTextColor = isDark ? '#CBD5E1' : '#334155';
+  const tokens = getThemeTokens(isDark);
+  const chartTokens = tokens.chart;
+  const activePalette = chartTokens.palette;
+  const labelColor = chartTokens.text;
+  const headingColor = chartTokens.title;
+  const axisLineColor = chartTokens.axisLine;
+  const splitLineColor = chartTokens.splitLine;
+  const tooltipBg = chartTokens.tooltipBg;
+  const tooltipBorder = chartTokens.tooltipBorder;
+  const tooltipText = chartTokens.tooltipText;
+  const baseTextColor = chartTokens.text;
 
   const mergeAxis = a => {
     if (!a) return a;
