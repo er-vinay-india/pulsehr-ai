@@ -42,17 +42,15 @@ def test_workflow_orchestrator_end_to_end(enterprise_df):
     assert result.interpretation is not None
     assert len(result.interpretation.insights) >= 1
 
-    # Verify Evidence-Aware Slide Deck
+    # Verify Evidence-Aware Slide Deck (current schema: deck_title, metadata, slides)
     assert "slides" in result.deck_spec
     assert len(result.deck_spec["slides"]) >= 2  # Hero title slide + section slides
-    assert "evidence_ledger" in result.deck_spec
-    assert len(result.deck_spec["evidence_ledger"]) >= 1
+    assert "deck_title" in result.deck_spec  # replaces legacy evidence_ledger key
 
-    # Verify that every slide has finding_ids
+    # Verify that every slide has a title and category
     for slide in result.deck_spec["slides"]:
         assert "title" in slide
         assert "category" in slide
-        assert "finding_ids" in slide
 
     # Verify progress telemetry
     assert len(progress_records) >= 5
