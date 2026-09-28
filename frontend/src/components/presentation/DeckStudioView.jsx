@@ -75,7 +75,7 @@ export default function DeckStudioView({
   // Handle Copilot Slide Curation
   const handleApplyCopilotCuration = async (promptText) => {
     const prompt = (promptText || curatePrompt).trim();
-    if (!prompt || !currentSlide || isBusy) return;
+    if (!prompt || !currentSlide || isBusy || isCurating) return;
 
     setIsCurating(true);
     // Snapshot current state for Revert capability
@@ -418,28 +418,48 @@ export default function DeckStudioView({
 
           {/* HRIDAY CURATION PROMPT BAR (Below Active Slide) */}
           {!isPresenterMode && (
-            <div className="studio-copilot-bar hriday-curation-bar">
+            <div
+              className="studio-copilot-bar hriday-curation-bar"
+              role="region"
+              aria-label="HRIDAY Slide Editor"
+            >
               <div className="copilot-bar-top">
-                <div className="copilot-badge hriday-badge">
-                  <Sparkles size={13} />
+                <div
+                  className="copilot-badge hriday-badge"
+                >
+                  <Sparkles size={13} aria-hidden="true" />
                   <span>HRIDAY · Slide editor</span>
                 </div>
-                <div className="suggestion-pills">
+                <details className="studio-suggestions">
+                  <summary>Suggested refinements</summary>
+                <div
+                  className="suggestion-pills"
+                  role="group"
+                  aria-label="Curation suggestions"
+                >
                   {SUGGESTION_PROMPTS.map((sug, i) => (
                     <button
                       key={i}
                       type="button"
                       className="suggestion-pill"
                       onClick={() => handleApplyCopilotCuration(sug)}
-                      disabled={isCurating}
+                      disabled={isCurating || isBusy}
+                      aria-label={`Prompt HRIDAY to ${sug}`}
+                      title={`Apply prompt: ${sug}`}
                     >
                       {sug}
                     </button>
                   ))}
                 </div>
+                </details>
               </div>
 
-              {curationError && <p role="alert">{curationError}</p>}
+              <p className="copilot-status" role="status" aria-live="polite" aria-atomic="true">
+                {isCurating ? "HRIDAY is refining this slide. Please wait."
+                  : showApprovalBanner ? "Slide refined. Review the changes before accepting."
+                  : ""}
+              </p>
+              {curationError && <p role="alert" className="copilot-error-msg">{curationError}</p>}
               <form
                 className="copilot-input-row"
                 onSubmit={(e) => {
@@ -454,21 +474,22 @@ export default function DeckStudioView({
                   placeholder="Ask HRIDAY to refine this slide (e.g. 'Rephrase for the CFO', 'Make bullet points sharper')..."
                   aria-label="Ask HRIDAY to refine this slide"
                   className="copilot-input"
-                  disabled={isCurating}
+                  disabled={isCurating || isBusy}
                 />
                 <button
                   type="submit"
-                  disabled={isCurating || !curatePrompt.trim()}
+                  disabled={isCurating || isBusy || !curatePrompt.trim()}
                   className="btn-curate btn-hriday-curate"
+                  aria-label={isCurating ? "Refining slide..." : "Refine with HRIDAY"}
                 >
                   {isCurating ? (
                     <>
-                      <Zap size={14} className="spin-icon" />
+                      <Zap size={14} className="spin-icon" aria-hidden="true" />
                       <span>Refining...</span>
                     </>
                   ) : (
                     <>
-                      <Sparkles size={14} />
+                      <Sparkles size={14} aria-hidden="true" />
                       <span>Refine with HRIDAY</span>
                     </>
                   )}

@@ -155,7 +155,7 @@ body:has(.presentation-modal-backdrop) {
     background: #FEF2F2;
     border: 1px solid #FCA5A5;
     border-radius: 8px;
-    color: #991B1B;
+    color: #7F1D1D;
     font-size: 12px;
     font-weight: 500;
     margin-bottom: 20px;
@@ -1722,8 +1722,9 @@ body:has(.presentation-modal-backdrop) {
 
 .studio-copilot-bar {
   margin-top: 12px;
-  background: var(--hriday-bg-soft, #E8F7F5);
-  border: 1px solid rgba(15, 118, 110, 0.25);
+  background: #E8F7F5;
+  min-width: 0;
+  border: 1px solid rgba(4, 58, 53, 0.28);
   border-radius: 10px;
   padding: 12px 16px;
   display: flex;
@@ -1741,35 +1742,71 @@ body:has(.presentation-modal-backdrop) {
     display: inline-flex;
     align-items: center;
     gap: 5px;
-    font-size: 11px;
+    font-size: 14px;
     font-weight: 700;
-    color: var(--hriday-secondary, #0F766E);
+    color: #043A35;
     text-transform: uppercase;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.05em;
+
+    svg {
+      stroke: #043A35;
+      stroke-width: 2.2px;
+      flex-shrink: 0;
+    }
   }
 
   .suggestion-pills {
     display: flex;
     gap: 6px;
     flex-wrap: wrap;
+    align-items: center;
   }
 
   .suggestion-pill {
     background: #FFFFFF;
-    border: 1px solid rgba(15, 118, 110, 0.3);
-    border-radius: 4px;
-    padding: 3px 8px;
-    font-size: 10px;
-    font-weight: 500;
-    color: var(--hriday-secondary, #0F766E);
+    border: 1px solid #527770;
+    border-radius: 6px;
+    padding: 5px 11px;
+    min-height: 44px;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.35;
+    color: #043A35;
     cursor: pointer;
-    transition: all 150ms ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 150ms ease, color 150ms ease, border-color 150ms ease, box-shadow 150ms ease;
 
     &:hover:not(:disabled) {
-      background: rgba(15, 118, 110, 0.1);
-      color: #0d5c56;
-      border-color: var(--hriday-secondary, #0F766E);
+      background: rgba(4, 58, 53, 0.08);
+      color: #022421;
+      border-color: #043A35;
     }
+
+    &:focus-visible {
+      outline: 2px solid #043A35;
+      outline-offset: 2px;
+      border-color: #043A35;
+    }
+
+    &:disabled {
+      opacity: 1;
+      cursor: not-allowed;
+    }
+  }
+
+  .copilot-error-msg {
+    margin: 0;
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #7F1D1D;
+    background: #FEE2E2;
+    border: 1px solid #F87171;
   }
 
   .copilot-input-row {
@@ -1780,20 +1817,27 @@ body:has(.presentation-modal-backdrop) {
 
   .copilot-input {
     flex: 1;
+    min-width: 0;
+    min-height: 44px;
+    box-sizing: border-box;
     background: #FFFFFF;
-    border: 1px solid rgba(15, 118, 110, 0.35);
+    border: 1px solid #527770;
     border-radius: 6px;
     padding: 8px 12px;
-    color: var(--hriday-text, #1E293B);
-    font-size: 12px;
+    color: #0F172A;
+    font-size: 16px;
     outline: none;
+    transition: border-color 150ms ease, box-shadow 150ms ease;
 
     &::placeholder {
-      color: #64748B;
+      color: #475569;
     }
 
-    &:focus {
-      border-color: var(--hriday-secondary, #0F766E);
+    &:focus-visible {
+      outline: 2px solid #043A35;
+      outline-offset: 2px;
+      border-color: #043A35;
+      box-shadow: 0 0 0 2px rgba(4, 58, 53, 0.2);
     }
   }
 
@@ -1801,22 +1845,135 @@ body:has(.presentation-modal-backdrop) {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    background: var(--hriday-secondary, #0F766E);
-    border: none;
+    background: #043A35;
+    border: 1px solid #043A35;
     border-radius: 6px;
-    padding: 8px 14px;
-    font-size: 11px;
+    padding: 8px 15px;
+    font-size: 14px;
     font-weight: 700;
-    color: #ffffff;
+    color: #FFFFFF;
     cursor: pointer;
     transition: all 150ms ease;
-    white-space: nowrap;
+    white-space: normal;
+    min-height: 44px;
 
     &:hover:not(:disabled) {
-      background: #0d655e;
+      background: #022421;
+      border-color: #022421;
+    }
+
+    &:focus-visible {
+      outline: 2px solid #043A35;
+      outline-offset: 2px;
+    }
+
+    &:disabled {
+      opacity: 1;
+      cursor: not-allowed;
+    }
+  }
+
+  /* Dark Theme WCAG AAA Support (>= 7.0:1) */
+  [data-theme="dark"] & {
+    background: #0F1B2D;
+    border-color: rgba(94, 234, 212, 0.25);
+
+    .copilot-badge {
+      color: #5EEAD4;
+      svg {
+        stroke: #5EEAD4;
+      }
+    }
+
+    .suggestion-pill {
+      background: #16273B;
+      border-color: #6DA99F;
+      color: #F0FDFA;
+
+      &:hover:not(:disabled) {
+        background: rgba(94, 234, 212, 0.16);
+        color: #FFFFFF;
+        border-color: #5EEAD4;
+      }
+
+      &:focus-visible {
+        outline: 2px solid #5EEAD4;
+        outline-offset: 2px;
+        border-color: #5EEAD4;
+      }
+    }
+
+    .copilot-input {
+      background: #132238;
+      border-color: #6DA99F;
+      color: #F8FAFC;
+
+      &::placeholder {
+        color: #B8C5D6;
+      }
+
+      &:focus-visible {
+        outline: 2px solid #5EEAD4;
+        outline-offset: 2px;
+        border-color: #5EEAD4;
+        box-shadow: 0 0 0 2px rgba(94, 234, 212, 0.25);
+      }
+    }
+
+    .btn-curate {
+      background: #005A6B;
+      border-color: #005A6B;
+      color: #FFFFFF;
+
+      &:hover:not(:disabled) {
+        background: #004350;
+        border-color: #004350;
+      }
+
+      &:focus-visible {
+        outline: 2px solid #5EEAD4;
+        outline-offset: 2px;
+      }
+    }
+  }
+
+  @media (max-width: 640px) {
+    padding: 10px 12px;
+    gap: 8px;
+
+    .copilot-bar-top {
+      gap: 8px;
+    }
+
+    .suggestion-pill {
+      font-size: 14px;
+      padding: 4px 9px;
+      min-height: 44px;
+    }
+
+    .copilot-input-row {
+      flex-direction: column;
+      align-items: stretch;
+
+      .btn-curate {
+        justify-content: center;
+      }
     }
   }
 }
+.studio-copilot-bar .copilot-status {
+  margin: 0;
+  color: #043A35;
+  font-size: 14px;
+}
+[data-theme="dark"] .studio-copilot-bar .copilot-status { color: #F0FDFA; }
+@media (prefers-reduced-motion: reduce) {
+  .studio-copilot-bar *, .studio-copilot-bar *::before, .studio-copilot-bar *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
 
 .pres-approval-banner {
   background: rgba(52, 211, 153, 0.12);
@@ -3731,4 +3888,121 @@ body:has(.presentation-modal-backdrop) {
       }
     }
   }
+}
+
+// Local studio hierarchy: preserve existing colors, theme and control placement.
+.presentation-page-container .pres-studio-body:not(.theater-presenter-mode) {
+  .studio-sub-toolbar {
+    padding: 12px 16px;
+    gap: 16px 24px;
+
+    .toolbar-left,
+    .toolbar-right {
+      gap: 8px;
+    }
+
+    .slide-counter-badge {
+      padding-inline: 0;
+      margin-inline-end: 8px;
+      background: transparent;
+    }
+
+    .symbolic-action-btn:not(.btn-present-orb):not(.btn-export-pptx):not(.active):not(:hover):not(:focus-visible) {
+      background: transparent;
+      border-color: transparent;
+      box-shadow: none;
+      font-weight: 500;
+    }
+  }
+
+  .studio-presenter-center {
+    padding: 16px;
+    gap: 16px;
+  }
+
+  .hriday-curation-bar {
+    margin-top: 0;
+    padding: 12px 16px;
+    gap: 12px;
+    box-shadow: none;
+
+    .copilot-bar-top {
+      align-items: baseline;
+      gap: 12px 24px;
+    }
+
+    .copilot-status:empty {
+      margin: 0;
+      height: 0;
+    }
+
+    .studio-suggestions {
+      max-width: 100%;
+      min-width: 0;
+
+      summary {
+        display: list-item;
+        width: fit-content;
+        min-height: 44px;
+        padding-block: 12px;
+        box-sizing: border-box;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        color: inherit;
+
+        &:focus-visible {
+          outline: 2px solid currentColor;
+          outline-offset: 2px;
+        }
+      }
+
+      .suggestion-pills {
+        padding-top: 8px;
+        gap: 8px;
+      }
+    }
+  }
+
+  @media (max-width: 860px) {
+    .studio-sub-toolbar {
+      padding: 12px;
+      gap: 12px;
+    }
+
+    .studio-presenter-center {
+      padding: 10px;
+      gap: 12px;
+    }
+
+    .hriday-curation-bar {
+      padding: 12px;
+    }
+  }
+}
+
+// Setup-only progressive disclosure; retain the existing palette and form controls.
+.pres-prompt-studio.pres-setup-disclosure {
+  .pres-prompt-studio__header { margin-bottom: 16px; }
+  .pres-source-tabs { margin-block: 0 16px; }
+  .pres-setup-advanced {
+    > summary {
+      display: list-item;
+      cursor: pointer;
+      margin: 0;
+      min-height: 44px;
+      padding-block: 12px;
+      box-sizing: border-box;
+      &:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+    }
+    &[open] > summary { margin-bottom: 16px; }
+    > .pres-step-card {
+      border: 0;
+      box-shadow: none;
+      background: transparent;
+      padding-inline: 0;
+      margin-top: 20px;
+    }
+  }
+  .pres-launch-box { margin-top: 8px; }
 }

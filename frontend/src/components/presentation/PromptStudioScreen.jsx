@@ -80,13 +80,21 @@ export default function PromptStudioScreen({
   onSelectSheet,
   error,
 }) {
-  const [audience, setAudience] = useState("Executive leadership");
+  const [pathDrafts, setPathDrafts] = useState({
+    dashboard_truth: { audience: "Executive leadership", instructions: "", sourceScope: "single_sheet" },
+    custom_prompt: { audience: "Executive leadership", instructions: "", sourceScope: "single_sheet" },
+  });
   const [brief, setBrief] = useState("");
-  const [instructions, setInstructions] = useState("");
-  const [sourceScope, setSourceScope] = useState("single_sheet");
   const [animation, setAnimation] = useState("none");
   const [sourceMode, setSourceMode] = useState("dashboard_truth"); // "dashboard_truth" | "custom_prompt"
   const [customPrompt, setCustomPrompt] = useState("");
+  const { audience, instructions, sourceScope } = pathDrafts[sourceMode];
+  const updatePathDraft = (field, value) => setPathDrafts((drafts) => ({
+    ...drafts, [sourceMode]: { ...drafts[sourceMode], [field]: value },
+  }));
+  const setAudience = (value) => updatePathDraft("audience", value);
+  const setInstructions = (value) => updatePathDraft("instructions", value);
+  const setSourceScope = (value) => updatePathDraft("sourceScope", value);
   const [slideCount, setSlideCount] = useState(null);
   const [selectedThemeId, setSelectedThemeId] = useState("executive_dark");
   const [backgroundMode, setBackgroundMode] = useState("solid"); // "solid" | "image"
@@ -118,19 +126,11 @@ export default function PromptStudioScreen({
     [availableThemes, selectedThemeId]
   );
 
-  let currentStepNum = 1;
-  const datasetStep = currentStepNum++;
-  const customPromptStep = sourceMode === "custom_prompt" ? currentStepNum++ : null;
-  const slideCountStep = currentStepNum++;
-  const themeStep = currentStepNum++;
-  const backgroundStep = currentStepNum++;
-  const animationStep = currentStepNum++;
-
   const handleLaunch = useCallback(() => {
     onGenerateDeck({
       sourceMode,
       audience,
-      objective: brief,
+      objective: sourceMode === "dashboard_truth" ? brief : "",
       instructions,
       scopeType: sourceScope,
       customPrompt: sourceMode === "custom_prompt" ? customPrompt : null,
@@ -160,49 +160,11 @@ export default function PromptStudioScreen({
   ]);
 
   return (
-    <div className="pres-prompt-studio">
+    <div className="pres-prompt-studio pres-setup-disclosure">
       {/* Studio Header Banner */}
       <div className="pres-prompt-studio__header">
-        <div className="pres-prompt-studio__badge">
-          <Sparkles size={14} />
-          <span>
-            {sourceMode === "dashboard_truth"
-              ? "Zero-Scope AI Studio · Bound to Active Dashboard Truth"
-              : "Executive AI Studio · Custom Topic Synthesis"}
-          </span>
-        </div>
-        <h1 className="pres-prompt-studio__title">
-          Build Boardroom Executive Presentation
-        </h1>
-        <p className="pres-prompt-studio__subtitle">
-          {sourceMode === "dashboard_truth"
-            ? "Directly translates active dashboard disparity models, forward forecasts, exception anomalies, and S01–S20 audit evidence into high-impact boardroom slides."
-            : "Synthesizes your custom executive briefing prompt into structured, high-impact boardroom slides with empirical rigor."}
-        </p>
+        <h1 className="pres-prompt-studio__title">Create a presentation</h1>
 
-        {/* Source Mode Toggle */}
-        <div className="pres-source-tabs" role="tablist" aria-label="Presentation Source Mode">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={sourceMode === "dashboard_truth"}
-            className={`source-tab-btn ${sourceMode === "dashboard_truth" ? "active" : ""}`}
-            onClick={() => setSourceMode("dashboard_truth")}
-          >
-            <Layers size={14} />
-            <span>Website & Dashboard Truth (Auto)</span>
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={sourceMode === "custom_prompt"}
-            className={`source-tab-btn ${sourceMode === "custom_prompt" ? "active" : ""}`}
-            onClick={() => setSourceMode("custom_prompt")}
-          >
-            <Sparkles size={14} />
-            <span>Custom Topic & Executive Briefing</span>
-          </button>
-        </div>
       </div>
 
       {error && (
@@ -214,17 +176,53 @@ export default function PromptStudioScreen({
 
       <div className="pres-prompt-studio__grid">
         <div className="pres-prompt-studio__controls-col">
-          {/* Step 1: Ground-Truth Dataset & Evidence Scope */}
-          <div className="pres-step-card pres-scope-card">
-            <div className="pres-step-card__header">
-              <span className="pres-step-badge">{datasetStep}</span>
-              <div>
-                <h3 className="pres-step-title">Ground-Truth Dataset & Evidence Scope</h3>
-                <p className="pres-step-desc">Configure source data, analytical coverage, and executive audience tone</p>
+          <h2 className="pres-step-title">How would you like to start?</h2>
+        {/* Source Mode Toggle */}
+        <div className="pres-source-tabs" role="group" aria-label="Presentation Source Mode">
+          <button
+            type="button"
+                        aria-pressed={sourceMode === "dashboard_truth"}
+            className={`source-tab-btn ${sourceMode === "dashboard_truth" ? "active" : ""}`}
+            onClick={() => setSourceMode("dashboard_truth")}
+          >
+            <Layers size={14} />
+            <span>Use Existing Data</span>
+          </button>
+          <button
+            type="button"
+                        aria-pressed={sourceMode === "custom_prompt"}
+            className={`source-tab-btn ${sourceMode === "custom_prompt" ? "active" : ""}`}
+            onClick={() => setSourceMode("custom_prompt")}
+          >
+            <Sparkles size={14} />
+            <span>Provide Context</span>
+          </button>
+        </div>
+          <div className="pres-step-card pres-scope-card" key={`fields-${sourceMode}`}>
+            <p className="pres-step-desc">
+              {sourceMode === "dashboard_truth"
+                ? "Use an already uploaded dataset, workspace or dashboard."
+                : "Describe your topic, talking points or executive brief."}
+            </p>
+            {sourceMode === "custom_prompt" && (
+              <div className="pres-form-group">
+                <label htmlFor="pres-context" className="pres-form-label">What do you want to present?</label>
+                <textarea id="pres-context" className="pres-prompt-textarea" rows={3}
+                  value={customPrompt} onChange={(e) => setCustomPrompt(e.target.value)}
+                  placeholder="Enter your topic, talking points, or executive brief" />
+                {customPrompt && (
+                  <button type="button" className="btn-clear-prompt" onClick={() => setCustomPrompt("")}
+                    aria-label="Clear custom briefing prompt"><X size={13} /> Clear</button>
+                )}
+                <p className="pres-field-hint">
+                  {selectedSheetId
+                    ? "Uses the currently selected sheet as supporting evidence."
+                    : "Select an uploaded sheet in Use Existing Data before generating a briefing."}
+                </p>
               </div>
-            </div>
-
+            )}
             <div className="pres-scope-form-grid">
+              {sourceMode === "dashboard_truth" && (<>
               <div className="pres-form-group">
                 <label htmlFor="pres-sheet" className="pres-form-label">
                   <Database size={13} />
@@ -244,7 +242,6 @@ export default function PromptStudioScreen({
                     </option>
                   ))}
                 </select>
-                <span className="pres-field-hint">HRIDAY extracts facts, metrics, and models directly from this dataset.</span>
               </div>
 
               <div className="pres-form-group">
@@ -261,9 +258,9 @@ export default function PromptStudioScreen({
                   <option value="single_sheet">Active sheet only</option>
                   <option value="workspace">All eligible workspace sheets</option>
                 </select>
-                <span className="pres-field-hint">Defines whether multi-sheet workspace synthesis is engaged.</span>
               </div>
 
+              </>)}
               <div className="pres-form-group">
                 <label htmlFor="pres-audience" className="pres-form-label">
                   <Users size={13} />
@@ -277,27 +274,43 @@ export default function PromptStudioScreen({
                   onChange={(e) => setAudience(e.target.value)}
                   placeholder="e.g. Executive leadership, Board of Directors"
                 />
-                <span className="pres-field-hint">Calibrates vocabulary, analytical density, and strategic tone.</span>
               </div>
 
-              {sourceMode === "dashboard_truth" && (
-                <div className="pres-form-group">
-                  <label htmlFor="pres-brief" className="pres-form-label">
-                    <Target size={13} />
-                    <span>Presentation Objective (Optional)</span>
-                  </label>
-                  <input
-                    id="pres-brief"
-                    type="text"
-                    className="pres-input"
-                    value={brief}
-                    onChange={(e) => setBrief(e.target.value)}
-                    placeholder="Executive summary of the selected dataset"
-                  />
-                  <span className="pres-field-hint">Primary strategic objective or executive mandate for the deck.</span>
-                </div>
-              )}
 
+
+            </div>
+          </div>
+
+          <details key={`advanced-${sourceMode}`} className="pres-setup-advanced pres-step-card">
+            <summary className="pres-form-label">Advanced options</summary>
+            <div className="pres-scope-card">
+              <div className="pres-scope-form-grid">
+            {sourceMode === "custom_prompt" && (
+              <div className="pres-form-group">
+                <label htmlFor="pres-scope" className="pres-form-label">
+                  <Layers size={13} />
+                  <span>Evidence Coverage</span>
+                </label>
+                <select
+                  id="pres-scope"
+                  className="pres-select"
+                  value={sourceScope}
+                  onChange={(e) => setSourceScope(e.target.value)}
+                >
+                  <option value="single_sheet">Active sheet only</option>
+                  <option value="workspace">All eligible workspace sheets</option>
+                </select>
+              </div>
+
+            )}
+            {sourceMode === "dashboard_truth" && (
+              <div className="pres-form-group">
+                <label htmlFor="pres-brief" className="pres-form-label">Presentation objective (optional)</label>
+                <input id="pres-brief" className="pres-input" value={brief}
+                  onChange={(e) => setBrief(e.target.value)}
+                  placeholder="Executive summary of the selected dataset" />
+              </div>
+            )}
               <div className="pres-form-group pres-form-group--full">
                 <label htmlFor="pres-instructions" className="pres-form-label">
                   <FileText size={13} />
@@ -311,43 +324,10 @@ export default function PromptStudioScreen({
                   onChange={(e) => setInstructions(e.target.value)}
                   placeholder="Topics to emphasize, exclusions, specific KPIs, or board reporting requirements..."
                 />
-                <span className="pres-field-hint">Constraints passed directly to the presentation execution orchestrator.</span>
               </div>
             </div>
-          </div>
-
-          {/* Custom Prompt Input Section (when custom_prompt mode active) */}
-          {sourceMode === "custom_prompt" && (
-            <div className="pres-step-card pres-custom-prompt-card">
-              <div className="pres-step-card__header">
-                <span className="pres-step-badge highlight">{customPromptStep}</span>
-                <div style={{ flex: 1 }}>
-                  <h3 className="pres-step-title">Custom Topic & Talking Points</h3>
-                  <p className="pres-step-desc">Enter your presentation topic, notes, or executive brief</p>
-                </div>
-                {customPrompt && (
-                  <button
-                    type="button"
-                    className="btn-clear-prompt"
-                    onClick={() => setCustomPrompt("")}
-                    title="Clear prompt"
-                    aria-label="Clear custom briefing prompt"
-                  >
-                    <X size={13} />
-                    <span>Clear</span>
-                  </button>
-                )}
-              </div>
-              <div className="pres-prompt-input-wrap">
-                <textarea
-                  className="pres-prompt-textarea"
-                  value={customPrompt}
-                  onChange={(e) => setCustomPrompt(e.target.value)}
-                  placeholder="e.g. Conduct a comprehensive operational review of Store 20 vs Store 33, addressing wage disparity, overtime leakages, and Q4 margin impacts..."
-                  aria-label="Custom presentation topic and talking points"
-                  rows={3}
-                />
-
+            </div>
+            {sourceMode === "custom_prompt" && (
                 <div className="inspiration-ideas-section">
                   <div className="inspiration-ideas-header">
                     <Sparkles size={13} className="sparkle-icon" />
@@ -391,14 +371,10 @@ export default function PromptStudioScreen({
                     })}
                   </div>
                 </div>
-              </div>
-            </div>
-          )}
-
+            )}
           {/* Step: Slide Count & Narrative Arc */}
           <div className="pres-step-card">
             <div className="pres-step-card__header">
-              <span className="pres-step-badge">{slideCountStep}</span>
               <div>
                 <h3 className="pres-step-title">Slide Count & Narrative Pacing</h3>
                 <p className="pres-step-desc">Select executive narrative depth or let HRIDAY decide dynamically</p>
@@ -429,7 +405,6 @@ export default function PromptStudioScreen({
           {/* Step: Theme & Visual Palette */}
           <div className="pres-step-card">
             <div className="pres-step-card__header">
-              <span className="pres-step-badge">{themeStep}</span>
               <div>
                 <h3 className="pres-step-title">Theme & Visual Palette</h3>
                 <p className="pres-step-desc">Optimized for boardroom screen sharing & projectors</p>
@@ -477,7 +452,6 @@ export default function PromptStudioScreen({
           {/* Step: Background Atmosphere & Free Imagery */}
           <div className="pres-step-card">
             <div className="pres-step-card__header">
-              <span className="pres-step-badge">{backgroundStep}</span>
               <div>
                 <h3 className="pres-step-title">Background & Royalty-Free Imagery</h3>
                 <p className="pres-step-desc">Commercial-use photography with automatic contrast scrim</p>
@@ -654,7 +628,6 @@ export default function PromptStudioScreen({
           {/* Step: Animation & Transitions */}
           <div className="pres-step-card">
             <div className="pres-step-card__header">
-              <span className="pres-step-badge">{animationStep}</span>
               <div>
                 <h3 className="pres-step-title">Animation & Transitions</h3>
                 <p className="pres-step-desc">Subtle slide transitions and element reveal pacing designed for executive focus</p>
@@ -711,6 +684,8 @@ export default function PromptStudioScreen({
             </div>
           </div>
 
+          </details>
+
           {/* Launch Studio Action */}
           <div className="pres-launch-box">
             <button
@@ -726,14 +701,11 @@ export default function PromptStudioScreen({
                 </>
               ) : (
                 <>
-                  <span>Build Slides with HRIDAY Studio</span>
+                  <span>Generate Presentation</span>
                   <ArrowRight size={18} />
                 </>
               )}
             </button>
-            <p className="launch-subtext">
-              Slides will be loaded into the 16:9 interactive studio with full HRIDAY curation, HRIDAY heart voiceover, and editable PPTX export.
-            </p>
           </div>
         </div>
       </div>
