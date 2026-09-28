@@ -8124,13 +8124,16 @@ textarea:focus-visible,
     box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
     overflow: hidden;
 
-    &.mode-config {
+    &.mode-config,
+    &.mode-generating {
       min-height: auto !important;
       border-radius: 0 !important;
       background: transparent !important;
       border: none !important;
       box-shadow: none !important;
       overflow: visible !important;
+      width: 100% !important;
+      max-width: 100% !important;
     }
   }
 
