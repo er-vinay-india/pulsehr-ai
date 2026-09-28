@@ -102,6 +102,36 @@ def normalize_token(s: str) -> str:
     return re.sub(r"[^a-z0-9]", "", s.strip().lower())
 
 
+def extract_entity_namespace(col_name: str) -> str | None:
+    """Extracts semantic entity namespace from column name, e.g. 'employee_id' -> 'employee', 'order_id' -> 'order'."""
+    lower = col_name.strip().lower()
+    for ns in ("employee", "emp", "staff", "worker", "person"):
+        if ns in lower:
+            return "employee"
+    for ns in ("order", "invoice", "transaction", "purchase"):
+        if ns in lower:
+            return "order"
+    for ns in ("customer", "cust", "client", "buyer"):
+        if ns in lower:
+            return "customer"
+    for ns in ("product", "sku", "item", "merchandise"):
+        if ns in lower:
+            return "product"
+    for ns in ("lead", "prospect", "applicant", "candidate"):
+        if ns in lower:
+            return "lead"
+    for ns in ("ticket", "incident", "case", "issue"):
+        if ns in lower:
+            return "ticket"
+    for ns in ("store", "branch", "location", "facility", "site"):
+        if ns in lower:
+            return "location"
+    for ns in ("department", "dept", "division", "unit", "team"):
+        if ns in lower:
+            return "department"
+    return None
+
+
 def detect_candidate_join_keys(
     left_cols: list[str],
     right_cols: list[str],
@@ -114,10 +144,16 @@ def detect_candidate_join_keys(
     for l_col in left_cols:
         l_norm = normalize_token(l_col)
         l_is_entity = any(re.search(pat, l_col.strip().lower()) for pat in ENTITY_KEY_PATTERNS)
+        l_ns = extract_entity_namespace(l_col)
 
         for r_col in right_cols:
             r_norm = normalize_token(r_col)
             r_is_entity = any(re.search(pat, r_col.strip().lower()) for pat in ENTITY_KEY_PATTERNS)
+            r_ns = extract_entity_namespace(r_col)
+
+            # Incompatible entity namespaces (e.g. employee vs order) cannot be the same entity!
+            if l_ns and r_ns and l_ns != r_ns:
+                continue
 
             if not (l_is_entity or r_is_entity or l_norm == r_norm):
                 continue
@@ -433,7 +469,7 @@ def build_enterprise_synthesis_element(
                     sheet_id=sheet_id,
                     label=manifest.display_name,
                     target_type="sheet",
-                    route=f"/explorer?sheet_id={sheet_id}",
+                    route=f"/?sheet_id={sheet_id}&view=eda#explorer",
                 )
             ],
             glance=GlanceSpec(
@@ -522,13 +558,13 @@ def build_enterprise_synthesis_element(
             sheet_id=s.sheet_id,
             label=s.display_name,
             target_type="sheet",
-            route=f"/explorer?sheet_id={s.sheet_id}",
+            route=f"/?sheet_id={s.sheet_id}&view=eda#explorer",
         )
         for s in source_refs
     ]
 
-    # Evaluate candidate sibling sheets against primary sheet
-    best_candidate = None
+    # Evaluate candidate sibling sheets against primary sheet deterministically
+    safe_candidates = []
     for other_id in other_sids:
         other = sibling_data[other_id]
         key_candidates = detect_candidate_join_keys(
@@ -548,7 +584,7 @@ def build_enterprise_synthesis_element(
                 continue
 
             if card_info["matched_count"] >= 5 and card_info["coverage_ratio"] >= 0.1:
-                best_candidate = {
+                cand = {
                     "other_id": other_id,
                     "other": other,
                     "left_key": l_key,
@@ -560,11 +596,18 @@ def build_enterprise_synthesis_element(
                     "unmatched_count": card_info["unmatched_count"],
                     "coverage_ratio": card_info["coverage_ratio"],
                     "common_set": card_info["common_set"],
+                    "has_metrics": bool(
+                        find_numeric_metric_column(other["columns"], other["rows"], exclude_cols={r_key})
+                        or any("leave" in c.lower() for c in other["columns"])
+                        or any("return" in c.lower() for c in other["columns"])
+                        or any("win" in c.lower() or "opp" in c.lower() for c in other["columns"])
+                    ),
                 }
+                safe_candidates.append(cand)
                 break
 
-        if best_candidate:
-            break
+    # Prioritize candidate siblings with compatible analytical metrics over static coverage-only sheets
+    best_candidate = next((c for c in safe_candidates if c["has_metrics"]), safe_candidates[0] if safe_candidates else None)
 
     # If no safe join candidate passed, emit Coverage-only synthesis (Recipe E)
     if not best_candidate:
@@ -622,6 +665,7 @@ def build_enterprise_synthesis_element(
     coverage_ratio = best_candidate["coverage_ratio"]
     common_set = best_candidate["common_set"]
     left_eligible = best_candidate["left_eligible"]
+    right_eligible = best_candidate["right_eligible"]
     analytical_blocker: str | None = None
 
     left_periods = _period_tokens(primary_columns, rows)
@@ -638,43 +682,86 @@ def build_enterprise_synthesis_element(
         )
 
     # -------------------------------------------------------------
-    # RECIPE A: Reconciled Lifecycle Metric
+    # RECIPE A: Reconciled Lifecycle Metric & Ledger Reconciliation (S17)
     # -------------------------------------------------------------
-    # Check for order -> return, lead -> win, ticket -> satisfaction, or employee -> leave reconciliation
     left_col_names_lower = [c.lower() for c in primary_columns]
     right_col_names_lower = [c.lower() for c in other["columns"]]
 
     is_order_return = any("order" in c for c in left_col_names_lower) and any("return" in c for c in right_col_names_lower)
     is_lead_win = any("lead" in c for c in left_col_names_lower) and any("win" in c or "opp" in c for c in right_col_names_lower)
+    cancelled_tokens = {"cancelled", "canceled", "void", "failed", "rejected", "false", "0"}
 
     if (is_order_return or is_lead_win) and not analytical_blocker:
-        # Reconciled lifecycle rate
         recipe_title = "Delivered order return rate" if is_order_return else "Lead-to-win conversion rate"
-        rate_val = round((matched_count / max(left_eligible, 1)) * 100, 1)
+
+        # Determine eligible entities in primary (filter out cancelled/failed orders)
+        status_col_left = next((c for c in primary_columns if re.search(r"status|state", c, re.IGNORECASE)), None)
+        eligible_left_set = set()
+        for r in rows:
+            k = str(r.get(l_key, "")).strip()
+            if not k:
+                continue
+            if status_col_left:
+                st = str(r.get(status_col_left, "")).strip().lower()
+                if st in cancelled_tokens:
+                    continue
+            eligible_left_set.add(k)
+
+        # Determine valid target events in sibling (filter out unrequested/zero-amount returns)
+        return_req_col = next((c for c in other["columns"] if re.search(r"return_requested|is_returned|returned|requested", c, re.IGNORECASE)), None)
+        return_amt_col = next((c for c in other["columns"] if re.search(r"return_amount|refund_amount|refund", c, re.IGNORECASE)), None)
+        status_col_right = next((c for c in other["columns"] if re.search(r"status|state", c, re.IGNORECASE)), None)
+
+        valid_right_set = set()
+        for r in other_rows:
+            k = str(r.get(r_key, "")).strip()
+            if not k:
+                continue
+            if return_req_col is not None:
+                val = r.get(return_req_col)
+                if val in (False, "False", "false", 0, "0", "no", "No", None, ""):
+                    continue
+            if return_amt_col is not None:
+                try:
+                    amt = float(str(r.get(return_amt_col, 0)).replace(",", "").strip())
+                    if amt <= 0:
+                        continue
+                except (ValueError, TypeError):
+                    continue
+            if status_col_right is not None:
+                st = str(r.get(status_col_right, "")).strip().lower()
+                if st in cancelled_tokens or st in {"none", "no_return", "denied", "lost"}:
+                    continue
+            valid_right_set.add(k)
+
+        effective_eligible = len(eligible_left_set)
+        reconciled_keys = eligible_left_set & valid_right_set
+        reconciled_count = len(reconciled_keys)
+        rate_val = round((reconciled_count / max(effective_eligible, 1)) * 100, 1) if effective_eligible > 0 else 0.0
+
+        flow_points = [
+            EnterpriseVisualPoint(label="Eligible cohort", x=0.0, y=float(effective_eligible), sample_size=effective_eligible, formatted_y=f"{effective_eligible:,}"),
+            EnterpriseVisualPoint(label="Reconciled stage", x=1.0, y=float(reconciled_count), sample_size=reconciled_count, formatted_y=f"{reconciled_count:,}"),
+        ]
 
         evidence = CrossSourceEvidence(
             finding_id="finding_lifecycle_reconciled",
             recipe_id="recipe_a_lifecycle",
             title=recipe_title,
-            observation=f"{matched_count} distinct entities reconciled across {manifest.display_name} and {other['ref'].display_name}.",
+            observation=f"{reconciled_count} distinct entities reconciled across {manifest.display_name} and {other['ref'].display_name}.",
             interpretation=f"Verified lifecycle rate is {rate_val}% across {round(coverage_ratio * 100, 1)}% of eligible records. Unmatched records remain excluded.",
             metric_names=[recipe_title],
             values=[rate_val],
             units=["%"],
-            paired_or_eligible_count=left_eligible,
-            matched_count=matched_count,
-            unmatched_count=unmatched_count,
-            coverage_ratio=coverage_ratio,
+            paired_or_eligible_count=effective_eligible,
+            matched_count=reconciled_count,
+            unmatched_count=effective_eligible - reconciled_count,
+            coverage_ratio=round(reconciled_count / max(effective_eligible, 1), 4) if effective_eligible > 0 else 0.0,
             join_description=f"Joined on {l_key} ↔ {r_key} ({best_candidate['cardinality']}).",
             calculation_id=f"calc_ent_life_{combined_snapshot[:8]}",
             source_sheet_ids=[sheet_id, other["ref"].sheet_id],
             snapshot=combined_snapshot,
         )
-
-        flow_points = [
-            EnterpriseVisualPoint(label="Eligible cohort", x=0.0, y=float(left_eligible), sample_size=left_eligible, formatted_y=f"{left_eligible:,}"),
-            EnterpriseVisualPoint(label="Reconciled stage", x=1.0, y=float(matched_count), sample_size=matched_count, formatted_y=f"{matched_count:,}"),
-        ]
 
         return EnterpriseSynthesisSpec(
             component_id="enterprise_element",
@@ -690,9 +777,9 @@ def build_enterprise_synthesis_element(
                 y_axis_title="Distinct entities",
                 points=flow_points,
             ),
-            what_it_establishes=f"{recipe_title} is {rate_val}% across {matched_count:,} verified matched entities without event-row multiplication.",
+            what_it_establishes=f"{recipe_title} is {rate_val}% across {reconciled_count:,} verified matched entities without event-row multiplication.",
             what_it_does_not_establish="Unmatched records are not assumed to have passed or failed without verifiable receipt.",
-            next_check=f"Inspect the {unmatched_count:,} unmatched records in Data Explorer to verify data capture timing.",
+            next_check=f"Inspect the {effective_eligible - reconciled_count:,} unmatched records in Data Explorer to verify data capture timing.",
             drilldown_targets=drilldown_targets,
             glance=GlanceSpec(
                 label=recipe_title,
@@ -700,11 +787,11 @@ def build_enterprise_synthesis_element(
                 formatted_value=f"{rate_val}%",
                 unit="%",
                 unit_display="explicit_suffix",
-                context_qualifier=f"{matched_count:,} matched entities",
+                context_qualifier=f"{reconciled_count:,} matched entities",
             ),
             explain=ExplainSpec(
                 short_definition="Reconciled lifecycle rates connect distinct entities through verified milestones using unique identifiers.",
-                exact_value_text=f"{rate_val}% ({matched_count:,} matched of {left_eligible:,} eligible).",
+                exact_value_text=f"{rate_val}% ({reconciled_count:,} matched of {effective_eligible:,} eligible).",
             ),
             inspect=InspectSpec(
                 metric_title=recipe_title,
@@ -713,10 +800,10 @@ def build_enterprise_synthesis_element(
                 applicable_population=f"Eligible records in {manifest.display_name} with verified key in {other['ref'].display_name}.",
                 source_name=f"{manifest.display_name} & {other['ref'].display_name}",
                 calculation_method=f"Distinct entity matching on {l_key} = {r_key} with strict cardinality enforcement.",
-                data_completeness=f"{matched_count:,} of {left_eligible:,} eligible entities matched ({round(coverage_ratio * 100, 1)}%)",
+                data_completeness=f"{reconciled_count:,} of {effective_eligible:,} eligible entities matched ({round(coverage_ratio * 100, 1)}%)",
                 workforce_coverage=f"{round(coverage_ratio * 100, 1)}% match coverage",
                 selection_reason=f"Verified lifecycle entity progression between {manifest.display_name} and {other['ref'].display_name}.",
-                excluded_observations=unmatched_count,
+                excluded_observations=effective_eligible - reconciled_count,
                 limitations=["Events outside the observed recording window are excluded."],
                 calculation_id=f"calc_ent_life_{combined_snapshot[:8]}",
                 definition_id="def_enterprise_lifecycle_v1",
@@ -731,18 +818,153 @@ def build_enterprise_synthesis_element(
                 value=rate_val,
                 unit="%",
                 aggregation="ratio",
-                numerator=float(matched_count),
-                denominator=float(max(left_eligible, 1)),
-                is_known_zero=matched_count == 0,
+                numerator=float(reconciled_count),
+                denominator=float(max(effective_eligible, 1)),
+                is_known_zero=reconciled_count == 0,
                 missing_observations=0,
                 invalid_observations=0,
-                excluded_observations=unmatched_count,
+                excluded_observations=effective_eligible - reconciled_count,
                 coverage_ratio=coverage_ratio,
                 calculation_method=f"Distinct entity join on {l_key} = {r_key}.",
                 provenance=f"Dataset {dataset_id}: {manifest.display_name} ↔ {other['ref'].display_name}",
                 limitations=["Cross-source lifecycle timing relies on recorded event timestamps."],
             ),
             caption=f"{len(source_refs)} evaluated sources · 2 connected ({rate_val}% lifecycle rate)",
+        )
+
+    # -------------------------------------------------------------
+    # S17: Cross-Source Ledger Reconciliation (Attendance/Leave & Shared Measures)
+    # -------------------------------------------------------------
+    is_attendance_leave = (
+        (any("attend" in c for c in left_col_names_lower) or contract.entity_type == "employee")
+        and any("leave" in c for c in right_col_names_lower)
+    ) or (
+        any("leave" in c for c in left_col_names_lower)
+        and (any("attend" in c for c in right_col_names_lower) or contract.entity_type == "employee")
+    )
+    shared_measure_left = next(
+        (c for c in primary_columns if c != l_key and not is_pii_column(c) and any(c.lower() == rc.lower() for rc in other["columns"] if rc != r_key)),
+        None,
+    )
+    shared_measure_right = next(
+        (rc for rc in other["columns"] if shared_measure_left and rc.lower() == shared_measure_left.lower() and rc != r_key),
+        None,
+    ) if shared_measure_left else None
+
+    if (is_attendance_leave or shared_measure_left) and not analytical_blocker:
+        primary_only = left_eligible - matched_count
+        sibling_only = right_eligible - matched_count
+
+        if shared_measure_left and shared_measure_right:
+            l_vals_by_key = _mean_by_key(rows, l_key, shared_measure_left)
+            r_vals_by_key = _mean_by_key(other_rows, r_key, shared_measure_right)
+            agreed_keys = {
+                k for k in common_set
+                if k in l_vals_by_key and k in r_vals_by_key and abs(l_vals_by_key[k] - r_vals_by_key[k]) < 0.01
+            }
+            agreed_count = len(agreed_keys)
+        else:
+            agreed_count = matched_count
+
+        agreement_rate = round((agreed_count / max(matched_count, 1)) * 100, 1) if matched_count > 0 else 0.0
+        reconciliation_title = "Cross-source ledger reconciliation" if not is_attendance_leave else "Attendance & leave ledger reconciliation"
+
+        flow_points = [
+            EnterpriseVisualPoint(label="Primary records", x=0.0, y=float(left_eligible), sample_size=left_eligible, formatted_y=f"{left_eligible:,}"),
+            EnterpriseVisualPoint(label="Matched cohort", x=1.0, y=float(matched_count), sample_size=matched_count, formatted_y=f"{matched_count:,}"),
+            EnterpriseVisualPoint(label="Agreed records", x=2.0, y=float(agreed_count), sample_size=agreed_count, formatted_y=f"{agreed_count:,}"),
+        ]
+        if sibling_only > 0:
+            flow_points.append(
+                EnterpriseVisualPoint(label="Sibling only", x=3.0, y=float(sibling_only), sample_size=sibling_only, formatted_y=f"{sibling_only:,}")
+            )
+
+        evidence = CrossSourceEvidence(
+            finding_id="finding_ledger_reconciliation",
+            recipe_id="recipe_s17_reconciliation",
+            title=reconciliation_title,
+            observation=f"{matched_count:,} matched entities reconciled ({agreement_rate:.1f}% agreement); {primary_only:,} primary-only and {sibling_only:,} sibling-only records identified.",
+            interpretation=f"Agreement is conditional on the matched cohort ({matched_count:,} records). {primary_only:,} records in {manifest.display_name} and {sibling_only:,} records in {other['ref'].display_name} remain unmatched across systems.",
+            metric_names=["Agreement rate", "Primary-only records", "Sibling-only records"],
+            values=[agreement_rate, float(primary_only), float(sibling_only)],
+            units=["%", "records", "records"],
+            paired_or_eligible_count=left_eligible,
+            matched_count=matched_count,
+            unmatched_count=primary_only,
+            coverage_ratio=coverage_ratio,
+            join_description=f"Joined on {l_key} ↔ {r_key} ({best_candidate['cardinality']}).",
+            calculation_id=f"calc_ent_rec_{combined_snapshot[:8]}",
+            source_sheet_ids=[sheet_id, other["ref"].sheet_id],
+            snapshot=combined_snapshot,
+        )
+
+        return EnterpriseSynthesisSpec(
+            component_id="enterprise_element",
+            kind="reconciled_metric",
+            business_concept="Cross-source reconciliation",
+            title="Enterprise synthesis",
+            sources=source_refs,
+            source_count=len(source_refs),
+            lead_finding=evidence,
+            visual=EnterpriseVisualSpec(
+                kind="lifecycle_flow",
+                x_axis_title="Reconciliation stage",
+                y_axis_title="Records",
+                points=flow_points,
+            ),
+            what_it_establishes=f"{agreement_rate:.1f}% agreement across {matched_count:,} verified matched entities without event-row multiplication. {primary_only:,} primary-only and {sibling_only:,} sibling-only records identified.",
+            what_it_does_not_establish="Agreement is strictly conditional on the matched cohort; unmatched records cannot be assumed to agree without cross-system confirmation. This reconciliation does not imply an association or causal relationship.",
+            next_check=f"Investigate the {primary_only:,} primary-only and {sibling_only:,} sibling-only exceptions in Data Explorer.",
+            drilldown_targets=drilldown_targets,
+            glance=GlanceSpec(
+                label="Ledger agreement",
+                value=agreement_rate,
+                formatted_value=f"{agreement_rate:.1f}%",
+                unit="%",
+                unit_display="explicit_suffix",
+                context_qualifier=f"{matched_count:,} matched ({primary_only} primary-only, {sibling_only} sibling-only)",
+            ),
+            explain=ExplainSpec(
+                short_definition="Cross-source ledger reconciliation compares corresponding entity records and measures across separate operational systems.",
+                exact_value_text=f"{agreement_rate:.1f}% agreement across {matched_count:,} matched records ({primary_only:,} primary-only, {sibling_only:,} sibling-only).",
+            ),
+            inspect=InspectSpec(
+                metric_title=reconciliation_title,
+                exact_value=f"{agreement_rate:.1f}%",
+                what_this_counts="Proportion of matched entity records showing consistent values across systems.",
+                applicable_population=f"Matched records between {manifest.display_name} and {other['ref'].display_name}.",
+                source_name=f"{manifest.display_name} & {other['ref'].display_name}",
+                calculation_method=f"Distinct entity matching on {l_key} = {r_key} with strict cardinality enforcement.",
+                data_completeness=f"{matched_count:,} of {left_eligible:,} primary records matched ({round(coverage_ratio * 100, 1)}%)",
+                workforce_coverage=f"{round(coverage_ratio * 100, 1)}% match coverage",
+                selection_reason=f"Cross-source ledger reconciliation between {manifest.display_name} and {other['ref'].display_name}.",
+                excluded_observations=primary_only,
+                limitations=["Discrepancies may arise from difference in recording timing or policy definitions."],
+                calculation_id=f"calc_ent_rec_{combined_snapshot[:8]}",
+                definition_id="def_enterprise_reconciliation_v1",
+                snapshot=combined_snapshot,
+                provenance=f"Sheets {sheet_id} & {other['ref'].sheet_id} in Dataset {dataset_id}",
+            ),
+            evidence=EvidenceResult(
+                calculation_id=f"calc_ent_rec_{combined_snapshot[:8]}",
+                snapshot=combined_snapshot,
+                definition_id="def_enterprise_reconciliation_v1",
+                status="available",
+                value=agreement_rate,
+                unit="%",
+                aggregation="ratio",
+                numerator=float(agreed_count),
+                denominator=float(max(matched_count, 1)),
+                is_known_zero=agreed_count == 0,
+                missing_observations=0,
+                invalid_observations=0,
+                excluded_observations=primary_only,
+                coverage_ratio=coverage_ratio,
+                calculation_method=f"Distinct entity join on {l_key} = {r_key}.",
+                provenance=f"Dataset {dataset_id}: {manifest.display_name} ↔ {other['ref'].display_name}",
+                limitations=["Cross-source ledger reconciliation compares common entity keys only."],
+            ),
+            caption=f"{len(source_refs)} evaluated sources · 2 connected ({agreement_rate:.1f}% agreement)",
         )
 
     # -------------------------------------------------------------
@@ -1048,6 +1270,25 @@ def build_enterprise_synthesis_element(
     # -------------------------------------------------------------
     # Fallback to Coverage-Only Synthesis (Recipe E)
     # -------------------------------------------------------------
+    coverage_finding = CrossSourceEvidence(
+        finding_id="finding_coverage_only",
+        recipe_id="recipe_e_coverage",
+        title=f"Verified key overlap ({matched_count:,} entities)",
+        observation=f"Key overlap on {l_key} ↔ {r_key} verified across {matched_count:,} distinct records between {manifest.display_name} and {other['ref'].display_name}.",
+        interpretation="Key overlap is verified, but compatible numeric metrics or cohort dimensions were insufficient for cross-source lifecycle, cohort, or association models.",
+        metric_names=["Matched entities"],
+        values=[float(matched_count)],
+        units=["entities"],
+        paired_or_eligible_count=left_eligible,
+        matched_count=matched_count,
+        unmatched_count=unmatched_count,
+        coverage_ratio=coverage_ratio,
+        join_description=f"Joined on {l_key} ↔ {r_key} ({best_candidate['cardinality']}).",
+        calculation_id=f"calc_ent_cov_{combined_snapshot[:8]}",
+        source_sheet_ids=[sheet_id, other["ref"].sheet_id],
+        snapshot=combined_snapshot,
+    )
+
     return EnterpriseSynthesisSpec(
         component_id="enterprise_element",
         kind="coverage_only",
@@ -1055,7 +1296,7 @@ def build_enterprise_synthesis_element(
         title="Enterprise synthesis",
         sources=source_refs,
         source_count=len(source_refs),
-        lead_finding=None,
+        lead_finding=coverage_finding,
         visual=EnterpriseVisualSpec(kind="none"),
         what_it_establishes=f"{len(source_refs)} sources evaluated within dataset {dataset_id}; key overlap on {l_key} ↔ {r_key} verified across {matched_count:,} records.",
         what_it_does_not_establish=analytical_blocker or "Compatible numeric metrics or cohort dimensions were insufficient to produce a statistically defensible lifecycle rate, cohort comparison, or association.",

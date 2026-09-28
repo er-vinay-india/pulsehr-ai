@@ -3636,13 +3636,22 @@ def build_decision_focus_element(
             fmt_comp = f"{benchmark:.1f}%"
             fmt_gap = f"{abs_gap:.1f} pp below the workforce benchmark" if gap < 0 else f"{abs_gap:.1f} pp above the workforce benchmark"
 
-            headline = f"Review {target.segment} attendance reliability" if not is_tie else f"Review {target.segment} (tied) attendance reliability"
-            why_it_matters = (
-                "This unit has the largest verified attendance-reliability gap among organizational units with adequate records."
-                if not is_tie
-                else f"This unit shares the largest verified attendance-reliability gap with {', '.join(t.segment for t in ties[1:])}. Neither is singled out as unique."
-            )
-            next_step = "Review scheduling coverage and approved-leave patterns before changing policy."
+            all_identical = len(ties) == len(valid_items) and abs(gap) < 0.1
+            if all_identical:
+                headline = "Consistent attendance reliability across all units"
+                why_it_matters = (
+                    "All evaluated departments exhibit identical attendance reliability with zero observed gap "
+                    "relative to the organizational benchmark."
+                )
+                next_step = "Continue standard workforce monitoring across all operational departments."
+            else:
+                headline = f"Review {target.segment} attendance reliability" if not is_tie else f"Review {target.segment} (tied) attendance reliability"
+                why_it_matters = (
+                    "This unit has the largest verified attendance-reliability gap among organizational units with adequate records."
+                    if not is_tie
+                    else f"This unit shares the largest verified attendance-reliability gap with {', '.join(t.segment for t in ties[1:])}. Neither is singled out as unique."
+                )
+                next_step = "Review scheduling coverage and approved-leave patterns before changing policy."
 
             context_qual = f"{fmt_gap} · {target.sample_size} employees"
             if is_partial_period:

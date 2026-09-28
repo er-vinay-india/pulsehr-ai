@@ -16,6 +16,7 @@ Evaluates target-gap or statistical forecast candidates under strict validation:
 from __future__ import annotations
 
 import math
+import re
 from typing import Any, Literal
 import numpy as np
 
@@ -73,29 +74,40 @@ def detect_target_column(
     columns: list[str],
     metric_name: str,
 ) -> str | None:
-    """Finds an explicit verified target, plan, budget, or quota column."""
+    """Finds an explicit verified target, plan, budget, or quota column matching the active metric."""
     target_keywords = ("target", "plan", "quota", "budget", "sla", "threshold", "goal")
     metric_tokens = [
         t for t in metric_name.lower().replace("_", " ").split()
-        if len(t) >= 3 and t not in ("weekly", "monthly", "daily", "annual", "total", "average", "avg")
+        if len(t) >= 3 and t not in ("weekly", "monthly", "daily", "annual", "total", "average", "avg", "mean")
     ]
+
+    domain_qualifiers = {
+        "recruitment", "hiring", "hire", "turnover", "attrition", "retention",
+        "headcount", "staffing", "attendance", "leave", "training", "hours",
+        "revenue", "sales", "margin", "profit", "cost", "expense", "spend",
+        "conversion", "churn", "tickets", "incidents", "defects", "scrap",
+    }
+    unrelated_qualifiers = domain_qualifiers - set(metric_tokens)
 
     # 1. Look for column containing both target keyword and metric token
     for col in columns:
-        c_lower = str(col).lower()
-        if c_lower == metric_name.lower():
+        c_lower = str(col).lower().strip()
+        if c_lower == metric_name.lower().strip():
             continue
-        if any(kw in c_lower for kw in target_keywords):
-            if any(tok in c_lower for tok in metric_tokens):
+        c_parts = set(re.findall(r"[a-z0-9]+", c_lower))
+        if any(kw in c_parts for kw in target_keywords):
+            if any(tok in c_parts or tok in c_lower for tok in metric_tokens):
                 return col
 
-    # 2. Look for any column containing a target keyword in its name
+    # 2. Look for pure target column without unrelated domain qualifiers
     for col in columns:
         c_lower = str(col).lower().strip()
-        if c_lower == metric_name.lower():
+        if c_lower == metric_name.lower().strip():
             continue
-        c_parts = c_lower.replace("_", " ").split()
-        if any(kw in c_parts for kw in target_keywords) or c_lower in target_keywords:
+        c_parts = set(re.findall(r"[a-z0-9]+", c_lower))
+        if any(kw in c_parts for kw in target_keywords):
+            if c_parts & unrelated_qualifiers:
+                continue
             return col
 
     return None
@@ -287,8 +299,9 @@ def backtest_candidate_models(
         "seasonal_naive": "Seasonal Naïve (Annual)",
     }
 
-    # Pass condition: best candidate MAE <= baseline_mae
-    passed = (best_mae <= baseline_mae * 1.00) or (best_candidate != baseline_model and best_mae <= baseline_mae * 1.02)
+    # Pass condition: A candidate model must outperform the baseline.
+    # Equal performance to baseline is NOT model improvement.
+    passed = (best_candidate != baseline_model and best_mae < baseline_mae)
     rejection_reason = None
     if not passed:
         rejection_reason = f"No candidate model outperformed baseline MAE ({baseline_mae:.2f}) across {num_folds} rolling folds."
@@ -361,22 +374,43 @@ def build_forward_outlook_element(
     if target_col is not None:
         target_vals = []
         actual_vals = []
+        missing_actual_count = 0
+        missing_target_count = 0
         for r in rows:
             t_raw = r.get(target_col)
             a_raw = r.get(metric_name)
+            if t_raw is None or str(t_raw).strip() == "":
+                missing_target_count += 1
+                continue
+            if a_raw is None or str(a_raw).strip() == "":
+                missing_actual_count += 1
+                continue
             try:
-                if t_raw is not None and str(t_raw).strip() != "":
-                    t_clean = float(str(t_raw).replace("$", "").replace(",", "").replace("%", ""))
-                    a_clean = float(str(a_raw).replace("$", "").replace(",", "").replace("%", "")) if a_raw is not None else 0.0
-                    target_vals.append(t_clean)
-                    actual_vals.append(a_clean)
+                t_clean = float(str(t_raw).replace("$", "").replace(",", "").replace("%", ""))
+                a_clean = float(str(a_raw).replace("$", "").replace(",", "").replace("%", ""))
+                target_vals.append(t_clean)
+                actual_vals.append(a_clean)
             except (ValueError, TypeError):
                 continue
 
-        if len(target_vals) >= 3:
+        if len(actual_vals) == 0 and missing_actual_count > 0:
+            return build_unavailable_outlook(
+                concept=concept,
+                metric_name=metric_name,
+                unit=unit,
+                sheet_id=manifest.sheet_id,
+                manifest=manifest,
+                reason=f"Recorded target column '{target_col}' exists, but all matching actual observations for '{metric_name}' are missing or unrecorded.",
+            )
+
+        if len(target_vals) >= 3 and len(actual_vals) >= 3:
             avg_actual = float(np.mean(actual_vals))
             avg_target = float(np.mean(target_vals))
             gap = avg_actual - avg_target
+
+            unit_gaps = [a - t for a, t in zip(actual_vals, target_vals)]
+            units_behind = sum(1 for g in unit_gaps if g < 0)
+            pct_behind = round((units_behind / len(actual_vals)) * 100.0, 1)
 
             gap_direction = "above" if gap >= 0 else "below"
             abs_gap = abs(gap)
@@ -389,7 +423,13 @@ def build_forward_outlook_element(
             else:
                 gap_phrase = f"{formatted_gap} {gap_direction} the recorded target ({formatted_target})"
 
-            why = f"Current observed performance stands at {formatted_actual} against an explicit target of {formatted_target}, resulting in a gap of {gap_phrase}."
+            if gap >= 0 and units_behind > 0:
+                why = (
+                    f"Current average performance of {formatted_actual} meets or exceeds target of {formatted_target} "
+                    f"({gap_phrase}), but {units_behind} of {len(actual_vals)} units ({pct_behind:.0f}%) remain behind target."
+                )
+            else:
+                why = f"Current observed performance stands at {formatted_actual} against an explicit target of {formatted_target}, resulting in a gap of {gap_phrase}."
             review_stmt = "Review operational capacity and underlying segment distribution before adjusting target baselines."
 
             points = [
