@@ -37,7 +37,10 @@ const fmt = (n) => (n == null ? 'Unavailable' : Number(n).toLocaleString(undefin
 
 export default function DataExplorerPage() {
   const [catalog, setCatalog] = useState({ sheets: [], relationships: [] });
-  const [selected, setSelected] = useState('');
+  const [selected, setSelected] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('sheet_id') || '';
+  });
   const [relation, setRelation] = useState('');
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
@@ -80,11 +83,16 @@ export default function DataExplorerPage() {
     getSheets()
       .then((r) => {
         setCatalog(r);
-        setSelected((current) =>
-          r.sheets.some((s) => String(s.id) === current)
+        setSelected((current) => {
+          const params = new URLSearchParams(window.location.search);
+          const urlSheet = params.get('sheet_id');
+          if (urlSheet && r.sheets.some((s) => String(s.id) === urlSheet)) {
+            return urlSheet;
+          }
+          return r.sheets.some((s) => String(s.id) === current)
             ? current
-            : String(r.sheets[r.sheets.length - 1]?.id || '')
-        );
+            : String(r.sheets[r.sheets.length - 1]?.id || '');
+        });
         setRelation('');
         setPage(1);
       })

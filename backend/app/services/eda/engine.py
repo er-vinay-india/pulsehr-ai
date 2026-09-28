@@ -53,6 +53,7 @@ def run_eda_pipeline(sheet_ids: list[int] | None = None, conn: sqlite3.Connectio
 
         curated_tables: dict[int, list[dict[str, Any]]] = {}
         normalization_results: dict[int, dict[str, Any]] = {}
+        raw_records_by_sheet: dict[int, list[dict[str, Any]]] = {}
 
         # 1. Intra-Sheet Cleansing & Normalization
         for s in sheets:
@@ -62,6 +63,7 @@ def run_eda_pipeline(sheet_ids: list[int] | None = None, conn: sqlite3.Connectio
                 (sid,)
             ).fetchall()
             raw_records = [json.loads(r["data_json"]) for r in raw_rows_db]
+            raw_records_by_sheet[sid] = raw_records
 
             norm_res = normalize_dataset(
                 sheet_id=sid,
@@ -101,26 +103,44 @@ def run_eda_pipeline(sheet_ids: list[int] | None = None, conn: sqlite3.Connectio
 
         # 4. Generate & Persist Structured EDA Reports
         reports_by_sheet: dict[int, dict[str, Any]] = {}
+        eda_cols = [r[1] for r in conn.execute("PRAGMA table_info(eda_reports)").fetchall()]
+        has_snapshot_col = "snapshot" in eda_cols
+
         for s in sheets:
             sid = s["id"]
+            raw_rows = raw_records_by_sheet.get(sid, [])
+            from ..adaptive_dashboard.engine import compute_source_snapshot
+            snap = compute_source_snapshot(sid, s["columns"], raw_rows)
+
             report = build_sheet_eda_report(
                 sheet_meta=s,
                 norm_result=normalization_results[sid],
                 cross_intel=cross_intel,
-                derived_tables=derived_tables
+                derived_tables=derived_tables,
+                snapshot=snap
             )
             reports_by_sheet[sid] = report
 
             conn.execute("DELETE FROM eda_reports WHERE sheet_id=?", (sid,))
-            conn.execute(
-                """
-                INSERT INTO eda_reports(sheet_id, dataset_id, health_score, report_json)
-                VALUES (?, ?, ?, ?)
-                """,
-                (sid, s["dataset_id"], report["health_score"], json.dumps(report))
-            )
+            if has_snapshot_col:
+                conn.execute(
+                    """
+                    INSERT INTO eda_reports(sheet_id, dataset_id, health_score, report_json, snapshot)
+                    VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (sid, s["dataset_id"], report["health_score"], json.dumps(report), snap)
+                )
+            else:
+                conn.execute(
+                    """
+                    INSERT INTO eda_reports(sheet_id, dataset_id, health_score, report_json)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    (sid, s["dataset_id"], report["health_score"], json.dumps(report))
+                )
 
         conn.commit()
+
 
         logger.info(
             f"EDA pipeline successfully completed across {len(sheets)} sheets: "

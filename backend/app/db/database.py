@@ -128,7 +128,14 @@ def init_db(conn: sqlite3.Connection | None = None) -> None:
             )
             """
         )
+        eda_cols = [r[1] for r in conn.execute("PRAGMA table_info(eda_reports)").fetchall()]
+        if "snapshot" not in eda_cols:
+            try:
+                conn.execute("ALTER TABLE eda_reports ADD COLUMN snapshot TEXT")
+            except Exception:
+                pass
         conn.commit()
+
     finally:
         if close_after:
             conn.close()

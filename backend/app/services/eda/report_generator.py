@@ -1,6 +1,7 @@
 """Assembles structured EDA reports for individual sheets and multi-sheet collections."""
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any
 
 
@@ -8,11 +9,13 @@ def build_sheet_eda_report(
     sheet_meta: dict[str, Any],
     norm_result: dict[str, Any],
     cross_intel: dict[str, Any],
-    derived_tables: list[dict[str, Any]]
+    derived_tables: list[dict[str, Any]],
+    snapshot: str | None = None,
 ) -> dict[str, Any]:
     """Builds a comprehensive EDA report for a single sheet, including intra-sheet and cross-sheet findings."""
     sheet_id = sheet_meta["id"]
     sheet_name = sheet_meta.get("display_name") or sheet_meta["name"]
+    dataset_id = sheet_meta.get("dataset_id")
 
     # Filter links and correlations relevant to this sheet
     related_links = [
@@ -39,9 +42,14 @@ def build_sheet_eda_report(
 
     return {
         "sheet_id": sheet_id,
+        "dataset_id": dataset_id,
+        "snapshot": snapshot,
         "sheet_name": sheet_name,
         "health_score": score,
         "health_status": health_status,
+        "generation_timestamp": datetime.now(timezone.utc).isoformat(),
+        "eda_method_version": "1.0.0",
+
         "summary": {
             "total_rows": norm_result["total_rows"],
             "total_columns": norm_result["total_columns"],
