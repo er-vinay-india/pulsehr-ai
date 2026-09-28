@@ -53,7 +53,7 @@ def inventory_candidate_findings(
     primary_gt = sheet_contexts[primary_sid]["ground_truth"]
     primary_mean = None
     metric_label = "Network Baseline Mean"
-    is_sales = any("sales" in s["domain"].lower() or "commercial" in s["domain"].lower() for s in included_sheets)
+    is_sales = any("sales" in s.get("domain", "").lower() or "commercial" in s.get("domain", "").lower() for s in included_sheets)
 
     if hr_analytics and hr_analytics.get("organization_benchmarks"):
         bench = hr_analytics["organization_benchmarks"]
@@ -438,5 +438,36 @@ def inventory_candidate_findings(
             {"question": "Can these figures be audited independently?", "answer": "Yes, re-running against this snapshot hash validates every slide number within ±0.1%."}
         ]
     })
+
+    # F13: Adaptive Dashboard Unified Findings (T31 Parity)
+    try:
+        from ..adaptive_dashboard.findings import get_shared_findings_for_sheet
+        shared_findings = get_shared_findings_for_sheet(primary_sid)
+        for sf in shared_findings:
+            findings.append({
+                "finding_id": sf.finding_id,
+                "evidence_id": sf.calculation_id,
+                "title": sf.short_business_title,
+                "category": sf.decision_category.upper().replace("_", " "),
+                "importance": "high" if sf.rank_score >= 80 else "medium",
+                "evidence_strength": sf.allowed_claim_level,
+                "metric_name": sf.short_business_title,
+                "metric_value": sf.formatted_value,
+                "numeric_value": sf.typed_value,
+                "source_sheets": sf.source_scope,
+                "row_count": tot_rows,
+                "date_range": period_summary,
+                "is_partial_year": is_partial,
+                "calculation_methodology": f"Adaptive engine definition {sf.definition_id} (calc: {sf.calculation_id}).",
+                "what_it_establishes": sf.evidence_bound_observation,
+                "what_it_does_not_establish": sf.limitations[0] if sf.limitations else "Causal factors not fully established.",
+                "chart": None,
+                "likely_questions": [
+                    {"question": "What is the recommended next step?", "answer": sf.one_next_check_or_action}
+                ],
+                "snapshot_hash": sf.snapshot,
+            })
+    except Exception:
+        pass
 
     return findings
