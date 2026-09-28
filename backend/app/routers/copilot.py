@@ -1,5 +1,6 @@
 import hashlib
 import json
+import logging
 import time
 from typing import Literal
 import pandas as pd
@@ -14,6 +15,8 @@ from ..services.data_engine.semantic_classifier import SemanticClassifier
 from ..services.copilot.generic_copilot_engine import GenericCopilotEngine
 from ..services.data_engine.analysis_context import AnalysisContext
 from ..services.reporting.workflow_orchestrator import _GENERIC_WORKFLOW_CACHE
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/copilot", tags=["copilot"])
 
@@ -30,7 +33,7 @@ class CopilotQueryRequest(BaseModel):
     engine: Literal["generic", "legacy", "auto"] = "auto"
 
 
-def _load_active_sheet_dataframe(sheet_id: int | None = None, dataset_id: int | None = None) -> tuple[pd.DataFrame | None, str | None, AnalysisContext | None]:
+def _load_active_sheet_dataframe(sheet_id: int | None = None, dataset_id: int | None = None) -> tuple[pd.DataFrame | None, str | None, AnalysisContext | None, int | None]:
     """Loads active or requested tabular sheet as DataFrame and associated AnalysisContext from database."""
     with get_connection() as conn:
         sheet = None
@@ -64,8 +67,89 @@ def _load_active_sheet_dataframe(sheet_id: int | None = None, dataset_id: int | 
                         ctx = AnalysisContext.model_validate_json(ctx_raw)
                     except Exception:
                         pass
-                return pd.DataFrame(records), sheet['display_name'] or sheet['name'], ctx
-    return None, None, None
+                return pd.DataFrame(records), sheet['display_name'] or sheet['name'], ctx, sheet['id']
+    return None, None, None, None
+
+
+def _answer_from_shared_findings(query: str, sheet_id: int, dataset_name: str) -> dict | None:
+    """Answers high-level management questions directly from the authoritative Shared Findings Store (T30, T31)."""
+    q_low = query.lower()
+    is_top_points = any(phrase in q_low for phrase in ["top 3", "top three", "top points", "top findings", "key findings", "summary", "overview"])
+    is_worst_dept = any(phrase in q_low for phrase in ["worst department", "worst team", "worst unit", "lowest department", "which department"])
+
+    if not (is_top_points or is_worst_dept):
+        return None
+
+    try:
+        from ..services.adaptive_dashboard.findings import get_shared_findings_for_sheet
+        findings = get_shared_findings_for_sheet(sheet_id)
+        if not findings:
+            return None
+
+        if is_top_points:
+            top_3 = findings[:3]
+            lines = [f"### Top 3 Verified Findings for {dataset_name}\n"]
+            citations = []
+            for i, f in enumerate(top_3, 1):
+                lines.append(f"{i}. **{f.short_business_title}** ({f.formatted_value}): {f.evidence_bound_observation}")
+                lines.append(f"   - *Action*: {f.one_next_check_or_action}")
+                citations.append({
+                    "fact_id": f.finding_id,
+                    "type": "unified_finding",
+                    "calculation_id": f.calculation_id,
+                })
+            return {
+                "query": query,
+                "answer": "\n".join(lines),
+                "model_used": "shared_findings_store",
+                "citations": citations,
+                "exact_matches": [],
+                "suggested_questions": [
+                    "Which department has the lowest attendance rate?",
+                    "What are the verified ledger reconciliation findings?",
+                ],
+                "visual_charts": [],
+                "related_rows": len(findings),
+                "timings": {"total_ms": 1.0, "llm_calls": 0, "is_deterministic": True},
+                "engine": "shared_findings",
+                "metadata": {"source": "shared_findings_store", "sheet_id": sheet_id},
+            }
+
+        if is_worst_dept:
+            focus = next((f for f in findings if f.decision_category == "segment_disparity"), None)
+            if focus:
+                ans = (
+                    f"### Department Attendance Reliability Priority\n\n"
+                    f"**Focus Unit**: {focus.short_business_title}\n\n"
+                    f"- **Observation**: {focus.evidence_bound_observation}\n"
+                    f"- **Context & Benchmark**: {focus.comparison_and_effect or 'Workforce benchmark comparison'}\n"
+                    f"- **Population**: {focus.population_or_exposure}\n"
+                    f"- **Recommended Next Step**: {focus.one_next_check_or_action}\n\n"
+                    f"*Note: This prioritization reflects the greatest verified rate disparity below the workforce benchmark. "
+                    f"It does not imply an individual performance deficit or policy violation.*"
+                )
+                return {
+                    "query": query,
+                    "answer": ans,
+                    "model_used": "shared_findings_store",
+                    "citations": [{
+                        "fact_id": focus.finding_id,
+                        "type": "unified_finding",
+                        "calculation_id": focus.calculation_id,
+                    }],
+                    "exact_matches": [],
+                    "suggested_questions": ["What are the top 3 overall points?"],
+                    "visual_charts": [],
+                    "related_rows": 1,
+                    "timings": {"total_ms": 1.0, "llm_calls": 0, "is_deterministic": True},
+                    "engine": "shared_findings",
+                    "metadata": {"source": "shared_findings_store", "sheet_id": sheet_id},
+                }
+    except Exception as exc:
+        logger.warning(f"Could not retrieve shared findings for copilot: {exc}")
+        return None
+
+    return None
 
 
 def _execute_generic_copilot(req: CopilotQueryRequest, df: pd.DataFrame, dataset_name: str, context: AnalysisContext | None = None) -> dict:
@@ -80,13 +164,30 @@ def _execute_generic_copilot(req: CopilotQueryRequest, df: pd.DataFrame, dataset
     cached = _GENERIC_WORKFLOW_CACHE.get(cache_key)
     existing_interp = cached.interpretation if cached else None
 
-    grounded = GenericCopilotEngine.answer_query(
-        df=df,
-        profile=profile,
-        user_query=req.query,
-        existing_interpretation=existing_interp,
-        context=context
-    )
+    try:
+        grounded = GenericCopilotEngine.answer_query(
+            df=df,
+            profile=profile,
+            user_query=req.query,
+            existing_interpretation=existing_interp,
+            context=context
+        )
+    except Exception as exc:
+        logger.warning(f"Generic copilot execution failed, applying deterministic fallback per T29: {exc}")
+        return {
+            "query": req.query,
+            "answer": f"Evaluated {len(df)} records across {len(profile.columns)} columns in {dataset_name}. Analysis completed with deterministic summary fallback.",
+            "model_used": "deterministic_fallback",
+            "citations": [],
+            "exact_matches": [],
+            "suggested_questions": ["What are the summary statistics of this dataset?"],
+            "visual_charts": [],
+            "related_rows": len(df),
+            "timings": {"total_ms": round((time.perf_counter() - t_start) * 1000, 1), "llm_calls": 0, "is_deterministic": True},
+            "engine": "generic_fallback",
+            "metadata": {"fallback": True, "error": str(exc)},
+        }
+
     duration_ms = (time.perf_counter() - t_start) * 1000
 
     return {
@@ -124,9 +225,13 @@ def _is_explicit_legacy_hr_request(req: CopilotQueryRequest) -> bool:
 @router.post("/generic")
 def ask_generic_copilot(req: CopilotQueryRequest):
     """GENERIC route: strictly executes via GenericCopilotEngine."""
-    df, name, ctx = _load_active_sheet_dataframe(req.sheet_id, req.dataset_id)
+    df, name, ctx, sid = _load_active_sheet_dataframe(req.sheet_id, req.dataset_id)
     if df is None or df.empty:
         raise HTTPException(400, "No active tabular dataset found. Please upload a dataset first.")
+    if sid is not None:
+        direct_ans = _answer_from_shared_findings(req.query, sid, name or "Uploaded Dataset")
+        if direct_ans is not None:
+            return direct_ans
     return _execute_generic_copilot(req, df, name or "Uploaded Dataset", context=ctx)
 
 
@@ -138,14 +243,18 @@ def ask_copilot(req: CopilotQueryRequest):
     - If engine == 'legacy': routes to legacy query_copilot.
     - If engine == 'auto': deterministically checks for legacy HR terms vs active tabular sheet.
     """
+    df, name, ctx, sid = _load_active_sheet_dataframe(req.sheet_id, req.dataset_id)
+    if sid is not None:
+        direct_ans = _answer_from_shared_findings(req.query, sid, name or "Uploaded Dataset")
+        if direct_ans is not None:
+            return direct_ans
+
     if req.engine == "generic":
-        df, name, ctx = _load_active_sheet_dataframe(req.sheet_id, req.dataset_id)
         if df is not None and not df.empty:
             return _execute_generic_copilot(req, df, name or "Uploaded Dataset", context=ctx)
         raise HTTPException(400, "No active tabular dataset found. Please upload a dataset first.")
 
     if req.engine == "auto" and not _is_explicit_legacy_hr_request(req):
-        df, name, ctx = _load_active_sheet_dataframe(req.sheet_id, req.dataset_id)
         if df is not None and not df.empty:
             return _execute_generic_copilot(req, df, name or "Uploaded Dataset", context=ctx)
 
@@ -168,13 +277,29 @@ def ask_copilot_stream(req: CopilotQueryRequest):
     SHARED route: Streams token chunks and status updates as Server-Sent Events.
     Uses GenericCopilotEngine if targeting generic tabular data, otherwise legacy stream generator.
     """
+    df, name, ctx, sid = _load_active_sheet_dataframe(req.sheet_id, req.dataset_id)
+    if sid is not None:
+        direct_ans = _answer_from_shared_findings(req.query, sid, name or "Uploaded Dataset")
+        if direct_ans is not None:
+            def _direct_stream():
+                yield f"event: status\ndata: {json.dumps({'status': 'Authoritative shared findings loaded', 'step': 'ready'})}\n\n"
+                answer = direct_ans["answer"]
+                words = answer.split(" ")
+                for i in range(0, len(words), 4):
+                    chunk = " ".join(words[i:i+4]) + " "
+                    yield f"event: token\ndata: {json.dumps({'token': chunk})}\n\n"
+                yield f"event: done\ndata: {json.dumps(direct_ans)}\n\n"
+            return StreamingResponse(
+                _direct_stream(),
+                media_type="text/event-stream",
+                headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"}
+            )
+
     if req.engine == "generic" or (req.engine == "auto" and not _is_explicit_legacy_hr_request(req)):
-        df, name, ctx = _load_active_sheet_dataframe(req.sheet_id, req.dataset_id)
         if df is not None and not df.empty:
             result = _execute_generic_copilot(req, df, name or "Uploaded Dataset", context=ctx)
             def _generic_stream():
                 yield f"event: status\ndata: {json.dumps({'status': 'Grounded in verified candidate facts', 'step': 'ready'})}\n\n"
-                # Stream the markdown answer in small chunks
                 answer = result["answer"]
                 words = answer.split(" ")
                 for i in range(0, len(words), 4):
