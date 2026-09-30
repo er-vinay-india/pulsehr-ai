@@ -143,7 +143,7 @@ export default function PresentationSlideContent({
     );
   };
 
-  if (slide?.visual_spec) {
+  if (layout === "visual_intelligence" || layout === "process_flow" || (!slide.layout && slide?.visual_spec)) {
     return (
       <div className={`slide-card-wrapper layout-${layout} visual-spec-active`}>
         <VisualSlideRenderer

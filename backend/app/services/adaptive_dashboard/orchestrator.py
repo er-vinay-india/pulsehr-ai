@@ -531,8 +531,16 @@ def calculate_data_dependent_rank_score(
 
     # 1. Relevance (25%)
     is_primary = False
-    if contract.primary_measure and contract.primary_measure.lower() in finding.short_business_title.lower():
-        is_primary = True
+    if contract.primary_measure:
+        p_clean = contract.primary_measure.lower().replace("_", " ")
+        p_root = re.sub(r"\b(days|hours|rate|amount|score|sum|total|count)\b", "", p_clean).strip()
+        f_title = finding.short_business_title.lower()
+        if (
+            contract.primary_measure.lower() in f_title
+            or p_clean in f_title
+            or (p_root and p_root in f_title)
+        ):
+            is_primary = True
     if is_primary:
         relevance = 1.0
     elif finding.decision_category in ("segment_disparity", "ledger_reconciliation"):
@@ -2303,11 +2311,11 @@ def orchestrate_sheet_strategies(
             allowed_claim_level=top_f.allowed_claim_level,
             top_segment=top_f.visual_points_summary[0]["label"] if top_f.visual_points_summary else None,
             focus_group=top_f.visual_points_summary[0]["label"] if top_f.visual_points_summary else None,
-            dimension_name="Department" if contract.domain == "hr" else ("Store" if "store" in str(inputs.entity_col or "").lower() or "store" in top_f.short_business_title.lower() else "Unit"),
-            metric_name=top_f.unit if top_f.unit and top_f.unit != "$" else "Value",
-            owner="Lead HRBP with Operations Head" if contract.domain == "hr" else "Operations & Performance Lead",
-            guardrail="Verify flex arrangements & leave ledgers before review" if contract.domain == "hr" else "Validate localized seasonal drivers and inventory levels before adjusting operational targets",
-            review_cycle="14 days (Q3 Workforce Cycle)" if contract.domain == "hr" else "14-day operational review cycle",
+            dimension_name="Department" if contract.domain in ("hr", "workforce_hr") else ("Cohort / Group" if contract.domain in ("education", "education_academic") else ("Store" if "store" in str(inputs.entity_col or "").lower() or "store" in top_f.short_business_title.lower() else "Segment")),
+            metric_name=top_f.unit if top_f.unit and top_f.unit != "$" else ("Average Score" if contract.domain in ("education", "education_academic") else "Value"),
+            owner="Lead HRBP with Operations Head" if contract.domain in ("hr", "workforce_hr") else ("Academic Dean & Student Success Lead" if contract.domain in ("education", "education_academic") else "Operations & Performance Lead"),
+            guardrail="Verify flex arrangements & leave ledgers before review" if contract.domain in ("hr", "workforce_hr") else ("Academic Support Guardrail: Interventions are pedagogical support recommendations. Review individual student circumstances and learning plans before program adjustments." if contract.domain in ("education", "education_academic") else "Validate localized operational context and capacity before adjusting performance targets"),
+            review_cycle="14 days (Q3 Workforce Cycle)" if contract.domain in ("hr", "workforce_hr") else ("Quarterly Academic Grading Cycle" if contract.domain in ("education", "education_academic") else "14-day operational review cycle"),
         )
 
     return coverage_summary, findings, priority_insight

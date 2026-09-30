@@ -248,13 +248,19 @@ def extract_findings_from_response(response: AdaptiveDashboardResponse) -> list[
             "statistical_association" if ent.kind == "cross_source_association" else "descriptive_fact"
         )
         sources_list = [s.display_name for s in ent.sources]
-        existing_ent = next((f for f in findings if f.recipe_id == lead.recipe_id), None)
+        existing_ent = next(
+            (f for f in findings if f.recipe_id == lead.recipe_id or (f.recipe_id.startswith("recipe_s17_") and lead.recipe_id.startswith("recipe_s17_")) or f.decision_category == "cross_source_reconciliation"),
+            None
+        )
         if existing_ent:
+            existing_ent.recipe_id = lead.recipe_id
             existing_ent.finding_id = f10_id
             existing_ent.calculation_id = lead.calculation_id
             existing_ent.definition_id = ent.inspect.definition_id
             existing_ent.source_sheet_ids = lead.source_sheet_ids
             existing_ent.source_scope = sources_list
+            existing_ent.snapshot = lead.snapshot
+            existing_ent.short_business_title = lead.title
         else:
             findings.append(
                 UnifiedFinding(

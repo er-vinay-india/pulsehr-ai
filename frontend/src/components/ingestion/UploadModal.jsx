@@ -120,10 +120,11 @@ export default function UploadModal({
       timer = setInterval(() => {
         setUploadElapsed((prev) => {
           const next = prev + 1;
-          if (next >= 26) setUploadStep(9);
-          else if (next >= 22) setUploadStep(8);
-          else if (next >= 18) setUploadStep(7);
-          else if (next >= 14) setUploadStep(6);
+          if (next >= 28) setUploadStep(10);
+          else if (next >= 25) setUploadStep(9);
+          else if (next >= 21) setUploadStep(8);
+          else if (next >= 17) setUploadStep(7);
+          else if (next >= 13) setUploadStep(6);
           else if (next >= 10) setUploadStep(5);
           else if (next >= 7) setUploadStep(4);
           else if (next >= 4) setUploadStep(3);

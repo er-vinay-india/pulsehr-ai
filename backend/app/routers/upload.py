@@ -47,14 +47,69 @@ def upload_file(
             naming = generate_sheet_display_name(original, first['columns'], first['records'])
             display_name = naming['display_name']
 
+            # Run Controlled Semantic Data Enrichment & Scientific Feature Discovery Pipeline
+            enrichment_summary = None
+            try:
+                import pandas as pd
+                from ..services.enrichment import ControlledEnrichmentPipeline
+
+                df_raw = pd.DataFrame(first['records'])
+                final_df, enriched_pkg = ControlledEnrichmentPipeline.enrich_dataset(
+                    df=df_raw,
+                    dataset_id=original
+                )
+                enriched_records = json.loads(final_df.to_json(orient="records"))
+                enriched_cols = list(final_df.columns)
+                first['records'] = enriched_records
+                first['columns'] = enriched_cols
+
+                enrichment_summary = {
+                    "original_col_count": enriched_pkg.original_col_count,
+                    "enriched_col_count": enriched_pkg.enriched_col_count,
+                    "derived_features_count": len(enriched_pkg.derived_features),
+                    "derived_features": [f.model_dump() for f in enriched_pkg.derived_features],
+                    "semantic_groups": [g.model_dump() for g in enriched_pkg.semantic_groups],
+                    "analytical_tables_count": len(enriched_pkg.analytical_tables),
+                    "analytical_tables": [t.model_dump() for t in enriched_pkg.analytical_tables],
+                    "budget_summary": enriched_pkg.budget_summary
+                }
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).warning(f"Enrichment pipeline non-blocking warning: {e}")
+
             conn = get_connection()
             with conn:
-                dataset_id = conn.execute('''INSERT INTO dataset_uploads(filename,original_name,display_name,file_type,sheet_count,row_count,col_count,columns_json,sample_preview_json,summary_insights)
-                    VALUES (?,?,?,?,?,?,?,?,?,?)''', (path.name, original, display_name, suffix[1:], len(prepared), total, len(first['columns']), json.dumps(first['columns']), json.dumps(first['records'][:5]),
-                    f'{len(prepared)} sheets and {total} rows. All original values retained.')).lastrowid
+                enrich_json_str = json.dumps(enrichment_summary) if enrichment_summary else None
+                dataset_id = conn.execute('''INSERT INTO dataset_uploads(filename,original_name,display_name,file_type,sheet_count,row_count,col_count,columns_json,sample_preview_json,summary_insights,enrichment_json)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?)''', (path.name, original, display_name, suffix[1:], len(prepared), total, len(first['columns']), json.dumps(first['columns']), json.dumps(first['records'][:5]),
+                    f'{len(prepared)} sheets and {total} rows. All original values retained.', enrich_json_str)).lastrowid
                 for sid, profiles in column_updates:
                     conn.execute('UPDATE sheets SET profile_json=? WHERE id=?', (json.dumps(profiles), sid))
                 insert_sheets(conn, dataset_id, prepared, display_name=display_name)
+                if enrich_json_str:
+                    conn.execute('UPDATE sheets SET enrichment_json=? WHERE dataset_id=?', (enrich_json_str, dataset_id))
+
+                # Materialize synthesized analytical tables in derived_tables catalog
+                if enrichment_summary and enrichment_summary.get("analytical_tables"):
+                    for atbl in enrichment_summary["analytical_tables"]:
+                        try:
+                            conn.execute(
+                                """
+                                INSERT INTO derived_tables(name, display_name, description, source_sheets_json, join_keys_json, columns_json, row_count)
+                                VALUES (?, ?, ?, ?, ?, ?, ?)
+                                """,
+                                (
+                                    atbl["table_id"],
+                                    atbl["title"],
+                                    atbl["description"],
+                                    json.dumps([dataset_id]),
+                                    json.dumps({"type": "scientific_enrichment_rollup"}),
+                                    json.dumps(atbl["columns"]),
+                                    atbl["row_count"]
+                                )
+                            )
+                        except Exception:
+                            pass
                 rebuild_relationships(conn)
                 from ..services.eda import run_eda_pipeline
                 eda_res = run_eda_pipeline(conn=conn)
@@ -98,8 +153,9 @@ def upload_file(
                     'industrial_analytics': industrial_res,
                     'analysis_context': analysis_ctx_dict,
                     'workspace_context': ws_ctx_dict,
+                    'enrichment': enrichment_summary,
                     'user_objective': user_objective.strip() if user_objective else "",
-                    'message': f'Indexed all {total} rows. Reconciled user intent into analytical evidence pipeline.' if analysis_ctx_dict else f'Indexed all {total} rows. Found {linked} exact key relationships and computed industrial analytics pipeline.'}
+                    'message': f'Indexed all {total} rows with {enrichment_summary["derived_features_count"] if enrichment_summary else 0} scientifically derived features.' if enrichment_summary else (f'Indexed all {total} rows. Reconciled user intent into analytical evidence pipeline.' if analysis_ctx_dict else f'Indexed all {total} rows. Found {linked} exact key relationships and computed industrial analytics pipeline.')}
         except (ValueError, OSError, ImportError) as exc:
             path.unlink(missing_ok=True)
             raise HTTPException(400, str(exc)) from exc
@@ -122,9 +178,23 @@ def list_datasets():
             item.pop('sample_preview_json', None)
             ctx_str = item.pop('analysis_context_json', None)
             item['analysis_context'] = json.loads(ctx_str) if ctx_str else None
+            enrich_str = item.pop('enrichment_json', None)
+            item['enrichment'] = json.loads(enrich_str) if enrich_str else None
             item['sheets'] = [dict(s) for s in conn.execute('SELECT id,name,display_name,row_count FROM sheets WHERE dataset_id=?', (row['id'],))]
             datasets.append(item)
         return {'datasets': datasets}
+    finally:
+        conn.close()
+
+
+@router.get('/datasets/{dataset_id}/enrichment')
+def get_dataset_enrichment(dataset_id: int):
+    conn = get_connection()
+    try:
+        row = conn.execute('SELECT enrichment_json FROM dataset_uploads WHERE id=?', (dataset_id,)).fetchone()
+        if not row or not row['enrichment_json']:
+            return {"enrichment": None, "message": "No enrichment data available for this dataset."}
+        return {"enrichment": json.loads(row['enrichment_json'])}
     finally:
         conn.close()
 

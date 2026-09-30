@@ -58,7 +58,8 @@ class SemanticClassifier:
         ],
         InferredDomain.EDUCATION: [
             "student", "grade", "course", "curriculum", "lecture", "module", "exam", "score",
-            "teacher", "instructor", "enrollment", "gpa", "semester", "academic"
+            "teacher", "instructor", "enrollment", "gpa", "semester", "academic", "parental",
+            "math", "reading", "writing", "school", "lunch"
         ],
     }
 
@@ -69,6 +70,7 @@ class SemanticClassifier:
     def enrich_column_semantics(cls, col_prof: ColumnProfile, sample_series: pd.Series | None = None) -> ColumnProfile:
         """Determines the semantic role and unit for a column using name, type, and sample distribution."""
         name_lower = col_prof.name.lower().replace(" ", "_").replace("-", "_")
+        tokens = set(re.split(r'[^a-zA-Z0-9%]+', name_lower))
 
         # 1. Date / Time
         if col_prof.data_type == "datetime" or any(k in name_lower for k in ("date", "timestamp", "created_at", "updated_at")):
@@ -81,10 +83,11 @@ class SemanticClassifier:
             col_prof.semantic_unit = SemanticUnit.DURATION
             return col_prof
 
-        # 2. Percentage / Ratios
-        if any(k in name_lower for k in cls.PERCENT_SYMBOLS) or (
+        # 2. Percentage / Ratios (token-aware to prevent 'preparation' matching 'rate')
+        is_pct_name = "%" in name_lower or "percent" in name_lower or any(t in tokens for t in ("pct", "percentage", "rate", "ratio"))
+        if is_pct_name or (
             col_prof.data_type == "numeric" and col_prof.min_val is not None and col_prof.max_val is not None
-            and 0.0 <= col_prof.min_val and col_prof.max_val <= 1.0 and any(k in name_lower for k in ("ratio", "pct", "rate", "score"))
+            and 0.0 <= col_prof.min_val and col_prof.max_val <= 1.0 and any(t in tokens for t in ("ratio", "pct", "rate", "score"))
         ):
             col_prof.semantic_role = SemanticColumnRole.PERCENTAGE
             col_prof.semantic_unit = SemanticUnit.PERCENTAGE

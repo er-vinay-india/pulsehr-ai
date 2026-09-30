@@ -123,6 +123,16 @@ class DataProfiler:
             is_datetime = pd.api.types.is_datetime64_any_dtype(series)
             is_bool = pd.api.types.is_bool_dtype(series)
 
+            # Numeric heuristic if stored as object/string
+            if not is_numeric and not is_bool and len(clean_series) > 0:
+                try:
+                    converted = pd.to_numeric(clean_series, errors='coerce')
+                    valid_ratio = float(converted.notna().sum()) / max(1, len(clean_series))
+                    if valid_ratio >= 0.8:
+                        is_numeric = True
+                except Exception:
+                    pass
+
             # Date heuristic if stored as object/string
             if not is_datetime and not is_numeric and unique_count > 0:
                 is_datetime = cls._check_date_like(clean_series)

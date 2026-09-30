@@ -52,27 +52,32 @@ export default function UploadProgressCard({ uploadingFile, uploadElapsed, uploa
           },
           {
             step: 5,
-            title: "5. Missing Value Diagnostics & Smart Imputation",
-            sub: "Computing distribution-aware targets (median for skewed metrics, mode for categories) while preserving raw flags",
+            title: "5. Controlled Semantic Enrichment & Scientific Discovery",
+            sub: "Graph clustering (G1...Gf), dimensional SI conversions, scientific formulas (speed, density, margins), and analytical tables",
           },
           {
             step: 6,
-            title: "6. Statistical Exploratory Data Analysis (EDA) & Outlier Profiling",
-            sub: "Running Tukey IQR fences & Z-score diagnostics, generating column profiles, and computing 0–100 Data Health Score",
+            title: "6. Missing Value Diagnostics & Smart Imputation",
+            sub: "Computing distribution-aware targets (median for skewed metrics, mode for categories) while preserving raw flags",
           },
           {
             step: 7,
-            title: "7. Multi-Sheet Key Discovery & Cross-Correlation Matrix (N-Sheet EDA)",
-            sub: "Discovering entity linkages across sheets, synthesizing derived tables, and mining empirical Pearson/Spearman matrix",
+            title: "7. Statistical Exploratory Data Analysis (EDA) & Outlier Profiling",
+            sub: "Running Tukey IQR fences & Z-score diagnostics, generating column profiles, and computing 0–100 Data Health Score",
           },
           {
             step: 8,
-            title: "8. Semantic Vectorization & BM25 Hybrid Retrieval Indexing",
-            sub: "Batching normalized tokens through local embedding model and building inverted index for hybrid RAG search",
+            title: "8. Multi-Sheet Key Discovery & Cross-Correlation Matrix (N-Sheet EDA)",
+            sub: "Discovering entity linkages across sheets, synthesizing derived tables, and mining empirical Pearson/Spearman matrix",
           },
           {
             step: 9,
-            title: "9. Analytical Evidence Catalog & Dashboard Readiness",
+            title: "9. Semantic Vectorization & BM25 Hybrid Retrieval Indexing",
+            sub: "Batching normalized tokens through local embedding model and building inverted index for hybrid RAG search",
+          },
+          {
+            step: 10,
+            title: "10. Analytical Evidence Catalog & Dashboard Readiness",
             sub: "Materializing Post-EDA curated views, linking cross-sheet intelligence, and routing into projection pipelines",
           },
         ].map(({ step, title, sub }) => {

@@ -40,6 +40,27 @@ export default function VisualEdaDashboard({
   const currentMetric = selectedMetric || availableMetrics[0] || '';
   const currentDist = metricDistributions[currentMetric];
 
+  const isEducation =
+    availableMetrics.some((m) => {
+      const lower = m.toLowerCase();
+      return lower.includes('score') || lower.includes('math') || lower.includes('reading') || lower.includes('writing') || lower.includes('student');
+    }) ||
+    edaReport?.domain === 'education' ||
+    edaReport?.domain === 'education_academic' ||
+    edaReport?.inferred_domain === 'education' ||
+    edaReport?.inferred_domain === 'education_academic';
+
+  const isHr =
+    !isEducation &&
+    (edaReport?.domain === 'hr' ||
+      edaReport?.domain === 'workforce_hr' ||
+      edaReport?.inferred_domain === 'hr' ||
+      edaReport?.inferred_domain === 'workforce_hr' ||
+      availableMetrics.some((m) => {
+        const lower = m.toLowerCase();
+        return lower.includes('attendance') || lower.includes('leave') || lower.includes('headcount') || lower.includes('salary');
+      }));
+
   // 1. Correlation Heatmap Option
   const heatmapOption = useMemo(() => {
     const metrics = correlationMatrix.metrics || [];
@@ -537,7 +558,7 @@ export default function VisualEdaDashboard({
         <div className="eda-recs-card">
           <h3>
             <Sparkles size={16} />
-            HR Executive Analytical Insights & Next Steps
+            {isHr ? 'HR Executive Analytical Insights & Next Steps' : (isEducation ? 'Academic Leadership Analytical Insights & Next Steps' : 'Executive Analytical Insights & Next Steps')}
           </h3>
           <ul>
             {edaReport.recommendations.map((rec, idx) => (
@@ -771,7 +792,7 @@ export default function VisualEdaDashboard({
                     padding: '0.85rem 1.1rem'
                   }}
                 >
-                  <strong style={{ color: '#ffb089', fontSize: '0.9rem' }}>HR Temporal Findings:</strong>
+                  <strong style={{ color: '#ffb089', fontSize: '0.9rem' }}>{isHr ? 'HR Temporal Findings:' : 'Temporal Trend Findings:'}</strong>
                   <ul style={{ margin: '6px 0 0 1.25rem', padding: 0, fontSize: '0.85rem', color: '#e5dacd' }}>
                     {temporalAnalysis.insights.map((ins, idx) => (
                       <li key={idx} style={{ marginBottom: '4px' }}>{ins}</li>
@@ -899,7 +920,7 @@ export default function VisualEdaDashboard({
                     color: '#e5dacd'
                   }}
                 >
-                  <strong style={{ color: '#2ed573' }}>HR Head Takeaway:</strong> {linearModel.executive_takeaway}
+                  <strong style={{ color: '#2ed573' }}>{isHr ? 'HR Head Takeaway:' : (isEducation ? 'Academic Lead Takeaway:' : 'Executive Takeaway:')}</strong> {linearModel.executive_takeaway}
                 </div>
               </div>
             ) : (
@@ -917,7 +938,7 @@ export default function VisualEdaDashboard({
                 Logistic Regression & Binary Risk Classification
               </h3>
               <p>
-                Models the probability of critical workplace outcomes ($P(Y=1|X)$) with Odds Ratios and accuracy metrics.
+                Models the probability of critical {isHr ? 'workplace' : (isEducation ? 'academic achievement' : 'performance')} outcomes ($P(Y=1|X)$) with Odds Ratios and accuracy metrics.
               </p>
             </div>
 
@@ -1010,7 +1031,7 @@ export default function VisualEdaDashboard({
                         color: '#e5dacd'
                       }}
                     >
-                      <strong style={{ color: '#ff6b81' }}>HR Intervention Point:</strong> {logisticModel.executive_takeaway}
+                      <strong style={{ color: '#ff6b81' }}>{isHr ? 'HR Intervention Point:' : (isEducation ? 'Academic Intervention Point:' : 'Target Intervention Point:')}</strong> {logisticModel.executive_takeaway}
                     </div>
                   </div>
                 </div>

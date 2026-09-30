@@ -120,7 +120,8 @@ class PresentationDirector:
         chart_pack: dict[str, Any] | None = None,
         profiled_data: dict[str, Any] | None = None,
         evidence_ledger: list[dict[str, Any]] | None = None,
-        on_slide_progress: Any = None
+        on_slide_progress: Any = None,
+        on_slide_start: Any = None
     ) -> dict[str, Any]:
         """Convenience wrapper: Plans the presentation and adapts it into a valid PresentationDeckSpec."""
         plan_spec = self.plan_presentation(ctx)
@@ -132,7 +133,8 @@ class PresentationDirector:
             chart_pack=chart_pack,
             profiled_data=profiled_data,
             evidence_ledger=evidence_ledger,
-            on_slide_progress=on_slide_progress
+            on_slide_progress=on_slide_progress,
+            on_slide_start=on_slide_start
         )
 
 

@@ -130,7 +130,7 @@ def run_eda_pipeline(sheet_ids: list[int] | None = None, conn: sqlite3.Connectio
             predictive_suite = generate_predictive_suite_for_sheet(curated_rows, s["columns"], diag)
 
             from ..adaptive_dashboard.engine import compute_source_snapshot
-            snap = compute_source_snapshot(sid, s["columns"], raw_rows)
+            snap = compute_source_snapshot(sid, s["columns"], curated_rows if curated_rows else raw_rows)
 
             report = build_sheet_eda_report(
                 sheet_meta=s,

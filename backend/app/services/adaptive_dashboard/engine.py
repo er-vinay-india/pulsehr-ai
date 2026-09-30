@@ -164,7 +164,11 @@ def classify_domain_and_persona(
     if any(k in text_corpus for k in ["ticket", "incident", "sla", "priority", "jira", "helpdesk", "zendesk", "bug", "issue"]):
         return "operations_support", "Support Operations Analyst"
 
-    # 5. Workforce / Attendance / HR
+    # 5. Education / Academic / Students
+    if any(k in text_corpus for k in ["student", "grade", "course", "curriculum", "exam", "score", "teacher", "parental", "reading score", "math score", "writing score", "academic", "gpa", "school", "education"]):
+        return "education_academic", "Academic & Student Success Lead"
+
+    # 6. Workforce / Attendance / HR
     if any(k in text_corpus for k in ["employee", "attendance", "roster", "shift", "clock", "wfo", "timesheet", "payroll", "headcount", "person_"]):
         return "workforce_hr", "HR / People Operations Analyst"
 
@@ -294,6 +298,35 @@ def profile_source(
                 primary_measure_col = col
                 measure_unit = "units"
                 break
+            elif any(k in col_clean for k in ("mathscore", "readingscore", "writingscore", "score", "exam", "grade", "gpa", "mark", "points")):
+                primary_measure_col = col
+                measure_unit = "points"
+                break
+
+        # Fallback if primary_measure_col is still None: check if any column is numeric in rows
+        if not primary_measure_col:
+            for col in columns:
+                if col == entity_col or col == date_col:
+                    continue
+                num_hits = 0
+                sample = rows[:30]
+                for r in sample:
+                    rv = r.get(col)
+                    if rv is not None and str(rv).strip() != "":
+                        try:
+                            float(str(rv).replace(",", "").replace("$", ""))
+                            num_hits += 1
+                        except (ValueError, TypeError):
+                            pass
+                if sample and num_hits >= len(sample) * 0.7:
+                    primary_measure_col = col
+                    measure_unit = "points" if any(k in str(col).lower() for k in ("score", "grade", "mark", "point", "gpa")) else "units"
+                    break
+
+        if not entity_col:
+            text_corpus = f"{sheet_name} {file_name} {' '.join(columns)}".lower()
+            if any(k in text_corpus for k in ["student", "reading score", "math score", "writing score", "parental level", "exam", "education", "course"]):
+                entity_type = "student"
 
         if entity_col or primary_measure_col:
             layout = "long_tabular"
@@ -311,15 +344,16 @@ def profile_source(
                 mappings[primary_measure_col] = "primary_numeric_measure"
                 mappings["_measure_unit"] = measure_unit
 
-            grain_desc = f"Tabular log with {f'entity key {entity_col}' if entity_col else 'records'} and {len(rows)} observations."
-            verification_basis = f"Corroborated by column schema ({f'entity key {entity_col}' if entity_col else ''} {f'measure {primary_measure_col}' if primary_measure_col else ''})."
+            entity_label = f"student entity ({distinct_count} students)" if entity_type == "student" else (f"entity key {entity_col}" if entity_col else "records")
+            grain_desc = f"Tabular log with {entity_label} and {len(rows)} observations."
+            verification_basis = f"Corroborated by column schema ({entity_label} {f'measure {primary_measure_col}' if primary_measure_col else ''})."
 
             domain, persona = classify_domain_and_persona(columns, sheet_name, file_name, rows)
             contract = SemanticContract(
                 layout=layout,
                 entity_type=entity_type,
-                entity_identifiers=[entity_col] if entity_col else [],
-                distinct_entity_count=distinct_count if entity_col else None,
+                entity_identifiers=[entity_col] if entity_col else ([] if entity_type != "student" else []),
+                distinct_entity_count=distinct_count if (entity_col or entity_type == "student") else None,
                 date_column=date_col,
                 primary_measure=primary_measure_col,
                 grain_description=grain_desc,
@@ -507,81 +541,116 @@ def evaluate_and_select_primary_metric(
             period_years = f"{start_y}–{end_y}" if start_y != end_y else start_y
 
         clean_measure_name = format_display_label(primary_measure_col)
-        if "sales" in primary_measure_col.lower():
-            label = "Total sales"
-            business_concept = "commercial.total_sales"
-        elif "revenue" in primary_measure_col.lower():
-            label = "Total revenue"
-            business_concept = "finance.total_revenue"
-        else:
-            label = f"Total {clean_measure_name.lower()}"
-            business_concept = f"metric.total_{primary_measure_col.lower()}"
+        is_education = contract.entity_type == "student" or contract.domain in ("education", "education_academic")
 
-        formatted_val = format_currency_short(total_sum) if unit == "$" else f"{total_sum:,.0f}"
-        context_qualifier = f"Across {entity_count} {entity_name}s · {period_years}" if period_years else f"Across {entity_count} {entity_name}s"
+        if is_education:
+            label = f"Average {clean_measure_name.lower()}"
+            business_concept = f"education.average_{primary_measure_col.lower()}"
+            metric_val = round(avg_val, 1)
+            formatted_val = f"{metric_val:.1f} pts"
+            context_qualifier = f"Across {entity_count} students assessed"
+            evidence_agg = "average"
+            evidence_val = metric_val
+            evidence_denom = valid_count
+            evidence_calc_method = f"Deterministic mean average of '{primary_measure_col}' across all valid student records."
+            evidence_limitations = [
+                f"Represents recorded average {clean_measure_name.lower()} across {entity_count} assessed students.",
+                "Subject scores reflect raw examination results recorded in the dataset.",
+            ]
+            short_def = f"Mean {clean_measure_name.lower()} achieved across all {entity_count} assessed students in the cohort."
+            exact_val_text = f"Cohort average: {metric_val:.1f} points across {valid_count:,} valid student records (total sum: {total_sum:,.0f})."
+            what_counts = f"Arithmetic mean of '{primary_measure_col}' across {valid_count:,} assessed students."
+            cov_label = "Cohort Enrollment"
+            cov_val = f"{entity_count} students"
+            sel_reason = "Core academic benchmark indicator representing aggregate cohort achievement across the assessed subject."
+        else:
+            if "sales" in primary_measure_col.lower():
+                label = "Total sales"
+                business_concept = "commercial.total_sales"
+            elif "revenue" in primary_measure_col.lower():
+                label = "Total revenue"
+                business_concept = "finance.total_revenue"
+            else:
+                label = f"Total {clean_measure_name.lower()}"
+                business_concept = f"metric.total_{primary_measure_col.lower()}"
+
+            metric_val = round(total_sum, 2)
+            formatted_val = format_currency_short(total_sum) if unit == "$" else f"{total_sum:,.0f}"
+            context_qualifier = f"Across {entity_count} {entity_name}s · {period_years}" if period_years else f"Across {entity_count} {entity_name}s"
+            evidence_agg = "sum"
+            evidence_val = metric_val
+            evidence_denom = None
+            evidence_calc_method = f"Deterministic summation of column '{primary_measure_col}' across all valid rows."
+            evidence_limitations = [
+                f"Represents recorded {clean_measure_name.lower()} across the {entity_count} reporting {entity_name}s throughout the observed period.",
+                f"Unreported locations or non-tracked channels are not included in this dataset.",
+            ]
+            short_def = f"Cumulative {clean_measure_name.lower()} recorded across all {entity_count} {entity_name}s throughout the reporting period."
+            exact_val_text = f"Exact total: {unit}{total_sum:,.2f} across {valid_count:,} observations (averaging {unit}{avg_val:,.2f} per observation)."
+            what_counts = f"Deterministic sum of column '{primary_measure_col}' across all {valid_count:,} recorded observations."
+            cov_label = "Store Network Coverage" if entity_name == "store" else f"{entity_name.capitalize()} Coverage"
+            cov_val = f"{entity_count} {entity_name}s represented in the reporting network."
+            sel_reason = f"Definitive commercial scale measure. Represents overall financial performance across the observed network."
 
         evidence = EvidenceResult(
             calculation_id=f"CALC-{calc_id}",
             snapshot=snapshot,
-            definition_id=f"DEF-{primary_measure_col.upper()}-SUM",
+            definition_id=f"DEF-{primary_measure_col.upper()}-AVG" if is_education else f"DEF-{primary_measure_col.upper()}-SUM",
             status="available",
-            value=round(total_sum, 2),
-            unit=unit,
-            aggregation="sum",
+            value=evidence_val,
+            unit=unit if not is_education else "points",
+            aggregation=evidence_agg,
             numerator=round(total_sum, 2),
-            denominator=None,
+            denominator=evidence_denom,
             is_known_zero=(total_sum == 0),
             missing_observations=missing_count,
             invalid_observations=0,
             excluded_observations=0,
             coverage_ratio=round(valid_count / max(1, len(rows)), 4),
-            calculation_method=f"Deterministic summation of column '{primary_measure_col}' across all valid rows.",
+            calculation_method=evidence_calc_method,
             provenance=f"Extracted directly from source columns in sheet {manifest.sheet_name} (snapshot: {snapshot}).",
-            limitations=[
-                f"Represents recorded {clean_measure_name.lower()} across the {entity_count} reporting {entity_name}s throughout the observed period.",
-                f"Unreported locations or non-tracked channels are not included in this dataset.",
-            ],
+            limitations=evidence_limitations,
         )
 
         request = MetricRequest(
             recipe_id=business_concept,
-            target_construct=f"Total {clean_measure_name.lower()} scale representation",
-            operation="sum_measure",
+            target_construct=f"{'Average' if is_education else 'Total'} {clean_measure_name.lower()} representation",
+            operation="mean_measure" if is_education else "sum_measure",
             target_role=entity_name,
             grain=contract.grain_description,
-            rationale=f"Primary financial/operational scale measure. Verifiably grounded by '{primary_measure_col}' observations.",
+            rationale=f"Primary benchmark measure. Verifiably grounded by '{primary_measure_col}' observations.",
         )
 
         glance = GlanceSpec(
             label=label,
-            value=round(total_sum, 2),
+            value=metric_val,
             formatted_value=formatted_val,
-            unit=unit,
+            unit=unit if not is_education else "points",
             unit_display="currency_prefix" if unit == "$" else "explicit_suffix",
             context_qualifier=context_qualifier,
             has_info_control=True,
         )
 
         explain = ExplainSpec(
-            short_definition=f"Cumulative {clean_measure_name.lower()} recorded across all {entity_count} {entity_name}s throughout the reporting period.",
-            exact_value_text=f"Exact total: {unit}{total_sum:,.2f} across {valid_count:,} observations (averaging {unit}{avg_val:,.2f} per observation).",
+            short_definition=short_def,
+            exact_value_text=exact_val_text,
         )
 
         inspect = InspectSpec(
             metric_title=label,
-            exact_value=f"{unit}{total_sum:,.2f}",
-            what_this_counts=f"Deterministic sum of column '{primary_measure_col}' across all {valid_count:,} recorded observations.",
-            applicable_population=f"{entity_count} {entity_name} locations operating across {manifest.date_range.get('distinct_dates', len(rows)) if manifest.date_range else len(rows)} recorded periods.",
+            exact_value=f"{metric_val} points" if is_education else (f"{unit}{total_sum:,.2f}" if unit == "$" else f"{total_sum:,.0f} {unit}"),
+            what_this_counts=what_counts,
+            applicable_population=f"{entity_count} {entity_name}s recorded across {manifest.date_range.get('distinct_dates', len(rows)) if manifest.date_range else len(rows)} observations.",
             source_name=f"{manifest.display_name} · {manifest.sheet_name}",
             reporting_period=period_str,
-            calculation_method=f"Deterministic summation of '{primary_measure_col}' across all valid rows.",
+            calculation_method=evidence_calc_method,
             data_completeness=f"{len(rows):,} observations; {missing_count} missing or excluded values (100% complete)." if missing_count == 0 else f"{len(rows):,} observations; {missing_count} missing or null entries.",
-            workforce_coverage=f"{entity_count} {entity_name}s represented in the reporting network.",
-            coverage_label="Store Network Coverage" if entity_name == "store" else f"{entity_name.capitalize()} Coverage",
-            coverage_value=f"{entity_count} {entity_name}s represented in the reporting network.",
+            workforce_coverage=cov_val,
+            coverage_label=cov_label,
+            coverage_value=cov_val,
             missing_observations=missing_count,
             excluded_observations=0,
-            selection_reason=f"Definitive commercial scale measure. Represents overall financial performance across the observed network.",
+            selection_reason=sel_reason,
             limitations=evidence.limitations,
             calculation_id=evidence.calculation_id,
             definition_id=evidence.definition_id,
@@ -2132,6 +2201,8 @@ def build_categorical_breakdown_element(
     total_categories = len(items_raw)
     total_records = len(rows)
 
+    is_education = contract.domain in ("education", "education_academic") or contract.entity_type == "student"
+
     if is_sales and primary_measure:
         # Commercial sales breakdown by Store/Category
         total_val = sum(s["measure_sum"] for s in items_raw.values())
@@ -2140,14 +2211,21 @@ def build_categorical_breakdown_element(
         unit = "$"
         title = f"Top {dimension_label}s by Sales Volume" if total_categories > 10 else f"{dimension_label} Sales Performance"
         caption = f"Ranked sales performance across top {dimension_label.lower()}s with fleet benchmark."
+    elif is_education:
+        total_val = total_records
+        sorted_groups = sorted(items_raw.items(), key=lambda x: x[1]["count"], reverse=True)
+        metric_name = "Students"
+        unit = "students"
+        title = f"Students by {dimension_label}"
+        caption = f"Student distribution across {total_categories} {dimension_label.lower()} cohorts with average achievement scores."
     else:
         # Workforce/general breakdown by Department/Group
         total_val = total_records
         sorted_groups = sorted(items_raw.items(), key=lambda x: x[1]["count"], reverse=True)
-        metric_name = "Headcount"
+        metric_name = "Headcount" if is_hr else "Records"
         unit = "employees" if is_hr else "records"
-        title = f"Workforce by {dimension_label.lower()}"
-        caption = f"Headcount distribution across {total_categories} {dimension_label.lower()}s."
+        title = f"Workforce by {dimension_label.lower()}" if is_hr else f"Distribution by {dimension_label}"
+        caption = f"Headcount distribution across {total_categories} {dimension_label.lower()}s." if is_hr else f"Record distribution across {total_categories} {dimension_label.lower()} categories."
 
     # Top-N consolidation if more than 10 categories
     items: list[BreakdownItem] = []
@@ -2163,8 +2241,12 @@ def build_categorical_breakdown_element(
                 fmt_val = format_currency_short(val)
                 sec_val = round(val / s["count"], 0) if s["count"] > 0 else None
                 fmt_sec = f"{format_currency_short(sec_val)}/wk avg" if sec_val is not None else None
+            elif is_education and primary_measure:
+                fmt_val = f"{s['count']} students"
+                sec_val = round(s["measure_sum"] / s["count"], 1) if s["count"] > 0 and s["measure_sum"] > 0 else None
+                fmt_sec = f"{sec_val:.1f} pts avg" if sec_val is not None else None
             else:
-                fmt_val = f"{s['count']} employees" if is_hr else f"{s['count']}"
+                fmt_val = f"{s['count']} employees" if is_hr else (f"{s['count']} students" if is_education else f"{s['count']}")
                 sec_val = round(s["att_sum"] / s["count"], 1) if s["count"] > 0 and s["att_sum"] > 0 else None
                 fmt_sec = f"{sec_val} d avg" if sec_val is not None else None
 
@@ -2202,7 +2284,7 @@ def build_categorical_breakdown_element(
         else:
             rest_val = sum(s["count"] for _, s in rest_slice)
             rest_pct = round((rest_val / total_val) * 100, 1) if total_val > 0 else 0.0
-            fmt_rest = f"{rest_count} employees" if is_hr else f"{rest_val}"
+            fmt_rest = f"{rest_count} employees" if is_hr else (f"{rest_count} students" if is_education else f"{rest_val}")
             items.append(
                 BreakdownItem(
                     category="Other",
@@ -2224,8 +2306,12 @@ def build_categorical_breakdown_element(
                 fmt_val = format_currency_short(val)
                 sec_val = round(val / s["count"], 0) if s["count"] > 0 else None
                 fmt_sec = f"{format_currency_short(sec_val)}/wk avg" if sec_val is not None else None
+            elif is_education and primary_measure:
+                fmt_val = f"{s['count']} students"
+                sec_val = round(s["measure_sum"] / s["count"], 1) if s["count"] > 0 and s["measure_sum"] > 0 else None
+                fmt_sec = f"{sec_val:.1f} pts avg" if sec_val is not None else None
             else:
-                fmt_val = f"{s['count']} employees" if is_hr else f"{s['count']}"
+                fmt_val = f"{s['count']} employees" if is_hr else (f"{s['count']} students" if is_education else f"{s['count']}")
                 sec_val = round(s["att_sum"] / s["count"], 1) if s["count"] > 0 and s["att_sum"] > 0 else None
                 fmt_sec = f"{sec_val} d avg" if sec_val is not None else None
 
@@ -2906,6 +2992,178 @@ def build_explanatory_comparator_element(
             _conn.close()
     except Exception:
         pass
+
+    # --- Strategy 4: Single-Sheet Binary Cohort Comparator ---
+    primary_meas = contract.primary_measure
+    if primary_meas:
+        binary_candidates = []
+        for c in candidate_cols:
+            if c == primary_meas or c == contract.date_column:
+                continue
+            vals = set(str(r.get(c, "")).strip() for r in rows if r.get(c) is not None and str(r.get(c, "")).strip())
+            if len(vals) == 2:
+                c_lower = c.lower()
+                weight = 10 if "prep" in c_lower or "course" in c_lower else (8 if "lunch" in c_lower or "meal" in c_lower else (5 if "gender" in c_lower else 1))
+                binary_candidates.append((weight, c, list(vals)))
+
+        if binary_candidates:
+            binary_candidates.sort(key=lambda x: x[0], reverse=True)
+            _, split_col, cohort_names = binary_candidates[0]
+
+            cohort_data = defaultdict(list)
+            for r in rows:
+                k = str(r.get(split_col, "")).strip()
+                v = r.get(primary_meas)
+                if k in cohort_names and v is not None and str(v).strip() != "":
+                    try:
+                        cohort_data[k].append(float(str(v).replace(",", "").replace("$", "")))
+                    except (ValueError, TypeError):
+                        pass
+
+            if len(cohort_data) == 2:
+                k1, k2 = list(cohort_data.keys())
+                mean1 = sum(cohort_data[k1]) / len(cohort_data[k1]) if cohort_data[k1] else 0.0
+                mean2 = sum(cohort_data[k2]) / len(cohort_data[k2]) if cohort_data[k2] else 0.0
+
+                if any(b in k1.lower() for b in ("none", "no", "0", "false", "control", "free/reduced")):
+                    base_k, comp_k = k1, k2
+                    mean_base, mean_comp = mean1, mean2
+                elif any(b in k2.lower() for b in ("none", "no", "0", "false", "control", "free/reduced")):
+                    base_k, comp_k = k2, k1
+                    mean_base, mean_comp = mean2, mean1
+                elif mean1 < mean2:
+                    base_k, comp_k = k1, k2
+                    mean_base, mean_comp = mean1, mean2
+                else:
+                    base_k, comp_k = k2, k1
+                    mean_base, mean_comp = mean2, mean1
+
+                n_comp = len(cohort_data[comp_k])
+                n_base = len(cohort_data[base_k])
+                total_n = n_comp + n_base
+                abs_lift = mean_comp - mean_base
+                rel_lift_pct = ((abs_lift / mean_base) * 100) if mean_base != 0 else 0.0
+
+                split_disp = format_display_label(split_col)
+                meas_disp = format_display_label(primary_meas)
+
+                is_edu = contract.domain in ("education", "education_academic") or contract.entity_type == "student"
+                unit = "points" if is_edu else ("$" if "$" in str(contract.verified_mappings.get("_measure_unit", "")) else "units")
+
+                title = f"{split_disp} {meas_disp.lower()} lift"
+                fmt_comp = f"{mean_comp:.1f} pts" if unit == "points" else f"{mean_comp:,.1f}"
+                fmt_base = f"{mean_base:.1f} pts" if unit == "points" else f"{mean_base:,.1f}"
+                fmt_abs = f"{abs_lift:+.1f} pts" if unit == "points" else f"{abs_lift:+,.1f}"
+                fmt_rel = f"{rel_lift_pct:+.1f}%"
+
+                context_qualifier = f"{fmt_comp} ({comp_k}) vs {fmt_base} ({base_k}) · {fmt_abs} lift"
+
+                glance = GlanceSpec(
+                    label=f"{split_disp} impact",
+                    value=round(rel_lift_pct, 1),
+                    formatted_value=fmt_rel,
+                    unit="%",
+                    unit_display="explicit_suffix",
+                    context_qualifier=context_qualifier,
+                    has_info_control=True,
+                )
+
+                explain = ExplainSpec(
+                    short_definition=f"Evaluates how '{split_disp}' correlates with {meas_disp.lower()} across the observed cohort.",
+                    exact_value_text=f"{comp_k} cohort averaged {fmt_comp} ({n_comp} students) vs {base_k} averaging {fmt_base} ({n_base} students). Net lift: {fmt_abs} ({fmt_rel}).",
+                )
+
+                inspect = InspectSpec(
+                    metric_title=title,
+                    exact_value=f"{fmt_abs} ({fmt_rel})",
+                    what_this_counts=f"Mean difference in '{primary_meas}' between '{comp_k}' and '{base_k}' cohorts.",
+                    applicable_population=f"All {total_n} students across '{comp_k}' and '{base_k}' cohorts.",
+                    source_name=manifest.display_name or manifest.sheet_name,
+                    reporting_period=manifest.display_name,
+                    calculation_method=f"Cohort Mean({comp_k}) - Cohort Mean({base_k}). Relative lift calculated against baseline.",
+                    data_completeness=f"{total_n} records evaluated with 100% attribute completeness.",
+                    workforce_coverage=f"All {total_n} students represented in the assessed cohort.",
+                    coverage_label="Cohort Scope",
+                    coverage_value=f"{total_n} students ({n_comp} {comp_k}, {n_base} {base_k})",
+                    missing_observations=0,
+                    excluded_observations=0,
+                    selection_reason=f"Explanatory comparator isolating the quantitative impact of '{split_disp}' on academic achievement.",
+                    limitations=[
+                        f"Classified using source column '{split_col}'.",
+                        "Descriptive difference in averages reflects observed group outcomes and does not establish standalone causation.",
+                    ],
+                    calculation_id=f"CALC-COMP-BINARY-{snapshot[:8]}",
+                    definition_id=f"DEF-BINARY-LIFT-{split_col.upper()}",
+                    snapshot=snapshot,
+                    provenance=f"Computed from {total_n} observations in sheet {manifest.sheet_name}.",
+                )
+
+                evidence = EvidenceResult(
+                    calculation_id=f"CALC-COMP-BINARY-{snapshot[:8]}",
+                    snapshot=snapshot,
+                    definition_id=f"DEF-BINARY-LIFT-{split_col.upper()}",
+                    status="available",
+                    value=round(rel_lift_pct, 1),
+                    unit="%",
+                    aggregation="ratio",
+                    numerator=abs_lift,
+                    denominator=mean_base if mean_base != 0 else 1.0,
+                    is_known_zero=False,
+                    missing_observations=0,
+                    invalid_observations=0,
+                    excluded_observations=0,
+                    coverage_ratio=1.0,
+                    calculation_method=inspect.calculation_method,
+                    provenance=inspect.provenance,
+                    limitations=inspect.limitations,
+                )
+
+                items = [
+                    ComparatorItem(
+                        cohort=comp_k.capitalize(),
+                        is_baseline=False,
+                        value=round(mean_comp, 2),
+                        formatted_value=fmt_comp,
+                        sample_size=n_comp,
+                        sample_label=f"{n_comp} students" if is_edu else f"{n_comp} records",
+                        secondary_value=round(mean_comp, 1),
+                        formatted_secondary=f"{mean_comp:.1f} avg",
+                        share_pct=round((n_comp / total_n) * 100, 1),
+                    ),
+                    ComparatorItem(
+                        cohort=base_k.capitalize(),
+                        is_baseline=True,
+                        value=round(mean_base, 2),
+                        formatted_value=fmt_base,
+                        sample_size=n_base,
+                        sample_label=f"{n_base} students" if is_edu else f"{n_base} records",
+                        secondary_value=round(mean_base, 1),
+                        formatted_secondary=f"{mean_base:.1f} avg",
+                        share_pct=round((n_base / total_n) * 100, 1),
+                    ),
+                ]
+
+                return ComparatorSpec(
+                    component_id="quaternary_element",
+                    kind="cohort_comparator",
+                    business_concept=f"education.{split_col.lower().replace(' ', '_')}_{primary_meas.lower().replace(' ', '_')}_lift" if is_edu else f"general.{split_col.lower().replace(' ', '_')}_lift",
+                    title=title,
+                    dimension_name=split_disp,
+                    metric_name=f"Average {meas_disp.lower()}",
+                    unit=unit,
+                    baseline_cohort=base_k.capitalize(),
+                    comparator_cohort=comp_k.capitalize(),
+                    absolute_lift=round(abs_lift, 2),
+                    formatted_absolute_lift=fmt_abs,
+                    relative_lift_pct=round(rel_lift_pct, 2),
+                    formatted_relative_lift=fmt_rel,
+                    items=items,
+                    glance=glance,
+                    explain=explain,
+                    inspect=inspect,
+                    evidence=evidence,
+                    caption=f"{fmt_rel} ({fmt_abs}) difference in {meas_disp.lower()} between {comp_k} and {base_k}",
+                )
 
     return None
 
@@ -3766,6 +4024,9 @@ def build_decision_focus_element(
                 ),
                 inspect=inspect_spec,
                 evidence=evidence_res,
+                owner="Lead HRBP with Unit Manager",
+                guardrail="HR Policy Guardrail: Recommendation is for managerial decision-support. Reconcile medical/annual leaves before adjusting capacity targets.",
+                review_cycle="14-day cycle",
                 caption=f"{fmt_obs} · {fmt_gap} · {target.sample_size} employees",
             )
 
@@ -3887,10 +4148,132 @@ def build_decision_focus_element(
                 ),
                 inspect=inspect_spec,
                 evidence=evidence_res,
+                owner="Retail Operations & Regional Merchandising Lead",
+                guardrail="Commercial Guardrail: Store-level targets should be evaluated against local square footage and inventory availability before operational adjustment.",
+                review_cycle="Weekly commercial trading cycle",
                 caption=f"{fmt_obs} · {fmt_gap} · {target.sample_size} store-weeks",
             )
 
-        # 1C. General Tabular Fallback (Direction Unknown -> STRICTLY NEUTRAL WORDING)
+        # 1C. Education / Academic Student Achievement Priority
+        is_education = (
+            contract.domain in ("education", "education_academic")
+            or contract.entity_type == "student"
+            or "score" in quinary_element.metric_name.lower()
+        )
+        if is_education:
+            benchmark = float(quinary_element.benchmark_value or 0.0)
+            valid_items.sort(key=lambda x: (x.primary_value, -x.sample_size, x.segment))
+            target = valid_items[0]
+            obs_val = target.primary_value
+            ties = [it for it in valid_items if abs(it.primary_value - target.primary_value) <= 0.5]
+            is_tie = len(ties) > 1
+
+            gap = round(target.primary_value - benchmark, 1)
+            abs_gap = abs(gap)
+            fmt_obs = f"{obs_val:.1f} pts"
+            fmt_comp = f"{benchmark:.1f} pts"
+            fmt_gap = f"{abs_gap:.1f} pts below cohort benchmark" if gap < 0 else f"{abs_gap:.1f} pts above cohort benchmark"
+
+            headline = f"Support {target.segment} student achievement" if not is_tie else f"Support {target.segment} (tied) student achievement"
+            why_it_matters = (
+                f"Students in the '{target.segment}' cohort recorded the lowest average achievement ({fmt_obs}) relative to the overall cohort benchmark ({fmt_comp}). Targeted pedagogical support and tutoring can help close this learning gap."
+                if not is_tie
+                else f"Students in '{target.segment}' and {', '.join(t.segment for t in ties[1:])} share the lowest average achievement ({fmt_obs}). Interventions should address shared curriculum challenges across both cohorts."
+            )
+            next_step = "Review prerequisite concept mastery, provide targeted tutoring resources, and engage parents/guardians on practice strategies."
+            context_qual = f"{fmt_gap} · {target.sample_size} students"
+
+            inspect_spec = InspectSpec(
+                metric_title="Decision Focus: Academic Achievement Priority",
+                exact_value=f"{fmt_obs} ({fmt_gap})",
+                what_this_counts="Identifies the student cohort exhibiting the largest score deficit relative to the overall cohort benchmark to prioritize instructional interventions.",
+                applicable_population=f"All {target.sample_size} students in the {target.segment} cohort ({len(rows)} students overall).",
+                source_name=manifest.display_name,
+                reporting_period=manifest.date_range.get("formatted") if manifest.date_range else None,
+                calculation_method=f"Cohort Average = {fmt_obs} vs Benchmark = {fmt_comp}. Gap = {abs_gap:.1f} pts below benchmark.",
+                data_completeness=f"100% of {target.sample_size} student records evaluated with adequate sample guard (n >= 5).",
+                workforce_coverage=f"{target.sample_size} students in focus cohort ({len(rows)} students overall)",
+                coverage_label="Cohort Enrollment",
+                coverage_value=f"{target.sample_size} students",
+                missing_observations=0,
+                excluded_observations=sum(it.sample_size for it in quinary_element.items if it.sample_size < 5),
+                selection_reason="Selected lexicographically: lowest cohort average score with adequate sample support (n >= 5) to maximize instructional intervention impact.",
+                limitations=[
+                    "Descriptive differences in average scores reflect observed assessments and do not define individual student potential.",
+                    "Socioeconomic factors, attendance history, and individual learning plans should be considered before program changes.",
+                ],
+                calculation_id=f"calc_decision_edu_{snapshot[:8]}",
+                definition_id="def_decision_focus_education_v1",
+                snapshot=snapshot,
+                provenance=f"{manifest.file_name} -> {manifest.sheet_name} (rows: {len(rows)})",
+            )
+
+            evidence_res = EvidenceResult(
+                calculation_id=f"calc_decision_edu_{snapshot[:8]}",
+                snapshot=snapshot,
+                definition_id="def_decision_focus_education_v1",
+                status="available",
+                value=obs_val,
+                unit="points",
+                aggregation="directional_segment_gap",
+                numerator=obs_val,
+                denominator=benchmark,
+                is_known_zero=obs_val == 0.0,
+                missing_observations=0,
+                invalid_observations=0,
+                excluded_observations=sum(it.sample_size for it in quinary_element.items if it.sample_size < 5),
+                coverage_ratio=round(target.sample_size / max(1, len(rows)), 4),
+                calculation_method=f"Cohort average score ({fmt_obs}) compared against overall benchmark ({fmt_comp}).",
+                provenance=f"{manifest.file_name} -> {manifest.sheet_name}",
+                limitations=[],
+            )
+
+            return DecisionFocusSpec(
+                component_id="decision_element",
+                kind="decision_focus",
+                business_concept="education.cohort_achievement_decision_focus",
+                title=headline,
+                subject_type=quinary_element.dimension_name,
+                subject_label=target.segment,
+                metric_name=quinary_element.metric_name,
+                unit="points",
+                observed_value=obs_val,
+                formatted_observed_value=fmt_obs,
+                comparator_label="cohort benchmark",
+                comparator_value=benchmark,
+                formatted_comparator_value=fmt_comp,
+                gap_value=gap,
+                formatted_gap_value=fmt_gap,
+                sample_size=target.sample_size,
+                sample_label=f"{target.sample_size} students",
+                why_it_matters=why_it_matters,
+                next_step=next_step,
+                monitor_metric=quinary_element.metric_name,
+                supporting_component_id="quinary_element",
+                supporting_calculation_ids=[quinary_element.evidence.calculation_id] if quinary_element.evidence else [],
+                priority_basis="largest_material_cohort_gap_with_adequate_sample",
+                glance=GlanceSpec(
+                    label="Decision focus",
+                    value=abs_gap,
+                    formatted_value=fmt_obs,
+                    unit="points",
+                    unit_display="explicit_suffix",
+                    context_qualifier=context_qual,
+                    has_info_control=True,
+                ),
+                explain=ExplainSpec(
+                    short_definition="Identifies the student cohort with the lowest average score relative to the overall cohort benchmark.",
+                    exact_value_text=f"{target.segment} observed average score is {fmt_obs}, which is {fmt_gap} (benchmark {fmt_comp}) across {target.sample_size} students.",
+                ),
+                inspect=inspect_spec,
+                evidence=evidence_res,
+                owner="Academic Dean & Student Success Lead",
+                guardrail="Academic Support Guardrail: Recommendations are pedagogical support guidelines. Review individual student circumstances and learning plans before applying program adjustments.",
+                review_cycle="Quarterly Academic Grading Cycle",
+                caption=f"{fmt_obs} · {fmt_gap} · {target.sample_size} students",
+            )
+
+        # 1D. General Tabular Fallback (Direction Unknown -> STRICTLY NEUTRAL WORDING)
         benchmark = float(quinary_element.benchmark_value or 0.0)
         valid_items.sort(key=lambda x: (abs(x.primary_value - benchmark), -x.sample_size, x.segment), reverse=True)
         target = valid_items[0]
@@ -4000,6 +4383,9 @@ def build_decision_focus_element(
             ),
             inspect=inspect_spec,
             evidence=evidence_res,
+            owner="Operations & Performance Lead",
+            guardrail="Operational Guardrail: Recommendations are managerial decision-support guidelines. Validate local operational context before reallocating resources.",
+            review_cycle="14-day operational review cycle",
             caption=f"{fmt_obs} · {fmt_gap} · {target.sample_size} observations",
         )
 

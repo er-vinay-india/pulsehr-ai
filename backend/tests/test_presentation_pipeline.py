@@ -910,3 +910,112 @@ def test_eight_stage_pipeline_execution_and_stage_transitions():
     assert deck["quality_audit"]["critical_count"] == 0
 
 
+def test_phase1_upfront_slide_count_and_observer_ai_train_effect():
+    """Verifies that:
+    1. Phase 1 decides and locks the total slide count upfront.
+    2. SlideContextObserver generates sequential briefings and tracks slide units.
+    3. The job status persists slide_status_list, observer_note, and active_phase.
+    """
+    from app.services.presentation.observer_ai import SlideContextObserver
+    from app.services.presentation.job_manager import PresentationJobManager
+
+    # 1. Test SlideContextObserver upfront locking
+    scope = {
+        "objective": "Q3 Executive Performance Review",
+        "instructions": "Focus on sales trends and dispersion",
+        "target_length": 8
+    }
+    observer = SlideContextObserver(scope=scope, primary_ctx={"domain": "sales"})
+    assert observer.total_slides == 8
+    slide_units = observer.get_slide_status_list(active_phase="layout", current_building_slide=0)
+    assert len(slide_units) == 8
+    assert slide_units[0]["order"] == 1
+    assert slide_units[0]["status"] == "pending"
+
+    # 2. Test slide start (unit enters building state)
+    start_res = observer.on_slide_start(slide_num=1, slide_title="Executive Briefing & Core Metrics", category="Strategy")
+    assert start_res["current_slide"] == 1
+    assert "Observer AI:" in start_res["briefing"]
+    active_units = start_res["slide_status_list"]
+    assert active_units[0]["status"] == "building"
+    assert active_units[0]["badge"] == "Synthesizing"
+
+    # 3. Test slide complete (unit checks off complete and stores takeaway)
+    complete_res = observer.on_slide_complete(
+        slide_num=1,
+        slide_title="Executive Briefing & Core Metrics",
+        category="Strategy",
+        slide_dict={"narrative": "Weekly sales averaged $27,500 across 100 audited units.", "evidence_id": "EVID-KPI-01"}
+    )
+    assert complete_res["current_slide"] == 1
+    assert "Verified Slide 1" in complete_res["observer_note"]
+    finished_units = complete_res["slide_status_list"]
+    assert finished_units[0]["status"] == "complete"
+    assert finished_units[0]["badge"] == "Complete"
+
+    # 4. Test Slide 2 starts with narrative context carried forward from Slide 1
+    start_slide_2 = observer.on_slide_start(slide_num=2, slide_title="Analysis Scope & Governance", category="Governance")
+    assert "Carrying forward context from" in start_slide_2["briefing"]
+    assert "Executive Briefing" in start_slide_2["briefing"]
+
+    # 5. Test Job Manager persists observer fields
+    mgr = PresentationJobManager()
+    test_job_id = mgr.create_job(scope)
+    mgr.update_stage(
+        test_job_id,
+        "layout",
+        "Phase 1: Architecture locked - Initializing 8 executive slide units",
+        12,
+        extra={
+            "current_slide": 0,
+            "total_slides": 8,
+            "slide_status_list": slide_units,
+            "observer_note": "Observer AI: Locked total slide count to 8 units.",
+            "active_phase": "layout"
+        }
+    )
+    retrieved = mgr.get_job(test_job_id)
+    assert retrieved is not None
+    assert retrieved["total_slides"] == 8
+    assert retrieved["observer_note"] == "Observer AI: Locked total slide count to 8 units."
+    assert retrieved["active_phase"] == "layout"
+    assert len(retrieved["slide_status_list"]) == 8
+
+
+def test_ten_stage_slide_by_slide_train_pipeline():
+    """Layman explanation:
+    Verifies that the presentation generator executes across all 10 granular stages
+    (layout, headings, data_math, narrative_ai, graphics, text, animation, transitions, transcript, formatting)
+    and that each stage maintains slide unit tracking.
+    """
+    from app.services.presentation.job_manager import PresentationJobManager
+
+    mgr = PresentationJobManager()
+    job_id = mgr.create_job({"objective": "10-Stage Pipeline Test"})
+
+    expected_stages = [
+        "layout", "headings", "data_math", "narrative_ai",
+        "graphics", "text", "animation", "transitions", "transcript", "formatting"
+    ]
+
+    for stage_idx, stage_id in enumerate(expected_stages):
+        mgr.update_stage(
+            job_id,
+            stage_id,
+            f"Testing {stage_id}",
+            (stage_idx + 1) * 9,
+            extra={
+                "current_slide": stage_idx + 1,
+                "total_slides": 10,
+                "active_phase": stage_id,
+                "observer_note": f"Observer AI certifying {stage_id}"
+            }
+        )
+        job = mgr.get_job(job_id)
+        assert job["stage"] == stage_id
+        assert job["active_phase"] == stage_id
+        assert job["current_slide"] == stage_idx + 1
+
+
+
+

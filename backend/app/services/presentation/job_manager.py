@@ -151,7 +151,10 @@ class PresentationJobManager:
                     "total_slides",
                     "current_slide_title",
                     "current_slide_category",
-                    "slide_status_list"
+                    "slide_status_list",
+                    "observer_note",
+                    "observer_context",
+                    "active_phase"
                 )
                 if k in job
             }

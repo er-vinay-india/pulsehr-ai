@@ -12,9 +12,15 @@ const STAGE_ALIASES = {
   collecting_findings: "layout",
   planning_coverage: "layout",
   layout: "layout",
-  planning_presentation: "headings",
-  building_slides: "headings",
   headings: "headings",
+  planning_presentation: "headings",
+  data_math: "data_math",
+  deriving_metrics: "data_math",
+  narrative_ai: "narrative_ai",
+  building_slides: "narrative_ai",
+  enrichment: "enrichment",
+  executive_polish: "enrichment",
+  polishing_tone: "enrichment",
   graphics: "graphics",
   rendering_graphics: "graphics",
   text: "text",
@@ -28,6 +34,46 @@ const STAGE_ALIASES = {
   finalizing_presentation: "formatting",
   ready: "formatting",
 };
+
+/**
+ * SlideTrain Component
+ *
+ * Layman explanation:
+ * Renders a compact, sleek single row of slide pills.
+ * Look and feel is completely unified across both running and completed phases:
+ * - Completed slides show: Slide 1 ✓
+ * - Active slide shows: Slide 2 ⟳ (subtle glowing active indicator)
+ * - Upcoming slides show: Slide 3
+ * Compact, lightweight, single horizontal line, zero clutter, zero AI badges.
+ */
+function SlideTrain({ totalSlides, currentSlide, isPassed, isCurrent }) {
+  if (!totalSlides || totalSlides <= 0) return null;
+
+  return (
+    <div className="stage-slide-pills-row">
+      {Array.from({ length: totalSlides }, (_, i) => {
+        const slideNum = i + 1;
+        const isDone = isPassed || slideNum < currentSlide || (currentSlide === totalSlides);
+        const isActive = isCurrent && slideNum === currentSlide && currentSlide < totalSlides;
+
+        return (
+          <span
+            key={slideNum}
+            className={`slide-step-pill ${isDone ? "done" : isActive ? "building" : "pending"}`}
+            title={`Slide ${slideNum}`}
+          >
+            Slide {slideNum}
+            {isDone ? (
+              <span className="pill-status-mark"> ✓</span>
+            ) : isActive ? (
+              <RotateCw size={10} className="pill-spin spin-icon" />
+            ) : null}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
 
 export default function DeckGeneratingView({
   stages = [],
@@ -144,31 +190,21 @@ export default function DeckGeneratingView({
               </div>
 
               <div className="stage-meta">
-                <span className="stage-title">Phase {idx + 1}: {st.label}</span>
+                <div className="stage-title-row">
+                  <span className="stage-title">Phase {idx + 1}: {st.label}</span>
+                </div>
                 <span className="stage-desc">
                   {isCurrent && jobStageLabel ? jobStageLabel : (st.desc || st.label)}
                 </span>
 
-                {/* Slide Pills with symbolic tick on Slide Synthesis Phase (Phase 2) */}
-                {st.id === "headings" && (isCurrent || isPassed) && slideProgressData?.total_slides > 0 && (
-                  <div className="stage-slide-sequential-container">
-                    <div className="stage-slide-pills-row">
-                      {Array.from({ length: slideProgressData.total_slides }, (_, i) => {
-                        const slideNum = i + 1;
-                        const isDone = isPassed || slideNum <= (slideProgressData.current_slide || 0);
-                        const isBuilding = isCurrent && slideNum === (slideProgressData.current_slide || 0) + 1;
-                        return (
-                          <span
-                            key={slideNum}
-                            className={`slide-step-pill ${isDone ? "done" : isBuilding ? "building" : "pending"}`}
-                            title={`Slide ${slideNum}: ${isDone ? "Complete" : isBuilding ? "Building..." : "Pending"}`}
-                          >
-                            {isDone ? `Slide ${slideNum} ✓` : isBuilding ? `Slide ${slideNum} ⟳` : `Slide ${slideNum}`}
-                          </span>
-                        );
-                      })}
-                    </div>
-                  </div>
+                {/* Unified, compact SlideTrain across active and completed phases */}
+                {(isCurrent || isPassed) && slideProgressData?.total_slides > 0 && (
+                  <SlideTrain
+                    totalSlides={slideProgressData.total_slides}
+                    currentSlide={slideProgressData.current_slide || 0}
+                    isPassed={isPassed}
+                    isCurrent={isCurrent}
+                  />
                 )}
               </div>
 

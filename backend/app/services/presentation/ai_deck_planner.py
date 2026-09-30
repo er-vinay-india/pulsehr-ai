@@ -111,6 +111,12 @@ Your objective: Generate a complete, multi-slide executive presentation plan in 
 2. Every slide title must be an assertive, conclusion-driven headline under 78 characters.
 3. Every narrative must weave verified counts and percentages (e.g. 'X of {total_records:,} records (Z%)').
 4. Valid visual_hook values: 'none', 'line_chart', 'bar_chart', 'donut_chart', 'rel_chart', 'talent_9box', 'burnout_strain', 'bradford_factor', 'table_categorical', 'action_plan', 'raci_matrix', 'evidence_ledger_part1', 'evidence_ledger_part2'.
+5. SPATIAL LAYOUT CONTRACTS (Strict 1080p Canvas Capacity):
+   - layout 'chart_narrative': 1 Takeaway lead (≤160 chars) + max 3 bullets (≤95 chars each). Never cram >3 bullets beside a visual chart.
+   - layout 'action_plan': Exactly 3 structured initiatives. If >3 actions are needed, plan 2 sequential slides.
+   - layout 'table_detail': Maximum 6 data rows per page. If evidence exceeds 6 rows, allocate 2 slides (Part 1 and Part 2).
+   - layout 'kpi_summary': 3 to 4 metric scorecards + max 3 key takeaway bullets.
+   - layout 'comparison_split': Max 2 structured proposals or 3 bullets per card.
 
 Return ONLY a JSON object matching this schema:
 {{

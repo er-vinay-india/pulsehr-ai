@@ -255,7 +255,10 @@ def prepare_existing_column_vectors():
     finally:
         conn.close()
     missing = [(sid, profile) for sid, profiles in sheets for profile in profiles if not profile.get('vector')]
-    vectors = model_embeddings([f"Column {p['column']} ({p['canonical']})" for _, p in missing])
+    vectors = model_embeddings([
+        f"Column {p.get('column') or p.get('name') or p.get('column_name') or ''} ({p.get('canonical') or p.get('column') or ''})"
+        for _, p in missing
+    ])
     for (_, profile), vector in zip(missing, vectors):
         profile['vector'] = vector
         profile['embedding_model'] = config.OLLAMA_EMBED_MODEL
@@ -292,8 +295,13 @@ def rebuild_relationships(conn):
         for right in sheets[idx+1:]:
             for lp in json.loads(left['profile_json']):
                 for rp in json.loads(right['profile_json']):
-                    lc, rc = lp['column'], rp['column']
-                    exact = canonical(lc) == canonical(rc)
+                    lc = lp.get('column') or lp.get('name') or lp.get('original_name') or ''
+                    rc = rp.get('column') or rp.get('name') or rp.get('original_name') or ''
+                    if not lc or not rc:
+                        continue
+                    lp_canon = lp.get('canonical') or canonical(lc)
+                    rp_canon = rp.get('canonical') or canonical(rc)
+                    exact = lp_canon == rp_canon
                     similarity = None
                     if not exact and lp.get('embedding_model') == rp.get('embedding_model') and lp.get('vector') and rp.get('vector'):
                         a, b = np.array(lp['vector']), np.array(rp['vector'])
@@ -307,7 +315,7 @@ def rebuild_relationships(conn):
                         continue
                     lu, ru = all(v == 1 for v in lv.values()), all(v == 1 for v in rv.values())
                     cardinality = ('one' if lu else 'many') + '-to-' + ('one' if ru else 'many')
-                    keylike = lp['canonical'] not in ('id', 'paid', 'valid') and (lp['canonical'] in ('employee_id', 'employee_name', 'department', 'department_id', 'email') or lp['canonical'].endswith('id') or lp['canonical'].endswith('code'))
+                    keylike = lp_canon not in ('id', 'paid', 'valid') and (lp_canon in ('employee_id', 'employee_name', 'department', 'department_id', 'email') or lp_canon.endswith('id') or lp_canon.endswith('code'))
                     status = 'linked' if exact and keylike and (lu or ru) else 'suggested'
                     method = ('exact' if lc.casefold() == rc.casefold() else 'alias') if exact else 'vector'
                     reason = 'Matching keys with a unique side; exact equality join.' if status == 'linked' else 'Review before use: similarity or shared values alone do not establish identity.'

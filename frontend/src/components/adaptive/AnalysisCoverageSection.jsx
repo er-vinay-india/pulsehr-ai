@@ -177,11 +177,24 @@ const STRATEGY_HR_METADATA = {
  * 4. Actionable Unlock Recipes with direct column prerequisite chips and Explorer navigation.
  * 5. Instant Search and Status Filters.
  */
-export default function AnalysisCoverageSection({ coverage, sheetId, onNavigateTab }) {
+export default function AnalysisCoverageSection({ coverage, sheetId, onNavigateTab, domain }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [selectedPillar, setSelectedPillar] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
+
+  const isEducation = domain === "education" || domain === "education_academic" || coverage?.domain === "education";
+  const isHr = !isEducation && (domain === "hr" || domain === "workforce_hr" || coverage?.domain === "hr" || (!domain && !coverage?.domain));
+
+  const getPillarLabel = (pillar) => {
+    if (pillar.id === "all") {
+      return isHr ? "All HR Playbooks" : (isEducation ? "All Academic Playbooks" : "All Playbooks");
+    }
+    if (pillar.id === "governance") {
+      return isHr ? "HR Governance & Simpson's Guardrails" : "Governance & Simpson's Guardrails";
+    }
+    return pillar.label;
+  };
 
   if (!coverage || !coverage.strategies) {
     return null;
@@ -300,7 +313,7 @@ export default function AnalysisCoverageSection({ coverage, sheetId, onNavigateT
   };
 
   return (
-    <section className="adaptive-coverage-drawer" aria-label="Executive HR Strategy Coverage & Intelligence Audit">
+    <section className="adaptive-coverage-drawer" aria-label={isHr ? "Executive HR Strategy Coverage & Intelligence Audit" : (isEducation ? "Executive Academic Strategy Coverage & Intelligence Audit" : "Executive Strategy Coverage & Intelligence Audit")}>
       {/* Executive Header Banner */}
       <div className="adaptive-coverage-drawer__header">
         <div className="adaptive-coverage-drawer__lead">
@@ -310,12 +323,16 @@ export default function AnalysisCoverageSection({ coverage, sheetId, onNavigateT
           <div className="adaptive-coverage-drawer__title-block">
             <div className="adaptive-coverage-drawer__title-row">
               <h3 className="adaptive-coverage-drawer__title">
-                Executive HR Strategy Coverage & Intelligence Audit
+                {isHr ? "Executive HR Strategy Coverage & Intelligence Audit" : (isEducation ? "Executive Academic Strategy Coverage & Intelligence Audit" : "Executive Strategy Coverage & Intelligence Audit")}
               </h3>
               <span className="adaptive-coverage-drawer__version-tag">20-Playbook Suite</span>
             </div>
             <p className="adaptive-coverage-drawer__subtitle">
-              Rigorous algorithmic audit across workforce operations, cohort retention, payroll economics, and Simpson&apos;s Paradox guardrails.
+              {isHr
+                ? "Rigorous algorithmic audit across workforce operations, cohort retention, payroll economics, and Simpson's Paradox guardrails."
+                : (isEducation
+                    ? "Rigorous algorithmic audit across student achievement, cohort disparity, intervention economics, and Simpson's Paradox guardrails."
+                    : "Rigorous algorithmic audit across operational drivers, cohort retention, resource economics, and Simpson's Paradox guardrails.")}
             </p>
           </div>
         </div>
@@ -329,7 +346,7 @@ export default function AnalysisCoverageSection({ coverage, sheetId, onNavigateT
             <div
               className="adaptive-coverage-header-meter__bar"
               role="meter"
-              aria-label="Executive HR strategy capability readiness"
+              aria-label={isHr ? "Executive HR strategy capability readiness" : (isEducation ? "Executive academic strategy capability readiness" : "Executive strategy capability readiness")}
               aria-valuenow={effectiveCompleted}
               aria-valuemin={0}
               aria-valuemax={total_strategies}
@@ -365,10 +382,12 @@ export default function AnalysisCoverageSection({ coverage, sheetId, onNavigateT
             onClick={() => setIsExpanded(!isExpanded)}
             className="adaptive-coverage-expand-btn"
             aria-expanded={isExpanded}
-            aria-controls="hr-strategy-audit-content"
-            aria-label="Toggle full executive HR strategy audit"
+            aria-controls="strategy-audit-content"
+            aria-label={isHr ? "Toggle full executive HR strategy audit" : "Toggle full executive strategy audit"}
           >
-            {isExpanded ? "Collapse HR Audit" : "Review HR Strategy Audit"}
+            {isExpanded
+              ? (isHr ? "Collapse HR Audit" : "Collapse Audit")
+              : (isHr ? "Review HR Strategy Audit" : (isEducation ? "Review Academic Strategy Audit" : "Review Strategy Audit"))}
             {isExpanded ? <ChevronUp size={15} aria-hidden="true" /> : <ChevronDown size={15} aria-hidden="true" />}
           </button>
         </div>
@@ -376,7 +395,7 @@ export default function AnalysisCoverageSection({ coverage, sheetId, onNavigateT
 
       {/* Expanded Executive Audit Console */}
       {isExpanded && (
-        <div id="hr-strategy-audit-content" className="adaptive-coverage-drawer__content">
+        <div id="strategy-audit-content" className="adaptive-coverage-drawer__content">
           {/* Executive KPI Metric Cards */}
           <div className="adaptive-coverage-kpi-grid">
             <div className="adaptive-coverage-kpi-card adaptive-coverage-kpi-card--active">
@@ -405,7 +424,11 @@ export default function AnalysisCoverageSection({ coverage, sheetId, onNavigateT
                 {needs_inputs_count} <span className="adaptive-coverage-kpi-card__total">Strategies Awaiting Fields</span>
               </div>
               <p className="adaptive-coverage-kpi-card__desc">
-                Mapping 1–2 optional HR columns (e.g. scheduled duty roster, tenure, or overtime) immediately activates deep cohort and capacity diagnostics.
+                {isHr
+                  ? "Mapping 1–2 optional HR columns (e.g. scheduled duty roster, tenure, or overtime) immediately activates deep cohort and capacity diagnostics."
+                  : (isEducation
+                      ? "Mapping additional student assessment or demographic columns immediately activates deep subgroup and longitudinal diagnostics."
+                      : "Mapping additional operational columns immediately activates deep cohort and capacity diagnostics.")}
               </p>
             </div>
 
@@ -425,7 +448,7 @@ export default function AnalysisCoverageSection({ coverage, sheetId, onNavigateT
             </div>
           </div>
 
-          {/* HR Strategic Pillar Navigation Tabs */}
+          {/* Strategic Pillar Navigation Tabs */}
           <div className="adaptive-coverage-pillar-nav">
             {Object.values(HR_PILLARS).map((pillar) => {
               const Icon = pillar.icon;
@@ -439,7 +462,7 @@ export default function AnalysisCoverageSection({ coverage, sheetId, onNavigateT
                   className={`adaptive-coverage-pillar-btn ${isActive ? "adaptive-coverage-pillar-btn--active" : ""}`}
                 >
                   <Icon size={14} className="adaptive-coverage-pillar-btn__icon" aria-hidden="true" />
-                  <span>{pillar.label}</span>
+                  <span>{getPillarLabel(pillar)}</span>
                   <span className="adaptive-coverage-pillar-btn__count">{count}</span>
                 </button>
               );
@@ -475,9 +498,9 @@ export default function AnalysisCoverageSection({ coverage, sheetId, onNavigateT
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search playbooks, HR questions, or missing fields..."
+                placeholder={isHr ? "Search playbooks, HR questions, or missing fields..." : (isEducation ? "Search playbooks, academic questions, or missing fields..." : "Search playbooks, decision questions, or missing fields...")}
                 className="adaptive-coverage-search__input"
-                aria-label="Search HR strategy playbooks"
+                aria-label={isHr ? "Search HR strategy playbooks" : "Search strategy playbooks"}
               />
               {searchQuery && (
                 <button
@@ -532,7 +555,7 @@ export default function AnalysisCoverageSection({ coverage, sheetId, onNavigateT
                           <span
                             className={`adaptive-coverage-card__pillar-badge adaptive-coverage-card__pillar-badge--${pillarDef.id}`}
                           >
-                            {pillarDef.label.split("&")[0].trim()}
+                            {getPillarLabel(pillarDef).split("&")[0].trim()}
                           </span>
                         </div>
                         <h4 className="adaptive-coverage-card__title">{s.strategy_name}</h4>
@@ -542,9 +565,9 @@ export default function AnalysisCoverageSection({ coverage, sheetId, onNavigateT
                       </div>
                     </div>
 
-                    {/* HR Decision Focus Box */}
+                    {/* Decision Focus Box */}
                     <div className="adaptive-coverage-card__question-box">
-                      <span className="adaptive-coverage-card__question-tag">HR Decision Focus:</span>
+                      <span className="adaptive-coverage-card__question-tag">{isHr ? "HR Decision Focus:" : (isEducation ? "Academic Decision Focus:" : "Decision Focus:")}</span>
                       <p className="adaptive-coverage-card__question-text">
                         &ldquo;{meta.question}&rdquo;
                       </p>
@@ -562,7 +585,7 @@ export default function AnalysisCoverageSection({ coverage, sheetId, onNavigateT
                       <div className="adaptive-coverage-card__unlock">
                         <div className="adaptive-coverage-card__unlock-header">
                           <Sparkles size={13} />
-                          <span>To Unlock this HR Playbook:</span>
+                          <span>{isHr ? "To Unlock this HR Playbook:" : (isEducation ? "To Unlock this Academic Playbook:" : "To Unlock this Playbook:")}</span>
                         </div>
                         <div className="adaptive-coverage-card__chips">
                           {s.missing_prerequisites.map((prereq, idx) => (

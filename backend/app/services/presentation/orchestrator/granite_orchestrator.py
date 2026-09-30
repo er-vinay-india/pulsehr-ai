@@ -689,7 +689,8 @@ Instructions:
         chart_pack: dict[str, Any] | None = None,
         profiled_data: dict[str, Any] | None = None,
         evidence_ledger: list[dict[str, Any]] | None = None,
-        on_slide_progress: Any = None
+        on_slide_progress: Any = None,
+        on_slide_start: Any = None
     ) -> tuple[dict[str, Any], list[SlideExecutionPackage]]:
         """End-to-end execution flow: builds execution DAG, executes tasks, and maps to PresentationDeckSpec."""
         resolved_theme_id = theme_id or ctx.theme_id or "bold_signal"
@@ -709,7 +710,7 @@ Instructions:
             chart_pack=chart_pack,
             evidence_ledger=evidence_ledger,
             theme_id=resolved_theme_id,
-            on_progress=on_slide_progress
+            on_progress=None
         )
 
         # Stage 3: Downstream adapter to canonical PresentationDeckSpec v2.0
@@ -721,7 +722,8 @@ Instructions:
             chart_pack=chart_pack,
             profiled_data=profiled_data,
             evidence_ledger=evidence_ledger,
-            on_slide_progress=on_slide_progress
+            on_slide_progress=on_slide_progress,
+            on_slide_start=on_slide_start
         )
 
         # Enrich deck spec metadata with execution plan details

@@ -48,8 +48,10 @@ def plan_slides(
         # Dynamically scale with available evidence, industrial models, and sections
         base = max(len(narrative.sections), 4)
         evidence_scale = min(len(main_units), 8)
-        model_count = sum(1 for m in ctx.industrial_models.values() if isinstance(m, dict) and m.get("available"))
-        target_count = max(5, min(16, base + (evidence_scale // 2) + model_count))
+        industrial_models = ctx.industrial_models or {}
+        available_charts = ctx.available_charts or {}
+        model_count = sum(1 for m in industrial_models.values() if isinstance(m, dict) and m.get("available"))
+        target_count = max(8, min(16, base + (evidence_scale // 2) + model_count))
 
     # Clamp target_count to absolute bounds if specified
     if constraint.min_slides is not None:
@@ -60,14 +62,17 @@ def plan_slides(
     if max_retries < 0:
         return _build_fallback_slide_plans(target_count, ctx, intent, narrative, main_units, appendix_units)
 
+    industrial_models = ctx.industrial_models or {}
+    available_charts = ctx.available_charts or {}
+
     # Summarize assets for prompt
     available_assets = {
-        "line_chart": ctx.available_charts.get("line_chart", False),
-        "bar_chart": ctx.available_charts.get("bar_chart", False),
-        "donut_chart": ctx.available_charts.get("donut_chart", False),
-        "talent_9box": bool(ctx.industrial_models.get("talent_9box", {}).get("available")),
-        "burnout_strain": bool(ctx.industrial_models.get("burnout_strain", {}).get("available")),
-        "bradford_factor": bool(ctx.industrial_models.get("bradford_factor", {}).get("available")),
+        "line_chart": available_charts.get("line_chart", False),
+        "bar_chart": available_charts.get("bar_chart", False),
+        "donut_chart": available_charts.get("donut_chart", False),
+        "talent_9box": bool((industrial_models.get("talent_9box") or {}).get("available")),
+        "burnout_strain": bool((industrial_models.get("burnout_strain") or {}).get("available")),
+        "bradford_factor": bool((industrial_models.get("bradford_factor") or {}).get("available")),
         "action_plan": True,
         "raci_matrix": True,
         "evidence_ledger": True
@@ -214,17 +219,17 @@ def _normalize_and_bound_slides(
         layout = item.get("layout", "chart_narrative")
         visual_type = item.get("visual_type") or item.get("visual_hook") or "none"
 
-        # Validate layout compatibility with visual_type
-        if visual_type in ("line_chart", "bar_chart", "donut_chart", "rel_chart", "talent_9box", "burnout_strain", "bradford_factor"):
+        # Validate layout compatibility with slide sequence and visual_type
+        if idx == 0:
+            layout = "title_hero"
+        elif idx == 1:
+            layout = "kpi_summary"
+        elif visual_type in ("line_chart", "bar_chart", "donut_chart", "rel_chart", "talent_9box", "burnout_strain", "bradford_factor"):
             layout = "chart_narrative"
         elif visual_type in ("table", "raci_matrix", "evidence_ledger"):
             layout = "table_detail"
         elif visual_type == "action_plan":
             layout = "action_plan"
-        elif idx == 0:
-            layout = "title_hero"
-        elif idx == 1:
-            layout = "kpi_summary"
 
         bullets = item.get("bullet_points") or item.get("bullets") or []
         if len(bullets) < 3:
@@ -255,6 +260,50 @@ def _normalize_and_bound_slides(
                 speaker_notes=item.get("speaker_notes", f"Focus executive attention on verified findings in {headline}.")
             )
         )
+    # Ensure structural layout diversity for executive decks with >= 6 slides
+    if len(plans) >= 6:
+        # Guarantee presence of core layouts: title_hero (0), kpi_summary (1), chart_narrative (2)
+        if plans[2].layout not in ("chart_narrative", "full_chart_takeaway", "two_charts"):
+            plans[2].layout = "chart_narrative"
+            plans[2].visual_intent.layout_recommendation = "chart_narrative"
+            plans[2].visual_intent.visual_type = "line_chart" if ctx.available_charts.get("line_chart") else "bar_chart"
+
+        if len(plans) >= 7:
+            # Slides 2, 3, 4 are primary analytical chart slides
+            if ctx.available_charts.get("bar_chart") and plans[3].layout != "chart_narrative":
+                plans[3].layout = "chart_narrative"
+                plans[3].visual_intent.layout_recommendation = "chart_narrative"
+                plans[3].visual_intent.visual_type = "bar_chart"
+            if (ctx.available_charts.get("donut_chart") or ctx.available_charts.get("bar_chart")) and plans[4].layout != "chart_narrative":
+                plans[4].layout = "chart_narrative"
+                plans[4].visual_intent.layout_recommendation = "chart_narrative"
+                plans[4].visual_intent.visual_type = "donut_chart" if ctx.available_charts.get("donut_chart") else "bar_chart"
+
+        existing_layouts = {p.layout for p in plans}
+        # For decks with >= 7 slides, protect slides 2, 3, 4 for chart narratives
+        start_idx = 5 if len(plans) >= 7 else 4
+
+        if "comparison_split" not in existing_layouts:
+            for p in plans[start_idx:]:
+                if p.layout != "comparison_split":
+                    p.layout = "comparison_split"
+                    p.visual_intent.layout_recommendation = "comparison_split"
+                    break
+
+        existing_layouts = {p.layout for p in plans}
+        if "table_detail" not in existing_layouts:
+            for p in plans[start_idx:]:
+                if p.layout != "comparison_split":
+                    p.layout = "table_detail"
+                    p.visual_intent.layout_recommendation = "table_detail"
+                    p.visual_intent.visual_type = "table"
+                    break
+
+        existing_layouts = {p.layout for p in plans}
+        if "chart_narrative" not in existing_layouts:
+            plans[2].layout = "chart_narrative"
+            plans[2].visual_intent.layout_recommendation = "chart_narrative"
+
     return plans
 
 
@@ -267,6 +316,9 @@ def _build_fallback_slide_plans(
     appendix_units: list[InformationUnit]
 ) -> list[SlidePlan]:
     """Generates a complete, high-signal set of deterministic SlidePlans adhering to exact slide count."""
+    available_charts = ctx.available_charts or {}
+    industrial_models = ctx.industrial_models or {}
+
     templates = [
         # Slide 1: Hero
         {
@@ -289,7 +341,7 @@ def _build_fallback_slide_plans(
         # Slide 3: Volume / Strengths
         {
             "layout": "chart_narrative",
-            "visual_type": "line_chart" if ctx.available_charts.get("line_chart") else "none",
+            "visual_type": "line_chart" if available_charts.get("line_chart") else "none",
             "headline": "Operational Volume Surge & Throughput Resilience",
             "subtitle": "Observed Peak Throughput Trajectory",
             "key_message": "Strong performance across core operating cycles demonstrates system resilience.",
@@ -298,7 +350,7 @@ def _build_fallback_slide_plans(
         # Slide 4: Dispersion / Headwinds
         {
             "layout": "chart_narrative",
-            "visual_type": "bar_chart" if ctx.available_charts.get("bar_chart") else "table",
+            "visual_type": "bar_chart" if available_charts.get("bar_chart") else "table",
             "headline": "Entity Performance Dispersion & Headwind Analysis",
             "subtitle": f"Leader-to-Laggard Spread ({ctx.dispersion_metric})",
             "key_message": "Inter-unit variation reveals productivity headroom and target areas for standardization.",
@@ -307,7 +359,7 @@ def _build_fallback_slide_plans(
         # Slide 5: Distribution / Cohorts
         {
             "layout": "chart_narrative",
-            "visual_type": "donut_chart" if ctx.available_charts.get("donut_chart") else "comparison_split",
+            "visual_type": "donut_chart" if available_charts.get("donut_chart") else "comparison_split",
             "headline": "Category Distribution & Concentration Drivers",
             "subtitle": "Primary Volume Concentration Breakdown",
             "key_message": "Top operating unit accounts for the majority share of operational throughput.",
@@ -315,8 +367,8 @@ def _build_fallback_slide_plans(
         },
         # Slide 6: Industrial Model / Diagnostic
         {
-            "layout": "chart_narrative" if ctx.industrial_models.get("talent_9box", {}).get("available") else "comparison_split",
-            "visual_type": "talent_9box" if ctx.industrial_models.get("talent_9box", {}).get("available") else "table",
+            "layout": "chart_narrative" if (industrial_models.get("talent_9box") or {}).get("available") else "comparison_split",
+            "visual_type": "talent_9box" if (industrial_models.get("talent_9box") or {}).get("available") else "table",
             "headline": "Analytical Diagnostics & Capacity Distribution",
             "subtitle": "Evaluated Population Diagnostic Matrix",
             "key_message": "Diagnostic models isolate operational risk factors and talent retention vulnerabilities.",

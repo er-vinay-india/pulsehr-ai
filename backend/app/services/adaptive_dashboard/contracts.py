@@ -42,6 +42,7 @@ class SemanticContract(BaseModel):
         "demographics_public",
         "household_budget",
         "operations_support",
+        "education_academic",
         "general_tabular",
     ] = "general_tabular"
     analyst_persona: str = "General Data Analyst"
@@ -56,7 +57,7 @@ class MetricRequest(BaseModel):
 
     recipe_id: str
     target_construct: str
-    operation: Literal["count_distinct_entities", "sum_measure", "average_measure", "honest_definition_card"]
+    operation: Literal["count_distinct_entities", "sum_measure", "average_measure", "mean_measure", "honest_definition_card"]
     target_role: str
     grain: str
     rationale: str
@@ -376,6 +377,9 @@ class DecisionFocusSpec(BaseModel):
     explain: ExplainSpec
     inspect: InspectSpec
     evidence: EvidenceResult
+    owner: str | None = None
+    guardrail: str | None = None
+    review_cycle: str | None = None
     caption: str | None = None
 
 

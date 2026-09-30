@@ -84,7 +84,12 @@ export default function PresentationPage({
       if (rawCtx) {
         const parsed = JSON.parse(rawCtx);
         if (parsed?.sheetId || parsed?.sheet_id) {
-          setSelectedSheetId(String(parsed.sheetId || parsed.sheet_id));
+          const sid = String(parsed.sheetId || parsed.sheet_id);
+          if (!sheets || sheets.length === 0 || sheets.some(s => String(s.id) === sid)) {
+            setSelectedSheetId(sid);
+          } else if (sheets && sheets.length > 0) {
+            setSelectedSheetId(String(sheets[0].id));
+          }
         }
         if (parsed?.sheetTitle || parsed?.sheet_name) {
           setObjective(`Executive summary and decision-grade analysis for ${parsed.sheetTitle || parsed.sheet_name}`);
@@ -100,7 +105,7 @@ export default function PresentationPage({
     } catch (err) {
       console.warn("Failed reading presentation dashboard context from sessionStorage", err);
     }
-  }, [setSelectedSheetId, setObjective, setInstructions]);
+  }, [setSelectedSheetId, setObjective, setInstructions, sheets]);
 
   // Fetch primary dashboard element for truth binding
   useEffect(() => {

@@ -141,18 +141,30 @@ def validate_briefing_claims(
             flags=re.IGNORECASE,
         )
         text_without_dates = re.sub(r"\b\d{4}-\d{2}(?:-\d{2})?\b", " ", text_without_dates)
-        tokens = re.findall(r"(?<![\w#])[-+]?\$?\d{1,3}(?:,\d{3})*(?:\.\d+)?%?(?![\w])", text_without_dates)
+        tokens = re.findall(r"(?<![\w#])[-+]?\$?\d{1,3}(?:,\d{3})*(?:\.\d+)?(?:[kKmMbBtT])?%?(?![a-zA-Z0-9_])", text_without_dates)
         for token in tokens:
             clean_tok = token.replace(",", "").replace("$", "").rstrip("%").lstrip("+")
+            suffix = ""
+            if clean_tok and clean_tok[-1] in "kKmMbBtT":
+                suffix = clean_tok[-1].lower()
+                clean_tok = clean_tok[:-1]
             try:
                 val = float(clean_tok)
             except ValueError:
                 continue
             # Ignore standard 4-digit years
-            if 2000 <= val <= 2035 and "." not in clean_tok:
+            if 2000 <= val <= 2035 and "." not in clean_tok and not suffix:
                 continue
-            # Verify value exists in claim.numeric_values within display rounding tolerance (0.6 for integer rounding)
-            matched = any(abs(val - num) <= 0.6 or abs(abs(val) - abs(num)) <= 0.6 for num in claim.numeric_values)
+            multiplier = {"k": 1e3, "m": 1e6, "b": 1e9, "t": 1e12}.get(suffix, 1.0)
+            expanded_val = val * multiplier
+            # Verify value exists in claim.numeric_values within display rounding tolerance
+            matched = any(
+                abs(val - num) <= 0.6
+                or abs(abs(val) - abs(num)) <= 0.6
+                or abs(expanded_val - num) <= 0.6
+                or abs(abs(expanded_val) - abs(num)) <= 0.6
+                for num in claim.numeric_values
+            )
             if not matched:
                 raise ValueError(
                     f"Unbound numeric value '{token}' in claim '{claim.claim_id}' not found in claim.numeric_values ({claim.numeric_values})."
@@ -199,7 +211,17 @@ def build_executive_briefing_element(
     primary_formatted = primary.glance.formatted_value
     primary_unit = primary.glance.unit or "records"
 
-    if domain == "workforce_hr":
+    formatted_nums: list[float] = []
+    if primary_formatted:
+        for s in re.findall(r"\d+(?:\.\d+)?", str(primary_formatted)):
+            try:
+                formatted_nums.append(float(s))
+            except ValueError:
+                pass
+
+    base_primary_nums = ([primary_val] if (primary_val is not None and isinstance(primary_val, (int, float))) else []) + formatted_nums
+
+    if domain in ("workforce_hr", "hr"):
         scope_text = f"The attendance data represents {primary_formatted} employees{period_phrase}."
         claims.append(
             BriefingClaim(
@@ -208,8 +230,22 @@ def build_executive_briefing_element(
                 text=scope_text,
                 source_component_id=primary.component_id,
                 calculation_ids=[primary_calc_id],
-                numeric_values=[primary_val],
+                numeric_values=base_primary_nums,
                 unit="employees",
+            )
+        )
+    elif domain in ("education", "education_academic"):
+        student_count = manifest.row_count or (contract.distinct_entity_count or 0)
+        scope_text = f"The student assessment data covers {student_count:,} students across the cohort averaging {primary_formatted}{period_phrase}."
+        claims.append(
+            BriefingClaim(
+                claim_id="claim_scope_education",
+                claim_type="scope",
+                text=scope_text,
+                source_component_id=primary.component_id,
+                calculation_ids=[primary_calc_id],
+                numeric_values=[student_count] + base_primary_nums,
+                unit="students",
             )
         )
     elif domain in ("commercial_retail", "retail_sales"):
@@ -221,7 +257,7 @@ def build_executive_briefing_element(
                 text=scope_text,
                 source_component_id=primary.component_id,
                 calculation_ids=[primary_calc_id],
-                numeric_values=[primary_val],
+                numeric_values=base_primary_nums,
                 unit=primary_unit,
             )
         )
@@ -235,7 +271,7 @@ def build_executive_briefing_element(
                 text=scope_text,
                 source_component_id=primary.component_id,
                 calculation_ids=[primary_calc_id],
-                numeric_values=[primary_val],
+                numeric_values=base_primary_nums,
                 unit=primary_unit,
             )
         )
@@ -321,7 +357,7 @@ def build_executive_briefing_element(
             if quinary.top_segment and quinary.benchmark_value is not None:
                 top_item = next((it for it in quinary.items if it.segment == quinary.top_segment), None)
                 if top_item and top_item.segment != decision.subject_label:
-                    benchmark_context = "company attendance" if domain == "workforce_hr" else "the overall benchmark"
+                    benchmark_context = "company attendance" if domain in ("workforce_hr", "hr") else ("the student cohort" if domain in ("education", "education_academic") else "the overall benchmark")
                     pattern_text = (
                         f"{top_item.segment} recorded the highest {quinary.metric_name.lower()} at "
                         f"{top_item.formatted_primary}, while {benchmark_context} averaged {quinary.formatted_benchmark}."

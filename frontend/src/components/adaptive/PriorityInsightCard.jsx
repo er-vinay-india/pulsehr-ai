@@ -390,18 +390,24 @@ export default function PriorityInsightCard({
 
   // Domain-aware copy
   const isHr =
-    (metric_name && metric_name.toLowerCase().includes("attendance")) ||
+    (metric_name && (metric_name.toLowerCase().includes("attendance") || metric_name.toLowerCase().includes("headcount") || metric_name.toLowerCase().includes("leave"))) ||
     (dimension_name && dimension_name.toLowerCase() === "department");
 
-  const effectiveDimension = dimension_name || (isHr ? "Department" : "Store");
-  const effectiveMetric = metric_name || (isHr ? "Recorded Attendance" : "Observed Metric");
-  const effectiveOwner = owner || (isHr ? "Lead HRBP with Operations Head" : "Operations & Performance Lead");
+  const isEducation =
+    (metric_name && (metric_name.toLowerCase().includes("score") || metric_name.toLowerCase().includes("grade") || metric_name.toLowerCase().includes("gpa") || metric_name.toLowerCase().includes("student"))) ||
+    (dimension_name && (dimension_name.toLowerCase().includes("gender") || dimension_name.toLowerCase().includes("race") || dimension_name.toLowerCase().includes("lunch") || dimension_name.toLowerCase().includes("prep") || dimension_name.toLowerCase().includes("student") || dimension_name.toLowerCase().includes("cohort")));
+
+  const effectiveDimension = dimension_name || (isHr ? "Department" : (isEducation ? "Student Cohort" : "Segment"));
+  const effectiveMetric = metric_name || (isHr ? "Recorded Attendance" : (isEducation ? "Average Score" : "Observed Metric"));
+  const effectiveOwner = owner || (isHr ? "Lead HRBP with Operations Head" : (isEducation ? "Academic Dean & Student Success Lead" : "Operations & Performance Lead"));
   const effectiveGuardrail =
     guardrail ||
     (isHr
       ? "Policy guardrail: Verify flex arrangements & leave ledgers before review"
-      : "Data guardrail: Validate localized operational drivers before adjusting targets");
-  const effectiveReviewCycle = review_cycle || (isHr ? "within 14 days (Q3 Workforce Cycle)" : "14-day operational review cycle");
+      : (isEducation
+          ? "Academic support guardrail: Pedagogical interventions should support student learning rather than penalize performance"
+          : "Data guardrail: Validate localized operational drivers before adjusting targets"));
+  const effectiveReviewCycle = review_cycle || (isHr ? "within 14 days (Q3 Workforce Cycle)" : (isEducation ? "Quarterly Academic Grading Cycle" : "14-day operational review cycle"));
 
   // Extract categories and values for multi-view modes
   const { categories, values } = useMemo(
@@ -550,7 +556,7 @@ export default function PriorityInsightCard({
                 {comparison_value}
               </div>
               <span className="adaptive-priority-metric__hint">
-                {isHr ? "Neutral department attendance comparison" : "Neutral comparative unit benchmark"}
+                {isHr ? "Neutral department attendance comparison" : (isEducation ? "Student cohort performance comparison" : "Neutral comparative unit benchmark")}
               </span>
             </div>
           </div>

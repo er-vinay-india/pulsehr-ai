@@ -173,12 +173,14 @@ export default function VisualSlideRenderer({
                   <th
                     key={idx}
                     style={{
-                      padding: "8px 12px",
+                      padding: "12px 14px",
                       borderBottom: `2px solid ${cardBorder}`,
                       textAlign: "left",
-                      fontSize: "12px",
+                      fontSize: "13px",
                       color: secondaryText,
-                      fontWeight: 600
+                      fontWeight: 700,
+                      textTransform: "uppercase",
+                      letterSpacing: "0.04em"
                     }}
                   >
                     {h}
@@ -187,15 +189,15 @@ export default function VisualSlideRenderer({
               </tr>
             </thead>
             <tbody>
-              {tableData.rows.slice(0, 7).map((r, rIdx) => (
+              {tableData.rows.slice(0, 8).map((r, rIdx) => (
                 <tr key={rIdx}>
                   {(Array.isArray(r) ? r : Object.values(r)).map((cell, cIdx) => (
                     <td
                       key={cIdx}
                       style={{
-                        padding: "8px 12px",
+                        padding: "10px 14px",
                         borderBottom: `1px solid ${cardBorder}`,
-                        fontSize: "12px",
+                        fontSize: "14px",
                         color: primaryText
                       }}
                     >
@@ -235,7 +237,7 @@ export default function VisualSlideRenderer({
         <div className="d-flex justify-content-between align-items-center mb-1">
           <span
             className="text-uppercase fw-bold"
-            style={{ fontSize: "11px", letterSpacing: "0.08em", color: accentColor }}
+            style={{ fontSize: "13px", letterSpacing: "0.08em", color: accentColor }}
           >
             {spec.visual_story?.primary_message ? "Strategic Analysis" : "Executive Briefing"}
           </span>
@@ -251,20 +253,20 @@ export default function VisualSlideRenderer({
             onKeyDown={(e) => e.key === "Enter" && handleTitleBlur()}
             autoFocus
             style={{
-              fontSize: "24px",
-              fontWeight: 700,
+              fontSize: "36px",
+              fontWeight: 800,
               width: "100%",
               background: "rgba(255,255,255,0.05)",
               color: primaryText,
               border: `1px solid ${accentColor}`,
-              borderRadius: "4px",
-              padding: "4px 8px"
+              borderRadius: "6px",
+              padding: "6px 12px"
             }}
           />
         ) : (
           <h2
             className={`fw-bold mb-1 ${isEditable ? "editable-cursor" : ""}`}
-            style={{ fontSize: "26px", lineHeight: "1.25", color: primaryText }}
+            style={{ fontSize: "36px", lineHeight: "1.2", fontWeight: 800, color: primaryText }}
             onClick={() => isEditable && setIsEditingTitle(true)}
             title={isEditable ? "Click to edit title" : undefined}
           >
@@ -282,20 +284,20 @@ export default function VisualSlideRenderer({
             onKeyDown={(e) => e.key === "Enter" && handleSubtitleBlur()}
             autoFocus
             style={{
-              fontSize: "14px",
+              fontSize: "18px",
               width: "100%",
               background: "rgba(255,255,255,0.05)",
               color: secondaryText,
               border: `1px solid ${accentColor}`,
               borderRadius: "4px",
-              padding: "2px 8px"
+              padding: "4px 10px"
             }}
           />
         ) : (
           subtitle && (
             <p
               className={`mb-0 ${isEditable ? "editable-cursor" : ""}`}
-              style={{ fontSize: "14px", color: secondaryText, lineHeight: "1.4" }}
+              style={{ fontSize: "18px", color: secondaryText, lineHeight: "1.4" }}
               onClick={() => isEditable && setIsEditingSubtitle(true)}
               title={isEditable ? "Click to edit subtitle" : undefined}
             >
@@ -375,13 +377,13 @@ export default function VisualSlideRenderer({
           <div
             className="visual-narrative-box"
             style={{
-              padding: "10px 14px",
+              padding: "14px 20px",
               background: cardBg,
               border: `1px solid ${cardBorder}`,
-              borderLeft: `3px solid ${accentColor}`,
-              borderRadius: "6px",
-              fontSize: "14px",
-              lineHeight: "1.45",
+              borderLeft: `4px solid ${accentColor}`,
+              borderRadius: "8px",
+              fontSize: "16.5px",
+              lineHeight: "1.55",
               color: primaryText
             }}
           >
@@ -398,7 +400,7 @@ export default function VisualSlideRenderer({
                   color: primaryText,
                   border: `1px solid ${accentColor}`,
                   borderRadius: "4px",
-                  fontSize: "14px",
+                  fontSize: "16.5px",
                   outline: "none"
                 }}
               />
@@ -513,7 +515,7 @@ export default function VisualSlideRenderer({
       {/* 3. SLIDE FOOTER */}
       <footer
         className="d-flex justify-content-between align-items-center mt-3 pt-2"
-        style={{ borderTop: `1px solid ${cardBorder}`, fontSize: "11px", color: secondaryText }}
+        style={{ borderTop: `1px solid ${cardBorder}`, fontSize: "13px", color: secondaryText }}
       >
         <div className="d-flex align-items-center gap-2">
           <span>{footer.confidence_statement || "HighView Presentation Studio"}</span>

@@ -292,6 +292,9 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
   const explain = element?.explain;
   const inspect = element?.inspect;
 
+  const isHr = data?.contract?.domain === "hr" || data?.contract?.domain === "workforce_hr" || data?.contract?.analyst_persona?.toLowerCase().includes("hr");
+  const isEducation = data?.contract?.domain === "education" || data?.contract?.domain === "education_academic" || data?.contract?.analyst_persona?.toLowerCase().includes("student") || data?.contract?.analyst_persona?.toLowerCase().includes("academic");
+
   // Reporting range presentation: "1 Jan 2023 – 12 Dec 2024"
   const formattedReportingRange = useMemo(() => {
     if (manifest?.date_range?.start && manifest?.date_range?.end) {
@@ -325,11 +328,14 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
         period = "Reporting period not established";
       }
     }
-    const isHr = data?.contract?.domain === "hr" || data?.contract?.analyst_persona?.toLowerCase().includes("hr");
+    const isHr = data?.contract?.domain === "hr" || data?.contract?.domain === "workforce_hr" || data?.contract?.analyst_persona?.toLowerCase().includes("hr");
+    const isEducation = data?.contract?.domain === "education" || data?.contract?.domain === "education_academic" || data?.contract?.analyst_persona?.toLowerCase().includes("student") || data?.contract?.analyst_persona?.toLowerCase().includes("academic");
     const population = manifest.row_count
       ? (isHr
           ? `${Number(manifest.row_count).toLocaleString()} employees represented`
-          : `${Number(manifest.row_count).toLocaleString()} records indexed`)
+          : (isEducation
+              ? `${Number(manifest.row_count).toLocaleString()} students assessed`
+              : `${Number(manifest.row_count).toLocaleString()} records indexed`))
       : "Population scope pending";
     return {
       workbook,
@@ -345,14 +351,15 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
     if (!data) return [];
     const measures = [];
     const rowCount = data.manifest?.row_count;
-    const isHr = data?.contract?.domain === "hr" || data?.contract?.analyst_persona?.toLowerCase().includes("hr");
+    const isHr = data?.contract?.domain === "hr" || data?.contract?.domain === "workforce_hr" || data?.contract?.analyst_persona?.toLowerCase().includes("hr");
+    const isEducation = data?.contract?.domain === "education" || data?.contract?.domain === "education_academic" || data?.contract?.analyst_persona?.toLowerCase().includes("student") || data?.contract?.analyst_persona?.toLowerCase().includes("academic");
 
     if (rowCount) {
       measures.push({
         id: "population",
-        label: isHr ? "Employees represented" : "Records indexed",
+        label: isHr ? "Employees represented" : (isEducation ? "Students assessed" : "Records indexed"),
         value: Number(rowCount).toLocaleString(),
-        context: isHr ? "In attendance dataset" : (data.manifest?.display_name || "Active dataset"),
+        context: isHr ? "In attendance dataset" : (isEducation ? "Student academic cohort" : (data.manifest?.display_name || "Active dataset")),
         unit: "",
       });
     }
@@ -379,20 +386,33 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
           unit: "",
         });
       }
-    } else if (data.quinary_element?.formatted_benchmark) {
+
+      // If education and no attendance/leave in quaternary, show quaternary lift
+      if (isEducation && !attItem && !leaveItem && data.quaternary_element.items.length >= 2) {
+        const comp = data.quaternary_element.items[0];
+        measures.push({
+          id: "cohort_lift",
+          label: data.quaternary_element.dimension_name ? `${data.quaternary_element.dimension_name} Lift` : "Cohort Lift",
+          value: data.quaternary_element.formatted_relative_lift || data.quaternary_element.formatted_absolute_lift,
+          context: `${comp.cohort}: ${comp.formatted_value}`,
+          unit: "",
+        });
+      }
+    }
+    if (measures.length < 3 && data.quinary_element?.formatted_benchmark) {
       measures.push({
-        id: "attendance",
-        label: isHr ? "Recorded attendance" : "Benchmark average",
+        id: "benchmark",
+        label: isHr ? "Recorded attendance" : (isEducation ? "Cohort Benchmark" : "Benchmark average"),
         value: data.quinary_element.formatted_benchmark,
-        context: isHr ? "Company benchmark per employee" : "Organization benchmark",
+        context: isHr ? "Company benchmark per employee" : (isEducation ? "Average across assessed students" : "Organization benchmark"),
         unit: "",
       });
-    } else if (!isHr && data.priority_insight) {
+    } else if (measures.length < 3 && !isHr && data.priority_insight) {
       measures.push({
         id: "disparity",
-        label: "Observed Disparity",
+        label: isEducation ? "Observed Score Disparity" : "Observed Disparity",
         value: data.priority_insight.prominent_number,
-        context: data.priority_insight.comparison_label || "Max cohort spread",
+        context: data.priority_insight.comparison_label || (isEducation ? "Max cohort spread" : "Max cohort spread"),
         unit: data.priority_insight.unit || "",
       });
     }
@@ -1317,7 +1337,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
 
         {/* Compact Business Measures (WP2) */}
         {!calculating && !calcError && compactMeasures.length > 0 && (
-          <section className="adaptive-compact-summary-strip" aria-label="Key workforce measures">
+          <section className="adaptive-compact-summary-strip" aria-label={isHr ? "Key workforce measures" : (isEducation ? "Key academic measures" : "Key performance measures")}>
             {compactMeasures.map((m) => (
               <div key={m.id} className="compact-summary-tile">
                 <span className="compact-summary-tile__label">{m.label}</span>
@@ -1339,11 +1359,10 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
             snapshot={manifest?.snapshot}
             onInspect={() => handleOpenInspect("priority")}
             onOpenRecords={() => {
-              const isHr = data?.contract?.domain === "hr" || data?.contract?.analyst_persona?.toLowerCase().includes("hr");
               const targetId = priorityInsight.focus_group || priorityInsight.top_segment || null;
               setInvestigationTarget({
                 sheetId: selectedSheetId,
-                entityType: isHr ? "department" : (priorityInsight.dimension_name?.toLowerCase() || "segment"),
+                entityType: isHr ? "department" : (isEducation ? "student" : (priorityInsight.dimension_name?.toLowerCase() || "segment")),
                 targetId: targetId,
                 metric: priorityInsight.metric_name || null,
               });
@@ -1361,12 +1380,13 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
           />
         )}
 
-        {/* Executive HR Strategy Coverage & Intelligence Audit (S01–S20) */}
+        {/* Strategy Coverage & Intelligence Audit (S01–S20) */}
         {!calculating && !calcError && analysisCoverage && (
           <AnalysisCoverageSection
             coverage={analysisCoverage}
             sheetId={selectedSheetId}
             onNavigateTab={onNavigateTab}
+            domain={data?.contract?.domain}
           />
         )}
 
@@ -1881,15 +1901,15 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
               <div className="decision-narrative-block decision-narrative-block--owner">
                 <span className="narrative-tag">Accountable Owner</span>
                 <p className="narrative-text">
-                  <strong>{decisionElement.owner || "Lead HRBP with Unit Manager"}</strong> · Review: 14-day cycle
+                  <strong>{decisionElement.owner || (isHr ? "Lead HRBP with Unit Manager" : (isEducation ? "Academic Dean & Student Success Lead" : "Operational Lead"))}</strong> · Review: {decisionElement.review_cycle || (isEducation ? "Quarterly Academic Grading Cycle" : "14-day cycle")}
                 </p>
               </div>
             </div>
 
-            {/* HR Policy Compliance Guideline */}
+            {/* Compliance / Policy Guideline */}
             <div className="decision-compliance-guardrail" role="note">
               <span className="guardrail-dot" />
-              <span>HR Policy Guardrail: Recommendation is for managerial decision-support. Reconcile medical/annual leaves before adjusting capacity targets.</span>
+              <span>{decisionElement.guardrail || (isHr ? "HR Policy Guardrail: Recommendation is for managerial decision-support. Reconcile medical/annual leaves before adjusting capacity targets." : (isEducation ? "Academic Support Guardrail: Recommendations are pedagogical support guidelines and do not replace personalized instructional assessment." : "Policy Guardrail: Recommendations are analytical support guidelines for operational review."))}</span>
             </div>
 
             {/* Supporting evidence action link/button when supporting_component_id exists */}

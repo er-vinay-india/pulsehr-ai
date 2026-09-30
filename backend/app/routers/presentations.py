@@ -44,6 +44,7 @@ class GeneratePresentationRequest(BaseModel):
     scrim_opacity: int = 70
     transition: Literal["none", "fade", "slide", "scale", "reveal"] = "none"
     animation: Literal["none", "fade"] = "none"
+    enable_ai_planner: bool = True
 
 
 class ScopePreviewRequest(BaseModel):
@@ -160,6 +161,7 @@ def start_presentation_generation(req: GeneratePresentationRequest):
         "scrim_opacity": max(0, min(90, req.scrim_opacity)),
         "transition": req.transition,
         "animation": req.animation,
+        "enable_ai_planner": req.enable_ai_planner,
     }
     job_id = start_presentation_job(scope)
 

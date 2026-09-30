@@ -35,7 +35,8 @@ def generate_presentation_deck_spec(
     dataset_context: dict[str, Any],
     workspace_evidence: dict[str, Any] | None = None,
     on_slide_progress: Any = None,
-    on_phase_progress: Any = None
+    on_phase_progress: Any = None,
+    on_slide_start: Any = None
 ) -> dict[str, Any]:
     """Generates a complete, validated, evidence-driven PresentationDeckSpec.
 
@@ -264,7 +265,8 @@ def generate_presentation_deck_spec(
                     chart_pack=chart_pack,
                     profiled_data=profiled_data,
                     evidence_ledger=evidence_ledger,
-                    on_slide_progress=on_slide_progress
+                    on_slide_progress=on_slide_progress,
+                    on_slide_start=on_slide_start
                 )
             else:
                 director_deck_spec = presentation_director.plan_and_adapt(
@@ -274,27 +276,37 @@ def generate_presentation_deck_spec(
                     chart_pack=chart_pack,
                     profiled_data=profiled_data,
                     evidence_ledger=evidence_ledger,
-                    on_slide_progress=on_slide_progress
+                    on_slide_progress=on_slide_progress,
+                    on_slide_start=on_slide_start
                 )
             if director_deck_spec and director_deck_spec.get("slides") and len(director_deck_spec["slides"]) >= 4:
                 slides = director_deck_spec["slides"]
                 logger.info(f"Presentation Orchestrator successfully generated {len(slides)} slides.")
         except Exception as exc:
-            logger.warning(f"Presentation Director / Orchestrator execution failed, falling back to deterministic builders: {exc}")
+            logger.exception(f"Presentation Director / Orchestrator execution failed, falling back to deterministic builders: {exc}")
             slides = []
 
     if not slides:
         # Phase 2: High-fidelity deterministic builder pipeline (guaranteed fallback)
         target_count = int(scope.get("target_length") or 8)
 
+        def _notify_slide_start(title: str, category: str = ""):
+            if on_slide_start and callable(on_slide_start):
+                try:
+                    on_slide_start(len(slides) + 1, target_count, title, category)
+                except Exception:
+                    pass
+
         def _notify_slide(s: dict[str, Any]):
             if on_slide_progress and callable(on_slide_progress):
                 try:
-                    on_slide_progress(len(slides), target_count, s.get("title", f"Slide {len(slides)}"), s.get("category", ""))
+                    on_slide_progress(len(slides), target_count, s.get("title", f"Slide {len(slides)}"), s.get("category", ""), slide_dict=s)
+                    time.sleep(0.30)
                 except Exception:
                     pass
 
         # Slide 1: Executive Summary
+        _notify_slide_start("Executive Summary & Core Performance", "Strategy")
         slide_1 = build_executive_summary_slide(
             target_sheet=target_sheet,
             included_sheets=included_sheets,
@@ -313,6 +325,7 @@ def generate_presentation_deck_spec(
         _notify_slide(slide_1)
 
         # Slide 2: Analysis Scope & Baseline
+        _notify_slide_start("Analysis Scope & Dataset Governance", "Governance")
         slide_2 = build_baseline_scope_slide(
             included_sheets=included_sheets,
             source_summary=source_summary,
@@ -338,6 +351,7 @@ def generate_presentation_deck_spec(
             start_order=len(slides) + 1
         )
         for s in strength_slides:
+            _notify_slide_start(s.get("title", f"Slide {len(slides)+1}"), s.get("category", "Operations"))
             slides.append(s)
             _notify_slide(s)
 
@@ -353,6 +367,7 @@ def generate_presentation_deck_spec(
             start_order=len(slides) + 1
         )
         for s in headwind_slides:
+            _notify_slide_start(s.get("title", f"Slide {len(slides)+1}"), s.get("category", "Diagnostic"))
             slides.append(s)
             _notify_slide(s)
 
@@ -368,6 +383,7 @@ def generate_presentation_deck_spec(
             start_order=len(slides) + 1
         )
         for s in industrial_slides:
+            _notify_slide_start(s.get("title", f"Slide {len(slides)+1}"), s.get("category", "Diagnostic"))
             slides.append(s)
             _notify_slide(s)
 
@@ -386,6 +402,7 @@ def generate_presentation_deck_spec(
             start_order=len(slides) + 1
         )
         for s in gov_slides:
+            _notify_slide_start(s.get("title", f"Slide {len(slides)+1}"), s.get("category", "Governance"))
             slides.append(s)
             _notify_slide(s)
 
@@ -400,6 +417,7 @@ def generate_presentation_deck_spec(
             start_order=len(slides) + 1
         )
         for s in roadmap_slides:
+            _notify_slide_start(s.get("title", f"Slide {len(slides)+1}"), s.get("category", "Roadmap"))
             slides.append(s)
             _notify_slide(s)
 
@@ -416,30 +434,12 @@ def generate_presentation_deck_spec(
             start_order=len(slides) + 1
         )
         for s in ledger_slides:
+            _notify_slide_start(s.get("title", f"Slide {len(slides)+1}"), s.get("category", "Evidence"))
             slides.append(s)
             _notify_slide(s)
 
-    # Optional AI Enrichment Pass
-    ai_enhancements = None
-    if not os.environ.get("PYTEST_CURRENT_TEST"):
-        ai_enhancements = _call_ai_presentation_enrichment(
-            domain=domain,
-            objective=objective,
-            audience=audience,
-            instructions=instructions,
-            is_sales=is_sales,
-            is_hr=is_hr,
-            total_records=total_eval_records,
-            file_label=file_label,
-            slides=slides
-        )
-
-    if ai_enhancements and len(ai_enhancements) == len(slides):
-        for idx, enh in enumerate(ai_enhancements):
-            if enh.get("title") and len(enh["title"]) <= 80:
-                slides[idx]["title"] = format_display_label(enh["title"])
-            if enh.get("subtitle"):
-                slides[idx]["subtitle"] = enh["subtitle"]
+    # Batch AI enrichment pass removed to prevent duplicate whole-deck pauses.
+    # Executive tone and persona polish is now executed slide-by-slide in the dedicated 'enrichment' pipeline phase.
 
     if on_phase_progress:
         on_phase_progress("graphics", "Rendering slide graphics and chart specifications", 68)

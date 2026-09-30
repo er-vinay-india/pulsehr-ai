@@ -3,6 +3,7 @@ import { CheckCircle2, Download, Link2, Table } from "lucide-react";
 import { getDatasetDownloadUrl } from "../../api/client";
 import AnalysisBriefCard from "./AnalysisBriefCard";
 import ContextReviewCard from "./ContextReviewCard";
+import EnrichmentReviewCard from "./EnrichmentReviewCard";
 
 export default function UploadResultCard({ uploadResult }) {
   if (!uploadResult) return null;
@@ -38,6 +39,11 @@ export default function UploadResultCard({ uploadResult }) {
             <span><strong>Sheets:</strong> {uploadResult.sheets.join(", ")}</span>
             <span><strong>Total Rows:</strong> {uploadResult.total_rows}</span>
             <span><strong>Searchable rows:</strong> {uploadResult.indexed_chunks}</span>
+            {uploadResult.enrichment?.derived_features_count > 0 && (
+              <span style={{ color: "var(--brand-400)", borderColor: "rgba(224, 86, 36, 0.3)" }}>
+                <strong>Enriched:</strong> +{uploadResult.enrichment.derived_features_count} Scientific Features
+              </span>
+            )}
             {uploadResult.linked_employees > 0 && (
               <span style={{ color: "var(--accent-500)", borderColor: "rgba(126,231,217,0.3)" }}>
                 <Link2 size={13} style={{ display: "inline", verticalAlign: "middle", marginRight: "4px" }} />
@@ -75,6 +81,11 @@ export default function UploadResultCard({ uploadResult }) {
           workspaceId={String(uploadResult.dataset_id)}
           onContextUpdated={(updated) => setActiveContext(updated)}
         />
+      )}
+
+      {/* Controlled Semantic Enrichment & Scientific Discovery (Stages 1-11) */}
+      {uploadResult.enrichment && (
+        <EnrichmentReviewCard enrichment={uploadResult.enrichment} />
       )}
 
       {/* Analysis Brief & Business Intent Section */}

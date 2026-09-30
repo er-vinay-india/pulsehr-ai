@@ -235,30 +235,52 @@ def preview_presentation_scope(conn, scope: dict[str, Any]) -> dict[str, Any]:
             for s in all_sheets:
                 included_sheet_ids.add(s["id"])
     elif scope_type == "custom_sheets":
-        sids = set(int(x) for x in target_sheet_ids if str(x).isdigit())
-        if not sids and target_sheet_id:
+        valid_ids = {s["id"] for s in all_sheets}
+        sids = set(int(x) for x in target_sheet_ids if str(x).isdigit() and int(x) in valid_ids)
+        if not sids and target_sheet_id and int(target_sheet_id) in valid_ids:
             sids.add(int(target_sheet_id))
         if not sids and all_sheets:
-            sids.add(all_sheets[0]["id"])
+            sids.add(all_sheets[-1]["id"])
         included_sheet_ids = sids
         for s in all_sheets:
             if s["id"] not in included_sheet_ids:
                 exclusion_reasons[s["id"]] = "Excluded: unselected in custom selection"
     elif scope_type in ("single_sheet", "sheet"):
-        sid = int(target_sheet_id) if target_sheet_id else all_sheets[0]["id"]
-        included_sheet_ids.add(sid)
-        for s in all_sheets:
-            if s["id"] != sid:
-                exclusion_reasons[s["id"]] = "Excluded: single-sheet generation scope selected"
+        valid_ids = {s["id"] for s in all_sheets}
+        sid = None
+        if target_sheet_id and int(target_sheet_id) in valid_ids:
+            sid = int(target_sheet_id)
+        else:
+            # Stale or missing sheet_id: attempt match by name / original_name from instructions or objective
+            instr = f"{scope.get('instructions') or ''} {scope.get('objective') or ''}".lower()
+            for s in reversed(all_sheets):
+                s_name = (s.get("original_name") or s.get("name") or s.get("display_name") or "").lower()
+                if s_name and (s_name in instr or s["name"].lower() in instr):
+                    sid = s["id"]
+                    break
+            if not sid and all_sheets:
+                sid = all_sheets[-1]["id"]
+        if sid:
+            included_sheet_ids.add(sid)
+            for s in all_sheets:
+                if s["id"] != sid:
+                    exclusion_reasons[s["id"]] = "Excluded: single-sheet generation scope selected"
     elif scope_type == "dataset":
         target_dataset_id = scope.get("dataset_id")
-        for s in all_sheets:
-            if target_dataset_id and s["dataset_id"] == int(target_dataset_id):
+        valid_datasets = {s["dataset_id"] for s in all_sheets}
+        if target_dataset_id and int(target_dataset_id) in valid_datasets:
+            for s in all_sheets:
+                if s["dataset_id"] == int(target_dataset_id):
+                    included_sheet_ids.add(s["id"])
+                else:
+                    exclusion_reasons[s["id"]] = f"Excluded: not part of dataset {target_dataset_id}"
+        else:
+            for s in all_sheets:
                 included_sheet_ids.add(s["id"])
-            elif not target_dataset_id:
-                included_sheet_ids.add(s["id"])
-            else:
-                exclusion_reasons[s["id"]] = f"Excluded: not part of dataset {target_dataset_id}"
+
+    # Ultimate safety guarantee: if workspace has sheets, scope must never be empty
+    if not included_sheet_ids and all_sheets:
+        included_sheet_ids.add(all_sheets[-1]["id"])
 
     included_sheets_info = []
     all_is_partial = []

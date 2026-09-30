@@ -15,9 +15,12 @@ import { exportStandaloneHtmlPresentation } from "../../utils/standaloneHtmlExpo
 
 export const STAGES = [
   { id: "layout", label: "Layout build up", desc: "Freezing snapshot and assembling layout wireframes" },
-  { id: "headings", label: "Title & subpage headings", desc: "Generating deck title, section titles, and slide headings" },
+  { id: "headings", label: "Title & subpage headings", desc: "Outlining deck title, section categories, and slide titles" },
+  { id: "data_math", label: "Mathematical derivation", desc: "Computing exact totals, percentages, and evidence ledgers" },
+  { id: "narrative_ai", label: "AI storyline & narrative", desc: "Synthesizing executive findings, storylines, and insights" },
+  { id: "enrichment", label: "Executive tone & narrative polish", desc: "Refining language, C-suite tone, and executive subtitles slide by slide" },
   { id: "graphics", label: "Graphic content", desc: "Rendering charts, metric cards, and visual callouts" },
-  { id: "text", label: "Text content", desc: "Populating evidence-backed insights, takeaways, and findings" },
+  { id: "text", label: "Text content & density audit", desc: "Validating evidence claims and auditing spatial density" },
   { id: "animation", label: "Animation", desc: "Configuring entrance, emphasis, and motion cues" },
   { id: "transitions", label: "Transitions", desc: "Setting smooth slide-to-slide progression" },
   { id: "transcript", label: "HRIDAY voiceover transcript", desc: "Synthesizing executive talking points and speech notes" },
@@ -104,7 +107,16 @@ export function usePresentationWorkflow({
       .then(res => {
         if (res.sheets && res.sheets.length > 0) {
           setSheets(res.sheets);
-          setSelectedSheetId(current => current || new URLSearchParams(window.location.search).get("sheet_id") || String(res.sheets[0].id));
+          setSelectedSheetId(current => {
+            if (current && res.sheets.some(s => String(s.id) === String(current))) {
+              return current;
+            }
+            const urlSheetId = new URLSearchParams(window.location.search).get("sheet_id");
+            if (urlSheetId && res.sheets.some(s => String(s.id) === String(urlSheetId))) {
+              return urlSheetId;
+            }
+            return String(res.sheets[0].id);
+          });
           setCustomSheetIds(res.sheets.map(s => String(s.id)));
         }
       })
@@ -188,39 +200,46 @@ export function usePresentationWorkflow({
         setJobProgress(job.progress_pct || 0);
         setJobStage(job.stage);
         setJobStageLabel(job.stage_label || "Processing...");
-        if (job.current_slide || job.total_slides) {
+        if (job.current_slide !== undefined || job.total_slides !== undefined || job.slide_status_list) {
           setSlideProgressData((prev) => {
-            const currentList = Array.isArray(job.slide_status_list) && job.slide_status_list.length > 0
+            // Layman explanation:
+            // Use the real-time slide status list sent from the backend so that
+            // 'building' (active) and 'complete' (checked) states reflect actual progress.
+            let updatedList = Array.isArray(job.slide_status_list) && job.slide_status_list.length > 0
               ? job.slide_status_list
               : (prev?.slide_status_list || []);
 
-            let updatedList = [...currentList];
-            if (job.current_slide && job.current_slide_title) {
-              const existingIdx = updatedList.findIndex((s) => s.order === job.current_slide);
+            // Fallback merge only if backend didn't supply full slide_status_list
+            if ((!job.slide_status_list || job.slide_status_list.length === 0) && job.current_slide && job.current_slide_title) {
+              const listCopy = [...updatedList];
+              const existingIdx = listCopy.findIndex((s) => s.order === job.current_slide);
               if (existingIdx >= 0) {
-                updatedList[existingIdx] = {
-                  ...updatedList[existingIdx],
+                listCopy[existingIdx] = {
+                  ...listCopy[existingIdx],
                   title: job.current_slide_title,
-                  category: job.current_slide_category || updatedList[existingIdx].category,
+                  category: job.current_slide_category || listCopy[existingIdx].category,
                   status: "complete",
                 };
               } else {
-                updatedList.push({
+                listCopy.push({
                   order: job.current_slide,
                   title: job.current_slide_title,
                   category: job.current_slide_category || "",
                   status: "complete",
                 });
-                updatedList.sort((a, b) => a.order - b.order);
+                listCopy.sort((a, b) => a.order - b.order);
               }
+              updatedList = listCopy;
             }
 
             return {
-              current_slide: job.current_slide || prev?.current_slide || 0,
-              total_slides: job.total_slides || prev?.total_slides || 0,
+              current_slide: job.current_slide !== undefined ? job.current_slide : (prev?.current_slide || 0),
+              total_slides: job.total_slides || prev?.total_slides || (updatedList.length || 0),
               current_slide_title: job.current_slide_title || prev?.current_slide_title || "",
               current_slide_category: job.current_slide_category || prev?.current_slide_category || "",
               slide_status_list: updatedList,
+              observer_note: job.observer_note || prev?.observer_note || "",
+              active_phase: job.active_phase || prev?.active_phase || job.stage || "layout",
             };
           });
         }
@@ -265,7 +284,7 @@ export function usePresentationWorkflow({
           return;
         }
 
-        pollTimerRef.current = setTimeout(poll, 450);
+        pollTimerRef.current = setTimeout(poll, 250);
       } catch (err) {
         console.error("Job polling error:", err);
         setJobStageLabel("Connection interrupted. Reconnecting to the generation job…");
@@ -338,8 +357,14 @@ export function usePresentationWorkflow({
     setJobError(null);
     setCurrentJobId(null);
     setSlideProgressData(null);
-    handleStartGeneration();
-  }, [handleStartGeneration]);
+    if (sheets && sheets.length > 0 && !sheets.some(s => String(s.id) === String(selectedSheetId))) {
+      const fallbackId = String(sheets[0].id);
+      setSelectedSheetId(fallbackId);
+      handleStartGeneration({ sheet_id: Number(fallbackId) });
+    } else {
+      handleStartGeneration();
+    }
+  }, [handleStartGeneration, sheets, selectedSheetId]);
 
   const handleCancelGeneration = useCallback(async () => {
     if (!currentJobId) {

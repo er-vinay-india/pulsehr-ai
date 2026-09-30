@@ -384,6 +384,39 @@ def generate_predictive_suite_for_sheet(
                             f"Logistic Risk Model: {log_res['x_variable']} is a primary risk driver for {log_res['outcome_label']} "
                             f"(Odds Ratio: {log_res['odds_ratio']}x, Model Accuracy: {log_res['accuracy']*100:.1f}%)."
                         )
+    elif len(numeric_cols) >= 2:
+        # General / Academic: Predict bottom-quartile risk on primary numeric metric
+        target_metric = numeric_cols[0]
+        predictor_metric = numeric_cols[1]
+        t_vals = [float(r[target_metric]) for r in records if r.get(target_metric) is not None]
+        if t_vals:
+            threshold = float(np.percentile(t_vals, 25))
+            x_vals = []
+            y_bin = []
+            for r in records:
+                xv = r.get(predictor_metric)
+                yv = r.get(target_metric)
+                if xv is not None and yv is not None:
+                    try:
+                        x_vals.append(float(xv))
+                        # 1 = At-Risk (score in bottom quartile <= 25th percentile), 0 = Standard
+                        y_bin.append(1 if float(yv) <= threshold else 0)
+                    except (ValueError, TypeError):
+                        pass
+
+            if len(set(y_bin)) > 1:
+                log_res = fit_logistic_regression(
+                    x_vals=x_vals,
+                    y_binary=y_bin,
+                    x_name=predictor_metric,
+                    outcome_label=f"At-Risk Achievement Level ({target_metric} ≤ {threshold:.1f})"
+                )
+                if log_res:
+                    logistic_models.append(log_res)
+                    executive_points.append(
+                        f"Logistic Risk Model: Lower '{log_res['x_variable']}' is a primary predictive driver for '{log_res['outcome_label']}' "
+                        f"(Odds Ratio: {log_res['odds_ratio']}x, Model Accuracy: {log_res['accuracy']*100:.1f}%)."
+                    )
 
     return {
         "linear_models": linear_models,
