@@ -23,7 +23,8 @@ DOMAIN_KEYWORDS = {
     "physical_properties": {"mass", "volume", "density", "weight", "material", "area", "length", "width", "height", "temperature", "pressure", "kg", "grams", "liters"},
     "financial_economics": {"price", "cost", "revenue", "sales", "margin", "profit", "discount", "tax", "budget", "spend", "currency", "amount", "fee"},
     "workforce_operations": {"headcount", "hours", "overtime", "absent", "tenure", "salary", "rating", "performance", "shift", "department", "employee", "leave"},
-    "temporal_lifecycle": {"start", "end", "date", "created", "updated", "year", "quarter", "month", "duration", "latency", "cycle"}
+    "temporal_lifecycle": {"start", "end", "date", "created", "updated", "year", "quarter", "month", "duration", "latency", "cycle"},
+    "academic_assessment": {"score", "exam", "grade", "test", "math", "reading", "writing", "study", "education", "course", "degree", "school"}
 }
 
 
@@ -250,6 +251,10 @@ class ColumnRelationshipEngine:
             + 0.15 * domain_rel
             + 0.10 * unit_compat
         )
+        # Ensure strong empirical dependencies cross discovery threshold
+        if stat_dep >= 0.75:
+            composite_score = max(composite_score, stat_dep * 0.85)
+
         composite_score = round(min(1.0, max(0.0, composite_score)), 4)
 
         rel_type = "general_dependency"
