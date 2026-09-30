@@ -24,3 +24,5 @@ Thumbs.db
 backend/data/
 *.pptx
 scratch/
+outputs/
+backend/outputs/

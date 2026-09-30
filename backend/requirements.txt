@@ -42,3 +42,9 @@ edge-tts>=7.2.8
 xlsxwriter==3.2.9
 rank-bm25==0.2.2
 xlrd>=2.0.1
+pint==0.26.1
+scipy==1.18.1
+scikit-learn==1.9.1
+featuretools==1.31.0
+visions==0.8.2
+pysr==2.6.0

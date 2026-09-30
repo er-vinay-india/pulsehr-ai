@@ -25,6 +25,13 @@ class EnrichmentConfig(BaseModel):
     min_feature_confidence: float = Field(default=0.70, description="Minimum statistical/semantic confidence to retain a feature.")
     min_relationship_score: float = Field(default=0.60, description="Minimum hybrid score to form a relationship edge.")
     min_table_utility_score: float = Field(default=0.65, description="Minimum analytical utility required to materialize a table.")
+    min_feature_utility_score: float = Field(default=0.50, description="Minimum utility score for candidate feature acceptance.")
+    max_dimensions_per_table: int = Field(default=4, description="Maximum dimensions allowed per analytical table to prevent explosion.")
+    max_measures_per_table: int = Field(default=6, description="Maximum aggregated measures per analytical table.")
+    featuretools_enabled: bool = Field(default=True, description="Enable Featuretools DFS feature derivation.")
+    unit_processing_enabled: bool = Field(default=True, description="Enable Pint unit validation and dimensional analysis.")
+    symbolic_regression_enabled: bool = Field(default=True, description="Enable PySR symbolic regression discovery.")
+    visions_enabled: bool = Field(default=True, description="Enable Visions semantic type profiling.")
 
     @classmethod
     def from_dict(cls, data: dict[str, Any] | None) -> EnrichmentConfig:
@@ -120,3 +127,7 @@ class BudgetGuard:
             "stopped_due_to_limit": self.stopped_due_to_limit,
             "limit_reason": self.limit_reason
         }
+
+
+# Canonical alias
+EnrichmentBudgetManager = BudgetGuard

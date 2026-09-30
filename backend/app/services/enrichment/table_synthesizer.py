@@ -1,7 +1,7 @@
 """Analytical Table Synthesis & Cross-Dimensional Views Engine (Stage 10).
 
 Generates structured multi-dimensional analytical views, pivot tables, temporal trend summaries,
-and Pareto rankings bounded by table count budgets and utility thresholds.
+and Pareto rankings bounded by table explosion protections, table count budgets, and utility thresholds.
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 
 class AnalyticalTableSynthesizer:
-    """Synthesizes high-utility analytical tables, grouped views, and cross-tabulations."""
+    """Synthesizes high-utility analytical tables with strict explosion safeguards."""
 
     @classmethod
     def synthesize_tables(
@@ -33,19 +33,30 @@ class AnalyticalTableSynthesizer:
         if df.empty or not budget_guard.can_generate_table():
             return tables
 
-        # Find key dimensions, temporal columns, and numeric measures
-        dimensions = [
-            c for c in df.columns
-            if (profiles.get(c) and SemanticRole.DIMENSION in profiles[c].roles)
-            or (2 <= df[c].nunique() <= 30 and not pd.api.types.is_float_dtype(df[c]))
-        ]
+        n_rows = len(df)
 
+        # 1. Filter Safe Dimensions (protect against cardinality explosion)
+        dimensions: list[str] = []
+        for c in df.columns:
+            prof = profiles.get(c)
+            # Must not be high-cardinality ID
+            if prof and SemanticRole.IDENTIFIER in prof.roles:
+                continue
+            card = df[c].nunique()
+            unique_ratio = card / max(1, n_rows)
+            # Explosion protection: between 2 and 100 unique values, and unique_ratio < 0.5
+            if 2 <= card <= 100 and unique_ratio <= 0.5:
+                if (prof and SemanticRole.DIMENSION in prof.roles) or (not pd.api.types.is_float_dtype(df[c])):
+                    dimensions.append(c)
+
+        # 2. Temporal Columns
         time_cols = [
             c for c in df.columns
             if (profiles.get(c) and SemanticRole.TIME in profiles[c].roles)
             or any(t in c.lower() for t in ("year", "quarter", "month", "date"))
         ]
 
+        # 3. Numeric Measures (limit to max_measures_per_table)
         measures = [
             c for c in df.columns
             if pd.api.types.is_numeric_dtype(df[c])
@@ -53,15 +64,16 @@ class AnalyticalTableSynthesizer:
             and not c.endswith("_id")
             and not c.endswith("_is_weekend")
             and not c.endswith("_day")
-        ]
+        ][:config.max_measures_per_table]
 
         if not measures:
             return tables
 
         lead_measure = measures[0]
 
-        # 1. Primary Dimension Aggregation Table
-        for dim in dimensions[:3]:
+        # 4. Primary Dimension Aggregations (bounded by max_dimensions_per_table)
+        max_dims = min(len(dimensions), config.max_dimensions_per_table)
+        for dim in dimensions[:max_dims]:
             if not budget_guard.can_generate_table():
                 break
 
@@ -94,9 +106,9 @@ class AnalyticalTableSynthesizer:
                     budget_guard.record_generated_table()
                     tables.append(t)
             except Exception as e:
-                logger.warning(f"Could not build summary table for {dim}: {e}")
+                logger.warning("Could not build summary table for %s: %s", dim, e)
 
-        # 2. Temporal Trend / Periodic Momentum Table
+        # 5. Temporal Trend / Periodic Momentum Tables
         for t_col in time_cols[:2]:
             if not budget_guard.can_generate_table():
                 break
@@ -125,9 +137,9 @@ class AnalyticalTableSynthesizer:
                     budget_guard.record_generated_table()
                     tables.append(t)
             except Exception as e:
-                logger.warning(f"Could not build temporal table for {t_col}: {e}")
+                logger.warning("Could not build temporal table for %s: %s", t_col, e)
 
-        # 3. Two-Dimensional Cross-Tabulation Matrix
+        # 6. Two-Dimensional Cross-Tabulation Matrix
         if len(dimensions) >= 2 and budget_guard.can_generate_table():
             dim1, dim2 = dimensions[0], dimensions[1]
             try:
@@ -159,6 +171,6 @@ class AnalyticalTableSynthesizer:
                     budget_guard.record_generated_table()
                     tables.append(t)
             except Exception as e:
-                logger.warning(f"Could not build cross-tab table for {dim1} x {dim2}: {e}")
+                logger.warning("Could not build cross-tab table for %s x %s: %s", dim1, dim2, e)
 
         return tables

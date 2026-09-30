@@ -219,15 +219,28 @@ class ColumnRelationshipEngine:
         u1 = (prof1.detected_unit or "").lower()
         u2 = (prof2.detected_unit or "").lower()
         if u1 and u2:
-            if u1 == u2:
-                unit_compat = 0.9
-                reasons.append(f"Identical physical unit: {u1}")
-            elif (u1 in ("km", "m", "miles") and u2 in ("hours", "s", "min")) or (u2 in ("km", "m", "miles") and u1 in ("hours", "s", "min")):
-                unit_compat = 1.0
-                reasons.append("Complementary distance/time units for velocity derivation")
-            elif (u1 in ("kg", "g", "lb") and u2 in ("l", "ml", "m3")) or (u2 in ("kg", "g", "lb") and u1 in ("l", "ml", "m3")):
-                unit_compat = 1.0
-                reasons.append("Complementary mass/volume units for density derivation")
+            try:
+                from .adapters.unit_adapter import UnitSystemAdapter
+                u_adapter = UnitSystemAdapter(enabled=True)
+                if u1 == u2 or u_adapter.are_compatible(u1, u2):
+                    unit_compat = 0.9
+                    reasons.append(f"Dimensionally compatible units: {u1} and {u2}")
+                else:
+                    # Check ratio or product compatibility
+                    valid_ratio, _, _ = u_adapter.validate_operation("/", u1, u2)
+                    valid_prod, _, _ = u_adapter.validate_operation("*", u1, u2)
+                    if valid_ratio or valid_prod:
+                        unit_compat = 0.8
+                        reasons.append(f"Complementary physical dimensions: {u1} and {u2}")
+            except Exception:
+                if u1 == u2:
+                    unit_compat = 0.9
+                elif (u1 in ("km", "m", "miles") and u2 in ("hours", "s", "min")) or (u2 in ("km", "m", "miles") and u1 in ("hours", "s", "min")):
+                    unit_compat = 1.0
+                    reasons.append("Complementary distance/time units for velocity derivation")
+                elif (u1 in ("kg", "g", "lb") and u2 in ("l", "ml", "m3")) or (u2 in ("kg", "g", "lb") and u1 in ("l", "ml", "m3")):
+                    unit_compat = 1.0
+                    reasons.append("Complementary mass/volume units for density derivation")
 
         # Composite Score
         composite_score = (

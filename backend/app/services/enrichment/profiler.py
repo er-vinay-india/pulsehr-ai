@@ -163,6 +163,30 @@ class EnrichmentProfiler:
                 semantic_type = "date"
                 possible_domain = "temporal"
 
+        # Check column name via UnitSystemAdapter if unit still not detected
+        if not detected_unit:
+            try:
+                from .adapters.unit_adapter import UnitSystemAdapter
+                u_adapter = UnitSystemAdapter(enabled=True)
+                inferred_unit = u_adapter.detect_unit_from_name(col_name)
+                if inferred_unit:
+                    detected_unit = inferred_unit
+                    detected_pattern = "name_inferred_unit"
+                    if "usd" in inferred_unit or "eur" in inferred_unit or "inr" in inferred_unit or "currency" in inferred_unit:
+                        semantic_type = "currency"
+                        possible_domain = "finance"
+                    elif "meter" in inferred_unit or "mile" in inferred_unit or "kilometer" in inferred_unit:
+                        semantic_type = "distance"
+                        possible_domain = "physics"
+                    elif "gram" in inferred_unit or "pound" in inferred_unit or "kilogram" in inferred_unit:
+                        semantic_type = "mass"
+                        possible_domain = "physics"
+                    elif "hour" in inferred_unit or "second" in inferred_unit or "minute" in inferred_unit:
+                        semantic_type = "duration"
+                        possible_domain = "operations"
+            except Exception:
+                pass
+
         # Statistical Moments for Numeric or Cleanable Numerics
         min_val, max_val, mean_val, median_val, variance_val, std_dev_val = None, None, None, None, None, None
         physical_type = "string"

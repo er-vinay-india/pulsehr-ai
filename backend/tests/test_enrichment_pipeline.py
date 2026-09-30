@@ -200,17 +200,17 @@ def test_scientific_formula_discovery(sample_multidomain_dataset):
 
     # Verify speed = distance / travel_time
     assert any("derived_speed_distance_value_per_travel_time_hours" in name for name in feat_names)
-    speed_col = [n for n in feat_names if "speed" in n][0]
+    speed_col = [n for n in feat_names if "distance_value" in n and "travel_time_hours" in n and "speed" in n][0]
     assert df_form[speed_col].iloc[0] == 16.0  # 8 km / 0.5 hr = 16 km/h
 
     # Verify density = mass / volume
     assert any("derived_density_mass_kg_per_volume_m3" in name for name in feat_names)
-    dens_col = [n for n in feat_names if "density" in n][0]
+    dens_col = [n for n in feat_names if "mass_kg" in n and "volume_m3" in n and "density" in n][0]
     assert df_form[dens_col].iloc[0] == 250.0  # 50 kg / 0.2 m3 = 250 kg/m3
 
     # Verify profit = revenue - cost
     assert any("derived_profit_total_revenue_minus_total_cost" in name for name in feat_names)
-    profit_col = [n for n in feat_names if "profit" in n][0]
+    profit_col = [n for n in feat_names if "total_revenue" in n and "total_cost" in n and "profit" in n][0]
     assert df_form[profit_col].iloc[0] == 1800.0  # 5000 - 3200
 
 
@@ -307,4 +307,96 @@ def test_upload_endpoint_semantic_enrichment_integration(sample_multidomain_data
     saved_enr = get_res.json().get("enrichment")
     assert saved_enr is not None
     assert saved_enr["derived_features_count"] == enr["derived_features_count"]
+
+
+def test_unit_system_adapter_dimensional_analysis():
+    """Verifies that UnitSystemAdapter enforces dimensional consistency and rejects invalid physics."""
+    from app.services.enrichment.adapters.unit_adapter import UnitSystemAdapter
+
+    adapter = UnitSystemAdapter(enabled=True)
+    assert adapter.detect_unit_from_name("distance_km") == "kilometer"
+    assert adapter.detect_unit_from_name("weight_kg") == "kilogram"
+    assert adapter.detect_unit_from_name("travel_hours") == "hour"
+
+    # Compatibility check
+    assert adapter.are_compatible("kilometer", "meter") is True
+    assert adapter.are_compatible("kilogram", "meter") is False
+
+    # Incompatible addition: mass + distance must be rejected
+    is_valid, _, explanation = adapter.validate_operation("+", "kilogram", "meter")
+    assert is_valid is False
+    assert "Incompatible dimensions" in explanation
+
+    # Valid ratio: distance / time -> speed
+    is_valid, resulting_unit, _ = adapter.validate_operation("/", "kilometer", "hour")
+    assert is_valid is True
+    assert "hour" in resulting_unit
+
+
+def test_featuretools_synthesis_adapter():
+    """Verifies that FeatureSynthesisAdapter generates DFS features bounded by quota."""
+    from app.services.enrichment.adapters.feature_synthesis_adapter import FeatureSynthesisAdapter
+
+    adapter = FeatureSynthesisAdapter(enabled=True)
+    df = pd.DataFrame({
+        "revenue": [100.0, 200.0, 300.0, 400.0],
+        "cost": [60.0, 110.0, 150.0, 210.0]
+    })
+    synth_df, meta = adapter.synthesize_features_for_group(df, ["revenue", "cost"], max_features=3)
+    assert synth_df.shape[1] > 0
+    assert synth_df.shape[1] <= 3
+    assert len(meta) == synth_df.shape[1]
+    assert all(m["generator"] == "featuretools_dfs" for m in meta)
+
+
+def test_profiling_and_statistical_adapters():
+    """Verifies that ProfilingAdapter and StatisticalAdapter calculate advanced moments and visions types."""
+    from app.services.enrichment.adapters.profiling_adapter import ProfilingAdapter
+    from app.services.enrichment.adapters.statistical_adapter import StatisticalAdapter
+
+    stat_adapter = StatisticalAdapter(enabled=True)
+    s = pd.Series([1.0, 2.0, 3.0, 4.0, 5.0, 20.0])
+    moments = stat_adapter.compute_moments(s)
+    assert "skewness" in moments
+    assert "kurtosis" in moments
+    assert "iqr" in moments
+    assert moments["skewness"] > 0  # right-skewed by 20.0
+
+    prof_adapter = ProfilingAdapter(visions_enabled=True)
+    prof = prof_adapter.profile_series(s)
+    assert prof["is_numeric"] is True
+    assert "visions_type" in prof
+
+
+def test_formula_registry_domain_packs():
+    """Verifies that FormulaRegistry registers physics, business, operations, and healthcare formulas."""
+    from app.services.enrichment.formula_registry import FormulaRegistry
+
+    reg = FormulaRegistry()
+    all_formulas = reg.get_all()
+    categories = {f.category for f in all_formulas}
+    assert "physics" in categories
+    assert "business" in categories
+    assert "operations" in categories
+    assert "healthcare" in categories
+
+    # Verify physics speed
+    speed_formula = next(f for f in all_formulas if f.formula_id == "physics_speed")
+    res = speed_formula.eval_fn(pd.Series([100.0, 200.0]), pd.Series([2.0, 4.0]))
+    assert (res == pd.Series([50.0, 50.0])).all()
+
+
+def test_symbolic_relationship_adapter_fallback():
+    """Verifies that SymbolicRelationshipAdapter gracefully handles execution without crashing."""
+    from app.services.enrichment.adapters.symbolic_adapter import SymbolicRelationshipAdapter
+
+    # Test disabled flag
+    disabled_adapter = SymbolicRelationshipAdapter(enabled=False)
+    assert disabled_adapter.is_available() is False
+    res = disabled_adapter.discover_symbolic_relationship(pd.DataFrame({"a": [1], "b": [2]}), ["a"], "b")
+    assert res is None
+
+    # Test live adapter
+    live_adapter = SymbolicRelationshipAdapter(enabled=True)
+    assert isinstance(live_adapter.is_available(), bool)
 

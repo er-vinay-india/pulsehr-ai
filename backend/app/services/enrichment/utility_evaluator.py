@@ -64,7 +64,8 @@ class FeatureUtilityEvaluator:
                 base_utility = feat.utility_score * (1.0 - 0.3 * null_ratio)
 
             feat.utility_score = round(base_utility, 4)
-            evaluated_features.append(feat)
+            if feat.utility_score >= config.min_feature_utility_score:
+                evaluated_features.append(feat)
 
         # 4. Collinearity / Redundancy Pruning among numeric features
         evaluated_features.sort(key=lambda f: f.utility_score, reverse=True)

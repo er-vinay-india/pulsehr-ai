@@ -1,8 +1,9 @@
 """Controlled Semantic Data Enrichment & Scientific Feature Discovery Pipeline Package."""
 
-from .config import BudgetGuard, EnrichmentConfig
+from .config import BudgetGuard, EnrichmentBudgetManager, EnrichmentConfig
 from .models import (
     AnalyticalTable,
+    CandidateFeature,
     ColumnRelationship,
     DerivedFeature,
     EnrichedDatasetPackage,
@@ -10,6 +11,7 @@ from .models import (
     SemanticColumnGroup,
     SemanticRole,
 )
+from .formula_registry import FormulaRegistry, FormulaDefinition
 from .profiler import EnrichmentProfiler
 from .relationship_engine import ColumnRelationshipEngine
 from .column_grouping import ColumnGroupingEngine
@@ -22,14 +24,18 @@ from .pipeline import ControlledEnrichmentPipeline
 
 __all__ = [
     "BudgetGuard",
+    "EnrichmentBudgetManager",
     "EnrichmentConfig",
     "AnalyticalTable",
+    "CandidateFeature",
     "ColumnRelationship",
     "DerivedFeature",
     "EnrichedDatasetPackage",
     "EnrichmentColumnProfile",
     "SemanticColumnGroup",
     "SemanticRole",
+    "FormulaRegistry",
+    "FormulaDefinition",
     "EnrichmentProfiler",
     "ColumnRelationshipEngine",
     "ColumnGroupingEngine",

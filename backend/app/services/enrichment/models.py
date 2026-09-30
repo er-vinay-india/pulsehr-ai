@@ -73,6 +73,20 @@ class SemanticColumnGroup(BaseModel):
     cohesion_score: float = 1.0
 
 
+class CandidateFeature(BaseModel):
+    """A prioritized feature candidate undergoing validation, deduplication, and budget gating."""
+    name: str
+    derivation_type: str
+    expression: str
+    source_columns: list[str]
+    target_group_id: str | None = None
+    expected_utility_score: float = 1.0
+    expected_confidence: float = 1.0
+    unit: str | None = None
+    priority: float = 1.0
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
 class DerivedFeature(BaseModel):
     """A generated, normalized, scientific, or interaction feature bounded by budget."""
     name: str
