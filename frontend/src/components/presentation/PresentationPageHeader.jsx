@@ -4,7 +4,8 @@ import {
   Download,
   Sparkles,
   RefreshCw,
-  Plus
+  Plus,
+  ChevronDown
 } from "lucide-react";
 
 export default function PresentationPageHeader({
@@ -39,7 +40,7 @@ export default function PresentationPageHeader({
       case "studio": {
         const slideCount = deckSpec?.slides?.length || 0;
         const themeLabel = currentTheme?.name || "Theme";
-        return `${slideCount} slide${slideCount !== 1 ? "s" : ""} · ${themeLabel} · Frontend Slides 16:9 Stage`;
+        return `${slideCount} slide${slideCount !== 1 ? "s" : ""} · ${themeLabel}`;
       }
       case "config":
       default:
@@ -47,10 +48,58 @@ export default function PresentationPageHeader({
     }
   };
 
+  const secondaryActions = (
+    <>
+      <button
+        type="button"
+        className="btn-secondary btn-sm"
+        disabled={isRegeneratingSlide}
+        onClick={onResetAndStartGeneration}
+        title="Regenerate presentation deck with fresh AI intelligence"
+      >
+        <RefreshCw size={14} />
+        <span>Generate Again</span>
+      </button>
+
+      <button
+        type="button"
+        className="btn-secondary btn-sm"
+        disabled={isRegeneratingSlide}
+        onClick={onGoBackToConfig}
+        title="Configure and generate a new presentation"
+      >
+        <Plus size={14} />
+        <span>New Deck</span>
+      </button>
+
+      <button
+        type="button"
+        className="btn-secondary btn-sm"
+        onClick={onExportHtml}
+        title="Download Standalone Zero-Dependency HTML Presentation (Offline Presenter)"
+      >
+        <Download size={14} />
+        <span>Download HTML</span>
+      </button>
+
+      <button
+        type="button"
+        className="btn-secondary btn-sm"
+        disabled={isRegeneratingSlide}
+        onClick={onOpenRegenerateModal}
+        title="Regenerate current slide with AI prompt"
+      >
+        <Sparkles size={14} />
+        <span>Regenerate Slide</span>
+      </button>
+
+    </>
+  );
+
   const description = getDescription();
 
   return (
-    <header className="page-top-header presentation-page-header">
+    <header className={`page-top-header presentation-page-header presentation-header-${viewMode}`}>
       <div className="page-title-row">
         <div className="page-title-group">
           <h1 className="page-heading">{getTitle()}</h1>
@@ -60,49 +109,15 @@ export default function PresentationPageHeader({
         <div className="header-actions-row">
           {viewMode === "studio" && (
             <>
-              <button
-                type="button"
-                className="btn-secondary btn-sm"
-                disabled={isRegeneratingSlide}
-                onClick={onResetAndStartGeneration}
-                title="Regenerate presentation deck with fresh AI intelligence"
-              >
-                <RefreshCw size={14} />
-                <span>Generate Again</span>
-              </button>
-
-              <button
-                type="button"
-                className="btn-secondary btn-sm"
-                disabled={isRegeneratingSlide}
-                onClick={onGoBackToConfig}
-                title="Configure and generate a new presentation"
-              >
-                <Plus size={14} />
-                <span>New Deck</span>
-              </button>
-
-              <button
-                type="button"
-                className="btn-secondary btn-sm"
-                onClick={onExportHtml}
-                title="Download Standalone Zero-Dependency HTML Presentation (Offline Presenter)"
-              >
-                <Download size={14} />
-                <span>Download HTML</span>
-              </button>
-
-              <button
-                type="button"
-                className="btn-secondary btn-sm"
-                disabled={isRegeneratingSlide}
-                onClick={onOpenRegenerateModal}
-                title="Regenerate current slide with AI prompt"
-              >
-                <Sparkles size={14} />
-                <span>Regenerate Slide</span>
-              </button>
-
+              <div className="deck-desktop-actions">
+                {secondaryActions}
+              </div>
+              <details className="deck-mobile-actions">
+                <summary>Deck actions <ChevronDown size={16} aria-hidden="true" /></summary>
+                <div className="deck-action-menu">
+                  {secondaryActions}
+                </div>
+              </details>
               <button
                 type="button"
                 className="btn-primary btn-sm"

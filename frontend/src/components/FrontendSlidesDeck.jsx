@@ -34,6 +34,7 @@ export default function FrontendSlidesDeck({
   const [stagePosition, setStagePosition] = useState({ x: 0, y: 0 });
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isMobileViewport, setIsMobileViewport] = useState(() => typeof window !== "undefined" && window.innerWidth <= 768);
+  const [forceDesktopMode, setForceDesktopMode] = useState(false);
   const [forceMobileMode, setForceMobileMode] = useState(false);
   const [inlineEditActive, setInlineEditActive] = useState(false);
   const [showEditPrompt, setShowEditPrompt] = useState(false);
@@ -90,7 +91,7 @@ export default function FrontendSlidesDeck({
       resizeObserver.disconnect();
       clearTimeout(timer);
     };
-  }, [computeStageScale, forceMobileMode]);
+  }, [computeStageScale, forceMobileMode, forceDesktopMode, isMobileViewport]);
 
   // Fullscreen toggle
   const toggleFullscreen = () => {
@@ -121,7 +122,7 @@ export default function FrontendSlidesDeck({
       const target = e.target;
       if (
         target &&
-        (target.closest?.("[role=dialog]") ||
+        (target.closest?.("[role=dialog], summary") ||
           target.tagName === "BUTTON" || target.tagName === "SELECT" ||
           target.tagName === "INPUT" ||
           target.tagName === "TEXTAREA" ||
@@ -213,12 +214,12 @@ export default function FrontendSlidesDeck({
     }, 400);
   };
 
-  const showMobileView = isMobileViewport || forceMobileMode;
+  const showMobileView = (isMobileViewport && !forceDesktopMode) || forceMobileMode;
   const currentSlide = slides[activeSlideIndex] || slides[0];
   const progressPct = slides.length > 1 ? ((activeSlideIndex + 1) / slides.length) * 100 : 100;
 
   const editor = isEditable && !readOnly && inlineEditActive && currentSlide && (
-    <div className="pres-slide-text-editor" key={currentSlide.id} role="region" aria-label="Edit slide text">
+    <div id="deck-slide-text-editor" className="pres-slide-text-editor" key={currentSlide.id} role="region" aria-label="Edit slide text">
       {[['title', 'Title'], ['subtitle', 'Subtitle'], ['narrative', 'Body'], ['bullets', 'Takeaways (one per line)']].map(([field, label]) => (
         <label key={field}>{label}
           <textarea aria-label={`Slide ${label}`} rows={field === "bullets" ? 3 : 2}
@@ -240,24 +241,30 @@ export default function FrontendSlidesDeck({
   if (showMobileView) {
     return (
       <div className={`mobile-presentation-reflow theme-${themeName}`} data-slide-theme={themeName}>
-        <div className="mobile-deck-header">
-          <div className="mobile-deck-pagination">
+        <div className="mobile-deck-header" role="navigation" aria-label="Quick slide navigation">
+          <button type="button" className="btn-secondary" disabled={activeSlideIndex <= 0}
+            onClick={() => onSlideChange(Math.max(0, activeSlideIndex - 1))} aria-label="Previous Slide">
+            <ChevronLeft size={18} aria-hidden="true" />
+          </button>
+          <div className="mobile-deck-pagination" aria-live="polite" aria-atomic="true">
             Slide {activeSlideIndex + 1} of {slides.length}
           </div>
-          <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
-            <button
-              type="button"
-              className="btn-ghost-sm"
-              onClick={() => setForceMobileMode(false)}
-              title="Switch to 16:9 Widescreen Fixed Stage"
-            >
-              <Monitor size={14} />
-              <span>16:9 Stage</span>
-            </button>
-          </div>
+          <button type="button" className="btn-secondary" disabled={activeSlideIndex >= slides.length - 1}
+            onClick={() => onSlideChange(Math.min(slides.length - 1, activeSlideIndex + 1))} aria-label="Next Slide">
+            <ChevronRight size={18} aria-hidden="true" />
+          </button>
         </div>
-
-        {isEditable && !readOnly && <button className="btn-secondary" onClick={() => setInlineEditActive(value => !value)}>Edit slide text</button>}
+        <div className="mobile-deck-view-tools">
+          {isEditable && !readOnly && <button type="button" className="btn-secondary"
+            aria-expanded={inlineEditActive} aria-controls="deck-slide-text-editor"
+            onClick={() => setInlineEditActive(value => !value)}>
+            <Edit3 size={16} aria-hidden="true" />{inlineEditActive ? "Close editor" : "Edit text"}
+          </button>}
+          <button type="button" className="btn-secondary"
+            onClick={() => { setForceMobileMode(false); setForceDesktopMode(true); }}>
+            <Monitor size={16} aria-hidden="true" />Slide preview
+          </button>
+        </div>
         {editor}
         <div
           className="mobile-slide-card-container"
@@ -361,7 +368,7 @@ export default function FrontendSlidesDeck({
             <button
               type="button"
               className="symbolic-action-btn"
-              onClick={() => setForceMobileMode(true)}
+              onClick={() => { setForceDesktopMode(false); setForceMobileMode(true); }}
               aria-label="Switch to Mobile Reflow View"
             >
               <Smartphone size={14} />

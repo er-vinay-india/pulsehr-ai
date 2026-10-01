@@ -61,6 +61,7 @@ export default function DeckStudioView({
   isBusy = false,
   onApplyImage
 }) {
+  const [isSlideOptionsOpen, setIsSlideOptionsOpen] = useState(false);
   const [isImagePickerOpen, setIsImagePickerOpen] = useState(false);
   const [isPresenterMode, setIsPresenterMode] = useState(false);
   const [curatePrompt, setCuratePrompt] = useState("");
@@ -68,6 +69,19 @@ export default function DeckStudioView({
   const [curationError, setCurationError] = useState("");
   const [previousSlideSnapshot, setPreviousSlideSnapshot] = useState(null);
   const [showApprovalBanner, setShowApprovalBanner] = useState(false);
+  const notesPanelRef = React.useRef(null);
+  const shouldRevealNotes = React.useRef(false);
+
+  React.useEffect(() => {
+    if (window.matchMedia("(max-width: 768px)").matches) setSpeakerNotesOpen(false);
+  }, [setSpeakerNotesOpen]);
+
+  React.useEffect(() => {
+    if (speakerNotesOpen && shouldRevealNotes.current) {
+      notesPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      shouldRevealNotes.current = false;
+    }
+  }, [speakerNotesOpen]);
 
   const evidenceLocked = false; // Factual boundary: Editorial content freely editable; metrics tracked with USER_OVERRIDE
   const currentSlide = deckSpec.slides[activeSlideIndex] || deckSpec.slides[0];
@@ -126,7 +140,23 @@ export default function DeckStudioView({
     <div className={`pres-studio-body ${isPresenterMode ? "theater-presenter-mode" : ""}`}>
       {/* STUDIO SUB-TOOLBAR */}
       <fieldset className="studio-sub-toolbar pres-editor-fieldset" disabled={isBusy}>
-        <div className="toolbar-left">
+        <div className="mobile-studio-navigation">
+          <label className="mobile-slide-jump">
+            <span>Go to slide</span>
+            <select value={activeSlideIndex} onChange={e => setActiveSlideIndex(Number(e.target.value))}>
+              {deckSpec.slides.map((slide, index) => (
+                <option key={slide.id || index} value={index}>{index + 1}. {slide.title || "Untitled slide"}</option>
+              ))}
+            </select>
+          </label>
+          <button type="button" className="btn-secondary mobile-slide-options-toggle"
+            aria-expanded={isSlideOptionsOpen} aria-controls="deck-slide-options"
+            onClick={() => setIsSlideOptionsOpen(open => !open)}>
+            <Sliders size={16} aria-hidden="true" />
+            <span>Options</span>
+          </button>
+        </div>
+        <div id="deck-slide-options" className={`toolbar-left ${isSlideOptionsOpen ? "mobile-options-open" : ""}`}>
           <span className="slide-counter-badge">
             Slide {activeSlideIndex + 1} of {deckSpec.slides.length}
           </span>
@@ -236,8 +266,13 @@ export default function DeckStudioView({
             <button
               type="button"
               className={`symbolic-action-btn ${speakerNotesOpen ? "active" : ""}`}
-              onClick={() => setSpeakerNotesOpen(!speakerNotesOpen)}
+              onClick={() => {
+                shouldRevealNotes.current = !speakerNotesOpen && window.matchMedia("(max-width: 768px)").matches;
+                setSpeakerNotesOpen(!speakerNotesOpen);
+              }}
               aria-label="Toggle Speaker Notes"
+              aria-expanded={speakerNotesOpen}
+              aria-controls="deck-speaker-notes"
             >
               <FileText size={14} />
               <span className="btn-label-responsive">Notes</span>
@@ -257,7 +292,7 @@ export default function DeckStudioView({
               aria-label="Append a New Slide"
             >
               <Plus size={14} />
-              <span className="btn-label-responsive">Add</span>
+              <span className="btn-label-responsive">Add slide</span>
             </button>
             <span className="symbolic-tooltip">
               Add Slide: Append a new executive slide to current deck
@@ -266,7 +301,7 @@ export default function DeckStudioView({
 
           {/* Export Options */}
           {onExportPptx && (
-            <div className="symbolic-btn-wrap">
+            <div className="symbolic-btn-wrap studio-pptx-action">
               <button
                 type="button"
                 className="symbolic-action-btn btn-export-pptx"
@@ -471,7 +506,7 @@ export default function DeckStudioView({
                   type="text"
                   value={curatePrompt}
                   onChange={(e) => setCuratePrompt(e.target.value)}
-                  placeholder="Ask HRIDAY to refine this slide (e.g. 'Rephrase for the CFO', 'Make bullet points sharper')..."
+                  placeholder="Ask HRIDAY to improve this slide..."
                   aria-label="Ask HRIDAY to refine this slide"
                   className="copilot-input"
                   disabled={isCurating || isBusy}
@@ -500,7 +535,7 @@ export default function DeckStudioView({
 
           {/* BOTTOM SPEAKER NOTES DRAWER */}
           {speakerNotesOpen && currentSlide && (
-            <div className="studio-speaker-notes-bar" role="region" aria-label="Speaker notes">
+            <div ref={notesPanelRef} id="deck-speaker-notes" className="studio-speaker-notes-bar" role="region" aria-label="Speaker notes">
               <div className="notes-bar-header">
                 <div className="notes-header-left">
                   <FileText size={14} />

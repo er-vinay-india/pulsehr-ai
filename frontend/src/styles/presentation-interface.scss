@@ -179,3 +179,172 @@
     :focus-visible { outline: 3px solid var(--border-focus); outline-offset: 3px; box-shadow: none; }
   }
 }
+
+.presentation-header-studio {
+  .deck-desktop-actions { display: contents; }
+  .deck-mobile-actions { display: none; }
+}
+.mobile-studio-navigation { display: none; }
+
+// Mobile deck workspace: content first, optional settings on demand.
+@media (max-width: 768px) {
+  :root .presentation-page-container {
+    .presentation-header-studio {
+      margin-bottom: 12px;
+      .page-title-row { gap: 12px; }
+      .page-heading { font-size: 1.2rem; line-height: 1.3; overflow-wrap: anywhere; }
+      .page-description { font-size: .8rem; line-height: 1.4; }
+      .header-actions-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 8px;
+        width: 100%;
+        > .btn-primary { order: 0; min-height: 44px; padding: 8px; }
+      }
+      .deck-desktop-actions { display: none; }
+      .deck-mobile-actions {
+        display: block;
+        order: 1;
+        min-width: 0;
+        summary {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
+          min-height: 44px;
+          padding: 8px;
+          box-sizing: border-box;
+          border: 1px solid var(--border-input);
+          border-radius: 8px;
+          background: var(--color-bg-surface);
+          color: var(--color-text-secondary);
+          cursor: pointer;
+          list-style: none;
+          &::-webkit-details-marker { display: none; }
+          &:focus-visible { outline: 3px solid var(--border-focus); outline-offset: 2px; }
+        }
+        &[open] summary svg { transform: rotate(180deg); }
+        .deck-action-menu {
+          display: grid;
+          gap: 8px;
+          padding-top: 8px;
+          button { min-height: 44px; white-space: normal; width: 100%; }
+        }
+      }
+    }
+
+    .pres-studio-body:not(.theater-presenter-mode) {
+      .studio-sub-toolbar {
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        padding: 12px;
+        gap: 12px;
+        .mobile-studio-navigation {
+          display: flex;
+          gap: 8px;
+          align-items: flex-end;
+          min-width: 0;
+          .mobile-slide-jump {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            min-width: 0;
+            gap: 4px;
+            font-size: .75rem;
+            color: var(--color-text-secondary);
+          }
+          select {
+            min-width: 0;
+            width: 100%;
+            min-height: 44px;
+            padding: 8px;
+            font-size: 16px;
+            border: 1px solid var(--border-input);
+            border-radius: 8px;
+            background: var(--color-bg-surface);
+            color: var(--color-text-primary);
+          }
+          .mobile-slide-options-toggle { min-height: 44px; width: auto; flex-shrink: 0; padding: 8px 12px; }
+        }
+        .toolbar-left {
+          display: none;
+          &.mobile-options-open {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr);
+            width: 100%;
+            gap: 8px;
+          }
+          .slide-counter-badge { display: none; }
+          .symbolic-btn-wrap, .theme-quick-dropdown { width: 100%; min-width: 0; }
+          .select-theme-inline { flex: 1; min-width: 0; min-height: 44px; font-size: 16px; }
+        }
+        .toolbar-right {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 8px;
+          width: 100%;
+          .studio-pptx-action { display: none; }
+          .symbolic-btn-wrap { min-width: 0; }
+          .symbolic-action-btn {
+            min-height: 44px;
+            height: auto;
+            width: 100%;
+            padding: 8px 4px;
+            gap: 4px;
+            font-size: .75rem;
+            line-height: 1.25;
+            white-space: normal;
+            .btn-label-responsive { display: inline; }
+            svg { flex-shrink: 0; }
+          }
+        }
+        .symbolic-tooltip { display: none; }
+      }
+
+      .studio-main-grid { min-width: 0; }
+      .studio-presenter-center { min-width: 0; padding: 8px; gap: 12px; }
+      .mobile-deck-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 8px;
+        > button { min-height: 44px; min-width: 44px; width: 44px; padding: 8px; }
+        .mobile-deck-pagination { flex: 1; text-align: center; font-size: .85rem; }
+      }
+      .mobile-deck-view-tools {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 12px;
+        > button { flex: 1; min-width: 0; min-height: 44px; padding: 8px; font-size: .8rem; }
+      }
+      .mobile-deck-nav-bar {
+        gap: 8px;
+        > button { min-height: 44px; }
+      }
+      .pres-slide-text-editor { margin: 0 0 12px; padding: 12px; }
+      .pres-slide-text-editor textarea, .notes-textarea, .copilot-input { font-size: 16px; }
+      .studio-speaker-notes-bar { padding: 12px; }
+      .notes-bar-header { flex-wrap: wrap; gap: 6px; }
+      .notes-hint { line-height: 1.4; }
+      .notes-textarea { min-height: 120px; }
+      .frontend-slides-viewport { min-height: 320px; height: auto; }
+      .frontend-slides-stage-container { flex: none; aspect-ratio: 16 / 9; height: auto; }
+      .frontend-slides-top-bar {
+        padding: 8px;
+        .symbolic-brand-wrap { display: none; }
+        .deck-actions { display: flex; justify-content: flex-end; gap: 8px; width: 100%; }
+        .symbolic-btn-wrap:has([aria-label="Download Standalone HTML Presentation"]) { display: none; }
+        .symbolic-action-btn { min-width: 44px; min-height: 44px; height: auto; }
+        .btn-label-responsive { display: inline; }
+        .symbolic-tooltip { display: none; }
+      }
+      .frontend-slides-controls .nav-btn { min-width: 44px; min-height: 44px; }
+    }
+    .pres-regen-dialog-backdrop { position: fixed; padding: 12px; overflow-y: auto; }
+    .pres-regen-dialog { box-sizing: border-box; max-height: calc(100dvh - 24px); overflow-y: auto; }
+  }
+
+  // The header already offers HRIDAY; keep the floating launcher off deck controls.
+  body:has(.presentation-page-shell.mode-studio) .global-copilot-launcher { display: none; }
+}
