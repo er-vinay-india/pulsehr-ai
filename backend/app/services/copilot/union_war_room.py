@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 # Strict boundary defaults
 WAR_ROOM_TOTAL_TIMEOUT_SECONDS = 60.0
-CANDIDATE_ANSWER_MAX_TOKENS = 180
+CANDIDATE_ANSWER_MAX_TOKENS = 250
 VOTE_MAX_TOKENS = 60
 ELECTED_ANSWER_MAX_TOKENS = 500
 
@@ -98,6 +98,7 @@ COUNCIL_DELEGATES: list[CouncilDelegate] = [
 def clean_llm_text(text: str) -> str:
     """Strips <think>...</think> reasoning tags and markdown noise."""
     cleaned = re.sub(r'<think>[\s\S]*?</think>', '', text, flags=re.IGNORECASE)
+    cleaned = re.sub(r'<think>[\s\S]*$', '', cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r'```(?:json)?', '', cleaned)
     return cleaned.strip()
 
@@ -115,6 +116,7 @@ def _call_ollama_completion(
         "model": model,
         "prompt": prompt,
         "stream": False,
+        "think": False,
         "options": {
             "num_predict": max_tokens,
             "temperature": temperature,
@@ -200,7 +202,7 @@ class UnionWarRoomEngine:
             user_query=user_query,
             dataset_summary=dataset_summary,
             candidate_answers=candidate_answers,
-            timeout_per_model=min(7.0, remaining_time * 0.4)
+            timeout_per_model=max(10.0, min(14.0, remaining_time / len(COUNCIL_DELEGATES)))
         )
 
         # Phase 3: Deliver the elected replier's answer with full council resolution
@@ -302,6 +304,42 @@ class UnionWarRoomEngine:
         }
 
     @classmethod
+    def _generate_resilient_fallback(
+        cls,
+        d: CouncilDelegate,
+        user_query: str,
+        dataset_summary: str
+    ) -> str:
+        """Generates an intelligent, intent-aware emergency fallback if a model call fails."""
+        q_low = user_query.lower().strip()
+        is_greeting = any(w in q_low for w in ["hi", "hello", "hey", "namaste", "good morning", "good evening", "greetings"])
+        is_irrelevant = any(w in q_low for w in ["weather", "temperature", "forecast", "recipe", "cook", "movie", "song", "sports", "score", "game", "joke"])
+
+        if is_greeting:
+            return (
+                f"Hello! I am {d.name}, serving as {d.role_title} on the HRIDAY Executive AI Council. "
+                f"Welcome to the War Room—how can I assist you with your datasets, workforce performance, or operational decisions today?"
+            )
+
+        if is_irrelevant:
+            return (
+                f"I don't have access to external or real-time web services like weather forecasts. "
+                f"As {d.role_title}, my focus is on analyzing your enterprise datasets, operational metrics, and organizational decisions."
+            )
+
+        if "no specific dataset attached" in dataset_summary.lower():
+            return (
+                f"I'm ready to provide analysis as {d.role_title}, but no dataset is currently active. "
+                f"Please upload or select a spreadsheet dataset so I can evaluate verified metrics and trends for you."
+            )
+
+        first_line = dataset_summary.splitlines()[0] if dataset_summary else "the active dataset"
+        return (
+            f"From my perspective as {d.role_title}, evaluating {first_line} establishes verified operational baselines. "
+            f"Key metrics warrant regular monitoring to support sound organizational planning."
+        )
+
+    @classmethod
     def _fetch_single_candidate_answer(
         cls,
         d: CouncilDelegate,
@@ -310,8 +348,8 @@ class UnionWarRoomEngine:
         timeout_per_model: float = 14.0
     ) -> str:
         """Fetches the proposed complete answer from a single council delegate."""
-        prompt = f"""You are {d.name}, the {d.role_title} on the Executive AI Union Council.
-Your specialized domain is: {d.domain_specialty}.
+        prompt = f"""You are {d.name}, serving as {d.role_title} on the Executive AI Council for HRIDAY.
+Your domain specialty: {d.domain_specialty}.
 
 DATASET CONTEXT:
 {dataset_summary}
@@ -319,48 +357,19 @@ DATASET CONTEXT:
 USER INQUIRY:
 "{user_query}"
 
-TASK:
-Draft your proposed complete answer to the user's question, applying your specific domain expertise ({d.role_title}).
-- Ground your answer in factual analysis, specific metrics, or sound operational logic matching your role.
-- Be authoritative, direct, and actionable.
-- Answer in 3 to 4 concise sentences (80 to 130 words). Do NOT say 'as an AI'.
-This proposed answer will be submitted to the Council for democratic voting to elect the final Replier."""
+INSTRUCTIONS:
+1. GREETINGS & INTRODUCTIONS: If the user says hello or greets (e.g. 'hi', 'hello', 'hey'): give a warm, natural, intelligent welcome as {d.name}. Acknowledge HRIDAY and state how you can help.
+2. IRRELEVANT / OUT-OF-SCOPE INQUIRIES: If the user asks about external topics outside enterprise/data scope (e.g. weather forecast, recipes, sports, pop culture): politely decline, clarifying that the Council specializes in enterprise analytics and operational datasets.
+3. DATA & REPORT QUESTIONS: Give direct, concrete, authoritative answers grounded in the dataset context. If no dataset is attached and a report is requested, clearly let the user know they need to upload or select a dataset first.
+4. TONE & STYLE: Speak naturally and authentically in your own distinct perspective. Avoid formulaic filler phrases like 'From a causal logic standpoint' or mechanical boilerplate.
+Draft your proposed complete answer in 2 to 4 clear, high-signal sentences."""
 
         res = _call_ollama_completion(d.primary_model, prompt, max_tokens=CANDIDATE_ANSWER_MAX_TOKENS, timeout_s=timeout_per_model)
         if not res and d.fallback_model != d.primary_model:
             res = _call_ollama_completion(d.fallback_model, prompt, max_tokens=CANDIDATE_ANSWER_MAX_TOKENS, timeout_s=timeout_per_model * 0.7)
 
         if not res:
-            if "Quantitative" in d.role_title:
-                res = (
-                    f"From an empirical data perspective, evaluating {dataset_summary.splitlines()[0] if dataset_summary else 'the dataset'} "
-                    f"establishes verified numerical baselines across all evaluated records. Statistical averages and frequency distributions "
-                    f"confirm operational consistency within standard parameters, though lower-quartile deviations warrant targeted metric tracking."
-                )
-            elif "Reasoning" in d.role_title:
-                res = (
-                    f"From a causal logic standpoint, addressing '{user_query}' requires isolating root-cause structural drivers from surface symptoms. "
-                    f"Systemic interdependencies across operating units demonstrate that resolving foundational friction points yields significantly "
-                    f"higher ROI and stability than applying uniform cosmetic policy adjustments."
-                )
-            elif "Realism" in d.role_title:
-                res = (
-                    f"From an operational realism lens, theoretical plans inevitably face frontline execution friction. Shift constraints, "
-                    f"workflow handoffs, and behavioral compliance hurdles dictate that implementation must incorporate realistic buffer intervals "
-                    f"and phased rollouts rather than assuming immediate zero-friction adoption."
-                )
-            elif "Governance" in d.role_title:
-                res = (
-                    f"From a statutory governance and risk perspective, any operational changes regarding '{user_query}' must conform to "
-                    f"established compliance frameworks and corporate policies. Implementing transparent audit trails and mandatory deviation escalation "
-                    f"safeguards organizational integrity before broad scaling."
-                )
-            else:
-                res = (
-                    f"Strategically, executive prioritization must balance immediate metric stabilization with sustainable organizational roadmaps. "
-                    f"Leadership should align cross-functional stakeholders, establish transparent milestone reviews, and allocate resources "
-                    f"to highest-impact operational priorities."
-                )
+            res = cls._generate_resilient_fallback(d, user_query, dataset_summary)
 
         return res
 
@@ -417,7 +426,7 @@ STRICT DEMOCRATIC VOTING RULE:
 You CANNOT vote for yourself ({d.name}). You must evaluate the other 4 candidates above and cast your vote for the SINGLE BEST REPLIER among them.
 
 TASK:
-Pick the candidate whose answer provides the most accurate, thorough, and valuable response.
+Pick the candidate whose answer provides the most natural, authentic, and helpful response to the user's inquiry.
 Provide ONE short sentence explaining your vote from your perspective as {d.role_title}.
 
 OUTPUT FORMAT (strictly follow this):
@@ -553,7 +562,7 @@ RATIONALE: <Your single-sentence reason for choosing this replier, under 25 word
             user_query=user_query,
             dataset_summary=dataset_summary,
             candidate_answers=candidate_answers,
-            timeout_per_model=8.0
+            timeout_per_model=11.0
         )
 
         for d in COUNCIL_DELEGATES:

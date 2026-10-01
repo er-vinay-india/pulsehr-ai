@@ -129,7 +129,7 @@ export async function streamCopilotQuery(
   priorContext = null,
   snapshotId = null,
   page = null,
-  timeoutSeconds = 30.0
+  timeoutSeconds = 60.0
 ) {
   const { onStatus, onToken, onDone, onError, onWarRoomInit, onDelegatePerspective, onDelegateVote } = callbacks;
   try {
