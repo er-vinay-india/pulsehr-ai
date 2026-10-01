@@ -94,7 +94,7 @@ function minimalOptions(option, isDark = false) {
         if (d && typeof d === 'object' && !Array.isArray(d)) {
           const itemColor = d.color ? sanitizeColor(d.color, activePalette[dIdx % activePalette.length]) : undefined;
           const itemStyleColor = d.itemStyle?.color ? sanitizeColor(d.itemStyle.color, activePalette[dIdx % activePalette.length]) : undefined;
-          const itemBorderColor = d.itemStyle?.borderColor ? sanitizeColor(d.itemStyle.borderColor, isDark ? '#0F1B2D' : '#FFFFFF') : undefined;
+          const itemBorderColor = d.itemStyle?.borderColor ? sanitizeColor(d.itemStyle.borderColor, tokens.colors.surface) : undefined;
           return {
             ...d,
             ...(itemColor ? { color: itemColor } : {}),
@@ -117,7 +117,7 @@ function minimalOptions(option, isDark = false) {
         borderRadius: s.type === 'bar' ? 2 : undefined,
         ...s.itemStyle,
         color: seriesColor,
-        borderColor: sanitizeColor(s.itemStyle?.borderColor, isDark ? '#0F1B2D' : '#FFFFFF'),
+        borderColor: sanitizeColor(s.itemStyle?.borderColor, tokens.colors.surface),
       },
       lineStyle: {
         width: 2,
@@ -127,7 +127,7 @@ function minimalOptions(option, isDark = false) {
       },
       label: s.label ? {
         ...s.label,
-        color: sanitizeColor(s.label?.color, isDark ? '#CBD5E1' : '#334155'),
+        color: sanitizeColor(s.label?.color, tokens.colors.textSecondary),
       } : undefined,
       areaStyle: s.areaStyle ? {
         opacity: isDark ? 0.15 : 0.08,
@@ -147,14 +147,14 @@ function minimalOptions(option, isDark = false) {
     if (dz.type === 'slider') {
       return {
         ...dz,
-        borderColor: isDark ? '#26384D' : '#CBD5E1',
-        fillerColor: isDark ? 'rgba(94, 234, 212, 0.2)' : 'rgba(0, 90, 107, 0.15)',
+        borderColor: tokens.colors.borderStrong,
+        fillerColor: tokens.colors.mint,
         handleStyle: {
-          color: isDark ? '#5EEAD4' : '#005A6B',
+          color: tokens.colors.brandAccent,
           ...dz.handleStyle,
         },
         textStyle: {
-          color: isDark ? '#CBD5E1' : '#334155',
+          color: tokens.colors.textSecondary,
           fontSize: 10,
           ...dz.textStyle,
         },

@@ -1,0 +1,101 @@
+/* Shared controls use explicit foreground/background pairs in both themes.
+   Imported after legacy component styles to preserve their layout. */
+:root {
+  .btn-primary, .btn-primary-compact, .btn-header-upload, .copilot-send-btn,
+  .btn-hero-primary, .skip-link {
+    background: var(--btn-primary-bg);
+    color: var(--btn-primary-fg);
+    border-color: var(--btn-primary-border);
+    box-shadow: var(--shadow-sm);
+
+    &:hover:not(:disabled) {
+      background: var(--btn-primary-hover);
+      color: var(--btn-primary-fg);
+      border-color: var(--btn-primary-hover);
+      opacity: 1;
+    }
+  }
+
+  .eda-dashboard .eda-hero-card .btn-rerun-eda {
+    background: var(--btn-primary-bg);
+    color: var(--btn-primary-fg);
+    border-color: var(--btn-primary-border);
+    &:hover { background: var(--btn-primary-hover); color: var(--btn-primary-fg); }
+  }
+
+  .btn-secondary {
+    background: var(--color-bg-surface);
+    color: var(--color-brand-primary);
+    border-color: var(--color-border-strong);
+
+    &:hover:not(:disabled) {
+      background: var(--color-bg-subtle);
+      color: var(--color-brand-primary);
+      border-color: var(--color-brand-primary);
+    }
+  }
+
+  .btn-theme-toggle {
+    color: var(--color-text-primary);
+    background: var(--color-bg-surface);
+    border-color: var(--color-border-strong);
+  }
+
+  .global-copilot-launcher {
+    background: var(--hriday-gradient);
+    border-color: var(--color-border-strong);
+    box-shadow: var(--shadow-md);
+    color: var(--hv-text-on-dark);
+
+    &:hover { background: var(--hriday-gradient-hover); }
+    .launcher-label, .launcher-sub { color: var(--hv-text-on-dark); opacity: 1; }
+  }
+
+  .scope-line-separator, .evidence-separator { color: var(--color-text-muted); }
+
+  .adaptive-priority-metric {
+    background: var(--color-bg-soft-teal);
+    border-color: var(--color-border);
+  }
+  .adaptive-priority-card { box-shadow: var(--shadow-md); }
+  .adaptive-kpi-card { box-shadow: var(--shadow-card); }
+  .adaptive-priority-card .adaptive-priority-metric--hero {
+    background: var(--color-bg-soft-teal);
+  }
+
+  .avatar-small, .avatar-large, .chat-message.assistant .avatar-icon {
+    color: var(--fg-on-brand);
+  }
+
+  .model-chip { background: var(--color-bg-subtle); color: var(--color-text-muted); }
+
+  .copilot-text-input {
+    background: var(--color-bg-surface);
+    color: var(--color-text-primary);
+    border-color: var(--color-border-strong);
+    &:focus { border-color: var(--color-focus); }
+  }
+  .copilot-header-actions .btn-copilot-action, .suggestion-chip {
+    border-color: var(--color-border-strong);
+  }
+
+  button:focus-visible, a:focus-visible, input:focus-visible,
+  select:focus-visible, textarea:focus-visible, summary:focus-visible {
+    outline: 3px solid var(--color-focus);
+    outline-offset: 3px;
+  }
+
+  input::placeholder, textarea::placeholder {
+    color: var(--color-text-muted);
+    opacity: 1;
+  }
+}
+
+.app-header .brand-group .brand-logo-wrap .brand-logo-img { filter: none; }
+
+/* Inline prose links stay identifiable without relying on colour alone. */
+.message-content a, .markdown-view a, .briefing-narrative-box a {
+  color: var(--color-brand-accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}

@@ -2137,7 +2137,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
                     gap: "6px",
                     padding: "0.4rem 0.8rem",
                     borderRadius: "6px",
-                    border: "1px solid rgba(255, 176, 137, 0.3)",
+                    border: "1px solid var(--color-border-strong)",
                     background: themeTokens.colors.softGold,
                     color: themeTokens.colors.gold,
                     fontSize: "0.8rem",
@@ -2307,7 +2307,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
                       {activeCohortBreakdown.table_rows.map((row, idx) => {
                         const isTop = row.category === activeCohortBreakdown.top_category;
                         return (
-                          <tr key={idx} style={{ borderBottom: "1px solid rgba(255,255,255,0.04)", background: isTop ? "rgba(255, 159, 67, 0.08)" : undefined }}>
+                          <tr key={idx} style={{ borderBottom: "1px solid var(--color-divider)", background: isTop ? "var(--color-bg-soft-gold)" : undefined }}>
                             <td style={{ padding: "6px 8px", fontWeight: isTop ? 700 : 500, color: isTop ? themeTokens.colors.gold : "inherit" }}>
                               {row.category}
                             </td>
@@ -2628,7 +2628,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
               {inspectTarget === "decision" && decisionElement && (
                 <div className="inspect-item">
                   <span className="item-label">Decision Target & Recommendation</span>
-                  <div className="inspect-decision-summary" style={{ fontSize: "13px", lineHeight: "1.6", color: "var(--fg-secondary, #c9bdb0)" }}>
+                  <div className="inspect-decision-summary" style={{ fontSize: "13px", lineHeight: "1.6", color: "var(--color-text-secondary)" }}>
                     <div><strong>Focus Subject:</strong> {decisionElement.subject_type}: {decisionElement.subject_label}</div>
                     <div><strong>Observed vs Comparator:</strong> {decisionElement.formatted_observed_value} vs {decisionElement.formatted_comparator_value} ({decisionElement.formatted_gap_value})</div>
                     <div><strong>Next Diagnostic Step:</strong> {decisionElement.next_step}</div>

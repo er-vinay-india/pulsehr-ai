@@ -1,162 +1,177 @@
+/* Navy / emerald theme. Text tokens target >= 7:1 across semantic surfaces.
+   Control borders target >= 3:1; decorative dividers may be quieter.
+   Single palette source: JavaScript chart tokens are generated from this file.
+   Verify with npm run test:theme. */
 :root, [data-theme="light"] {
   /* ========================================================================
      HighView & HRIDAY Unified Brand System Tokens — LIGHT MODE (DEFAULT)
-     WCAG AAA Accessible Core Design System
-     Single Source of Truth for the Entire Application
+     WCAG AAA Text Contrast Palette
+     Canonical SCSS palette; JavaScript chart tokens are generated from these values
      ======================================================================== */
   color-scheme: light;
+  --overlay-backdrop: rgba(0, 0, 0, 0.75);
+  --color-bg-soft-gold: #F6EDDA;
+  --color-bg-soft-error: #FAEAEE;
+  --color-brand-blue: #234E70;
+  --color-gold: #65470C;
+  --color-violet: #513B72;
 
   /* ------------------------------------------------------------------------
      1. Semantic Theme Tokens
      ------------------------------------------------------------------------ */
-  --color-bg-page: #F8FAFC;
+  --color-bg-page: #F6F5F0;
   --color-bg-surface: #FFFFFF;
   --color-bg-elevated: #FFFFFF;
-  --color-bg-subtle: #F1F5F9;
-  --color-bg-soft-blue: #EAF4FF;
-  --color-bg-soft-teal: #E6F4F1;
+  --color-bg-subtle: #EEEFE9;
+  --color-bg-soft-blue: #EAF0F5;
+  --color-bg-soft-teal: #E7F3ED;
 
-  --color-text-primary: #0B1F3A;
-  --color-text-secondary: #334155;
-  --color-text-muted: #64748B;
+  --color-text-primary: #172B3A;
+  --color-text-secondary: #334B57;
+  --color-text-muted: #3C5059;
 
-  --color-brand-primary: #0B1F3A;
-  --color-brand-secondary: #005A6B;
-  --color-brand-accent: #155EEF;
+  --color-brand-primary: #183B56;
+  --color-brand-secondary: #075443;
+  --color-brand-accent: #075443;
 
-  --color-border: #E2E8F0;
-  --color-divider: #F1F5F9;
-  --color-border-strong: #CBD5E1;
+  --color-border: #D4DDD6;
+  --color-divider: #E5E9E3;
+  --color-border-strong: #78877F;
 
-  --color-success: #365314;
-  --color-info: #005A6B;
-  --color-warning: #B7791F;
-  --color-error: #B91C1C;
-  --color-focus: #155EEF;
+  --color-success: #075443;
+  --color-info: #234E70;
+  --color-warning: #65470C;
+  --color-error: #8E1938;
+  --color-focus: #075443;
 
   /* ------------------------------------------------------------------------
      2. HighView-Specific Tokens (Analytical, Executive, Crisp, Data-Driven)
-     Ratio: 70% light neutral surfaces, 20% navy/blue/teal, 10% bright brand accents
+     Warm neutral surfaces, navy identity, emerald actions, restrained gold
      ------------------------------------------------------------------------ */
-  --hv-primary: #0B1F3A;
-  --hv-secondary: #005A6B;
-  --hv-accent-blue: #155EEF;
-  --hv-accent-cyan: #22C7F2;
-  --hv-accent-teal: #14B8A6;
-  --hv-accent-green: #84CC16;
-  --hv-deep-blue: #123B5D;
+  --hv-primary: var(--color-brand-primary);
+  --hv-secondary: var(--color-brand-secondary);
+  --hv-accent-blue: var(--color-brand-blue);
+  --hv-accent-cyan: var(--color-brand-accent);
+  --hv-accent-teal: var(--color-brand-secondary);
+  --hv-accent-green: var(--color-success);
+  --hv-deep-blue: var(--color-brand-blue);
 
-  --hv-brand-primary: #0B1F3A;
-  --hv-brand-secondary: #005A6B;
-  --hv-brand-accent: #155EEF;
-  --hv-brand-navy: #0B1F3A;
-  --hv-brand-blue: #123B5D;
-  --hv-brand-cyan: #22C7F2;
-  --hv-brand-teal: #14B8A6;
-  --hv-brand-green: #84CC16;
+  --hv-brand-primary: var(--color-brand-primary);
+  --hv-brand-secondary: var(--color-brand-secondary);
+  --hv-brand-accent: var(--color-brand-accent);
+  --hv-brand-navy: var(--color-brand-primary);
+  --hv-brand-blue: var(--color-brand-blue);
+  --hv-brand-cyan: var(--color-brand-accent);
+  --hv-brand-teal: var(--color-brand-secondary);
+  --hv-brand-green: var(--color-success);
 
   /* HighView Accessible Foreground & Text Tokens (WCAG AAA >= 7:1) */
-  --hv-text-primary: #0B1F3A;          /* 15.8:1 contrast on #F8FAFC (AAA) */
-  --hv-text-secondary: #334155;        /* 9.5:1 contrast on #F8FAFC (AAA) */
-  --hv-text-muted: #64748B;            /* 4.8:1 contrast (AA) */
+  --hv-text-primary: var(--color-text-primary);
+  --hv-text-secondary: var(--color-text-secondary);
+  --hv-text-muted: var(--color-text-muted);
   --hv-text-on-dark: #FFFFFF;
 
   /* HighView Accessible Background & Surface Tokens */
-  --hv-bg-page: #F8FAFC;
-  --hv-bg-surface: #FFFFFF;
-  --hv-bg-surface-hover: #F1F5F9;
-  --hv-bg-mint: #E6F4F1;
-  --hv-bg-inset: #F8FAFC;
+  --hv-bg-page: var(--color-bg-page);
+  --hv-bg-surface: var(--color-bg-surface);
+  --hv-bg-surface-hover: var(--color-bg-subtle);
+  --hv-bg-mint: var(--color-bg-soft-teal);
+  --hv-bg-inset: var(--color-bg-page);
 
   /* HighView Borders */
-  --hv-border: #E2E8F0;
-  --hv-border-subtle: #F1F5F9;
-  --hv-border-strong: #CBD5E1;
-  --hv-border-focus: #155EEF;
+  --hv-border: var(--color-border);
+  --hv-border-subtle: var(--color-divider);
+  --hv-border-strong: var(--color-border-strong);
+  --hv-border-focus: var(--color-focus);
 
   /* HighView Semantic Status Tiers */
-  --hv-success: #365314;
-  --hv-success-bg: #E6F4F1;
-  --hv-status-success: #365314;
-  --hv-status-success-bg: #DCFCE7;
-  --hv-status-success-border: #86EFAC;
-  --hv-status-warning: #B7791F;
-  --hv-status-error: #B91C1C;
-  --hv-info: #005A6B;
-  --hv-info-bg: #EAF4FF;
+  --hv-success: var(--color-success);
+  --hv-success-bg: var(--color-bg-soft-teal);
+  --hv-status-success: var(--color-success);
+  --hv-status-success-bg: var(--color-bg-soft-teal);
+  --hv-status-success-border: var(--color-border-strong);
+  --hv-status-warning: var(--color-warning);
+  --hv-status-error: var(--color-error);
+  --hv-info: var(--color-info);
+  --hv-info-bg: var(--color-bg-soft-blue);
 
-  /* Chart Tokens — Accessible on #FFFFFF & #F8FAFC (Light Mode) */
-  --chart-text: #334155;               /* 9.3:1 (AAA) */
-  --chart-title: #0B1F3A;              /* 16.9:1 (AAA) */
-  --chart-grid: rgba(11, 31, 58, 0.08);
-  --chart-axis-line: #CBD5E1;
-  --chart-tooltip-bg: #FFFFFF;
-  --chart-tooltip-border: #CBD5E1;
-  --chart-tooltip-text: #0B1F3A;
-  --chart-tooltip-subtext: #334155;
-  --chart-series-1: #005A6B;           /* Accessible Teal: 7.7:1 (AAA) */
-  --chart-series-2: #123B5D;           /* Deep Blue: 11.2:1 (AAA) */
-  --chart-series-3: #365314;           /* Accessible Green: 7.8:1 (AAA) */
-  --chart-series-4: #155EEF;           /* Primary Blue: 4.8:1 (AA) */
-  --chart-series-5: #0F766E;           /* Dark Teal: 5.4:1 (AA) */
-  --chart-series-6: #0B1F3A;           /* Deep Navy: 16.9:1 (AAA) */
-  --chart-series-7: #6B21A8;           /* Deep Purple: 10.0:1 (AAA) */
-  --chart-series-8: #C2410C;           /* Rust Amber: 4.8:1 (AA) */
+  /* Chart Tokens — high contrast against all semantic light surfaces */
+  --chart-text: var(--color-text-secondary);
+  --chart-title: var(--color-text-primary);
+  --chart-grid: rgba(23, 43, 58, 0.1);
+  --chart-axis-line: var(--color-border-strong);
+  --chart-tooltip-bg: var(--color-bg-elevated);
+  --chart-tooltip-border: var(--color-border-strong);
+  --chart-tooltip-text: var(--color-text-primary);
+  --chart-tooltip-subtext: var(--color-text-secondary);
+  --chart-series-1: var(--color-brand-secondary);
+  --chart-series-2: var(--color-brand-blue);
+  --chart-series-3: var(--color-gold);
+  --chart-series-4: var(--color-error);
+  --chart-series-5: var(--color-violet);
+  --chart-series-6: var(--color-text-primary);
+  --chart-series-7: var(--color-text-secondary);
+  --color-ochre: #744018;
+  --chart-series-8: var(--color-ochre);
+  --chart-heatmap-negative: var(--color-error);
+  --chart-heatmap-neutral: var(--color-brand-primary);
+  --chart-heatmap-positive: var(--color-success);
+  --chart-heatmap-text: var(--btn-primary-fg);
 
-  /* Preferred HighView Gradient (#155EEF -> #22C7F2 -> #14B8A6 -> #84CC16) */
-  --hv-gradient: linear-gradient(135deg, #155EEF 0%, #22C7F2 35%, #14B8A6 70%, #84CC16 100%);
-  --hv-gradient-subtle: linear-gradient(135deg, rgba(21, 94, 239, 0.08) 0%, rgba(34, 199, 242, 0.08) 50%, rgba(20, 184, 166, 0.08) 100%);
+  /* Brand gradient: opaque navy to emerald; white labels only */
+  --hv-gradient: linear-gradient(135deg, #183B56 0%, #075443 100%);
+  --hv-gradient-subtle: linear-gradient(135deg, var(--color-bg-soft-blue), var(--color-bg-soft-teal));
 
   /* Navigation Specific (Clean Light Surface in Light Mode) */
-  --nav-bg: #FFFFFF;
-  --nav-border: #E2E8F0;
-  --nav-text-primary: #0B1F3A;
-  --nav-text-secondary: #334155;
-  --nav-active-fg: #005A6B;
-  --nav-active-bg: #E6F4F1;
-  --nav-active-indicator: #005A6B;
+  --nav-bg: var(--color-bg-surface);
+  --nav-border: var(--color-border);
+  --nav-text-primary: var(--color-text-primary);
+  --nav-text-secondary: var(--color-text-secondary);
+  --nav-active-fg: var(--color-brand-secondary);
+  --nav-active-bg: var(--color-bg-soft-teal);
+  --nav-active-indicator: var(--color-brand-secondary);
 
   /* Buttons */
-  --btn-primary-bg: #0B1F3A;
-  --btn-primary-hover: #123B5D;
+  --btn-primary-bg: var(--color-brand-accent);
+  --btn-primary-hover: #064536;
   --btn-primary-fg: #FFFFFF;
-  --btn-primary-border: #0B1F3A;
+  --btn-primary-border: var(--color-brand-accent);
 
-  --btn-secondary-bg: #005A6B;
-  --btn-secondary-hover: #004552;
+  --btn-secondary-bg: var(--color-brand-primary);
+  --btn-secondary-hover: #122F45;
   --btn-secondary-fg: #FFFFFF;
-  --btn-secondary-border: #005A6B;
+  --btn-secondary-border: var(--color-brand-primary);
 
-  --btn-outline-border: #005A6B;
-  --btn-outline-fg: #005A6B;
+  --btn-outline-border: var(--color-brand-accent);
+  --btn-outline-fg: var(--color-brand-accent);
   --btn-outline-bg: transparent;
 
   /* ------------------------------------------------------------------------
      3. HRIDAY ASSISTANT PALETTE (Warm, Human, Intelligent, Supportive)
      ------------------------------------------------------------------------ */
-  --hriday-primary: #102A43;           /* Primary HRIDAY Navy: header & identity */
-  --hriday-surface: #FFFFFF;
-  --hriday-secondary: #0F766E;         /* Human Teal: action buttons, interactive accent */
-  --hriday-accent: #0891B2;            /* Warm Cyan: AI activity / thinking states */
-  --hriday-success: #3F7D20;           /* Positive AI recommendation */
-  --hriday-heart-green: #3F7D20;
-  --hriday-warm: #B7791F;              /* Warm Gold Accent: subtle personality highlight */
-  --hriday-bg-soft: #E8F7F5;           /* Soft Aqua: assistant message background */
-  --hriday-bg-cream: #FFF9F0;          /* Soft Cream: warm assistant highlights */
-  --hriday-text: #1E293B;              /* HRIDAY Primary Text: assistant message copy */
-  --hriday-text-secondary: #334155;
-  --hriday-text-muted: #475569;
-  --hriday-border: rgba(15, 118, 110, 0.25);
+  --hriday-primary: #183B56;
+  --hriday-surface: var(--color-bg-surface);
+  --hriday-secondary: var(--color-brand-secondary);
+  --hriday-accent: var(--color-brand-blue);
+  --hriday-success: var(--color-success);
+  --hriday-heart-green: var(--color-success);
+  --hriday-warm: var(--color-gold);
+  --hriday-bg-soft: var(--color-bg-soft-teal);
+  --hriday-bg-cream: var(--color-bg-soft-gold);
+  --hriday-text: var(--color-text-primary);
+  --hriday-text-secondary: var(--color-text-secondary);
+  --hriday-text-muted: var(--color-text-muted);
+  --hriday-border: var(--color-border-strong);
 
-  --hriday-gradient: linear-gradient(135deg, #102A43 0%, #0F766E 50%, #0891B2 100%);
-  --hriday-gradient-hover: linear-gradient(135deg, #0b2034 0%, #0d645e 50%, #077995 100%);
-  --hriday-glow: rgba(15, 118, 110, 0.35);
+  --hriday-gradient: linear-gradient(135deg, #183B56 0%, #075443 100%);
+  --hriday-gradient-hover: linear-gradient(135deg, #122F45 0%, #064536 100%);
+  --hriday-glow: rgba(7, 84, 67, 0.18);
 
   /* Shadows (Restrained Drop Shadows) */
-  --shadow-sm: 0 1px 3px rgba(11, 31, 58, 0.06), 0 1px 2px rgba(11, 31, 58, 0.04);
-  --shadow-md: 0 4px 14px -2px rgba(11, 31, 58, 0.09), 0 2px 6px -1px rgba(11, 31, 58, 0.05);
-  --shadow-lg: 0 12px 32px -4px rgba(11, 31, 58, 0.12), 0 4px 12px -2px rgba(11, 31, 58, 0.06);
-  --shadow-card: 0 2px 8px rgba(11, 31, 58, 0.06), 0 1px 3px rgba(11, 31, 58, 0.04);
+  --shadow-sm: 0 1px 3px rgba(23, 43, 58, 0.05);
+  --shadow-md: 0 6px 18px -4px rgba(23, 43, 58, 0.09);
+  --shadow-lg: 0 16px 40px -8px rgba(23, 43, 58, 0.16);
+  --shadow-card: 0 2px 8px rgba(23, 43, 58, 0.045);
 
   /* Global Compatibility Aliases */
   --bg-canvas: var(--color-bg-page);
@@ -169,7 +184,7 @@
   --surface-inset: var(--color-bg-page);
   --surface-header: var(--nav-bg);
   --surface-header-end: var(--nav-bg);
-  --surface-footer: var(--color-bg-surface);
+  --surface-footer: var(--color-bg-page);
   --shell-edge: var(--color-border);
 
   --header-bg: var(--nav-bg);
@@ -188,30 +203,32 @@
   --fg-primary: var(--color-text-primary);
   --fg-secondary: var(--color-text-secondary);
   --fg-muted: var(--color-text-muted);
-  --fg-disabled: #94A3B8;
-  --fg-on-brand: #FFFFFF;
-  --fg-on-accent: #FFFFFF;
+  --fg-disabled: var(--color-text-muted);
+  --fg-on-brand: var(--btn-primary-fg);
+  --fg-on-accent: var(--btn-primary-fg);
 
-  --brand-400: var(--hv-accent-cyan);
-  --brand-500: var(--hv-accent-blue);
-  --brand-600: var(--hv-primary);
-  --brand-700: #08172B;
-  --brand-accent: var(--hv-accent-blue);
-  --brand-glow: rgba(21, 94, 239, 0.22);
-  --brand-subtle: rgba(21, 94, 239, 0.08);
-  --brand-subtle-border: rgba(21, 94, 239, 0.25);
-  --bg-brand: var(--hv-primary);
+  --brand-400: var(--color-brand-accent);
+  --brand-500: var(--color-brand-accent);
+  --brand-600: var(--color-brand-accent);
+  --brand-700: var(--btn-primary-hover);
+  --brand-accent: var(--color-brand-accent);
+  --brand-glow: rgba(7, 84, 67, 0.18);
+  --brand-subtle: var(--color-bg-soft-teal);
+  --brand-subtle-border: var(--color-border-strong);
+  --bg-brand: var(--color-brand-accent);
   --surface-elevated: var(--color-bg-elevated);
+  --bg-surface: var(--color-bg-surface);
+  --bg-surface-elevated: var(--color-bg-elevated);
 
-  --accent-500: var(--hv-brand-secondary); /* Accessible Teal #005A6B */
-  --accent-soft: rgba(0, 90, 107, 0.1);
+  --accent-500: var(--hv-brand-secondary); /* Theme accent */
+  --accent-soft: var(--color-bg-soft-teal);
 
   --emerald-tier: var(--color-success);
-  --emerald-bg: var(--hv-success-bg);
+  --emerald-bg: var(--color-bg-soft-teal);
   --amber-tier: var(--color-warning);
-  --amber-bg: var(--hriday-bg-cream);
+  --amber-bg: var(--color-bg-soft-gold);
   --rose-tier: var(--color-error);
-  --rose-bg: #FEF2F2;
+  --rose-bg: var(--color-bg-soft-error);
 
   /* Radii & Typography & Layout (Immutable across themes) */
   --radius-xs: 6px;
@@ -233,152 +250,162 @@
    ========================================================================== */
 [data-theme="dark"] {
   color-scheme: dark;
+  --color-bg-soft-gold: #3A3022;
+  --color-bg-soft-error: #402934;
+  --color-brand-blue: #A9CAE8;
+  --color-gold: #E8C675;
+  --color-violet: #D2C1E9;
 
   /* ------------------------------------------------------------------------
      1. Semantic Theme Tokens (Dark Mode)
      ------------------------------------------------------------------------ */
-  --color-bg-page: #08111F;
-  --color-bg-surface: #0F1B2D;
-  --color-bg-elevated: #172A40;
-  --color-bg-subtle: #132238;
-  --color-bg-soft-blue: rgba(96, 165, 250, 0.12);
-  --color-bg-soft-teal: rgba(45, 212, 191, 0.12);
+  --color-bg-page: #101B27;
+  --color-bg-surface: #172635;
+  --color-bg-elevated: #203445;
+  --color-bg-subtle: #1C2E3E;
+  --color-bg-soft-blue: #203748;
+  --color-bg-soft-teal: #1C3834;
 
-  --color-text-primary: #F8FAFC;
-  --color-text-secondary: #CBD5E1;
-  --color-text-muted: #94A3B8;
+  --color-text-primary: #F4F5EF;
+  --color-text-secondary: #D3DED9;
+  --color-text-muted: #BDCBC5;
 
-  --color-brand-primary: #60A5FA;
-  --color-brand-secondary: #5EEAD4;
-  --color-brand-accent: #60A5FA;
+  --color-brand-primary: #A9CAE8;
+  --color-brand-secondary: #82D9B5;
+  --color-brand-accent: #82D9B5;
 
-  --color-border: #26384D;
-  --color-divider: #1E3146;
-  --color-border-strong: #334960;
+  --color-border: #3B4E5A;
+  --color-divider: #2B3E4C;
+  --color-border-strong: #82968F;
 
-  --color-success: #A3E635;
-  --color-info: #5EEAD4;
-  --color-warning: #FBBF24;
-  --color-error: #F87171;
-  --color-focus: #60A5FA;
+  --color-success: #82D9B5;
+  --color-info: #A9CAE8;
+  --color-warning: #E8C675;
+  --color-error: #FFB3C0;
+  --color-focus: #82D9B5;
 
   /* ------------------------------------------------------------------------
      2. HighView-Specific Tokens (Dark Mode)
      ------------------------------------------------------------------------ */
-  --hv-primary: #F8FAFC;
-  --hv-secondary: #5EEAD4;
-  --hv-accent-blue: #60A5FA;
-  --hv-accent-cyan: #22D3EE;
-  --hv-accent-teal: #2DD4BF;
-  --hv-accent-green: #A3E635;
-  --hv-deep-blue: #93C5FD;
+  --hv-primary: var(--color-brand-primary);
+  --hv-secondary: var(--color-brand-secondary);
+  --hv-accent-blue: var(--color-brand-blue);
+  --hv-accent-cyan: var(--color-brand-accent);
+  --hv-accent-teal: var(--color-brand-secondary);
+  --hv-accent-green: var(--color-success);
+  --hv-deep-blue: var(--color-brand-blue);
 
-  --hv-brand-primary: #60A5FA;
-  --hv-brand-secondary: #5EEAD4;
-  --hv-brand-accent: #60A5FA;
-  --hv-brand-navy: #93C5FD;
-  --hv-brand-blue: #60A5FA;
-  --hv-brand-cyan: #22D3EE;
-  --hv-brand-teal: #2DD4BF;
-  --hv-brand-green: #A3E635;
+  --hv-brand-primary: var(--color-brand-primary);
+  --hv-brand-secondary: var(--color-brand-secondary);
+  --hv-brand-accent: var(--color-brand-accent);
+  --hv-brand-navy: var(--color-brand-primary);
+  --hv-brand-blue: var(--color-brand-blue);
+  --hv-brand-cyan: var(--color-brand-accent);
+  --hv-brand-teal: var(--color-brand-secondary);
+  --hv-brand-green: var(--color-success);
 
-  --hv-text-primary: #F8FAFC;
-  --hv-text-secondary: #CBD5E1;
-  --hv-text-muted: #94A3B8;
+  --hv-text-primary: var(--color-text-primary);
+  --hv-text-secondary: var(--color-text-secondary);
+  --hv-text-muted: var(--color-text-muted);
   --hv-text-on-dark: #FFFFFF;
 
-  --hv-bg-page: #08111F;
-  --hv-bg-surface: #0F1B2D;
-  --hv-bg-surface-hover: #132238;
-  --hv-bg-mint: rgba(45, 212, 191, 0.12);
-  --hv-bg-inset: #08111F;
+  --hv-bg-page: var(--color-bg-page);
+  --hv-bg-surface: var(--color-bg-surface);
+  --hv-bg-surface-hover: var(--color-bg-subtle);
+  --hv-bg-mint: var(--color-bg-soft-teal);
+  --hv-bg-inset: var(--color-bg-page);
 
-  --hv-border: #26384D;
-  --hv-border-subtle: #1E3146;
-  --hv-border-strong: #334960;
-  --hv-border-focus: #60A5FA;
+  --hv-border: var(--color-border);
+  --hv-border-subtle: var(--color-divider);
+  --hv-border-strong: var(--color-border-strong);
+  --hv-border-focus: var(--color-focus);
 
-  --hv-success: #A3E635;
-  --hv-success-bg: rgba(163, 230, 53, 0.12);
-  --hv-status-success: #2DD4BF;
-  --hv-status-success-bg: rgba(45, 212, 191, 0.15);
-  --hv-status-success-border: rgba(45, 212, 191, 0.35);
-  --hv-status-warning: #FBBF24;
-  --hv-status-error: #F87171;
-  --hv-info: #5EEAD4;
-  --hv-info-bg: rgba(94, 234, 212, 0.12);
+  --hv-success: var(--color-success);
+  --hv-success-bg: var(--color-bg-soft-teal);
+  --hv-status-success: var(--color-success);
+  --hv-status-success-bg: var(--color-bg-soft-teal);
+  --hv-status-success-border: var(--color-border-strong);
+  --hv-status-warning: var(--color-warning);
+  --hv-status-error: var(--color-error);
+  --hv-info: var(--color-info);
+  --hv-info-bg: var(--color-bg-soft-blue);
 
   /* Chart Tokens — Accessible on #0F1B2D & #08111F (Dark Mode) */
-  --chart-text: #CBD5E1;               /* 11.8:1 (AAA) */
-  --chart-title: #F8FAFC;              /* 16.6:1 (AAA) */
-  --chart-grid: rgba(248, 250, 252, 0.08);
-  --chart-axis-line: #26384D;
-  --chart-tooltip-bg: #172A40;
-  --chart-tooltip-border: #26384D;
-  --chart-tooltip-text: #F8FAFC;
-  --chart-tooltip-subtext: #CBD5E1;
-  --chart-series-1: #5EEAD4;           /* Interactive Teal: 12.1:1 (AAA) */
-  --chart-series-2: #93C5FD;           /* Interactive Blue: 9.8:1 (AAA) */
-  --chart-series-3: #2DD4BF;           /* Mint Teal: 9.5:1 (AAA) */
-  --chart-series-4: #60A5FA;           /* Electric Blue: 7.0:1 (AAA) */
-  --chart-series-5: #C084FC;           /* Soft Violet: 6.7:1 (AA) */
-  --chart-series-6: #F8FAFC;           /* Pure Slate: 16.6:1 (AAA) */
-  --chart-series-7: #38BDF8;           /* Bright Sky: 9.8:1 (AAA) */
-  --chart-series-8: #FBBF24;           /* Warm Amber: 10.5:1 (AAA) */
+  --chart-text: var(--color-text-secondary);
+  --chart-title: var(--color-text-primary);
+  --chart-grid: rgba(244, 245, 239, 0.1);
+  --chart-axis-line: var(--color-border-strong);
+  --chart-tooltip-bg: var(--color-bg-elevated);
+  --chart-tooltip-border: var(--color-border-strong);
+  --chart-tooltip-text: var(--color-text-primary);
+  --chart-tooltip-subtext: var(--color-text-secondary);
+  --chart-series-1: var(--color-brand-secondary);
+  --chart-series-2: var(--color-brand-blue);
+  --chart-series-3: var(--color-gold);
+  --chart-series-4: var(--color-error);
+  --chart-series-5: var(--color-violet);
+  --chart-series-6: var(--color-text-primary);
+  --chart-series-7: var(--color-text-muted);
+  --color-ochre: #EAC0A0;
+  --chart-series-8: var(--color-ochre);
+  --chart-heatmap-negative: var(--color-error);
+  --chart-heatmap-neutral: var(--color-text-muted);
+  --chart-heatmap-positive: var(--color-success);
+  --chart-heatmap-text: var(--btn-primary-fg);
 
-  --hv-gradient: linear-gradient(135deg, #60A5FA 0%, #22D3EE 35%, #2DD4BF 70%, #A3E635 100%);
-  --hv-gradient-subtle: linear-gradient(135deg, rgba(96, 165, 250, 0.12) 0%, rgba(34, 211, 238, 0.12) 50%, rgba(45, 212, 191, 0.12) 100%);
+  --hv-gradient: linear-gradient(135deg, #183B56 0%, #075443 100%);
+  --hv-gradient-subtle: linear-gradient(135deg, var(--color-bg-soft-blue), var(--color-bg-soft-teal));
 
   /* Navigation Specific (Deep Focused Surface in Dark Mode) */
-  --nav-bg: #0F1B2D;
-  --nav-border: #26384D;
-  --nav-text-primary: #F8FAFC;
-  --nav-text-secondary: #CBD5E1;
-  --nav-active-fg: #5EEAD4;
-  --nav-active-bg: rgba(45, 212, 191, 0.14);
-  --nav-active-indicator: #5EEAD4;
+  --nav-bg: var(--color-bg-surface);
+  --nav-border: var(--color-border);
+  --nav-text-primary: var(--color-text-primary);
+  --nav-text-secondary: var(--color-text-secondary);
+  --nav-active-fg: var(--color-brand-secondary);
+  --nav-active-bg: var(--color-bg-soft-teal);
+  --nav-active-indicator: var(--color-brand-secondary);
 
   /* Buttons */
-  --btn-primary-bg: #155EEF;
-  --btn-primary-hover: #1D4ED8;
-  --btn-primary-fg: #FFFFFF;
-  --btn-primary-border: #155EEF;
+  --btn-primary-bg: var(--color-brand-accent);
+  --btn-primary-hover: #A6E7CB;
+  --btn-primary-fg: #172B3A;
+  --btn-primary-border: var(--color-brand-accent);
 
-  --btn-secondary-bg: #0F766E;
-  --btn-secondary-hover: #115E59;
-  --btn-secondary-fg: #FFFFFF;
-  --btn-secondary-border: #0F766E;
+  --btn-secondary-bg: var(--color-brand-blue);
+  --btn-secondary-hover: #C4DCF0;
+  --btn-secondary-fg: #172B3A;
+  --btn-secondary-border: var(--color-brand-blue);
 
-  --btn-outline-border: #5EEAD4;
-  --btn-outline-fg: #5EEAD4;
+  --btn-outline-border: var(--color-brand-accent);
+  --btn-outline-fg: var(--color-brand-accent);
   --btn-outline-bg: transparent;
 
   /* ------------------------------------------------------------------------
      3. HRIDAY Assistant Dark Tokens (Warm, Focused, Human-Friendly)
      ------------------------------------------------------------------------ */
-  --hriday-primary: #102A43;
-  --hriday-surface: #102A43;
-  --hriday-secondary: #2DD4BF;
-  --hriday-accent: #22D3EE;
-  --hriday-success: #A3E635;
-  --hriday-heart-green: #A3E635;
-  --hriday-warm: #E0A43A;
-  --hriday-bg-soft: #15364F;
-  --hriday-bg-cream: #1C3048;
-  --hriday-text: #F8FAFC;
-  --hriday-text-secondary: #D7E3EC;
-  --hriday-text-muted: #94A3B8;
-  --hriday-border: #26384D;
+  --hriday-primary: #183B56;
+  --hriday-surface: var(--color-bg-surface);
+  --hriday-secondary: var(--color-brand-secondary);
+  --hriday-accent: var(--color-brand-blue);
+  --hriday-success: var(--color-success);
+  --hriday-heart-green: var(--color-success);
+  --hriday-warm: var(--color-gold);
+  --hriday-bg-soft: var(--color-bg-soft-teal);
+  --hriday-bg-cream: var(--color-bg-soft-gold);
+  --hriday-text: var(--color-text-primary);
+  --hriday-text-secondary: var(--color-text-secondary);
+  --hriday-text-muted: var(--color-text-muted);
+  --hriday-border: var(--color-border-strong);
 
-  --hriday-gradient: linear-gradient(135deg, #102A43 0%, #0F766E 50%, #0891B2 100%);
-  --hriday-gradient-hover: linear-gradient(135deg, #0b2034 0%, #0d645e 50%, #077995 100%);
-  --hriday-glow: rgba(45, 212, 191, 0.35);
+  --hriday-gradient: linear-gradient(135deg, #183B56 0%, #075443 100%);
+  --hriday-gradient-hover: linear-gradient(135deg, #122F45 0%, #064536 100%);
+  --hriday-glow: rgba(130, 217, 181, 0.16);
 
   /* Shadows (Dark Mode Restrained Glows) */
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4), 0 1px 2px rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 4px 14px -2px rgba(0, 0, 0, 0.5), 0 2px 6px -1px rgba(0, 0, 0, 0.3);
-  --shadow-lg: 0 12px 32px -4px rgba(0, 0, 0, 0.65), 0 4px 12px -2px rgba(0, 0, 0, 0.4);
-  --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.3);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 6px 18px -4px rgba(0, 0, 0, 0.24);
+  --shadow-lg: 0 16px 40px -8px rgba(0, 0, 0, 0.36);
+  --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.18);
 
   /* Global Compatibility Aliases (Dark Mode) */
   --bg-canvas: var(--color-bg-page);
@@ -388,10 +415,10 @@
   --surface-card: var(--color-bg-surface);
   --surface-card-hover: var(--color-bg-subtle);
   --surface-muted: var(--color-bg-subtle);
-  --surface-inset: #08111F;
+  --surface-inset: var(--color-bg-page);
   --surface-header: var(--nav-bg);
   --surface-header-end: var(--nav-bg);
-  --surface-footer: #08111F;
+  --surface-footer: var(--color-bg-page);
   --shell-edge: var(--color-border);
 
   --header-bg: var(--nav-bg);
@@ -410,28 +437,30 @@
   --fg-primary: var(--color-text-primary);
   --fg-secondary: var(--color-text-secondary);
   --fg-muted: var(--color-text-muted);
-  --fg-disabled: #64748B;
-  --fg-on-brand: #FFFFFF;
-  --fg-on-accent: #FFFFFF;
+  --fg-disabled: var(--color-text-muted);
+  --fg-on-brand: var(--btn-primary-fg);
+  --fg-on-accent: var(--btn-primary-fg);
 
-  --brand-400: var(--hv-accent-cyan);
-  --brand-500: var(--hv-accent-blue);
-  --brand-600: #60A5FA;
-  --brand-700: #3B82F6;
-  --brand-accent: var(--hv-accent-blue);
-  --brand-glow: rgba(96, 165, 250, 0.25);
-  --brand-subtle: rgba(96, 165, 250, 0.12);
-  --brand-subtle-border: rgba(96, 165, 250, 0.3);
-  --bg-brand: var(--hv-primary);
+  --brand-400: var(--color-brand-accent);
+  --brand-500: var(--color-brand-accent);
+  --brand-600: var(--color-brand-accent);
+  --brand-700: var(--btn-primary-hover);
+  --brand-accent: var(--color-brand-accent);
+  --brand-glow: rgba(130, 217, 181, 0.16);
+  --brand-subtle: var(--color-bg-soft-teal);
+  --brand-subtle-border: var(--color-border-strong);
+  --bg-brand: var(--color-brand-accent);
   --surface-elevated: var(--color-bg-elevated);
+  --bg-surface: var(--color-bg-surface);
+  --bg-surface-elevated: var(--color-bg-elevated);
 
-  --accent-500: var(--hv-brand-secondary); /* Interactive Teal #5EEAD4 */
-  --accent-soft: rgba(94, 234, 212, 0.14);
+  --accent-500: var(--hv-brand-secondary); /* Theme accent */
+  --accent-soft: var(--color-bg-soft-teal);
 
   --emerald-tier: var(--color-success);
-  --emerald-bg: var(--hv-success-bg);
+  --emerald-bg: var(--color-bg-soft-teal);
   --amber-tier: var(--color-warning);
-  --amber-bg: rgba(251, 191, 36, 0.12);
+  --amber-bg: var(--color-bg-soft-gold);
   --rose-tier: var(--color-error);
-  --rose-bg: rgba(248, 113, 113, 0.12);
+  --rose-bg: var(--color-bg-soft-error);
 }

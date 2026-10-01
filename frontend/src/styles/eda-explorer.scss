@@ -6,11 +6,11 @@
   flex-direction: column;
   gap: 1.5rem;
   margin-top: 1rem;
-  color: var(--hv-text-primary, #0B1F3A);
+  color: var(--hv-text-primary);
 
   .eda-hero-card {
-    background: var(--hv-bg-surface, #ffffff);
-    border: 1px solid var(--hv-border, #e2e8f0);
+    background: var(--hv-bg-surface);
+    border: 1px solid var(--hv-border);
     border-radius: var(--radius-md, 12px);
     padding: 1.5rem;
     display: flex;
@@ -38,21 +38,21 @@
         border: 3px solid;
 
         &.score-excellent {
-          background: #E6F4F1;
-          border-color: #365314;
-          color: #365314;
+          background: var(--color-bg-soft-teal);
+          border-color: var(--color-success);
+          color: var(--color-success);
         }
 
         &.score-good {
-          background: #E6F4F1;
-          border-color: #005A6B;
-          color: #005A6B;
+          background: var(--color-bg-soft-teal);
+          border-color: var(--color-info);
+          color: var(--color-info);
         }
 
         &.score-attention {
-          background: #FEF2F2;
-          border-color: #B91C1C;
-          color: #B91C1C;
+          background: var(--color-bg-soft-error);
+          border-color: var(--color-error);
+          color: var(--color-error);
         }
 
         span.score-label {
@@ -69,13 +69,13 @@
         h3 {
           margin: 0 0 0.25rem 0;
           font-size: 1.25rem;
-          color: var(--hv-text-primary, #0B1F3A);
+          color: var(--hv-text-primary);
         }
 
         p {
           margin: 0;
           font-size: 0.85rem;
-          color: var(--hv-text-secondary, #334155);
+          color: var(--hv-text-secondary);
         }
 
         .status-badge {
@@ -87,18 +87,18 @@
           font-weight: 600;
 
           &.status-excellent {
-            background: #E6F4F1;
-            color: #365314;
+            background: var(--color-bg-soft-teal);
+            color: var(--color-success);
           }
 
           &.status-good {
-            background: #E6F4F1;
-            color: #005A6B;
+            background: var(--color-bg-soft-teal);
+            color: var(--color-info);
           }
 
           &.status-attention {
-            background: #FEF2F2;
-            color: #B91C1C;
+            background: var(--color-bg-soft-error);
+            color: var(--color-error);
           }
         }
       }
@@ -110,15 +110,15 @@
       gap: 1rem;
 
       .summary-chip {
-        background: #F8FAFC;
-        border: 1px solid var(--hv-border, #E2E8F0);
+        background: var(--color-bg-page);
+        border: 1px solid var(--hv-border);
         border-radius: 8px;
         padding: 0.6rem 0.9rem;
         min-width: 105px;
 
         .chip-label {
           font-size: 0.72rem;
-          color: var(--hv-text-muted, #64748B);
+          color: var(--hv-text-muted);
           text-transform: uppercase;
           letter-spacing: 0.04em;
           margin-bottom: 0.2rem;
@@ -127,23 +127,23 @@
         .chip-val {
           font-size: 1.2rem;
           font-weight: 700;
-          color: var(--hv-text-primary, #0B1F3A);
+          color: var(--hv-text-primary);
 
           &.val-accent {
-            color: var(--hv-brand-secondary, #005A6B);
+            color: var(--hv-brand-secondary);
           }
 
           &.val-warning {
-            color: #B91C1C;
+            color: var(--color-error);
           }
         }
       }
     }
 
     .btn-rerun-eda {
-      background: var(--hv-brand-secondary, #005A6B);
-      border: 1px solid var(--hv-brand-secondary, #005A6B);
-      color: #ffffff;
+      background: var(--hv-brand-secondary);
+      border: 1px solid var(--hv-brand-secondary);
+      color: var(--color-text-primary);
       padding: 0.5rem 1rem;
       border-radius: 6px;
       font-weight: 600;
@@ -152,22 +152,22 @@
       transition: all 0.2s ease;
 
       &:hover {
-        background: #004552;
-        border-color: #004552;
+        background: var(--btn-primary-hover);
+        border-color: var(--color-border-strong);
       }
     }
   }
 
   .eda-recs-card {
-    background: #E6F4F1;
-    border: 1px solid rgba(0, 90, 107, 0.25);
+    background: var(--color-bg-soft-teal);
+    border: 1px solid var(--color-border-strong);
     border-radius: 10px;
     padding: 1rem 1.25rem;
 
     h4 {
       margin: 0 0 0.6rem 0;
       font-size: 0.95rem;
-      color: #005A6B;
+      color: var(--color-info);
       display: flex;
       align-items: center;
       gap: 0.5rem;
@@ -180,7 +180,7 @@
 
       li {
         font-size: 0.85rem;
-        color: #0B1F3A;
+        color: var(--color-text-primary);
         line-height: 1.5;
         margin-bottom: 0.3rem;
 
@@ -194,7 +194,7 @@
   .eda-subtabs-bar {
     display: flex;
     gap: 0.5rem;
-    border-bottom: 1px solid var(--hv-border, #E2E8F0);
+    border-bottom: 1px solid var(--hv-border);
     padding-bottom: 0.75rem;
     flex-wrap: wrap;
 
@@ -206,29 +206,29 @@
       border-radius: 6px;
       font-size: 0.82rem;
       font-weight: 600;
-      color: var(--hv-text-secondary, #334155);
+      color: var(--hv-text-secondary);
       background: transparent;
       border: 1px solid transparent;
       cursor: pointer;
       transition: all 0.15s ease;
 
       &:hover {
-        color: var(--hv-text-primary, #0B1F3A);
-        background: var(--hv-bg-surface-hover, #F1F5F9);
+        color: var(--hv-text-primary);
+        background: var(--hv-bg-surface-hover);
       }
 
       &.active {
-        background: #EAF4FF;
-        color: #005A6B;
-        border: 1px solid #BAE6FD;
+        background: var(--color-bg-soft-blue);
+        color: var(--color-info);
+        border: 1px solid var(--color-border-strong);
         box-shadow: var(--shadow-sm);
       }
     }
   }
 
   .eda-section-card {
-    background: var(--hv-bg-surface, #ffffff);
-    border: 1px solid var(--hv-border, #e2e8f0);
+    background: var(--hv-bg-surface);
+    border: 1px solid var(--hv-border);
     border-radius: var(--radius-md, 12px);
     padding: 1.25rem;
     box-shadow: var(--shadow-card);
@@ -239,7 +239,7 @@
       h3 {
         margin: 0 0 0.25rem 0;
         font-size: 1.15rem;
-        color: var(--hv-text-primary, #0B1F3A);
+        color: var(--hv-text-primary);
         display: flex;
         align-items: center;
         gap: 0.5rem;
@@ -248,7 +248,7 @@
       p {
         margin: 0;
         font-size: 0.85rem;
-        color: var(--hv-text-secondary, #334155);
+        color: var(--hv-text-secondary);
       }
     }
   }
@@ -260,8 +260,8 @@
     margin-bottom: 1.5rem;
 
     .link-tile {
-      background: #F8FAFC;
-      border: 1px solid var(--hv-border, #E2E8F0);
+      background: var(--color-bg-page);
+      border: 1px solid var(--hv-border);
       border-radius: 8px;
       padding: 0.85rem 1rem;
       display: flex;
@@ -271,7 +271,7 @@
       .link-title {
         font-weight: 600;
         font-size: 0.9rem;
-        color: var(--hv-text-primary, #0B1F3A);
+        color: var(--hv-text-primary);
         display: flex;
         align-items: center;
         gap: 0.4rem;
@@ -283,16 +283,16 @@
         font-size: 0.75rem;
 
         .badge-pill {
-          background: #E6F4F1;
-          color: var(--hv-brand-secondary, #005A6B);
+          background: var(--color-bg-soft-teal);
+          color: var(--hv-brand-secondary);
           padding: 0.15rem 0.5rem;
           border-radius: 4px;
           font-weight: 600;
         }
 
         .badge-cardinality {
-          background: #F1F5F9;
-          color: var(--hv-text-secondary, #334155);
+          background: var(--color-bg-subtle);
+          color: var(--hv-text-secondary);
           padding: 0.15rem 0.5rem;
           border-radius: 4px;
         }
@@ -306,8 +306,8 @@
     gap: 1rem;
 
     .correlation-tile {
-      background: #F8FAFC;
-      border: 1px solid var(--hv-border, #E2E8F0);
+      background: var(--color-bg-page);
+      border: 1px solid var(--hv-border);
       border-radius: 8px;
       padding: 1rem;
       display: flex;
@@ -316,7 +316,7 @@
       transition: border-color 0.2s ease;
 
       &:hover {
-        border-color: var(--hv-brand-secondary, #005A6B);
+        border-color: var(--hv-brand-secondary);
       }
 
       .corr-top-row {
@@ -328,7 +328,7 @@
         .corr-metrics {
           font-weight: 600;
           font-size: 0.9rem;
-          color: var(--hv-text-primary, #0B1F3A);
+          color: var(--hv-text-primary);
         }
 
         .corr-badge {
@@ -339,30 +339,30 @@
           white-space: nowrap;
 
           &.negative {
-            background: #FEF2F2;
-            color: #B91C1C;
-            border: 1px solid rgba(185, 28, 28, 0.3);
+            background: var(--color-bg-soft-error);
+            color: var(--color-error);
+            border: 1px solid var(--color-border-strong);
           }
 
           &.positive {
-            background: #E6F4F1;
-            color: #365314;
-            border: 1px solid rgba(54, 83, 20, 0.3);
+            background: var(--color-bg-soft-teal);
+            color: var(--color-success);
+            border: 1px solid var(--color-border-strong);
           }
         }
       }
 
       .corr-sheets-label {
         font-size: 0.78rem;
-        color: var(--hv-text-secondary, #334155);
+        color: var(--hv-text-secondary);
       }
 
       .corr-narrative {
         font-size: 0.83rem;
-        color: var(--hv-text-primary, #0B1F3A);
+        color: var(--hv-text-primary);
         line-height: 1.45;
-        background: #FFFFFF;
-        border: 1px solid var(--hv-border, #E2E8F0);
+        background: var(--color-bg-surface);
+        border: 1px solid var(--hv-border);
         padding: 0.5rem 0.7rem;
         border-radius: 6px;
       }
@@ -371,7 +371,7 @@
 
   .eda-table-container {
     overflow-x: auto;
-    border: 1px solid var(--hv-border, #E2E8F0);
+    border: 1px solid var(--hv-border);
     border-radius: 8px;
 
     table.eda-data-grid {
@@ -381,21 +381,21 @@
       text-align: left;
 
       th {
-        background: var(--hv-bg-surface-hover, #F8FAFC);
-        color: var(--hv-text-primary, #0B1F3A);
+        background: var(--hv-bg-surface-hover);
+        color: var(--hv-text-primary);
         padding: 0.7rem 0.9rem;
         font-weight: 700;
-        border-bottom: 2px solid var(--hv-border, #E2E8F0);
+        border-bottom: 2px solid var(--hv-border);
         white-space: nowrap;
       }
 
       td {
         padding: 0.65rem 0.9rem;
-        border-bottom: 1px solid var(--hv-border-subtle, #F1F5F9);
-        color: var(--hv-text-secondary, #334155);
+        border-bottom: 1px solid var(--hv-border-subtle);
+        color: var(--hv-text-secondary);
 
         &.type-cell {
-          color: var(--hv-brand-secondary, #005A6B);
+          color: var(--hv-brand-secondary);
           font-family: monospace;
           font-size: 0.8rem;
           font-weight: 600;
@@ -407,7 +407,7 @@
       }
 
       tr:hover td {
-        background: var(--hv-bg-surface-hover, #F1F5F9);
+        background: var(--hv-bg-surface-hover);
       }
     }
   }
@@ -421,22 +421,22 @@
   flex-wrap: wrap;
   gap: 0.75rem;
   margin-bottom: 0.85rem;
-  background: var(--hv-bg-surface, #ffffff);
+  background: var(--hv-bg-surface);
   padding: 0.5rem 0.85rem;
   border-radius: 8px;
-  border: 1px solid var(--hv-border, #e2e8f0);
+  border: 1px solid var(--hv-border);
 
   .version-pills {
     display: inline-flex;
-    background: #F1F5F9;
+    background: var(--color-bg-subtle);
     padding: 3px;
     border-radius: 6px;
-    border: 1px solid var(--hv-border, #E2E8F0);
+    border: 1px solid var(--hv-border);
 
     button.version-pill {
       background: transparent;
       border: none;
-      color: var(--hv-text-secondary, #334155);
+      color: var(--hv-text-secondary);
       font-size: 0.8rem;
       font-weight: 500;
       padding: 0.35rem 0.75rem;
@@ -445,12 +445,12 @@
       transition: all 0.15s ease;
 
       &:hover {
-        color: var(--hv-brand-primary, #0B1F3A);
+        color: var(--hv-brand-primary);
       }
 
       &.active {
-        background: var(--hv-brand-primary, #0B1F3A);
-        color: #ffffff;
+        background: var(--hv-brand-primary);
+        color: var(--color-text-primary);
         font-weight: 600;
         box-shadow: var(--shadow-sm);
       }
@@ -462,12 +462,12 @@
     align-items: center;
     gap: 0.5rem;
     font-size: 0.8rem;
-    color: var(--hv-text-secondary, #334155);
+    color: var(--hv-text-secondary);
 
     select {
-      background: #FFFFFF;
-      border: 1px solid var(--hv-border-strong, #CBD5E1);
-      color: var(--hv-text-primary, #0B1F3A);
+      background: var(--color-bg-surface);
+      border: 1px solid var(--hv-border-strong);
+      color: var(--hv-text-primary);
       padding: 0.3rem 0.6rem;
       border-radius: 4px;
       font-size: 0.8rem;
@@ -481,12 +481,12 @@
    ========================================================================== */
 [data-theme="dark"] {
   .eda-dashboard {
-    color: var(--color-text-primary, #F8FAFC);
+    color: var(--color-text-primary);
 
     .eda-hero-card {
-      background: var(--color-bg-surface, #0F1B2D);
-      border-color: var(--color-border, #26384D);
-      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+      background: var(--color-bg-surface);
+      border-color: var(--color-border);
+      box-shadow: var(--shadow-sm);
 
       .eda-score-box {
         .score-circle {
@@ -496,53 +496,53 @@
           }
 
           &.score-excellent {
-            background: rgba(34, 197, 94, 0.16);
-            border-color: #4ADE80;
-            color: #4ADE80;
-            span.score-label { color: #86EFAC; }
+            background: var(--color-bg-soft-teal);
+            border-color: var(--color-success);
+            color: var(--color-success);
+            span.score-label { color: var(--color-success); }
           }
 
           &.score-good {
-            background: rgba(96, 165, 250, 0.16);
-            border-color: #60A5FA;
-            color: #60A5FA;
-            span.score-label { color: #BFDBFE; }
+            background: var(--color-bg-soft-blue);
+            border-color: var(--color-info);
+            color: var(--color-info);
+            span.score-label { color: var(--color-info); }
           }
 
           &.score-attention {
-            background: rgba(239, 68, 68, 0.16);
-            border-color: #F87171;
-            color: #F87171;
-            span.score-label { color: #FECACA; }
+            background: var(--color-bg-soft-error);
+            border-color: var(--color-error);
+            color: var(--color-error);
+            span.score-label { color: var(--color-error); }
           }
         }
 
         .score-text {
           h3 {
-            color: var(--color-text-primary, #F8FAFC);
+            color: var(--color-text-primary);
           }
 
           p {
-            color: var(--color-text-secondary, #CBD5E1);
+            color: var(--color-text-secondary);
           }
 
           .status-badge {
             &.status-excellent {
-              background: rgba(34, 197, 94, 0.16);
-              color: #4ADE80;
-              border: 1px solid rgba(74, 222, 128, 0.35);
+              background: var(--color-bg-soft-teal);
+              color: var(--color-success);
+              border: 1px solid var(--color-border-strong);
             }
 
             &.status-good {
-              background: rgba(96, 165, 250, 0.16);
-              color: #60A5FA;
-              border: 1px solid rgba(96, 165, 250, 0.35);
+              background: var(--color-bg-soft-blue);
+              color: var(--color-info);
+              border: 1px solid var(--color-border-strong);
             }
 
             &.status-attention {
-              background: rgba(239, 68, 68, 0.16);
-              color: #F87171;
-              border: 1px solid rgba(248, 113, 113, 0.35);
+              background: var(--color-bg-soft-error);
+              color: var(--color-error);
+              border: 1px solid var(--color-border-strong);
             }
           }
         }
@@ -550,188 +550,188 @@
 
       .eda-summary-chips {
         .summary-chip {
-          background: var(--color-bg-subtle, #132238);
-          border-color: var(--color-border, #26384D);
+          background: var(--color-bg-subtle);
+          border-color: var(--color-border);
 
           .chip-label {
-            color: var(--color-text-secondary, #CBD5E1);
+            color: var(--color-text-secondary);
           }
 
           .chip-val {
-            color: var(--color-text-primary, #F8FAFC);
+            color: var(--color-text-primary);
 
             &.val-accent {
-              color: #60A5FA;
+              color: var(--color-info);
             }
 
             &.val-warning {
-              color: #F87171;
+              color: var(--color-error);
             }
           }
         }
       }
 
       .btn-rerun-eda {
-        background: #005A6B;
-        border-color: #BAE6FD;
-        color: #FFFFFF;
+        background: var(--btn-primary-bg);
+        border-color: var(--color-border-strong);
+        color: var(--color-text-primary);
 
         &:hover {
-          background: #007A91;
-          border-color: #60A5FA;
-          color: #FFFFFF;
+          background: var(--btn-primary-hover);
+          border-color: var(--color-info);
+          color: var(--color-text-primary);
         }
       }
     }
 
     .eda-recs-card {
-      background: rgba(45, 212, 191, 0.1);
-      border-color: rgba(45, 212, 191, 0.3);
+      background: var(--color-bg-soft-teal);
+      border-color: var(--color-border-strong);
 
       h4 {
-        color: #5EEAD4;
+        color: var(--color-brand-secondary);
       }
 
       ul li {
-        color: var(--color-text-primary, #F8FAFC);
+        color: var(--color-text-primary);
       }
     }
 
     .eda-subtabs-bar {
-      border-bottom-color: var(--color-border, #26384D);
+      border-bottom-color: var(--color-border);
 
       .toggle-btn {
-        color: var(--color-text-secondary, #CBD5E1);
+        color: var(--color-text-secondary);
 
         &:hover {
-          color: #FFFFFF;
-          background: var(--color-bg-subtle, #132238);
+          color: var(--color-text-primary);
+          background: var(--color-bg-subtle);
         }
 
         &.active {
-          background: var(--color-bg-subtle, #132238);
-          color: #60A5FA;
-          border: 1px solid #334960;
+          background: var(--color-bg-subtle);
+          color: var(--color-info);
+          border: 1px solid var(--color-border-strong);
         }
       }
     }
 
     .eda-section-card {
-      background: var(--color-bg-surface, #0F1B2D);
-      border-color: var(--color-border, #26384D);
-      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+      background: var(--color-bg-surface);
+      border-color: var(--color-border);
+      box-shadow: var(--shadow-sm);
 
       .section-header {
         h3 {
-          color: var(--color-text-primary, #F8FAFC);
+          color: var(--color-text-primary);
         }
 
         p {
-          color: var(--color-text-secondary, #CBD5E1);
+          color: var(--color-text-secondary);
         }
       }
     }
 
     .eda-links-grid .link-tile {
-      background: var(--color-bg-subtle, #132238);
-      border-color: var(--color-border, #26384D);
+      background: var(--color-bg-subtle);
+      border-color: var(--color-border);
 
       .link-title {
-        color: var(--color-text-primary, #F8FAFC);
+        color: var(--color-text-primary);
       }
 
       .link-meta {
         .badge-pill {
-          background: rgba(96, 165, 250, 0.16);
-          color: #60A5FA;
+          background: var(--color-bg-soft-blue);
+          color: var(--color-info);
         }
 
         .badge-cardinality {
-          background: rgba(148, 163, 184, 0.15);
-          color: var(--color-text-secondary, #CBD5E1);
+          background: var(--color-bg-subtle);
+          color: var(--color-text-secondary);
         }
       }
     }
 
     .eda-correlations-grid .correlation-tile {
-      background: var(--color-bg-subtle, #132238);
-      border-color: var(--color-border, #26384D);
+      background: var(--color-bg-subtle);
+      border-color: var(--color-border);
 
       &:hover {
-        border-color: #60A5FA;
+        border-color: var(--color-info);
       }
 
       .corr-top-row .corr-metrics {
-        color: var(--color-text-primary, #F8FAFC);
+        color: var(--color-text-primary);
       }
 
       .corr-sheets-label {
-        color: var(--color-text-secondary, #CBD5E1);
+        color: var(--color-text-secondary);
       }
 
       .corr-narrative {
-        background: var(--color-bg-page, #08111F);
-        border-color: var(--color-border, #26384D);
-        color: var(--color-text-primary, #F8FAFC);
+        background: var(--color-bg-page);
+        border-color: var(--color-border);
+        color: var(--color-text-primary);
       }
     }
 
     .eda-table-container {
-      border-color: var(--color-border, #26384D);
+      border-color: var(--color-border);
 
       table.eda-data-grid {
         th {
-          background: var(--color-bg-subtle, #132238);
-          color: var(--color-text-secondary, #CBD5E1);
-          border-bottom-color: var(--color-border, #26384D);
+          background: var(--color-bg-subtle);
+          color: var(--color-text-secondary);
+          border-bottom-color: var(--color-border);
         }
 
         td {
-          border-bottom-color: rgba(38, 56, 77, 0.4);
-          color: var(--color-text-primary, #F8FAFC);
+          border-bottom-color: var(--color-border-strong);
+          color: var(--color-text-primary);
 
           &.type-cell {
-            color: #60A5FA;
+            color: var(--color-info);
           }
         }
 
         tr:hover td {
-          background: var(--color-bg-subtle, #132238);
+          background: var(--color-bg-subtle);
         }
       }
     }
   }
 
   .table-version-toggle-bar {
-    background: var(--color-bg-surface, #0F1B2D);
-    border-color: var(--color-border, #26384D);
+    background: var(--color-bg-surface);
+    border-color: var(--color-border);
 
     .version-pills {
-      background: var(--color-bg-page, #08111F);
-      border-color: var(--color-border, #26384D);
+      background: var(--color-bg-page);
+      border-color: var(--color-border);
 
       button.version-pill {
-        color: var(--color-text-secondary, #CBD5E1);
+        color: var(--color-text-secondary);
 
         &:hover {
-          color: #FFFFFF;
+          color: var(--color-text-primary);
         }
 
         &.active {
-          background: #172A40;
-          color: #F8FAFC;
-          border: 1px solid #60A5FA;
+          background: var(--color-bg-elevated);
+          color: var(--color-text-primary);
+          border: 1px solid var(--color-border-strong);
         }
       }
     }
 
     .derived-views-picker {
-      color: var(--color-text-secondary, #CBD5E1);
+      color: var(--color-text-secondary);
 
       select {
-        background: var(--color-bg-subtle, #132238);
-        border-color: var(--color-border, #26384D);
-        color: var(--color-text-primary, #F8FAFC);
+        background: var(--color-bg-subtle);
+        border-color: var(--color-border);
+        color: var(--color-text-primary);
       }
     }
   }

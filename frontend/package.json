@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node scripts/test_markdown_rendering.mjs"
+    "test": "node scripts/test_markdown_rendering.mjs",
+    "pretest:theme": "node scripts/generate_theme_tokens.mjs",
+    "test:theme": "node scripts/test_theme_contrast.mjs"
   },
   "dependencies": {
     "echarts": "^6.1.0",

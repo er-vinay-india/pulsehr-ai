@@ -981,7 +981,7 @@ export default function VisualEdaDashboard({
                   style={{
                     marginTop: '1.25rem',
                     background: themeTokens.colors.softGold,
-                    border: '1px solid rgba(255, 176, 137, 0.25)',
+                    border: '1px solid var(--color-border-strong)',
                     borderRadius: '8px',
                     padding: '0.85rem 1.1rem'
                   }}
@@ -1107,7 +1107,7 @@ export default function VisualEdaDashboard({
                   style={{
                     marginTop: '1rem',
                     background: themeTokens.colors.mint,
-                    border: '1px solid rgba(46, 213, 115, 0.25)',
+                    border: '1px solid var(--color-border-strong)',
                     borderRadius: '8px',
                     padding: '0.75rem 1rem',
                     fontSize: '0.85rem',
@@ -1188,25 +1188,25 @@ export default function VisualEdaDashboard({
                         padding: '0.75rem'
                       }}
                     >
-                      <div style={{ background: themeTokens.colors.mint, border: '1px solid rgba(46, 213, 115, 0.3)', borderRadius: '6px', padding: '0.6rem', textAlign: 'center' }}>
+                      <div style={{ background: themeTokens.colors.mint, border: '1px solid var(--color-border-strong)', borderRadius: '6px', padding: '0.6rem', textAlign: 'center' }}>
                         <div style={{ fontSize: '0.72rem', color: themeTokens.colors.statusSuccess }}>TRUE POSITIVE (TP)</div>
                         <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: themeTokens.colors.textPrimary }}>
                           {logisticModel.confusion_matrix?.true_positive}
                         </div>
                       </div>
-                      <div style={{ background: themeTokens.colors.softError, border: '1px solid rgba(255, 107, 129, 0.25)', borderRadius: '6px', padding: '0.6rem', textAlign: 'center' }}>
+                      <div style={{ background: themeTokens.colors.softError, border: '1px solid var(--color-border-strong)', borderRadius: '6px', padding: '0.6rem', textAlign: 'center' }}>
                         <div style={{ fontSize: '0.72rem', color: themeTokens.colors.statusError }}>FALSE POSITIVE (FP)</div>
                         <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: themeTokens.colors.textPrimary }}>
                           {logisticModel.confusion_matrix?.false_positive}
                         </div>
                       </div>
-                      <div style={{ background: themeTokens.colors.softError, border: '1px solid rgba(255, 107, 129, 0.25)', borderRadius: '6px', padding: '0.6rem', textAlign: 'center' }}>
+                      <div style={{ background: themeTokens.colors.softError, border: '1px solid var(--color-border-strong)', borderRadius: '6px', padding: '0.6rem', textAlign: 'center' }}>
                         <div style={{ fontSize: '0.72rem', color: themeTokens.colors.statusError }}>FALSE NEGATIVE (FN)</div>
                         <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: themeTokens.colors.textPrimary }}>
                           {logisticModel.confusion_matrix?.false_negative}
                         </div>
                       </div>
-                      <div style={{ background: themeTokens.colors.mint, border: '1px solid rgba(46, 213, 115, 0.3)', borderRadius: '6px', padding: '0.6rem', textAlign: 'center' }}>
+                      <div style={{ background: themeTokens.colors.mint, border: '1px solid var(--color-border-strong)', borderRadius: '6px', padding: '0.6rem', textAlign: 'center' }}>
                         <div style={{ fontSize: '0.72rem', color: themeTokens.colors.statusSuccess }}>TRUE NEGATIVE (TN)</div>
                         <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: themeTokens.colors.textPrimary }}>
                           {logisticModel.confusion_matrix?.true_negative}
@@ -1218,7 +1218,7 @@ export default function VisualEdaDashboard({
                       style={{
                         marginTop: '0.85rem',
                         background: themeTokens.colors.softError,
-                        border: '1px solid rgba(255, 107, 129, 0.25)',
+                        border: '1px solid var(--color-border-strong)',
                         borderRadius: '8px',
                         padding: '0.75rem',
                         fontSize: '0.82rem',
@@ -1316,7 +1316,7 @@ export default function VisualEdaDashboard({
               style={{
                 marginTop: '1.25rem',
                 background: themeTokens.colors.softGold,
-                border: '1px solid rgba(255, 176, 137, 0.25)',
+                border: '1px solid var(--color-border-strong)',
                 borderRadius: '8px',
                 padding: '0.85rem 1.1rem',
                 display: 'flex',
@@ -1562,7 +1562,7 @@ export default function VisualEdaDashboard({
               <div
                 style={{
                   background: themeTokens.colors.softGold,
-                  border: '1px solid rgba(255, 176, 137, 0.3)',
+                  border: '1px solid var(--color-border-strong)',
                   borderRadius: '8px',
                   padding: '1rem',
                   display: 'flex',

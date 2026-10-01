@@ -4,8 +4,8 @@ export const lightPalette = lightTokens.chart.palette;
 export const darkPalette = darkTokens.chart.palette;
 
 export const palette = lightPalette;
-export const hridayPalette = ['#0F766E', '#0891B2', '#365314', '#102A43', '#B7791F'];
-export const hridayDarkPalette = ['#2DD4BF', '#5EEAD4', '#A3E635', '#F8FAFC', '#FBBF24'];
+export const hridayPalette = lightPalette;
+export const hridayDarkPalette = darkPalette;
 
 export const getChartPalette = (isDark = false) => (isDark ? darkPalette : lightPalette);
 
