@@ -158,7 +158,7 @@ def compute_relational_story(conn, model: str | None = None) -> dict | None:
     elif is_x_att and is_y_perf:
         q_titles['q1'] = {'title': 'Core Workforce Anchors', 'badgeColor': '#10b981', 'icon': '⚓', 'desc': f'Superior {col_x} and dependable {col_y}. Operational pillars.'}
         q_titles['q2'] = {'title': 'High-Efficiency Stars', 'badgeColor': '#818cf8', 'icon': '⚡', 'desc': f'Flexible {col_x} delivering high {col_y}.'}
-        q_titles['q3'] = {'title': 'Diligent Focus', 'badgeColor': '#f59e0b', 'icon': '🎯', 'desc': f'High {col_x} needing coaching in {col_y}.'}
+        q_titles['q3'] = {'title': 'Diligent Focus', 'badgeColor': '#f59e0b', 'icon': '🎯', 'desc': f'High {col_x} needing mentoring and support in {col_y}.'}
         q_titles['q4'] = {'title': 'Retention & Risk Review', 'badgeColor': '#ef4444', 'icon': '⚠️', 'desc': f'Lower {col_x} paired with sub-threshold {col_y}.'}
 
     if col_x and col_y:

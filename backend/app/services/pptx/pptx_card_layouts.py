@@ -6,6 +6,79 @@ from pptx.enum.shapes import MSO_SHAPE
 from .pptx_styles import add_styled_text_runs
 
 
+def _render_title_cover_slide(slide, slide_data, colors):
+    """Renders a boardroom-grade, high-aesthetic executive title cover slide."""
+    # Top Category Badge (e.g., "HUMAN RESOURCES · EXECUTIVE BOARDROOM REVIEW")
+    badge_shape = slide.shapes.add_shape(
+        MSO_SHAPE.ROUNDED_RECTANGLE,
+        Inches(1.0), Inches(1.1), Inches(11.333), Inches(0.45)
+    )
+    badge_shape.fill.solid()
+    badge_shape.fill.fore_color.rgb = colors["card_bg"]
+    badge_shape.line.color.rgb = colors["card_border"]
+    badge_shape.line.width = Pt(1)
+    btf = badge_shape.text_frame
+    btf.word_wrap = True
+    bp = btf.paragraphs[0]
+    cat_text = slide_data.get("category", "EXECUTIVE BRIEFING")
+    bp.text = f"●  {cat_text}"
+    bp.font.size = Pt(11)
+    bp.font.bold = True
+    bp.font.color.rgb = colors["brand"]
+
+    # Central Hero Title & Subtitle Card
+    center_card = slide.shapes.add_shape(
+        MSO_SHAPE.ROUNDED_RECTANGLE,
+        Inches(1.0), Inches(1.75), Inches(11.333), Inches(4.9)
+    )
+    center_card.fill.solid()
+    center_card.fill.fore_color.rgb = colors["card_bg"]
+    center_card.line.color.rgb = colors["card_border"]
+    center_card.line.width = Pt(1.5)
+
+    tf = center_card.text_frame
+    tf.word_wrap = True
+    tf.margin_left = Inches(0.6)
+    tf.margin_right = Inches(0.6)
+    tf.margin_top = Inches(0.5)
+    tf.margin_bottom = Inches(0.5)
+
+    # Title
+    p_title = tf.paragraphs[0]
+    p_title.text = slide_data.get("title", "Executive Operational Review")
+    p_title.font.size = Pt(26)
+    p_title.font.bold = True
+    p_title.font.color.rgb = colors["primary"]
+    p_title.space_after = Pt(10)
+
+    # Subtitle
+    if slide_data.get("subtitle"):
+        p_sub = tf.add_paragraph()
+        p_sub.text = slide_data.get("subtitle")
+        p_sub.font.size = Pt(13)
+        p_sub.font.bold = True
+        p_sub.font.color.rgb = colors["accent"]
+        p_sub.space_after = Pt(14)
+
+    # Narrative
+    if slide_data.get("narrative"):
+        p_narr = tf.add_paragraph()
+        add_styled_text_runs(p_narr, slide_data["narrative"], font_size=11, default_color=colors["secondary"])
+        p_narr.space_after = Pt(14)
+
+    # Executive Focus Pillars
+    bullets = slide_data.get("bullets", [])
+    for b in bullets[:3]:
+        p_b = tf.add_paragraph()
+        p_b.space_after = Pt(8)
+        run_dot = p_b.add_run()
+        run_dot.text = "◆ "
+        run_dot.font.color.rgb = colors["brand"]
+        run_dot.font.size = Pt(11)
+        run_dot.font.bold = True
+        add_styled_text_runs(p_b, b, font_size=11, default_color=colors["primary"])
+
+
 def _render_title_hero_slide(slide, slide_data, colors):
     left_card = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(0.8), Inches(1.8), Inches(6.8), Inches(4.7))
     left_card.fill.solid()

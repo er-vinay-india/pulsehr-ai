@@ -17,6 +17,8 @@ import {
   ChevronRight
 } from 'lucide-react';
 import ReactECharts from '../charts/SafeReactECharts';
+import { useTheme } from '../../context/ThemeContext';
+import { getThemeTokens } from '../../theme/tokens';
 
 export default function VisualEdaDashboard({
   edaReport,
@@ -25,6 +27,8 @@ export default function VisualEdaDashboard({
   onRerunEda,
   onExploreDerivedTable
 }) {
+  const { isDark } = useTheme();
+  const themeTokens = getThemeTokens(isDark);
   const [activeTab, setActiveTab] = useState('visuals'); // 'visuals' | 'temporal' | 'predictive' | 'multisheet' | 'diagnostics'
   const [selectedMetric, setSelectedMetric] = useState(null);
   const [selectedLinearIndex, setSelectedLinearIndex] = useState(0);
@@ -34,6 +38,46 @@ export default function VisualEdaDashboard({
   const metricDistributions = visualAnalytics.metric_distributions || {};
   const temporalAnalysis = visualAnalytics.temporal_analysis || { has_temporal_data: false, timeline_series: [] };
   const predictiveModeling = visualAnalytics.predictive_modeling || { linear_models: [], logistic_models: [] };
+  const groupByAnalytics = visualAnalytics.group_by_analytics || { dimensions: [], measures: [], breakdowns: {}, insights: [] };
+
+  const [selectedGroupDim, setSelectedGroupDim] = useState(null);
+  const [selectedGroupMeas, setSelectedGroupMeas] = useState(null);
+
+  const availableGroupDims = useMemo(() => {
+    const rawDims = groupByAnalytics.dimensions || [];
+    const bds = groupByAnalytics.breakdowns || {};
+    const valid = rawDims.filter(d => Object.keys(bds[d] || {}).length > 0);
+    return valid.length > 0 ? valid : rawDims;
+  }, [groupByAnalytics]);
+
+  const currentGroupDim = useMemo(() => {
+    if (selectedGroupDim && availableGroupDims.includes(selectedGroupDim)) {
+      return selectedGroupDim;
+    }
+    return availableGroupDims[0] || '';
+  }, [selectedGroupDim, availableGroupDims]);
+
+  const availableGroupMeasures = useMemo(() => {
+    if (!currentGroupDim || !groupByAnalytics.breakdowns?.[currentGroupDim]) {
+      return groupByAnalytics.measures || [];
+    }
+    const mList = Object.keys(groupByAnalytics.breakdowns[currentGroupDim]);
+    return mList.length > 0 ? mList : (groupByAnalytics.measures || []);
+  }, [groupByAnalytics, currentGroupDim]);
+
+  const currentGroupMeas = useMemo(() => {
+    if (selectedGroupMeas && availableGroupMeasures.includes(selectedGroupMeas)) {
+      return selectedGroupMeas;
+    }
+    return availableGroupMeasures[0] || '';
+  }, [selectedGroupMeas, availableGroupMeasures]);
+
+  const currentBreakdown = useMemo(() => {
+    if (!currentGroupDim || !currentGroupMeas) return null;
+    return groupByAnalytics.breakdowns?.[currentGroupDim]?.[currentGroupMeas] || null;
+  }, [groupByAnalytics, currentGroupDim, currentGroupMeas]);
+
+  const hasGroupBy = availableGroupDims.length > 0 && availableGroupMeasures.length > 0;
 
   // Set initial selected metric
   const availableMetrics = correlationMatrix.metrics || [];
@@ -77,11 +121,12 @@ export default function VisualEdaDashboard({
 
     return {
       backgroundColor: 'transparent',
+      color: themeTokens.chart.palette,
       tooltip: {
         position: 'top',
-        backgroundColor: '#1c1815',
-        borderColor: '#524940',
-        textStyle: { color: '#fff9f2', fontSize: 12 },
+        backgroundColor: themeTokens.colors.surface,
+        borderColor: themeTokens.colors.borderStrong,
+        textStyle: { color: themeTokens.colors.textPrimary, fontSize: 12 },
         formatter: (params) => {
           const [colIdx, rowIdx, val] = params.data;
           const xName = metrics[colIdx];
@@ -91,13 +136,13 @@ export default function VisualEdaDashboard({
 
           const dir = val > 0 ? 'Positive' : 'Negative';
           const strength = Math.abs(val) >= 0.7 ? 'Strong' : Math.abs(val) >= 0.35 ? 'Moderate' : 'Mild';
-          const color = val >= 0 ? '#2ed573' : '#ff6b81';
+          const color = val >= 0 ? themeTokens.colors.statusSuccess : themeTokens.colors.statusError;
           return `
-            <div style="font-weight:600;margin-bottom:4px;color:#c9bdb0;">${xName} ↔ ${yName}</div>
+            <div style="font-weight:600;margin-bottom:4px;color:${themeTokens.colors.textSecondary};">${xName} ↔ ${yName}</div>
             <div style="font-size:13px;font-weight:700;color:${color};">
               ${strength} ${dir} Correlation: ${val > 0 ? '+' : ''}${val}
             </div>
-            <div style="font-size:11px;color:#a89f94;margin-top:4px;">Click cell to inspect pair relationship</div>
+            <div style="font-size:11px;color:${themeTokens.colors.textMuted};margin-top:4px;">Click cell to inspect pair relationship</div>
           `;
         }
       },
@@ -113,25 +158,25 @@ export default function VisualEdaDashboard({
         data: metrics,
         splitArea: { show: true },
         axisLabel: {
-          color: '#c9bdb0',
+          color: themeTokens.colors.textSecondary,
           rotate: 35,
           fontSize: 10,
           interval: 0,
           formatter: (v) => v.length > 14 ? v.slice(0, 13) + '…' : v
         },
-        axisLine: { lineStyle: { color: '#524940' } }
+        axisLine: { lineStyle: { color: themeTokens.colors.borderStrong } }
       },
       yAxis: {
         type: 'category',
         data: metrics,
         splitArea: { show: true },
         axisLabel: {
-          color: '#c9bdb0',
+          color: themeTokens.colors.textSecondary,
           fontSize: 10,
           interval: 0,
           formatter: (v) => v.length > 14 ? v.slice(0, 13) + '…' : v
         },
-        axisLine: { lineStyle: { color: '#524940' } }
+        axisLine: { lineStyle: { color: themeTokens.colors.borderStrong } }
       },
       visualMap: {
         min: -1,
@@ -141,9 +186,9 @@ export default function VisualEdaDashboard({
         left: 'center',
         bottom: '0%',
         text: ['+1.0 (Positive)', '-1.0 (Negative)'],
-        textStyle: { color: '#c9bdb0', fontSize: 11 },
+        textStyle: { color: themeTokens.colors.textSecondary, fontSize: 11 },
         inRange: {
-          color: ['#ff6b81', '#3d362f', '#2ed573']
+          color: themeTokens.chart.heatmapPalette
         }
       },
       series: [
@@ -152,7 +197,7 @@ export default function VisualEdaDashboard({
           data: data,
           label: {
             show: metrics.length <= 8,
-            color: '#fff',
+            color: themeTokens.chart.heatmapText,
             fontSize: 10,
             formatter: (p) => p.data[2] != null ? p.data[2].toFixed(2) : ''
           },
@@ -165,7 +210,7 @@ export default function VisualEdaDashboard({
         }
       ]
     };
-  }, [correlationMatrix]);
+  }, [correlationMatrix, themeTokens]);
 
   // 2. Metric Distribution Histogram Option
   const distributionOption = useMemo(() => {
@@ -174,12 +219,13 @@ export default function VisualEdaDashboard({
 
     return {
       backgroundColor: 'transparent',
+      color: themeTokens.chart.palette,
       tooltip: {
         trigger: 'axis',
         axisPointer: { type: 'shadow' },
-        backgroundColor: '#1c1815',
-        borderColor: '#524940',
-        textStyle: { color: '#fff9f2', fontSize: 12 },
+        backgroundColor: themeTokens.colors.surface,
+        borderColor: themeTokens.colors.borderStrong,
+        textStyle: { color: themeTokens.colors.textPrimary, fontSize: 12 },
         formatter: (params) => {
           const p = params[0];
           return `<b>Range: ${p.name}</b><br/>Employees / Rows: <b>${p.value}</b>`;
@@ -195,13 +241,13 @@ export default function VisualEdaDashboard({
       xAxis: {
         type: 'category',
         data: bins.map((b) => b.label),
-        axisLabel: { color: '#c9bdb0', rotate: 25, fontSize: 10 },
-        axisLine: { lineStyle: { color: '#524940' } }
+        axisLabel: { color: themeTokens.colors.textSecondary, rotate: 25, fontSize: 10 },
+        axisLine: { lineStyle: { color: themeTokens.colors.borderStrong } }
       },
       yAxis: {
         type: 'value',
-        axisLabel: { color: '#c9bdb0', fontSize: 11 },
-        splitLine: { lineStyle: { color: 'rgba(255, 255, 255, 0.05)' } }
+        axisLabel: { color: themeTokens.colors.textSecondary, fontSize: 11 },
+        splitLine: { lineStyle: { color: themeTokens.chart.splitLine } }
       },
       series: [
         {
@@ -209,7 +255,7 @@ export default function VisualEdaDashboard({
           type: 'bar',
           data: bins.map((b) => b.count),
           itemStyle: {
-            color: '#ffb089',
+            color: themeTokens.colors.gold,
             borderRadius: [4, 4, 0, 0]
           },
           markLine: {
@@ -217,15 +263,15 @@ export default function VisualEdaDashboard({
             data: [
               {
                 xAxis: bins.findIndex((b) => currentDist.median >= b.bin_start && currentDist.median <= b.bin_end),
-                lineStyle: { color: '#2ed573', type: 'dashed', width: 2 },
-                label: { formatter: `Median: ${currentDist.median}`, color: '#2ed573', position: 'end' }
+                lineStyle: { color: themeTokens.colors.statusSuccess, type: 'dashed', width: 2 },
+                label: { formatter: `Median: ${currentDist.median}`, color: themeTokens.colors.statusSuccess, position: 'end' }
               }
             ]
           }
         }
       ]
     };
-  }, [currentDist]);
+  }, [currentDist, themeTokens]);
 
   // 3. Temporal Date-Separated Trajectory Option
   const temporalOption = useMemo(() => {
@@ -239,11 +285,12 @@ export default function VisualEdaDashboard({
 
     return {
       backgroundColor: 'transparent',
+      color: themeTokens.chart.palette,
       tooltip: {
         trigger: 'axis',
-        backgroundColor: '#1c1815',
-        borderColor: '#524940',
-        textStyle: { color: '#fff9f2', fontSize: 12 },
+        backgroundColor: themeTokens.colors.surface,
+        borderColor: themeTokens.colors.borderStrong,
+        textStyle: { color: themeTokens.colors.textPrimary, fontSize: 12 },
         formatter: (params) => {
           let html = `<b>Period: ${params[0].name}</b><br/>`;
           params.forEach((p) => {
@@ -254,7 +301,7 @@ export default function VisualEdaDashboard({
       },
       legend: {
         data: ['Avg Attendance (Days)', 'Avg Approved Leaves', 'Leave Utilization Rate (%)'],
-        textStyle: { color: '#c9bdb0', fontSize: 11 },
+        textStyle: { color: themeTokens.colors.textSecondary, fontSize: 11 },
         top: 0
       },
       grid: {
@@ -267,22 +314,22 @@ export default function VisualEdaDashboard({
       xAxis: {
         type: 'category',
         data: labels,
-        axisLabel: { color: '#c9bdb0', rotate: 20, fontSize: 11 },
-        axisLine: { lineStyle: { color: '#524940' } }
+        axisLabel: { color: themeTokens.colors.textSecondary, rotate: 20, fontSize: 11 },
+        axisLine: { lineStyle: { color: themeTokens.colors.borderStrong } }
       },
       yAxis: [
         {
           type: 'value',
           name: 'Days',
-          nameTextStyle: { color: '#a89f94', fontSize: 10 },
-          axisLabel: { color: '#c9bdb0', fontSize: 11 },
-          splitLine: { lineStyle: { color: 'rgba(255, 255, 255, 0.05)' } }
+          nameTextStyle: { color: themeTokens.colors.textMuted, fontSize: 10 },
+          axisLabel: { color: themeTokens.colors.textSecondary, fontSize: 11 },
+          splitLine: { lineStyle: { color: themeTokens.chart.splitLine } }
         },
         {
           type: 'value',
           name: 'Rate (%)',
-          nameTextStyle: { color: '#a89f94', fontSize: 10 },
-          axisLabel: { color: '#c9bdb0', fontSize: 11, formatter: '{value}%' },
+          nameTextStyle: { color: themeTokens.colors.textMuted, fontSize: 10 },
+          axisLabel: { color: themeTokens.colors.textSecondary, fontSize: 11, formatter: '{value}%' },
           splitLine: { show: false }
         }
       ],
@@ -291,13 +338,13 @@ export default function VisualEdaDashboard({
           name: 'Avg Attendance (Days)',
           type: 'bar',
           data: avgAtt,
-          itemStyle: { color: '#2ed573', borderRadius: [4, 4, 0, 0] }
+          itemStyle: { color: themeTokens.colors.statusSuccess, borderRadius: [4, 4, 0, 0] }
         },
         {
           name: 'Avg Approved Leaves',
           type: 'bar',
           data: avgLeaves,
-          itemStyle: { color: '#ffb089', borderRadius: [4, 4, 0, 0] }
+          itemStyle: { color: themeTokens.colors.gold, borderRadius: [4, 4, 0, 0] }
         },
         {
           name: 'Leave Utilization Rate (%)',
@@ -305,12 +352,12 @@ export default function VisualEdaDashboard({
           yAxisIndex: 1,
           data: leaveRates,
           symbolSize: 8,
-          itemStyle: { color: '#ff6b81' },
+          itemStyle: { color: themeTokens.colors.statusError },
           lineStyle: { width: 3 }
         }
       ]
     };
-  }, [temporalAnalysis]);
+  }, [temporalAnalysis, themeTokens]);
 
   // 4. Linear Regression Scatter Option
   const linearModel = predictiveModeling.linear_models?.[selectedLinearIndex] || predictiveModeling.linear_models?.[0];
@@ -321,11 +368,12 @@ export default function VisualEdaDashboard({
 
     return {
       backgroundColor: 'transparent',
+      color: themeTokens.chart.palette,
       tooltip: {
         trigger: 'item',
-        backgroundColor: '#1c1815',
-        borderColor: '#524940',
-        textStyle: { color: '#fff9f2', fontSize: 12 },
+        backgroundColor: themeTokens.colors.surface,
+        borderColor: themeTokens.colors.borderStrong,
+        textStyle: { color: themeTokens.colors.textPrimary, fontSize: 12 },
         formatter: (params) => {
           if (params.seriesName === 'OLS Trendline') {
             return `<b>Fitted Line:</b> ${linearModel.equation}`;
@@ -345,16 +393,16 @@ export default function VisualEdaDashboard({
         name: linearModel.x_variable,
         nameLocation: 'middle',
         nameGap: 28,
-        nameTextStyle: { color: '#c9bdb0', fontSize: 11 },
-        axisLabel: { color: '#c9bdb0', fontSize: 11 },
-        splitLine: { lineStyle: { color: 'rgba(255, 255, 255, 0.05)' } }
+        nameTextStyle: { color: themeTokens.colors.textSecondary, fontSize: 11 },
+        axisLabel: { color: themeTokens.colors.textSecondary, fontSize: 11 },
+        splitLine: { lineStyle: { color: themeTokens.chart.splitLine } }
       },
       yAxis: {
         type: 'value',
         name: linearModel.y_variable,
-        nameTextStyle: { color: '#c9bdb0', fontSize: 11 },
-        axisLabel: { color: '#c9bdb0', fontSize: 11 },
-        splitLine: { lineStyle: { color: 'rgba(255, 255, 255, 0.05)' } }
+        nameTextStyle: { color: themeTokens.colors.textSecondary, fontSize: 11 },
+        axisLabel: { color: themeTokens.colors.textSecondary, fontSize: 11 },
+        splitLine: { lineStyle: { color: themeTokens.chart.splitLine } }
       },
       series: [
         {
@@ -363,8 +411,8 @@ export default function VisualEdaDashboard({
           data: scatter,
           symbolSize: 6,
           itemStyle: {
-            color: 'rgba(255, 176, 137, 0.65)',
-            borderColor: '#ffb089'
+            color: themeTokens.colors.softGold,
+            borderColor: themeTokens.colors.gold
           }
         },
         {
@@ -372,21 +420,21 @@ export default function VisualEdaDashboard({
           type: 'line',
           data: trendline,
           showSymbol: false,
-          lineStyle: { color: '#2ed573', width: 3 },
+          lineStyle: { color: themeTokens.colors.statusSuccess, width: 3 },
           markPoint: {
             data: [
               {
                 coord: trendline[1],
                 value: `R² = ${linearModel.r_squared}`,
-                itemStyle: { color: '#2ed573' },
-                label: { color: '#1c1815', fontWeight: 'bold' }
+                itemStyle: { color: themeTokens.colors.statusSuccess },
+                label: { color: themeTokens.colors.textOnBrand, fontWeight: 'bold' }
               }
             ]
           }
         }
       ]
     };
-  }, [linearModel]);
+  }, [linearModel, themeTokens]);
 
   // 5. Logistic Regression Sigmoid Probability Option
   const logisticModel = predictiveModeling.logistic_models?.[0];
@@ -396,11 +444,12 @@ export default function VisualEdaDashboard({
 
     return {
       backgroundColor: 'transparent',
+      color: themeTokens.chart.palette,
       tooltip: {
         trigger: 'axis',
-        backgroundColor: '#1c1815',
-        borderColor: '#524940',
-        textStyle: { color: '#fff9f2', fontSize: 12 },
+        backgroundColor: themeTokens.colors.surface,
+        borderColor: themeTokens.colors.borderStrong,
+        textStyle: { color: themeTokens.colors.textPrimary, fontSize: 12 },
         formatter: (params) => {
           const pt = params[0];
           return `<b>${logisticModel.x_variable}: ${pt.value[0]}</b><br/>Risk Probability: <b>${(pt.value[1] * 100).toFixed(1)}%</b>`;
@@ -418,18 +467,18 @@ export default function VisualEdaDashboard({
         name: logisticModel.x_variable,
         nameLocation: 'middle',
         nameGap: 28,
-        nameTextStyle: { color: '#c9bdb0', fontSize: 11 },
-        axisLabel: { color: '#c9bdb0', fontSize: 11 },
-        splitLine: { lineStyle: { color: 'rgba(255, 255, 255, 0.05)' } }
+        nameTextStyle: { color: themeTokens.colors.textSecondary, fontSize: 11 },
+        axisLabel: { color: themeTokens.colors.textSecondary, fontSize: 11 },
+        splitLine: { lineStyle: { color: themeTokens.chart.splitLine } }
       },
       yAxis: {
         type: 'value',
         min: 0,
         max: 1.0,
         name: 'P(High Risk)',
-        nameTextStyle: { color: '#c9bdb0', fontSize: 11 },
-        axisLabel: { color: '#c9bdb0', fontSize: 11, formatter: (v) => `${(v * 100).toFixed(0)}%` },
-        splitLine: { lineStyle: { color: 'rgba(255, 255, 255, 0.05)' } }
+        nameTextStyle: { color: themeTokens.colors.textSecondary, fontSize: 11 },
+        axisLabel: { color: themeTokens.colors.textSecondary, fontSize: 11, formatter: (v) => `${(v * 100).toFixed(0)}%` },
+        splitLine: { lineStyle: { color: themeTokens.chart.splitLine } }
       },
       series: [
         {
@@ -438,7 +487,7 @@ export default function VisualEdaDashboard({
           smooth: true,
           data: curveData,
           showSymbol: false,
-          lineStyle: { color: '#ff6b81', width: 3 },
+          lineStyle: { color: themeTokens.colors.statusError, width: 3 },
           areaStyle: {
             color: {
               type: 'linear',
@@ -447,8 +496,8 @@ export default function VisualEdaDashboard({
               x2: 0,
               y2: 1,
               colorStops: [
-                { offset: 0, color: 'rgba(255, 107, 129, 0.35)' },
-                { offset: 1, color: 'rgba(255, 107, 129, 0.02)' }
+                { offset: 0, color: themeTokens.colors.softError },
+                { offset: 1, color: themeTokens.colors.surface }
               ]
             }
           },
@@ -457,15 +506,149 @@ export default function VisualEdaDashboard({
             data: [
               {
                 yAxis: 0.5,
-                lineStyle: { color: '#ffb089', type: 'dashed' },
-                label: { formatter: '50% Threshold', color: '#ffb089', position: 'end' }
+                lineStyle: { color: themeTokens.colors.gold, type: 'dashed' },
+                label: { formatter: '50% Threshold', color: themeTokens.colors.gold, position: 'end' }
               }
             ]
           }
         }
       ]
     };
-  }, [logisticModel]);
+  }, [logisticModel, themeTokens]);
+
+  // Group-By Category Bar Chart Option
+  const groupByBarOption = useMemo(() => {
+    if (!currentBreakdown) return null;
+    const cats = currentBreakdown.categories || [];
+    const means = currentBreakdown.means || [];
+    const topCat = currentBreakdown.top_category;
+    const overallMean = currentBreakdown.overall_mean;
+
+    return {
+      backgroundColor: 'transparent',
+      color: themeTokens.chart.palette,
+      tooltip: {
+        trigger: 'axis',
+        axisPointer: { type: 'shadow' },
+        backgroundColor: themeTokens.colors.surface,
+        borderColor: themeTokens.colors.borderStrong,
+        textStyle: { color: themeTokens.colors.textPrimary, fontSize: 12 },
+        formatter: (params) => {
+          const item = params[0];
+          const idx = item.dataIndex;
+          const count = currentBreakdown.counts?.[idx] ?? '';
+          const total = currentBreakdown.totals?.[idx] ?? '';
+          const isTop = cats[idx] === topCat;
+          return `
+            <div style="font-weight:700;margin-bottom:4px;color:${themeTokens.colors.textPrimary};">${item.name} ${isTop ? '🏆 (Top Cohort)' : ''}</div>
+            <div style="color:${themeTokens.colors.gold};font-size:13px;font-weight:600;">Mean ${currentBreakdown.measure_label}: ${item.value}</div>
+            <div style="color:${themeTokens.colors.textMuted};font-size:11px;margin-top:2px;">Sample Count: ${count} records</div>
+            <div style="color:${themeTokens.colors.textMuted};font-size:11px;">Aggregated Total: ${total}</div>
+          `;
+        }
+      },
+      grid: {
+        top: 35,
+        bottom: 50,
+        left: '5%',
+        right: '5%',
+        containLabel: true
+      },
+      xAxis: {
+        type: 'category',
+        data: cats,
+        axisLabel: {
+          color: themeTokens.colors.textSecondary,
+          rotate: cats.length > 5 ? 25 : 0,
+          fontSize: 11
+        },
+        axisLine: { lineStyle: { color: themeTokens.colors.borderStrong } }
+      },
+      yAxis: {
+        type: 'value',
+        name: `Mean ${currentBreakdown.measure_label}`,
+        nameTextStyle: { color: themeTokens.colors.textMuted, fontSize: 11 },
+        splitLine: { lineStyle: { color: themeTokens.chart.splitLine } },
+        axisLabel: { color: themeTokens.colors.textMuted, fontSize: 11 }
+      },
+      series: [
+        {
+          name: `Mean ${currentBreakdown.measure_label}`,
+          type: 'bar',
+          data: means.map((val, idx) => ({
+            value: val,
+            itemStyle: {
+              color: cats[idx] === topCat ? themeTokens.colors.gold : themeTokens.colors.brandBlue,
+              borderRadius: [4, 4, 0, 0]
+            }
+          })),
+          markLine: overallMean != null ? {
+            data: [{ type: 'average', name: 'Overall Mean', yAxis: overallMean }],
+            lineStyle: { color: themeTokens.colors.statusSuccess, type: 'dashed', width: 2 },
+            label: {
+              formatter: `Overall Mean: ${overallMean}`,
+              position: 'insideEndTop',
+              color: themeTokens.colors.statusSuccess,
+              fontSize: 11
+            }
+          } : undefined
+        }
+      ]
+    };
+  }, [currentBreakdown, themeTokens]);
+
+  // Group-By Donut Distribution Option
+  const groupByDonutOption = useMemo(() => {
+    if (!currentBreakdown || !currentBreakdown.table_rows) return null;
+    const pieData = currentBreakdown.table_rows.map((r) => ({
+      name: r.category,
+      value: r.count
+    }));
+
+    return {
+      backgroundColor: 'transparent',
+      color: themeTokens.chart.palette,
+      tooltip: {
+        trigger: 'item',
+        backgroundColor: themeTokens.colors.surface,
+        borderColor: themeTokens.colors.borderStrong,
+        textStyle: { color: themeTokens.colors.textPrimary, fontSize: 12 },
+        formatter: '{b}: {c} records ({d}%)'
+      },
+      legend: {
+        bottom: 0,
+        textStyle: { color: themeTokens.colors.textSecondary, fontSize: 11 }
+      },
+      series: [
+        {
+          name: 'Record Share',
+          type: 'pie',
+          radius: ['45%', '70%'],
+          center: ['50%', '45%'],
+          avoidLabelOverlap: false,
+          itemStyle: {
+            borderRadius: 6,
+            borderColor: themeTokens.colors.surface,
+            borderWidth: 2
+          },
+          label: {
+            show: false,
+            position: 'center'
+          },
+          emphasis: {
+            label: {
+              show: true,
+              fontSize: 13,
+              fontWeight: 'bold',
+              color: themeTokens.colors.textPrimary,
+              formatter: '{b}\n{d}%'
+            }
+          },
+          data: pieData
+        }
+      ]
+    };
+  }, [currentBreakdown, themeTokens]);
 
   if (loadingEda) {
     return (
@@ -588,6 +771,17 @@ export default function VisualEdaDashboard({
           <span>Distributions & Correlation Matrix</span>
         </button>
 
+        {hasGroupBy && (
+          <button
+            className={`toggle-btn ${activeTab === 'groupings' ? 'active' : ''}`}
+            onClick={() => setActiveTab('groupings')}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+          >
+            <Layers size={15} />
+            <span>📊 Group-By & Dimensional Breakdowns</span>
+          </button>
+        )}
+
         {temporalAnalysis.has_temporal_data && (
           <button
             className={`toggle-btn ${activeTab === 'temporal' ? 'active' : ''}`}
@@ -634,7 +828,7 @@ export default function VisualEdaDashboard({
           <div className="eda-section-card">
             <div className="section-header">
               <h3>
-                <Activity size={18} color="#ffb089" />
+                <Activity size={18} color={themeTokens.colors.gold} />
                 Realistic Intra-Sheet Correlation Matrix
               </h3>
               <p>
@@ -693,7 +887,7 @@ export default function VisualEdaDashboard({
             >
               <div>
                 <h3>
-                  <BarChart2 size={18} color="#2ed573" />
+                  <BarChart2 size={18} color={themeTokens.colors.statusSuccess} />
                   Metric Distribution Histogram & Outlier Inspector
                 </h3>
                 <p>
@@ -769,7 +963,7 @@ export default function VisualEdaDashboard({
         <div className="eda-section-card">
           <div className="section-header">
             <h3>
-              <Clock size={18} color="#ffb089" />
+              <Clock size={18} color={themeTokens.colors.gold} />
               Date-Separated Temporal Attendance & Leave Progression
             </h3>
             <p>
@@ -786,14 +980,14 @@ export default function VisualEdaDashboard({
                 <div
                   style={{
                     marginTop: '1.25rem',
-                    background: 'rgba(255, 176, 137, 0.08)',
+                    background: themeTokens.colors.softGold,
                     border: '1px solid rgba(255, 176, 137, 0.25)',
                     borderRadius: '8px',
                     padding: '0.85rem 1.1rem'
                   }}
                 >
-                  <strong style={{ color: '#ffb089', fontSize: '0.9rem' }}>{isHr ? 'HR Temporal Findings:' : 'Temporal Trend Findings:'}</strong>
-                  <ul style={{ margin: '6px 0 0 1.25rem', padding: 0, fontSize: '0.85rem', color: '#e5dacd' }}>
+                  <strong style={{ color: themeTokens.colors.gold, fontSize: '0.9rem' }}>{isHr ? 'HR Temporal Findings:' : 'Temporal Trend Findings:'}</strong>
+                  <ul style={{ margin: '6px 0 0 1.25rem', padding: 0, fontSize: '0.85rem', color: themeTokens.colors.textSecondary }}>
                     {temporalAnalysis.insights.map((ins, idx) => (
                       <li key={idx} style={{ marginBottom: '4px' }}>{ins}</li>
                     ))}
@@ -842,7 +1036,7 @@ export default function VisualEdaDashboard({
             >
               <div>
                 <h3>
-                  <TrendingUp size={18} color="#2ed573" />
+                  <TrendingUp size={18} color={themeTokens.colors.statusSuccess} />
                   Linear Regression Studio (Ordinary Least Squares)
                 </h3>
                 <p>
@@ -912,15 +1106,15 @@ export default function VisualEdaDashboard({
                 <div
                   style={{
                     marginTop: '1rem',
-                    background: 'rgba(46, 213, 115, 0.08)',
+                    background: themeTokens.colors.mint,
                     border: '1px solid rgba(46, 213, 115, 0.25)',
                     borderRadius: '8px',
                     padding: '0.75rem 1rem',
                     fontSize: '0.85rem',
-                    color: '#e5dacd'
+                    color: themeTokens.colors.textSecondary
                   }}
                 >
-                  <strong style={{ color: '#2ed573' }}>{isHr ? 'HR Head Takeaway:' : (isEducation ? 'Academic Lead Takeaway:' : 'Executive Takeaway:')}</strong> {linearModel.executive_takeaway}
+                  <strong style={{ color: themeTokens.colors.statusSuccess }}>{isHr ? 'HR Head Takeaway:' : (isEducation ? 'Academic Lead Takeaway:' : 'Executive Takeaway:')}</strong> {linearModel.executive_takeaway}
                 </div>
               </div>
             ) : (
@@ -934,7 +1128,7 @@ export default function VisualEdaDashboard({
           <div className="eda-section-card">
             <div className="section-header">
               <h3>
-                <Brain size={18} color="#ff6b81" />
+                <Brain size={18} color={themeTokens.colors.statusError} />
                 Logistic Regression & Binary Risk Classification
               </h3>
               <p>
@@ -988,33 +1182,33 @@ export default function VisualEdaDashboard({
                         display: 'grid',
                         gridTemplateColumns: '1fr 1fr',
                         gap: '0.5rem',
-                        background: 'rgba(255, 255, 255, 0.02)',
+                        background: themeTokens.chart.splitLine,
                         border: '1px solid var(--border-subtle)',
                         borderRadius: '8px',
                         padding: '0.75rem'
                       }}
                     >
-                      <div style={{ background: 'rgba(46, 213, 115, 0.12)', border: '1px solid rgba(46, 213, 115, 0.3)', borderRadius: '6px', padding: '0.6rem', textAlign: 'center' }}>
-                        <div style={{ fontSize: '0.72rem', color: '#2ed573' }}>TRUE POSITIVE (TP)</div>
-                        <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#fff9f2' }}>
+                      <div style={{ background: themeTokens.colors.mint, border: '1px solid rgba(46, 213, 115, 0.3)', borderRadius: '6px', padding: '0.6rem', textAlign: 'center' }}>
+                        <div style={{ fontSize: '0.72rem', color: themeTokens.colors.statusSuccess }}>TRUE POSITIVE (TP)</div>
+                        <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: themeTokens.colors.textPrimary }}>
                           {logisticModel.confusion_matrix?.true_positive}
                         </div>
                       </div>
-                      <div style={{ background: 'rgba(255, 107, 129, 0.1)', border: '1px solid rgba(255, 107, 129, 0.25)', borderRadius: '6px', padding: '0.6rem', textAlign: 'center' }}>
-                        <div style={{ fontSize: '0.72rem', color: '#ff6b81' }}>FALSE POSITIVE (FP)</div>
-                        <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#fff9f2' }}>
+                      <div style={{ background: themeTokens.colors.softError, border: '1px solid rgba(255, 107, 129, 0.25)', borderRadius: '6px', padding: '0.6rem', textAlign: 'center' }}>
+                        <div style={{ fontSize: '0.72rem', color: themeTokens.colors.statusError }}>FALSE POSITIVE (FP)</div>
+                        <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: themeTokens.colors.textPrimary }}>
                           {logisticModel.confusion_matrix?.false_positive}
                         </div>
                       </div>
-                      <div style={{ background: 'rgba(255, 107, 129, 0.1)', border: '1px solid rgba(255, 107, 129, 0.25)', borderRadius: '6px', padding: '0.6rem', textAlign: 'center' }}>
-                        <div style={{ fontSize: '0.72rem', color: '#ff6b81' }}>FALSE NEGATIVE (FN)</div>
-                        <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#fff9f2' }}>
+                      <div style={{ background: themeTokens.colors.softError, border: '1px solid rgba(255, 107, 129, 0.25)', borderRadius: '6px', padding: '0.6rem', textAlign: 'center' }}>
+                        <div style={{ fontSize: '0.72rem', color: themeTokens.colors.statusError }}>FALSE NEGATIVE (FN)</div>
+                        <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: themeTokens.colors.textPrimary }}>
                           {logisticModel.confusion_matrix?.false_negative}
                         </div>
                       </div>
-                      <div style={{ background: 'rgba(46, 213, 115, 0.12)', border: '1px solid rgba(46, 213, 115, 0.3)', borderRadius: '6px', padding: '0.6rem', textAlign: 'center' }}>
-                        <div style={{ fontSize: '0.72rem', color: '#2ed573' }}>TRUE NEGATIVE (TN)</div>
-                        <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#fff9f2' }}>
+                      <div style={{ background: themeTokens.colors.mint, border: '1px solid rgba(46, 213, 115, 0.3)', borderRadius: '6px', padding: '0.6rem', textAlign: 'center' }}>
+                        <div style={{ fontSize: '0.72rem', color: themeTokens.colors.statusSuccess }}>TRUE NEGATIVE (TN)</div>
+                        <div style={{ fontSize: '1.25rem', fontWeight: 'bold', color: themeTokens.colors.textPrimary }}>
                           {logisticModel.confusion_matrix?.true_negative}
                         </div>
                       </div>
@@ -1023,15 +1217,15 @@ export default function VisualEdaDashboard({
                     <div
                       style={{
                         marginTop: '0.85rem',
-                        background: 'rgba(255, 107, 129, 0.08)',
+                        background: themeTokens.colors.softError,
                         border: '1px solid rgba(255, 107, 129, 0.25)',
                         borderRadius: '8px',
                         padding: '0.75rem',
                         fontSize: '0.82rem',
-                        color: '#e5dacd'
+                        color: themeTokens.colors.textSecondary
                       }}
                     >
-                      <strong style={{ color: '#ff6b81' }}>{isHr ? 'HR Intervention Point:' : (isEducation ? 'Academic Intervention Point:' : 'Target Intervention Point:')}</strong> {logisticModel.executive_takeaway}
+                      <strong style={{ color: themeTokens.colors.statusError }}>{isHr ? 'HR Intervention Point:' : (isEducation ? 'Academic Intervention Point:' : 'Target Intervention Point:')}</strong> {logisticModel.executive_takeaway}
                     </div>
                   </div>
                 </div>
@@ -1050,7 +1244,7 @@ export default function VisualEdaDashboard({
         <div className="eda-section-card">
           <div className="section-header">
             <h3>
-              <GitBranch size={18} color="#ffb089" />
+              <GitBranch size={18} color={themeTokens.colors.gold} />
               Verified Multi-Sheet Entity Linkages & Cross-Reconciliation
             </h3>
             <p>
@@ -1069,7 +1263,7 @@ export default function VisualEdaDashboard({
                   <div key={idx} className="link-tile">
                     <div className="link-title">
                       <span>{link.left_sheet_name}</span>
-                      <ArrowRight size={14} color="#a89f94" />
+                      <ArrowRight size={14} color={themeTokens.colors.textMuted} />
                       <span>{link.right_sheet_name}</span>
                     </div>
                     <div className="link-meta">
@@ -1121,7 +1315,7 @@ export default function VisualEdaDashboard({
             <div
               style={{
                 marginTop: '1.25rem',
-                background: 'rgba(255, 176, 137, 0.08)',
+                background: themeTokens.colors.softGold,
                 border: '1px solid rgba(255, 176, 137, 0.25)',
                 borderRadius: '8px',
                 padding: '0.85rem 1.1rem',
@@ -1133,8 +1327,8 @@ export default function VisualEdaDashboard({
               }}
             >
               <div>
-                <strong style={{ color: '#ffb089' }}>Synthesized Derived Tables Available:</strong>
-                <p style={{ margin: '3px 0 0 0', fontSize: '0.82rem', color: '#e5dacd' }}>
+                <strong style={{ color: themeTokens.colors.gold }}>Synthesized Derived Tables Available:</strong>
+                <p style={{ margin: '3px 0 0 0', fontSize: '0.82rem', color: themeTokens.colors.textSecondary }}>
                   {edaReport.cross_sheet_intelligence.derived_tables.map((d) => d.display_name).join(', ')}
                 </p>
               </div>
@@ -1161,7 +1355,7 @@ export default function VisualEdaDashboard({
           <div className="eda-section-card">
             <div className="section-header">
               <h3>
-                <Table size={18} color="#ffb089" />
+                <Table size={18} color={themeTokens.colors.gold} />
                 Column Profiles, Null Rates & Imputation Strategies
               </h3>
               <p>
@@ -1195,7 +1389,7 @@ export default function VisualEdaDashboard({
                       <td className="stat-cell">
                         {col.imputation ? (
                           <div style={{ fontSize: '0.82rem', color: 'var(--brand-300)' }}>
-                            <span style={{ padding: '2px 6px', background: 'rgba(99, 102, 241, 0.15)', borderRadius: '4px', fontWeight: 600 }}>
+                            <span style={{ padding: '2px 6px', background: themeTokens.colors.softBlue, borderRadius: '4px', fontWeight: 600 }}>
                               {col.imputation.strategy.toUpperCase()} → {String(col.imputation.recommended_value)}
                             </span>
                             <div style={{ fontSize: '0.74rem', opacity: 0.8, marginTop: '4px', maxWidth: '250px', lineHeight: 1.25 }}>
@@ -1203,7 +1397,7 @@ export default function VisualEdaDashboard({
                             </div>
                           </div>
                         ) : (
-                          <span style={{ color: '#2ed573', fontSize: '0.82rem' }}>✓ Complete</span>
+                          <span style={{ color: themeTokens.colors.statusSuccess, fontSize: '0.82rem' }}>✓ Complete</span>
                         )}
                       </td>
                       <td className="stat-cell">{col.distinct_count}</td>
@@ -1214,11 +1408,11 @@ export default function VisualEdaDashboard({
                       </td>
                       <td>
                         {col.outlier_count > 0 ? (
-                          <span style={{ color: '#ff6b81', fontWeight: 600 }}>
+                          <span style={{ color: themeTokens.colors.statusError, fontWeight: 600 }}>
                             ⚠️ {col.outlier_count} outliers
                           </span>
                         ) : (
-                          <span style={{ color: '#2ed573' }}>✓ Normal</span>
+                          <span style={{ color: themeTokens.colors.statusSuccess }}>✓ Normal</span>
                         )}
                       </td>
                     </tr>
@@ -1232,7 +1426,7 @@ export default function VisualEdaDashboard({
           <div className="eda-section-card">
             <div className="section-header">
               <h3>
-                <ShieldCheck size={18} color="#2ed573" />
+                <ShieldCheck size={18} color={themeTokens.colors.statusSuccess} />
                 Data Cleansing & Normalization Audit Trail
               </h3>
               <p>
@@ -1269,7 +1463,7 @@ export default function VisualEdaDashboard({
                     })
                   ) : (
                     <tr>
-                      <td colSpan={5} style={{ textAlign: 'center', color: '#a89f94', padding: '1rem' }}>
+                      <td colSpan={5} style={{ textAlign: 'center', color: themeTokens.colors.textMuted, padding: '1rem' }}>
                         All column values in this sheet are already in canonical format; no type coercions required.
                       </td>
                     </tr>
@@ -1278,6 +1472,261 @@ export default function VisualEdaDashboard({
               </table>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* TAB: GROUP-BY & DIMENSIONAL BREAKDOWNS */}
+      {activeTab === 'groupings' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          {/* Section: Dimension & Metric Selection */}
+          <div className="eda-section-card">
+            <div className="section-header" style={{ marginBottom: '1rem' }}>
+              <h3>
+                <Layers size={18} color={themeTokens.colors.gold} />
+                Dimensional Segmentation & Group-By Projections
+              </h3>
+              <p>
+                Multi-dimensional aggregations grouping quantitative measures by categorical domains and date-derived temporal cycles (such as Day of the Week, Departments, or Education levels).
+              </p>
+            </div>
+
+            {/* Pill Pickers */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1.5rem', marginBottom: '1.25rem' }}>
+              <div>
+                <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--fg-muted)', textTransform: 'uppercase', marginBottom: '0.4rem', letterSpacing: '0.04em' }}>
+                  Group-By Dimension
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                  {availableGroupDims.map((dim) => {
+                    const isSelected = dim === currentGroupDim;
+                    const label = dim.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+                    return (
+                      <button
+                        key={dim}
+                        type="button"
+                        onClick={() => setSelectedGroupDim(dim)}
+                        style={{
+                          padding: '0.35rem 0.75rem',
+                          borderRadius: '6px',
+                          border: isSelected ? `1px solid ${themeTokens.colors.gold}` : '1px solid var(--border-subtle)',
+                          background: isSelected ? themeTokens.colors.softGold : 'var(--bg-surface)',
+                          color: isSelected ? themeTokens.colors.gold : 'var(--fg-secondary)',
+                          fontSize: '0.8rem',
+                          fontWeight: isSelected ? 600 : 400,
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--fg-muted)', textTransform: 'uppercase', marginBottom: '0.4rem', letterSpacing: '0.04em' }}>
+                  Aggregated Metric / Measure
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                  {availableGroupMeasures.map((meas) => {
+                    const isSelected = meas === currentGroupMeas;
+                    const label = meas.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+                    return (
+                      <button
+                        key={meas}
+                        type="button"
+                        onClick={() => setSelectedGroupMeas(meas)}
+                        style={{
+                          padding: '0.35rem 0.75rem',
+                          borderRadius: '6px',
+                          border: isSelected ? `1px solid ${themeTokens.colors.brandBlue}` : '1px solid var(--border-subtle)',
+                          background: isSelected ? themeTokens.colors.softBlue : 'var(--bg-surface)',
+                          color: isSelected ? themeTokens.colors.brandBlue : 'var(--fg-secondary)',
+                          fontSize: '0.8rem',
+                          fontWeight: isSelected ? 600 : 400,
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease'
+                        }}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* Key Disparity / Pattern Insight Banner */}
+            {currentBreakdown && (
+              <div
+                style={{
+                  background: themeTokens.colors.softGold,
+                  border: '1px solid rgba(255, 176, 137, 0.3)',
+                  borderRadius: '8px',
+                  padding: '1rem',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '0.75rem',
+                  marginBottom: '1rem'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Sparkles size={18} color={themeTokens.colors.gold} />
+                  <span style={{ fontSize: '0.9rem', fontWeight: 700, color: themeTokens.colors.textPrimary }}>
+                    Executive Dimensional Pattern & Disparity Callout
+                  </span>
+                </div>
+                <div style={{ fontSize: '0.88rem', color: themeTokens.colors.textSecondary, lineHeight: '1.45' }}>
+                  {currentBreakdown.insight}
+                </div>
+
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', marginTop: '0.25rem' }}>
+                  <div style={{ background: themeTokens.colors.surface, padding: '0.35rem 0.7rem', borderRadius: '5px', fontSize: '0.78rem' }}>
+                    <span style={{ color: themeTokens.colors.textMuted }}>🏆 Top Segment: </span>
+                    <strong style={{ color: themeTokens.colors.gold }}>{currentBreakdown.top_category}</strong>{' '}
+                    <span style={{ color: themeTokens.colors.textMuted }}>(Avg: {currentBreakdown.top_mean})</span>
+                  </div>
+                  <div style={{ background: themeTokens.colors.surface, padding: '0.35rem 0.7rem', borderRadius: '5px', fontSize: '0.78rem' }}>
+                    <span style={{ color: themeTokens.colors.textMuted }}>🔻 Lagging Segment: </span>
+                    <strong style={{ color: themeTokens.colors.statusError }}>{currentBreakdown.bottom_category}</strong>{' '}
+                    <span style={{ color: themeTokens.colors.textMuted }}>(Avg: {currentBreakdown.bottom_mean})</span>
+                  </div>
+                  <div style={{ background: themeTokens.colors.surface, padding: '0.35rem 0.7rem', borderRadius: '5px', fontSize: '0.78rem' }}>
+                    <span style={{ color: themeTokens.colors.textMuted }}>📈 Segment Lift / Gap: </span>
+                    <strong style={{ color: themeTokens.colors.statusSuccess }}>+{currentBreakdown.disparity_pct}%</strong>
+                  </div>
+                  <div style={{ background: themeTokens.colors.surface, padding: '0.35rem 0.7rem', borderRadius: '5px', fontSize: '0.78rem' }}>
+                    <span style={{ color: themeTokens.colors.textMuted }}>📊 Overall Average: </span>
+                    <strong style={{ color: themeTokens.colors.textPrimary }}>{currentBreakdown.overall_mean}</strong>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Visual Charts Grid (Bar + Donut) */}
+            {currentBreakdown ? (
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))',
+                  gap: '1rem',
+                  marginTop: '1rem'
+                }}
+              >
+                {/* Chart 1: Bar Chart */}
+                <div
+                  style={{
+                    background: 'var(--bg-surface-elevated, rgba(255,255,255,0.02))',
+                    border: '1px solid var(--border-subtle)',
+                    borderRadius: '8px',
+                    padding: '1rem'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                    <h4 style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--fg-secondary)' }}>
+                      Mean {currentBreakdown.measure_label} by {currentBreakdown.dimension_label}
+                    </h4>
+                    <span style={{ fontSize: '0.75rem', color: themeTokens.colors.gold }}>Highlighted: Top Segment</span>
+                  </div>
+                  {groupByBarOption && (
+                    <ReactECharts option={groupByBarOption} style={{ height: '300px', width: '100%' }} />
+                  )}
+                </div>
+
+                {/* Chart 2: Donut Distribution Chart */}
+                <div
+                  style={{
+                    background: 'var(--bg-surface-elevated, rgba(255,255,255,0.02))',
+                    border: '1px solid var(--border-subtle)',
+                    borderRadius: '8px',
+                    padding: '1rem'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                    <h4 style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--fg-secondary)' }}>
+                      Record Share Distribution across {currentBreakdown.dimension_label}
+                    </h4>
+                    <span style={{ fontSize: '0.75rem', color: themeTokens.colors.textMuted }}>Total: {currentBreakdown.total_records} rows</span>
+                  </div>
+                  {groupByDonutOption && (
+                    <ReactECharts option={groupByDonutOption} style={{ height: '300px', width: '100%' }} />
+                  )}
+                </div>
+              </div>
+            ) : (
+              <p style={{ color: 'var(--fg-muted)', fontSize: '0.85rem', marginTop: '1rem' }}>
+                Select a valid dimension and measure above to view group-by aggregations.
+              </p>
+            )}
+
+            {/* Rollup Breakdown Data Grid */}
+            {currentBreakdown && currentBreakdown.table_rows && (
+              <div style={{ marginTop: '1.5rem' }}>
+                <h4 style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--fg-secondary)', marginBottom: '0.6rem' }}>
+                  Tabular Rollup Breakdown ({currentBreakdown.dimension_label} × {currentBreakdown.measure_label})
+                </h4>
+                <div className="eda-table-container">
+                  <table className="eda-data-grid">
+                    <thead>
+                      <tr>
+                        <th>{currentBreakdown.dimension_label} Category</th>
+                        <th style={{ textAlign: 'right' }}>Record Count</th>
+                        <th style={{ textAlign: 'right' }}>Sample Share</th>
+                        <th style={{ textAlign: 'right' }}>Mean {currentBreakdown.measure_label}</th>
+                        <th style={{ textAlign: 'right' }}>Total Sum</th>
+                        <th style={{ textAlign: 'right' }}>Metric Share</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {currentBreakdown.table_rows.map((row, idx) => {
+                        const isTop = row.category === currentBreakdown.top_category;
+                        return (
+                          <tr key={idx} style={isTop ? { background: themeTokens.colors.softGold } : undefined}>
+                            <td>
+                              <strong>{row.category}</strong>
+                              {isTop && (
+                                <span style={{ marginLeft: '6px', fontSize: '0.7rem', color: themeTokens.colors.gold, fontWeight: 600 }}>
+                                  [Top Cohort]
+                                </span>
+                              )}
+                            </td>
+                            <td className="stat-cell" style={{ textAlign: 'right' }}>{row.count}</td>
+                            <td style={{ textAlign: 'right' }}>{row.share_records_pct}%</td>
+                            <td className="stat-cell" style={{ textAlign: 'right', fontWeight: 700, color: isTop ? themeTokens.colors.gold : 'inherit' }}>
+                              {row.mean}
+                            </td>
+                            <td className="stat-cell" style={{ textAlign: 'right' }}>{row.total}</td>
+                            <td style={{ textAlign: 'right' }}>{row.share_measure_pct}%</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Section: Discovered Sheet-Level Dimensional Insights */}
+          {groupByAnalytics.insights && groupByAnalytics.insights.length > 0 && (
+            <div className="eda-section-card">
+              <div className="section-header">
+                <h3>
+                  <TrendingUp size={18} color={themeTokens.colors.statusSuccess} />
+                  All Discovered Cross-Dimensional Patterns & Cohort Findings
+                </h3>
+                <p>
+                  Automated statistical findings across all discrete categories and temporal day-of-week cycles for this sheet.
+                </p>
+              </div>
+              <ul style={{ margin: '0.75rem 0 0 0', paddingLeft: '1.25rem', color: themeTokens.colors.textSecondary, fontSize: '0.85rem', lineHeight: '1.6' }}>
+                {groupByAnalytics.insights.map((ins, idx) => (
+                  <li key={idx} style={{ marginBottom: '0.4rem' }}>{ins}</li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       )}
     </div>

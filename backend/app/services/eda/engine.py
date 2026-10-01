@@ -15,6 +15,7 @@ from .cross_correlator import (
 )
 from .temporal_analyzer import analyze_temporal_dynamics
 from .predictive_models import generate_predictive_suite_for_sheet
+from .group_by_analyzer import compute_group_by_analytics
 from .derived_tables import synthesize_derived_tables
 from .report_generator import build_sheet_eda_report
 
@@ -129,6 +130,9 @@ def run_eda_pipeline(sheet_ids: list[int] | None = None, conn: sqlite3.Connectio
             # Compute predictive models (Linear & Logistic Regression)
             predictive_suite = generate_predictive_suite_for_sheet(curated_rows, s["columns"], diag)
 
+            # Compute dimensional group-by aggregations and projections
+            group_by_res = compute_group_by_analytics(curated_rows, s["columns"], diag)
+
             from ..adaptive_dashboard.engine import compute_source_snapshot
             snap = compute_source_snapshot(sid, s["columns"], curated_rows if curated_rows else raw_rows)
 
@@ -141,6 +145,7 @@ def run_eda_pipeline(sheet_ids: list[int] | None = None, conn: sqlite3.Connectio
                 metric_distributions=metric_dists,
                 temporal_analysis=temporal_dyn,
                 predictive_suite=predictive_suite,
+                group_by_analytics=group_by_res,
                 snapshot=snap
             )
             reports_by_sheet[sid] = report

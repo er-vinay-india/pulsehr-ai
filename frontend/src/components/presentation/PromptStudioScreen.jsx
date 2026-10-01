@@ -86,6 +86,11 @@ export default function PromptStudioScreen({
   sheets = [],
   selectedSheetId,
   onSelectSheet,
+  latestDeck = null,
+  onOpenLatestDeck = () => {},
+  onDeleteLatestDeck = () => {},
+  detectedPersona = null,
+  relevantPersonas = [],
   error,
 }) {
   // 3-Step Guided Form: 1 = Source & Topic, 2 = Narrative Depth, 3 = Theme & Polish
@@ -270,6 +275,98 @@ export default function PromptStudioScreen({
               </p>
             </div>
 
+            {/* Last Generated Presentation Quick Action Card */}
+            {latestDeck && (
+              <div
+                className="pres-latest-deck-banner"
+                style={{
+                  background: "var(--color-bg-surface)",
+                  border: "1px solid var(--color-border-strong)",
+                  borderRadius: "12px",
+                  padding: "16px 20px",
+                  marginBottom: "24px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  boxShadow: "var(--shadow-sm)"
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+                  <div
+                    style={{
+                      background: "var(--color-bg-soft-teal)",
+                      borderRadius: "10px",
+                      padding: "10px",
+                      color: "var(--color-brand-accent)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center"
+                    }}
+                  >
+                    <FileText size={22} />
+                  </div>
+                  <div>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
+                      <span style={{ fontSize: "11px", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-brand-accent)" }}>
+                        Last Generated Presentation
+                      </span>
+                      <span style={{ fontSize: "11px", color: "var(--color-text-muted)" }}>•</span>
+                      <span style={{ fontSize: "12px", color: "var(--color-text-muted)" }}>
+                        {latestDeck.slides?.length || 0} Slides
+                      </span>
+                    </div>
+                    <h4 style={{ margin: 0, fontSize: "15px", fontWeight: "600", color: "var(--color-text-primary)" }}>
+                      {latestDeck.metadata?.title || latestDeck.title || "Executive Presentation"}
+                    </h4>
+                  </div>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                  <button
+                    type="button"
+                    className="btn-open-latest-deck"
+                    onClick={() => onOpenLatestDeck && onOpenLatestDeck(latestDeck)}
+                    style={{
+                      background: "var(--btn-primary-bg)",
+                      color: "var(--btn-primary-fg)",
+                      border: "none",
+                      borderRadius: "8px",
+                      padding: "8px 16px",
+                      fontSize: "13px",
+                      fontWeight: "600",
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "6px"
+                    }}
+                  >
+                    <span>Open & Edit Last PPT</span>
+                    <ArrowRight size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-delete-latest-deck"
+                    onClick={() => onDeleteLatestDeck && onDeleteLatestDeck(latestDeck.id || latestDeck.deck_id)}
+                    style={{
+                      background: "var(--color-bg-soft-error)",
+                      color: "var(--color-error)",
+                      border: "1px solid var(--color-border-strong)",
+                      borderRadius: "8px",
+                      padding: "8px 14px",
+                      fontSize: "13px",
+                      fontWeight: "500",
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "6px"
+                    }}
+                    title="Delete previous presentation to start fresh"
+                  >
+                    <span>Delete & Create New</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Source Mode Chooser (Large Spacious Cards) */}
             <div className="pres-source-mode-grid" role="radiogroup" aria-label="Select presentation source">
               <button
@@ -345,6 +442,31 @@ export default function PromptStudioScreen({
                     <span className="pres-field-hint">
                       Extracts baseline facts and disparity models directly from this sheet.
                     </span>
+                    {detectedPersona && (
+                      <div
+                        className="pres-detected-persona-badge"
+                        style={{
+                          background: "var(--color-bg-soft-teal)",
+                          border: "1px solid var(--color-border-strong)",
+                          borderRadius: "8px",
+                          padding: "8px 12px",
+                          marginTop: "8px",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between"
+                        }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                          <span style={{ width: "7px", height: "7px", borderRadius: "50%", backgroundColor: "var(--color-brand-accent)" }} />
+                          <span style={{ fontSize: "12px", color: "var(--color-brand-accent)", fontWeight: "600" }}>
+                            {detectedPersona.role_title}
+                          </span>
+                        </div>
+                        <span style={{ fontSize: "11px", color: "var(--color-text-muted)" }}>
+                          Standard: {detectedPersona.standard_report_name}
+                        </span>
+                      </div>
+                    )}
                   </div>
 
                   <div className="pres-form-group">
@@ -378,7 +500,7 @@ export default function PromptStudioScreen({
                     className="pres-field-control"
                     value={brief}
                     onChange={(e) => setBrief(e.target.value)}
-                    placeholder="e.g. Executive review of departmental attendance disparities and Q3 headcount risks"
+                    placeholder={detectedPersona?.standard_report_name || "e.g. Executive review of departmental attendance disparities and Q3 headcount risks"}
                   />
                 </div>
               </div>

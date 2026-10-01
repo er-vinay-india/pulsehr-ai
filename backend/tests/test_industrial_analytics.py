@@ -12,6 +12,8 @@ from app.services.industrial_analytics import (
 )
 from app.services.visual_intelligence import get_sheet_raw_projections
 
+pytestmark = [pytest.mark.eda, pytest.mark.unit]
+
 
 def test_calculate_bradford_factor():
     records = [

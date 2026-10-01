@@ -254,6 +254,76 @@ def list_presentation_decks(limit: int = Query(20, ge=1, le=100)):
     return {"decks": decks}
 
 
+@router.get("/personas")
+def get_dataset_personas(sheet_id: int | None = Query(None)):
+    """Returns detected persona and relevant industry-standard personas for the active dataset."""
+    from ..services.presentation.persona_router import detect_dataset_persona, get_relevant_personas_for_dataset
+    from ..services.presentation.scope_detector import capture_dataset_context
+
+    with get_connection() as conn:
+        ctx = capture_dataset_context(conn, sheet_id)
+        detected = detect_dataset_persona(ctx, conn)
+        relevant = get_relevant_personas_for_dataset(ctx, conn)
+
+    return {
+        "detected_persona": detected,
+        "relevant_personas": relevant
+    }
+
+
+@router.get("/decks/latest")
+def get_latest_presentation_deck():
+    """Retrieves the most recently generated PresentationDeckSpec."""
+    with get_connection() as conn:
+        row = conn.execute(
+            """
+            SELECT id, title, dataset_id, sheet_id, theme_id, spec_json, pptx_filename, created_at, updated_at
+            FROM presentation_decks
+            ORDER BY created_at DESC
+            LIMIT 1
+            """
+        ).fetchone()
+
+    if not row:
+        return {"deck": None, "exists": False}
+
+    try:
+        spec = json.loads(row["spec_json"])
+        return {
+            "deck": spec,
+            "exists": True,
+            "id": row["id"],
+            "title": row["title"],
+            "created_at": row["created_at"],
+            "updated_at": row["updated_at"]
+        }
+    except Exception as exc:
+        logger.error(f"Error parsing latest deck spec: {exc}")
+        return {"deck": None, "exists": False}
+
+
+@router.delete("/decks/{deck_id}")
+def delete_presentation_deck(deck_id: str):
+    """Permanently deletes a saved presentation deck and cleans up export artifacts."""
+    with get_connection() as conn:
+        row = conn.execute("SELECT id, pptx_filename FROM presentation_decks WHERE id = ?", (deck_id,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Presentation deck not found")
+
+        conn.execute("DELETE FROM presentation_decks WHERE id = ?", (deck_id,))
+        conn.execute("UPDATE presentation_jobs SET deck_id = NULL WHERE deck_id = ?", (deck_id,))
+        conn.commit()
+
+    try:
+        pptx_path = config.EXPORTS_DIR / f"presentation_{deck_id}.pptx"
+        if pptx_path.exists():
+            pptx_path.unlink()
+    except Exception as exc:
+        logger.warning(f"Could not delete export file for deck {deck_id}: {exc}")
+
+    return {"status": "success", "id": deck_id, "deleted": True}
+
+
 @router.get("/decks/{deck_id}")
 def get_presentation_deck(deck_id: str):
     """Retrieves full PresentationDeckSpec by deck_id."""

@@ -17,9 +17,9 @@ def synthesize_derived_tables(
     """Identifies high-confidence 1:1 or 1:N entity joins and materializes unified derived tables."""
     derived_summaries: list[dict[str, Any]] = []
 
-    # Clear previous derived tables
-    conn.execute("DELETE FROM derived_table_rows")
-    conn.execute("DELETE FROM derived_tables")
+    # Clear previous cross-sheet derived tables (preserve scientific enrichment rollups)
+    conn.execute("DELETE FROM derived_table_rows WHERE derived_table_id IN (SELECT id FROM derived_tables WHERE join_keys_json NOT LIKE '%scientific_enrichment_rollup%')")
+    conn.execute("DELETE FROM derived_tables WHERE join_keys_json NOT LIKE '%scientific_enrichment_rollup%'")
 
     # Group links by pair of sheets
     processed_pairs = set()

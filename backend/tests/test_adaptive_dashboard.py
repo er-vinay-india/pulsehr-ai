@@ -53,6 +53,8 @@ from app.services.adaptive_dashboard.enterprise import (
     inspect_cardinality,
 )
 
+pytestmark = [pytest.mark.dashboard]
+
 
 @pytest.fixture
 def seeded_attendance_sheet():

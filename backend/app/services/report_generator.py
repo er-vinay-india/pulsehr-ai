@@ -25,6 +25,7 @@ from .pptx import (
     add_header,
     _save_deck,
     _render_footer,
+    _render_title_cover_slide,
     _render_title_hero_slide,
     _render_kpi_summary_slide,
     _render_chart_narrative_slide,
@@ -89,33 +90,35 @@ def export_spec_to_pptx(deck_spec: dict) -> Path:
             add_photo_background(slide, slide_data, prs.slide_width, prs.slide_height)
         except Exception as photo_err:
             logger.warning(f"Could not apply slide photo background: {photo_err}")
-        add_header(
-            slide,
-            slide_data.get("title", ""),
-            slide_data.get("category", "EXECUTIVE REVIEW"),
-            brand_color=colors["brand"],
-            title_color=colors["primary"]
-        )
-
         layout = slide_data.get("layout", "chart_narrative")
-        if layout == "title_hero":
-            _render_title_hero_slide(slide, slide_data, colors)
-        elif layout == "kpi_summary":
-            _render_kpi_summary_slide(slide, slide_data, colors)
-        elif layout == "chart_narrative":
-            _render_chart_narrative_slide(slide, slide_data, colors, theme_palette=theme.get("chart_palette"))
-        elif layout == "full_chart_takeaway":
-            _render_full_chart_takeaway_slide(slide, slide_data, colors, theme_palette=theme.get("chart_palette"))
-        elif layout == "two_charts":
-            _render_two_charts_slide(slide, slide_data, colors, theme_palette=theme.get("chart_palette"))
-        elif layout in ("action_plan", "initiative_detail"):
-            _render_action_plan_slide(slide, slide_data, colors)
-        elif layout in ("comparison_split", "methodology_panel"):
-            _render_comparison_split_slide(slide, slide_data, colors)
-        elif layout == "table_detail":
-            _render_table_detail_slide(slide, slide_data, colors)
+        if layout == "title_cover":
+            _render_title_cover_slide(slide, slide_data, colors)
         else:
-            _render_generic_slide(slide, slide_data, colors)
+            add_header(
+                slide,
+                slide_data.get("title", ""),
+                slide_data.get("category", "EXECUTIVE REVIEW"),
+                brand_color=colors["brand"],
+                title_color=colors["primary"]
+            )
+            if layout == "title_hero":
+                _render_title_hero_slide(slide, slide_data, colors)
+            elif layout == "kpi_summary":
+                _render_kpi_summary_slide(slide, slide_data, colors)
+            elif layout == "chart_narrative":
+                _render_chart_narrative_slide(slide, slide_data, colors, theme_palette=theme.get("chart_palette"))
+            elif layout == "full_chart_takeaway":
+                _render_full_chart_takeaway_slide(slide, slide_data, colors, theme_palette=theme.get("chart_palette"))
+            elif layout == "two_charts":
+                _render_two_charts_slide(slide, slide_data, colors, theme_palette=theme.get("chart_palette"))
+            elif layout in ("action_plan", "initiative_detail"):
+                _render_action_plan_slide(slide, slide_data, colors)
+            elif layout in ("comparison_split", "methodology_panel"):
+                _render_comparison_split_slide(slide, slide_data, colors)
+            elif layout == "table_detail":
+                _render_table_detail_slide(slide, slide_data, colors)
+            else:
+                _render_generic_slide(slide, slide_data, colors)
 
         _render_footer(slide, slide_data, colors, slide_num=idx + 1, total_slides=total_slides)
 

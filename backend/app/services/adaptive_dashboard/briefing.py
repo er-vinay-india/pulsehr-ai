@@ -99,6 +99,7 @@ def validate_briefing_claims(
     spoken_text: str,
     manifest_snapshot: str,
     available_component_ids: set[str],
+    available_components: dict[str, Any] | None = None,
 ) -> None:
     """Strict pre-publication validator. Raises ValueError on any contract or evidence violation."""
     # 1. Word and character bounds
@@ -141,7 +142,20 @@ def validate_briefing_claims(
             flags=re.IGNORECASE,
         )
         text_without_dates = re.sub(r"\b\d{4}-\d{2}(?:-\d{2})?\b", " ", text_without_dates)
-        tokens = re.findall(r"(?<![\w#])[-+]?\$?\d{1,3}(?:,\d{3})*(?:\.\d+)?(?:[kKmMbBtT])?%?(?![a-zA-Z0-9_])", text_without_dates)
+
+        # Mask out discrete segment/cohort labels to avoid treating identifier numbers (e.g. Store 003, Batch 2) as unbound metrics
+        clean_text = text_without_dates
+        if available_components:
+            for comp in available_components.values():
+                if hasattr(comp, "items") and comp.items:
+                    for it in comp.items:
+                        label = getattr(it, "segment", None) or getattr(it, "cohort", None) or getattr(it, "label", None)
+                        if label and any(c.isdigit() for c in str(label)):
+                            clean_text = clean_text.replace(str(label), " ")
+                if hasattr(comp, "subject_label") and comp.subject_label and any(c.isdigit() for c in str(comp.subject_label)):
+                    clean_text = clean_text.replace(str(comp.subject_label), " ")
+
+        tokens = re.findall(r"(?<![\w#])[-+]?\$?\d{1,3}(?:,\d{3})*(?:\.\d+)?(?:[kKmMbBtT])?%?(?![a-zA-Z0-9_])", clean_text)
         for token in tokens:
             clean_tok = token.replace(",", "").replace("$", "").rstrip("%").lstrip("+")
             suffix = ""
@@ -362,13 +376,14 @@ def build_executive_briefing_element(
                         f"{top_item.segment} recorded the highest {quinary.metric_name.lower()} at "
                         f"{top_item.formatted_primary}, while {benchmark_context} averaged {quinary.formatted_benchmark}."
                     )
+                    seg_nums = [float(x) for x in re.findall(r"\d+(?:\.\d+)?", str(top_item.segment))]
                     pattern_claim = BriefingClaim(
                         claim_id="claim_pattern_disparity_top",
                         claim_type="comparison",
                         text=pattern_text,
                         source_component_id=quinary.component_id,
                         calculation_ids=[quinary.inspect.calculation_id],
-                        numeric_values=[top_item.primary_value, quinary.benchmark_value],
+                        numeric_values=[top_item.primary_value, quinary.benchmark_value] + seg_nums,
                         unit=quinary.unit,
                     )
 
@@ -478,14 +493,17 @@ def build_executive_briefing_element(
                 f"{decision.subject_label} records {decision.formatted_observed_value} {decision.metric_name.lower()}, "
                 f"{clean_gap} across {sample_str}."
             )
-            subj_nums = [float(n) for n in re.findall(r"\d+", decision.subject_label)]
+            subj_nums = [float(n) for n in re.findall(r"\d+(?:\.\d+)?", str(decision.subject_label))]
+            sample_nums = [float(n) for n in re.findall(r"\d+(?:\.\d+)?", str(decision.sample_label))]
+            obs_nums = [float(n) for n in re.findall(r"\d+(?:\.\d+)?", str(decision.formatted_observed_value))]
+            gap_nums = [float(n) for n in re.findall(r"\d+(?:\.\d+)?", str(decision.formatted_gap_value))]
             numeric_vals = [
                 decision.observed_value,
                 decision.comparator_value,
                 decision.gap_value,
                 abs(decision.gap_value),
                 decision.sample_size,
-            ] + subj_nums
+            ] + subj_nums + sample_nums + obs_nums + gap_nums
             claims.append(
                 BriefingClaim(
                     claim_id="claim_action_decision_focus",
@@ -555,6 +573,7 @@ def build_executive_briefing_element(
         spoken_text=spoken_text,
         manifest_snapshot=snapshot,
         available_component_ids=set(available_components.keys()),
+        available_components=available_components,
     )
 
     estimated_word_count = _count_words(spoken_text)

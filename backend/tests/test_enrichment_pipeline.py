@@ -21,6 +21,8 @@ from app.services.enrichment.table_synthesizer import AnalyticalTableSynthesizer
 from app.services.enrichment.utility_evaluator import FeatureUtilityEvaluator
 from app.services.enrichment.pipeline import ControlledEnrichmentPipeline
 
+pytestmark = [pytest.mark.enrichment]
+
 
 @pytest.fixture
 def sample_multidomain_dataset() -> pd.DataFrame:
@@ -42,6 +44,7 @@ def sample_multidomain_dataset() -> pd.DataFrame:
     return pd.DataFrame(data)
 
 
+@pytest.mark.unit
 def test_budget_guard_hard_limits():
     """Verifies that BudgetGuard strictly bounds derived columns, tables, and runtime."""
     cfg = EnrichmentConfig(
@@ -277,6 +280,8 @@ def test_end_to_end_controlled_enrichment_pipeline(sample_multidomain_dataset):
     assert bs["generated_tables_count"] <= cfg.max_generated_tables
 
 
+@pytest.mark.integration
+@pytest.mark.db
 def test_upload_endpoint_semantic_enrichment_integration(sample_multidomain_dataset):
     """Verifies that the /api/upload/file endpoint executes semantic enrichment and exposes results."""
     from fastapi.testclient import TestClient

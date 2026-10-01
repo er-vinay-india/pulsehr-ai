@@ -52,6 +52,28 @@ export default function Header({ activeTab, onSelectTab, onOpenUploadModal, acti
           <ThemeToggle />
           <button
             type="button"
+            className="btn-header-hriday"
+            onClick={() => onSelectTab("copilot")}
+            title="Open HRIDAY AI Assistant"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+              background: "var(--color-bg-soft-teal)",
+              border: "1.5px solid var(--color-brand-secondary)",
+              borderRadius: "8px",
+              padding: "6px 12px",
+              color: "var(--color-brand-secondary)",
+              fontWeight: 700,
+              fontSize: "0.82rem",
+              cursor: "pointer"
+            }}
+          >
+            <BrainCircuit size={16} color="currentColor" />
+            <span>HRIDAY</span>
+          </button>
+          <button
+            type="button"
             className={`btn-header-upload ${isUploadingBackground ? "is-processing" : ""}`}
             onClick={onOpenUploadModal}
             title={isUploadingBackground ? "Spreadsheet ingestion running in background - click to view" : "Upload and ingest a new spreadsheet"}

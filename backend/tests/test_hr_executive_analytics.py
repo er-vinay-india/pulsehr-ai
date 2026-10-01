@@ -21,6 +21,8 @@ import sqlite3
 import pytest
 import pandas as pd
 
+pytestmark = [pytest.mark.eda]
+
 from app.services.semantic_mapping import (
     infer_semantic_catalog,
     is_identity_header,

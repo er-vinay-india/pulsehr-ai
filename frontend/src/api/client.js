@@ -112,6 +112,12 @@ export async function askCopilot(
   return res.json();
 }
 
+export async function getCouncilDelegates() {
+  const res = await fetch(`${API_BASE}/copilot/council/delegates`);
+  if (!res.ok) throw new Error("Failed to load council delegates");
+  return res.json();
+}
+
 export async function streamCopilotQuery(
   query,
   model = null,
@@ -122,9 +128,10 @@ export async function streamCopilotQuery(
   signal = null,
   priorContext = null,
   snapshotId = null,
-  page = null
+  page = null,
+  timeoutSeconds = 30.0
 ) {
-  const { onStatus, onToken, onDone, onError } = callbacks;
+  const { onStatus, onToken, onDone, onError, onWarRoomInit, onDelegatePerspective, onDelegateVote } = callbacks;
   try {
     const res = await fetch(`${API_BASE}/copilot/query/stream`, {
       method: "POST",
@@ -137,7 +144,9 @@ export async function streamCopilotQuery(
         sheet_id: sheetId,
         prior_context: priorContext,
         snapshot_id: snapshotId,
-        page
+        page,
+        engine: "war_room",
+        timeout_seconds: timeoutSeconds
       }),
       signal
     });
@@ -176,7 +185,13 @@ export async function streamCopilotQuery(
         if (dataStr) {
           try {
             const data = JSON.parse(dataStr);
-            if (eventType === "status") {
+            if (eventType === "war_room_init") {
+              onWarRoomInit?.(data);
+            } else if (eventType === "delegate_perspective") {
+              onDelegatePerspective?.(data);
+            } else if (eventType === "delegate_vote") {
+              onDelegateVote?.(data);
+            } else if (eventType === "status") {
               onStatus?.(data);
             } else if (eventType === "token") {
               onToken?.(data.token);
@@ -510,6 +525,30 @@ export async function exportPresentationPptx(deckSpec) {
 export async function getPresentationDecks() {
   const res = await fetch(`${API_BASE}/presentations/decks`);
   if (!res.ok) throw new Error("Failed to load saved presentations");
+  return res.json();
+}
+
+export async function getLatestPresentationDeck() {
+  const res = await fetch(`${API_BASE}/presentations/decks/latest`);
+  if (!res.ok) throw new Error("Failed to fetch latest presentation deck");
+  return res.json();
+}
+
+export async function deletePresentationDeck(deckId) {
+  const res = await fetch(`${API_BASE}/presentations/decks/${deckId}`, {
+    method: "DELETE"
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Failed to delete presentation deck");
+  }
+  return res.json();
+}
+
+export async function getDatasetPersonas(sheetId = null) {
+  const q = sheetId ? `?sheet_id=${sheetId}` : "";
+  const res = await fetch(`${API_BASE}/presentations/personas${q}`);
+  if (!res.ok) throw new Error("Failed to load dataset personas");
   return res.json();
 }
 

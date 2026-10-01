@@ -27,6 +27,11 @@ logger = logging.getLogger(__name__)
 # Default narrative templates for presentation slide outlines
 DEFAULT_SLIDE_TEMPLATES = [
     {
+        "title": "Executive Title Cover",
+        "category": "Executive",
+        "purpose": "Boardroom executive title cover establishing strategic mandate, audited population, and review scope."
+    },
+    {
         "title": "Executive Summary & Core Performance",
         "category": "Strategy",
         "purpose": "Deliver headline bottom-line results, top-line metrics, and executive conclusions."
@@ -149,7 +154,10 @@ class SlideContextObserver:
 
         for i in range(self.total_slides):
             slide_num = i + 1
-            if i < num_templates:
+            if i == 0:
+                title = self.objective if (self.objective and self.objective != "Executive Leadership Review") else "Executive Title Cover"
+                category = "Executive"
+            elif i < num_templates:
                 tpl = DEFAULT_SLIDE_TEMPLATES[i]
                 title = tpl["title"]
                 category = tpl["category"]

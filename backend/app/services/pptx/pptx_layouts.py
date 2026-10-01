@@ -6,6 +6,7 @@ Modular renderers are organized into:
 """
 
 from .pptx_card_layouts import (
+    _render_title_cover_slide,
     _render_title_hero_slide,
     _render_kpi_summary_slide,
     _render_comparison_split_slide,
@@ -21,6 +22,7 @@ from .pptx_visual_layouts import (
 )
 
 __all__ = [
+    "_render_title_cover_slide",
     "_render_title_hero_slide",
     "_render_kpi_summary_slide",
     "_render_chart_narrative_slide",

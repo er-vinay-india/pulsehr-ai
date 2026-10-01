@@ -63,6 +63,13 @@ def upload_file(
                 first['records'] = enriched_records
                 first['columns'] = enriched_cols
 
+                # Update profiles and hints for enriched columns
+                enriched_frames = {first['name']: final_df.astype(str)}
+                enriched_prep = prepare_sheets(enriched_frames, original, embed=False)
+                if enriched_prep:
+                    first['profiles'] = enriched_prep[0]['profiles']
+                    first['decision_hints'] = enriched_prep[0]['decision_hints']
+
                 enrichment_summary = {
                     "original_col_count": enriched_pkg.original_col_count,
                     "enriched_col_count": enriched_pkg.enriched_col_count,
@@ -89,11 +96,16 @@ def upload_file(
                 if enrich_json_str:
                     conn.execute('UPDATE sheets SET enrichment_json=? WHERE dataset_id=?', (enrich_json_str, dataset_id))
 
-                # Materialize synthesized analytical tables in derived_tables catalog
+                rebuild_relationships(conn)
+                from ..services.eda import run_eda_pipeline
+                eda_res = run_eda_pipeline(conn=conn)
+                industrial_res = run_ingestion_industrial_pipeline(conn, dataset_id)
+
+                # Materialize synthesized analytical tables in derived_tables & derived_table_rows (runs after EDA)
                 if enrichment_summary and enrichment_summary.get("analytical_tables"):
                     for atbl in enrichment_summary["analytical_tables"]:
                         try:
-                            conn.execute(
+                            cur = conn.execute(
                                 """
                                 INSERT INTO derived_tables(name, display_name, description, source_sheets_json, join_keys_json, columns_json, row_count)
                                 VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -103,17 +115,23 @@ def upload_file(
                                     atbl["title"],
                                     atbl["description"],
                                     json.dumps([dataset_id]),
-                                    json.dumps({"type": "scientific_enrichment_rollup"}),
+                                    json.dumps({"type": "scientific_enrichment_rollup", "group_by": atbl.get("group_by_columns", [])}),
                                     json.dumps(atbl["columns"]),
                                     atbl["row_count"]
                                 )
                             )
-                        except Exception:
-                            pass
-                rebuild_relationships(conn)
-                from ..services.eda import run_eda_pipeline
-                eda_res = run_eda_pipeline(conn=conn)
-                industrial_res = run_ingestion_industrial_pipeline(conn, dataset_id)
+                            dt_id = cur.lastrowid
+                            for r_idx, rec in enumerate(atbl.get("data_preview", [])):
+                                conn.execute(
+                                    """
+                                    INSERT INTO derived_table_rows(derived_table_id, row_index, data_json)
+                                    VALUES (?, ?, ?)
+                                    """,
+                                    (dt_id, r_idx, json.dumps(rec))
+                                )
+                        except Exception as dt_err:
+                            import logging
+                            logging.getLogger(__name__).warning(f"Error persisting analytical table: {dt_err}")
                 linked = conn.execute("SELECT COUNT(*) FROM sheet_relationships WHERE status='linked' AND (left_sheet IN (SELECT id FROM sheets WHERE dataset_id=?) OR right_sheet IN (SELECT id FROM sheets WHERE dataset_id=?))", (dataset_id, dataset_id)).fetchone()[0]
 
                 # Canonical Input & Context Intelligence Ingestion
@@ -144,6 +162,30 @@ def upload_file(
 
                 # Legacy User Intent Compatibility (if present)
                 analysis_ctx_dict = ws_ctx_dict
+
+            # Asynchronously pre-warm visual analytics, persona detection, and evidence ledger to eliminate PPT cold start
+            def _prewarm_presentation_cache(ds_id: int):
+                try:
+                    with get_connection() as warm_conn:
+                        from ..services.visuals.workspace_visual_dashboard import build_workspace_visual_dashboard
+                        from ..services.presentation.scope_detector import collect_workspace_evidence, capture_dataset_context
+                        from ..services.presentation.persona_router import detect_dataset_persona
+
+                        # 1. Pre-warm workspace visual dashboard cache
+                        build_workspace_visual_dashboard(warm_conn)
+
+                        # 2. Pre-detect industry-standard persona
+                        ctx = capture_dataset_context(warm_conn, ds_id)
+                        detect_dataset_persona(ctx, warm_conn)
+
+                        # 3. Pre-freeze evidence ledger snapshot
+                        scope = {"scope_type": "workspace", "sheet_id": ds_id}
+                        collect_workspace_evidence(warm_conn, scope)
+                except Exception as warm_err:
+                    import logging
+                    logging.getLogger(__name__).debug(f"Pre-warming presentation cache non-blocking notice: {warm_err}")
+
+            threading.Thread(target=_prewarm_presentation_cache, args=(dataset_id,), daemon=True).start()
 
             return {'status': 'success', 'dataset_id': dataset_id, 'filename': original,
                     'display_name': display_name, 'domain': (ws_ctx_dict.get('context_summary', {}).get('domain') if ws_ctx_dict else naming['domain']),
@@ -277,6 +319,8 @@ def perform_bulk_delete(dataset_ids: list[int] | None = None, delete_all: bool =
                 conn.execute('DELETE FROM executive_narratives')
                 conn.execute('DELETE FROM hr_alerts')
                 conn.execute('DELETE FROM tabular_vectors')
+                conn.execute('DELETE FROM derived_table_rows')
+                conn.execute('DELETE FROM derived_tables')
                 conn.execute('DELETE FROM dataset_uploads')
                 rebuild_relationships(conn)
             for row in rows:
@@ -295,12 +339,17 @@ def perform_bulk_delete(dataset_ids: list[int] | None = None, delete_all: bool =
             conn.execute(f'DELETE FROM executive_narratives WHERE target_type=\'sheet\' AND target_id IN (SELECT id FROM sheets WHERE dataset_id IN ({id_placeholders}))', found_ids)
             conn.execute('DELETE FROM executive_narratives WHERE target_type IN (\'global\', \'relationship\')')
             conn.execute(f'DELETE FROM tabular_vectors WHERE id IN (SELECT id FROM tabular_chunks WHERE dataset_id IN ({id_placeholders}))', found_ids)
+            for did in found_ids:
+                conn.execute("DELETE FROM derived_table_rows WHERE derived_table_id IN (SELECT id FROM derived_tables WHERE source_sheets_json LIKE ?)", (f"%{did}%",))
+                conn.execute("DELETE FROM derived_tables WHERE source_sheets_json LIKE ?", (f"%{did}%",))
             conn.execute(f'DELETE FROM dataset_uploads WHERE id IN ({id_placeholders})', found_ids)
             rebuild_relationships(conn)
             remaining = conn.execute('SELECT COUNT(*) FROM dataset_uploads').fetchone()[0]
             if remaining == 0:
                 conn.execute('DELETE FROM executive_narratives')
                 conn.execute('DELETE FROM hr_alerts')
+                conn.execute('DELETE FROM derived_table_rows')
+                conn.execute('DELETE FROM derived_tables')
         for row in rows:
             path = (config.UPLOADS_DIR / row['filename']).resolve()
             if path.is_relative_to(config.UPLOADS_DIR.resolve()):
@@ -324,14 +373,19 @@ def delete_dataset(dataset_id: int):
             conn.execute('DELETE FROM executive_narratives WHERE target_type IN (\'global\', \'relationship\')')
             # 3. Clean up tabular vectors
             conn.execute('DELETE FROM tabular_vectors WHERE id IN (SELECT id FROM tabular_chunks WHERE dataset_id=?)', (dataset_id,))
-            # 4. Delete dataset (cascades to sheets, sheet_rows, sheet_cells, tabular_chunks, sheet_relationships)
+            # 4. Clean up synthesized derived tables
+            conn.execute("DELETE FROM derived_table_rows WHERE derived_table_id IN (SELECT id FROM derived_tables WHERE source_sheets_json LIKE ?)", (f"%{dataset_id}%",))
+            conn.execute("DELETE FROM derived_tables WHERE source_sheets_json LIKE ?", (f"%{dataset_id}%",))
+            # 5. Delete dataset (cascades to sheets, sheet_rows, sheet_cells, tabular_chunks, sheet_relationships)
             conn.execute('DELETE FROM dataset_uploads WHERE id=?', (dataset_id,))
             rebuild_relationships(conn)
-            # 5. If no datasets remain in workspace, complete purge of all narratives and alerts
+            # 6. If no datasets remain in workspace, complete purge of all narratives and alerts
             remaining = conn.execute('SELECT COUNT(*) FROM dataset_uploads').fetchone()[0]
             if remaining == 0:
                 conn.execute('DELETE FROM executive_narratives')
                 conn.execute('DELETE FROM hr_alerts')
+                conn.execute('DELETE FROM derived_table_rows')
+                conn.execute('DELETE FROM derived_tables')
         path = (config.UPLOADS_DIR / row['filename']).resolve()
         # Never delete external Kaggle caches or paths outside uploads.
         if path.is_relative_to(config.UPLOADS_DIR.resolve()):

@@ -4801,6 +4801,46 @@ def run_adaptive_dashboard(sheet_id: int | None = None) -> AdaptiveDashboardResp
         except Exception as e:
             logger.exception("Production strategy orchestrator failed: %s", e)
 
+        # 15. Fetch Synthesized Analytical Tables & Compute Group-by Projections
+        analytical_tables = []
+        try:
+            dt_rows = conn.execute(
+                """
+                SELECT id, name, display_name, description, columns_json, row_count, join_keys_json
+                FROM derived_tables
+                WHERE source_sheets_json LIKE ? OR source_sheets_json LIKE ?
+                ORDER BY id ASC
+                """,
+                (f"%{sid}%", f"%{dataset_id}%")
+            ).fetchall()
+
+            for dt in dt_rows:
+                dt_id = dt[0]
+                tbl_rows = conn.execute(
+                    "SELECT data_json FROM derived_table_rows WHERE derived_table_id=? ORDER BY row_index ASC LIMIT 100",
+                    (dt_id,)
+                ).fetchall()
+                row_records = [json.loads(tr[0]) for tr in tbl_rows]
+                analytical_tables.append({
+                    "id": dt_id,
+                    "name": dt[1],
+                    "display_name": dt[2],
+                    "description": dt[3],
+                    "columns": json.loads(dt[4]),
+                    "row_count": dt[5],
+                    "join_keys": json.loads(dt[6]),
+                    "rows": row_records
+                })
+        except Exception as dt_err:
+            logger.warning("Could not fetch analytical tables for dashboard: %s", dt_err)
+
+        group_by_projections = {}
+        try:
+            from ..eda.group_by_analyzer import compute_group_by_analytics
+            group_by_projections = compute_group_by_analytics(rows, columns)
+        except Exception as gb_err:
+            logger.warning("Could not compute group-by projections for dashboard: %s", gb_err)
+
         # Return atomic response
         return AdaptiveDashboardResponse(
             version="adaptive-v10",
@@ -4821,6 +4861,8 @@ def run_adaptive_dashboard(sheet_id: int | None = None) -> AdaptiveDashboardResp
             priority_insight=priority_insight,
             analysis_coverage=analysis_coverage,
             orchestrator_findings=orchestrator_findings,
+            analytical_tables=analytical_tables,
+            group_by_projections=group_by_projections,
             run_status="ready" if spec.kind == "kpi" else "needs_definition",
         )
 

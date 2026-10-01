@@ -22,7 +22,18 @@ import pandas as pd
 
 from .config import BudgetGuard, EnrichmentConfig
 from .models import EnrichedDatasetPackage
-from .profiler import EnrichmentProfiler
+from .profiler import (
+    EnrichmentProfiler,
+    PERCENTAGE_PATTERN,
+    CURRENCY_PATTERN,
+    DISTANCE_PATTERN,
+    MASS_PATTERN,
+    VOLUME_PATTERN,
+    SPEED_PATTERN,
+    TIME_DURATION_PATTERN,
+    TEMPERATURE_PATTERN,
+    DATE_PATTERN,
+)
 from .relationship_engine import ColumnRelationshipEngine
 from .column_grouping import ColumnGroupingEngine
 from .primitive_deriver import PrimitiveFeatureDeriver
@@ -50,17 +61,40 @@ class ControlledEnrichmentPipeline:
         orig_rows, orig_cols = df.shape
         logger.info(f"Starting Controlled Semantic Enrichment for {dataset_id} ({orig_rows} rows x {orig_cols} cols).")
 
+        # Stage 0: Safe Automatic Type Coercion for String-encoded Numerics
+        # Preserve text columns, dates, and measurement strings with physical units
+        cleaned_df = df.copy()
+        for col in cleaned_df.columns:
+            if not pd.api.types.is_numeric_dtype(cleaned_df[col]):
+                non_null_series = cleaned_df[col].dropna().astype(str).str.strip()
+                if len(non_null_series) == 0:
+                    continue
+                sample_vals = non_null_series.iloc[:30].tolist()
+                has_unit_or_date = any(
+                    PERCENTAGE_PATTERN.match(v) or CURRENCY_PATTERN.match(v) or
+                    DISTANCE_PATTERN.match(v) or MASS_PATTERN.match(v) or
+                    VOLUME_PATTERN.match(v) or SPEED_PATTERN.match(v) or
+                    TIME_DURATION_PATTERN.match(v) or TEMPERATURE_PATTERN.match(v) or
+                    DATE_PATTERN.match(v)
+                    for v in sample_vals
+                )
+                if not has_unit_or_date:
+                    converted = pd.to_numeric(cleaned_df[col].astype(str).str.replace(',', ''), errors='coerce')
+                    valid_ratio = converted.notna().sum() / max(1, len(non_null_series))
+                    if valid_ratio >= 0.8:
+                        cleaned_df[col] = converted
+
         # Stage 1 & 2: Data Profiling & Multi-Role Semantic Typing
-        profiles = EnrichmentProfiler.profile_dataset(df)
+        profiles = EnrichmentProfiler.profile_dataset(cleaned_df)
 
         # Stage 3: Column Relationship Discovery
-        relationships = ColumnRelationshipEngine.discover_relationships(df, profiles, cfg)
+        relationships = ColumnRelationshipEngine.discover_relationships(cleaned_df, profiles, cfg)
 
         # Stage 4: Semantic Column Grouping (G1...Gf)
-        groups = ColumnGroupingEngine.group_columns(list(df.columns), relationships, profiles, cfg.min_relationship_score)
+        groups = ColumnGroupingEngine.group_columns(list(cleaned_df.columns), relationships, profiles, cfg.min_relationship_score)
 
         # Stage 5 & 6: Morphological Normalization & Primitive Feature Derivation
-        df_primitives, primitive_features = PrimitiveFeatureDeriver.derive_primitives(df, profiles, budget)
+        df_primitives, primitive_features = PrimitiveFeatureDeriver.derive_primitives(cleaned_df, profiles, budget)
 
         # Update profiles for newly derived columns to allow formula & interaction discovery
         all_profiles = dict(profiles)
@@ -92,7 +126,7 @@ class ControlledEnrichmentPipeline:
 
         # Stage 11: Utility Evaluation & Hard Ceiling Pruning
         final_df, retained_features = FeatureUtilityEvaluator.evaluate_and_prune(
-            original_df=df,
+            original_df=cleaned_df,
             enriched_df=df_interactions,
             derived_features=all_derived_features,
             config=cfg

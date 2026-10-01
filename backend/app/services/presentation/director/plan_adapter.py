@@ -288,8 +288,12 @@ def adapt_plan_to_deck_spec(
             cat = "STRATEGIC ROADMAP"
             stable_id = "slide_action_plan"
         elif idx == 0:
-            cat = "EXECUTIVE SUMMARY"
-            stable_id = "slide_exec_overview"
+            if layout == "title_cover":
+                cat = f"{ctx.domain.upper()[:22]} · EXECUTIVE BRIEFING"
+                stable_id = "slide_title_cover"
+            else:
+                cat = "EXECUTIVE SUMMARY"
+                stable_id = "slide_exec_overview"
         elif idx == 1:
             cat = "ANALYSIS BASELINE"
             stable_id = "slide_macro_outcomes"

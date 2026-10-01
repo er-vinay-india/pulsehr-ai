@@ -450,6 +450,8 @@ class AdaptiveDashboardResponse(BaseModel):
     priority_insight: "PriorityInsightSpec | None" = None
     analysis_coverage: "AnalysisCoverageSummary | None" = None
     orchestrator_findings: list["UnifiedFinding"] = Field(default_factory=list)
+    analytical_tables: list[dict[str, Any]] = Field(default_factory=list)
+    group_by_projections: dict[str, Any] = Field(default_factory=dict)
     run_status: Literal["ready", "needs_definition", "failed"] = "ready"
 
 

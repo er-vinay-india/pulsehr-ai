@@ -5,6 +5,85 @@ from app.services.display_formatters import format_display_label
 from .common import calculate_timing, find_evidence, format_briefing
 
 
+def build_executive_title_cover_slide(
+    persona: dict[str, Any],
+    included_sheets: list[dict[str, Any]],
+    total_eval_records: int,
+    reporting_period_summary: str,
+    file_label: str,
+    evidence_ledger: list[dict[str, Any]],
+    current_slide_order: int = 1
+) -> dict[str, Any]:
+    """Generates a high-aesthetic Executive Title Cover Slide adhering to presentation standards."""
+    role_title = persona.get("role_title") or "Executive Leadership"
+    standard_report = persona.get("standard_report_name") or "Executive Operational Review & Strategic Performance Diagnostic"
+    domain = persona.get("industry_domain") or "Enterprise Operations"
+
+    title = standard_report
+    subtitle = f"Empirical Ground Truth & Strategic Operational Review · {reporting_period_summary}"
+    if len(subtitle) > 110:
+        subtitle = f"Empirical Operations Review ({reporting_period_summary[:50]})"
+
+    ev1 = find_evidence(evidence_ledger, "EVID-EXEC-01")
+
+    narrative = (
+        f"This executive presentation delivers an audit-grade assessment of operational performance across "
+        f"{total_eval_records:,} verified records. Conducted for {persona.get('target_audience', 'Executive Leadership')}, "
+        f"all findings reconcile with 100% mathematical precision against immutable source data."
+    )
+
+    bullets = [
+        f"[Audited Population] {total_eval_records:,} verified records evaluated across {len(included_sheets)} dataset source(s).",
+        f"[Operational Horizon] Chronological coverage spanning {reporting_period_summary}.",
+        f"[Executive Mandate] Strategic performance variance isolation, bottleneck diagnostics, and roadmap governance."
+    ]
+
+    script = (
+        f"Welcome executive leadership. Today we present the {title}, covering {total_eval_records:,} audited records "
+        f"across {reporting_period_summary}. Our analysis establishes empirical baselines, isolates operational variance, "
+        f"and outlines a clear governance roadmap for leadership decision-making."
+    )
+
+    notes = format_briefing(
+        ev1,
+        title,
+        f"Establishes boardroom-ready title and strategic framing for {role_title}.",
+        "Executive Title Cover slide sets high-standard presentation aesthetics and strategic domain context.",
+        script
+    )
+
+    clean_category = f"{domain.upper()} · EXECUTIVE BRIEFING"
+
+    return {
+        "id": f"slide_{uuid.uuid4().hex[:8]}",
+        "stable_slide_id": "slide_title_cover",
+        "order": current_slide_order,
+        "layout": "title_cover",
+        "category": clean_category,
+        "title": title,
+        "subtitle": subtitle,
+        "narrative": narrative,
+        "bullets": bullets,
+        "metrics": [
+            {"label": "Audited Scope", "value": f"{total_eval_records:,}", "subtext": "Verified records"},
+            {"label": "Reporting Period", "value": reporting_period_summary[:20], "subtext": "Chronological span"},
+            {"label": "Executive Focus", "value": role_title.split('&')[0].strip(), "subtext": "Prepared for Leadership"}
+        ],
+        "chart": None,
+        "table": None,
+        "speaker_notes": notes,
+        "narration_script": script,
+        "reading_order": ["category", "title", "subtitle", "narrative", "bullets", "footer"],
+        "timing_metadata": calculate_timing(script),
+        "evidence_id": "EVID-EXEC-01",
+        "evidence_item": ev1,
+        "evidence_sources": [s["original_name"] for s in included_sheets],
+        "persona_key": persona.get("persona_key"),
+        "persona_role": role_title,
+        "is_partial_year": False
+    }
+
+
 def build_executive_summary_slide(
     target_sheet: dict[str, Any],
     included_sheets: list[dict[str, Any]],

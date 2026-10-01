@@ -4,6 +4,8 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from app.core import config
+
+pytestmark = [pytest.mark.presentation]
 from app.services.gateway.model_gateway import GatewayResult
 from app.services.presentation.director import (
     AudienceSeniority,

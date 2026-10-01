@@ -34,12 +34,12 @@ def build_model_group_investigation(
         explanation_steps = [
             "Cohort maps contributors across dual axes: Appraisal Performance vs Flight Risk / Potential.",
             "Top-tier performers with elevated attrition risk represent critical retention vulnerability.",
-            "Contributors below performance benchmarks receive targeted development and coaching pathways."
+            "Contributors below performance benchmarks receive targeted development and mentoring pathways."
         ]
         questions = [
             "Have retention check-ins been scheduled with identified flight-risk high performers?",
             "Are compensation and market adjustments aligned with high-performer contributions?",
-            "What structured development or mentoring plans are active for coaching candidates?"
+            "What structured development or mentoring plans are active for development candidates?"
         ]
     else:
         title = f"HR Fact Evidence Investigation: {group_key}"

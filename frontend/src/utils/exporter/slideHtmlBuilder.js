@@ -45,8 +45,35 @@ export function buildSlideHtml(slide, index, total, theme) {
 
   let bodyHtml = "";
 
+  // LAYOUT 0: TITLE COVER (Executive Title Cover)
+  if (layout === "title_cover") {
+    const bulletsHtml = (slide.bullets || []).map(b => `
+      <div style="background:${cardBg};border:1px solid ${cardBorder};border-radius:12px;padding:16px 20px;display:flex;align-items:center;gap:12px;box-shadow:0 4px 16px rgba(0,0,0,0.2);text-align:left;">
+        <span style="width:8px;height:8px;border-radius:50%;background:${brandColor};flex-shrink:0;"></span>
+        <div style="font-size:15px;color:#f8fafc;">${parseFormattedText(typeof b === 'string' ? b : b.text, brandColor)}</div>
+      </div>
+    `).join("");
+
+    bodyHtml = `
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:40px 20px;max-width:960px;margin:0 auto;">
+        <div style="display:inline-flex;align-items:center;gap:8px;padding:6px 16px;background:rgba(255,255,255,0.06);border:1px solid ${cardBorder};border-radius:24px;margin-bottom:24px;">
+          <span style="width:8px;height:8px;border-radius:50%;background:${brandColor};"></span>
+          <span style="font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:${brandColor};">${escapeHtml(slide.category || "EXECUTIVE BRIEFING")}</span>
+        </div>
+        <h1 style="font-size:44px;font-weight:800;color:#ffffff;line-height:1.2;margin:0 0 16px 0;letter-spacing:-0.02em;">
+          ${escapeHtml(slide.title)}
+        </h1>
+        ${slide.subtitle ? `<div style="font-size:19px;color:${accentColor};margin-bottom:24px;font-weight:500;">${escapeHtml(slide.subtitle)}</div>` : ""}
+        ${slide.narrative ? `<div style="font-size:16px;color:#94a3b8;line-height:1.6;max-width:800px;margin:0 auto 32px auto;">${parseFormattedText(slide.narrative, brandColor)}</div>` : ""}
+        <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));gap:16px;width:100%;">
+          ${bulletsHtml}
+        </div>
+      </div>
+    `;
+  }
+
   // LAYOUT 1: TITLE HERO
-  if (layout === "title_hero") {
+  else if (layout === "title_hero") {
     const bulletsHtml = (slide.bullets || []).map(b => `
       <li style="display:flex;align-items:flex-start;gap:12px;margin-bottom:12px;font-size:18px;color:#cbd5e1;">
         <span style="width:8px;height:8px;border-radius:50%;background:${brandColor};margin-top:7px;flex-shrink:0;"></span>

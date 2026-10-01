@@ -20,6 +20,7 @@ from .pptx_styles import (
 )
 from .pptx_charts import _add_native_chart_shape, _render_native_9box_matrix
 from .pptx_layouts import (
+    _render_title_cover_slide,
     _render_title_hero_slide,
     _render_kpi_summary_slide,
     _render_chart_narrative_slide,
@@ -51,6 +52,7 @@ __all__ = [
     "_render_footer",
     "_add_native_chart_shape",
     "_render_native_9box_matrix",
+    "_render_title_cover_slide",
     "_render_title_hero_slide",
     "_render_kpi_summary_slide",
     "_render_chart_narrative_slide",

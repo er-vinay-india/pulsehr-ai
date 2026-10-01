@@ -14,6 +14,7 @@ def build_sheet_eda_report(
     metric_distributions: dict[str, Any] | None = None,
     temporal_analysis: dict[str, Any] | None = None,
     predictive_suite: dict[str, Any] | None = None,
+    group_by_analytics: dict[str, Any] | None = None,
     snapshot: str | None = None,
 ) -> dict[str, Any]:
     """Builds a comprehensive EDA report for a single sheet, including intra-sheet and cross-sheet findings,
@@ -77,7 +78,8 @@ def build_sheet_eda_report(
             "correlation_matrix": clean_corrs,
             "metric_distributions": clean_dists,
             "temporal_analysis": clean_temporal,
-            "predictive_modeling": clean_predictive
+            "predictive_modeling": clean_predictive,
+            "group_by_analytics": group_by_analytics or {"dimensions": [], "measures": [], "breakdowns": {}, "insights": []}
         },
 
         # Multi-sheet connections
@@ -93,7 +95,8 @@ def build_sheet_eda_report(
             related_links,
             related_correlations,
             clean_temporal.get("insights", []),
-            clean_predictive.get("domain_executive_points", [])
+            clean_predictive.get("domain_executive_points", []),
+            (group_by_analytics or {}).get("insights", [])
         )
     }
 
@@ -104,11 +107,15 @@ def _generate_recommendations(
     links: list[dict[str, Any]],
     correlations: list[dict[str, Any]],
     temporal_insights: list[str],
-    predictive_insights: list[str]
+    predictive_insights: list[str],
+    group_by_insights: list[str] | None = None
 ) -> list[str]:
     recs: list[str] = []
 
-    # 1. Predictive and Domain-Specific HR Points (Highest priority)
+    # 1. Predictive, Temporal, and Group-By Key Insights (Highest priority)
+    for g_ins in (group_by_insights or []):
+        recs.append(g_ins)
+
     for p_ins in predictive_insights:
         recs.append(p_ins)
 

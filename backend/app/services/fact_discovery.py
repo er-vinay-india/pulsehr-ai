@@ -80,7 +80,7 @@ def discover_prioritized_hr_facts(
                     }
                 })
 
-            # Opportunity: Coaching & Alignment
+            # Opportunity: Development & Alignment
             if underperf > 0:
                 pct = round((underperf / total) * 100, 1)
                 candidates.append({
@@ -98,7 +98,7 @@ def discover_prioritized_hr_facts(
                         "type": "model_group",
                         "model": "talent_9box",
                         "group_key": "underperformance",
-                        "title": "Performance Coaching Cohort",
+                        "title": "Performance Mentoring Cohort",
                         "metric": "Performance Score"
                     }
                 })

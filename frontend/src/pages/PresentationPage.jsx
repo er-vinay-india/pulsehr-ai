@@ -1,7 +1,12 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import "../styles/presentation-responsive.scss";
 import { AlertCircle, X } from "lucide-react";
-import { getAdaptiveDashboardPrimaryElement } from "../api/client";
+import {
+  getAdaptiveDashboardPrimaryElement,
+  getLatestPresentationDeck,
+  deletePresentationDeck,
+  getDatasetPersonas
+} from "../api/client";
 import EvidenceInspectionDrawer from "../components/EvidenceInspectionDrawer.jsx";
 import DeckGeneratingView from "../components/presentation/DeckGeneratingView.jsx";
 import DeckStudioView from "../components/presentation/DeckStudioView.jsx";
@@ -34,6 +39,7 @@ export default function PresentationPage({
     setJobError,
     slideProgressData,
     deckSpec,
+    setDeckSpec,
     activeSlideIndex,
     setActiveSlideIndex,
     isExportingPptx,
@@ -76,6 +82,63 @@ export default function PresentationPage({
   // Active Dashboard Truth preview state
   const [dashboardData, setDashboardData] = useState(null);
   const [dashboardLoading, setDashboardLoading] = useState(false);
+
+  // Latest Generated Deck & Detected Industry Persona State
+  const [latestDeck, setLatestDeck] = useState(null);
+  const [detectedPersona, setDetectedPersona] = useState(null);
+  const [relevantPersonas, setRelevantPersonas] = useState([]);
+
+  const loadLatestDeck = useCallback(async () => {
+    try {
+      const res = await getLatestPresentationDeck();
+      if (res && res.exists && res.deck) {
+        setLatestDeck(res.deck);
+      } else {
+        setLatestDeck(null);
+      }
+    } catch (err) {
+      console.debug("Could not fetch latest presentation:", err);
+      setLatestDeck(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadLatestDeck();
+  }, [loadLatestDeck]);
+
+  // Auto-detect matching industry standard persona whenever active sheet changes
+  useEffect(() => {
+    if (!selectedSheetId) return;
+    getDatasetPersonas(selectedSheetId)
+      .then((res) => {
+        if (res?.detected_persona) {
+          setDetectedPersona(res.detected_persona);
+          setObjective(res.detected_persona.standard_report_name);
+        }
+        if (res?.relevant_personas) {
+          setRelevantPersonas(res.relevant_personas);
+        }
+      })
+      .catch((err) => console.debug("Error loading dataset personas:", err));
+  }, [selectedSheetId, setObjective]);
+
+  const handleOpenLatestDeck = useCallback((deck) => {
+    if (!deck) return;
+    setDeckSpec(deck);
+    setViewMode("studio");
+  }, [setDeckSpec, setViewMode]);
+
+  const handleDeleteLatestDeck = useCallback(async (deckId) => {
+    if (!deckId) return;
+    try {
+      await deletePresentationDeck(deckId);
+      setLatestDeck(null);
+      setDeckSpec(null);
+      loadLatestDeck();
+    } catch (err) {
+      setJobError(`Failed to delete presentation: ${err.message}`);
+    }
+  }, [setDeckSpec, setJobError, loadLatestDeck]);
 
   // Ingest Dashboard Context from sessionStorage if initiated from Adaptive Dashboard
   useEffect(() => {
@@ -194,6 +257,11 @@ export default function PresentationPage({
             sheets={sheets}
             selectedSheetId={selectedSheetId}
             onSelectSheet={setSelectedSheetId}
+            latestDeck={latestDeck}
+            onOpenLatestDeck={handleOpenLatestDeck}
+            onDeleteLatestDeck={handleDeleteLatestDeck}
+            detectedPersona={detectedPersona}
+            relevantPersonas={relevantPersonas}
             error={jobError}
           />
         </div>

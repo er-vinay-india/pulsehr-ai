@@ -114,27 +114,28 @@ export default function UploadModal({
   // Upload timer & step progression
   useEffect(() => {
     let timer;
+    let stepTimer;
     if (uploading) {
       setUploadElapsed(0);
       setUploadStep(1);
+
+      // Elapsed seconds counter
       timer = setInterval(() => {
-        setUploadElapsed((prev) => {
-          const next = prev + 1;
-          if (next >= 28) setUploadStep(10);
-          else if (next >= 25) setUploadStep(9);
-          else if (next >= 21) setUploadStep(8);
-          else if (next >= 17) setUploadStep(7);
-          else if (next >= 13) setUploadStep(6);
-          else if (next >= 10) setUploadStep(5);
-          else if (next >= 7) setUploadStep(4);
-          else if (next >= 4) setUploadStep(3);
-          else if (next >= 2) setUploadStep(2);
-          return next;
-        });
+        setUploadElapsed((prev) => prev + 1);
       }, 1000);
+
+      // Responsive stage progressor (ticks every 700ms so steps 5, 7, 8 are visibly highlighted)
+      let currentStage = 1;
+      stepTimer = setInterval(() => {
+        currentStage += 1;
+        if (currentStage <= 10) {
+          setUploadStep(currentStage);
+        }
+      }, 700);
     }
     return () => {
       if (timer) clearInterval(timer);
+      if (stepTimer) clearInterval(stepTimer);
     };
   }, [uploading]);
 
@@ -195,8 +196,11 @@ export default function UploadModal({
 
     try {
       const res = await uploadDatasetFile(selectedFile, intentToUse);
-      setUploadStep(9);
+      setUploadStep(10);
       setUploadResult(res);
+
+      // Visual grace period so user clearly sees all stages complete with green checkmarks
+      await new Promise((resolve) => setTimeout(resolve, 600));
 
       if (onUploadSuccess) {
         onUploadSuccess(res, { wasBackground: isBackgroundRef.current });

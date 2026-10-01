@@ -57,7 +57,21 @@ def build_comparative_suite(conn, sheet_meta_map: dict, sheet_data_map: dict) ->
         if l_key not in df_l.columns or r_key not in df_r.columns:
             continue
 
-        merged = pd.merge(df_l, df_r, left_on=l_key, right_on=r_key, suffixes=('_left', '_right'))
+        try:
+            df_l_join = df_l.copy()
+            df_r_join = df_r.copy()
+            df_l_join[l_key] = df_l_join[l_key].astype(str).str.strip()
+            df_r_join[r_key] = df_r_join[r_key].astype(str).str.strip()
+            invalid_keys = {'', 'nan', 'none', 'null', '<na>'}
+            df_l_join = df_l_join[~df_l_join[l_key].str.lower().isin(invalid_keys)]
+            df_r_join = df_r_join[~df_r_join[r_key].str.lower().isin(invalid_keys)]
+            if len(df_l_join) < 3 or len(df_r_join) < 3:
+                continue
+
+            merged = pd.merge(df_l_join, df_r_join, left_on=l_key, right_on=r_key, suffixes=('_left', '_right'))
+        except Exception:
+            continue
+
         if len(merged) < 3:
             continue
 

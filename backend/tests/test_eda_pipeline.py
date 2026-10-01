@@ -15,6 +15,8 @@ from app.services.eda.cross_correlator import compute_cross_sheet_intelligence
 from app.services.eda.derived_tables import synthesize_derived_tables
 from app.services.eda.engine import run_eda_pipeline
 
+pytestmark = [pytest.mark.eda]
+
 
 @pytest.fixture
 def client():

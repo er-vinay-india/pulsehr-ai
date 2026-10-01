@@ -45,7 +45,7 @@ def generate_comparative_insight(cat_col: str, m1: str, m2: str, u1: str, u2: st
             f"**Cross-Sheet Impact**: **{top_m1['label']}** benchmarks peak performance at "
             f"**{top_m1['val1']} {u1}** alongside **{top_m1['val2']} {u2}** absent. Conversely, **{top_m2['label']}** "
             f"logs the highest absence impact (**{top_m2['val2']} {u2}**), correlating with performance at "
-            f"**{top_m2['val1']} {u1}**. Target leadership coaching on high-absence clusters to protect department velocity."
+            f"**{top_m2['val1']} {u1}**. Target leadership development on high-absence clusters to protect department velocity."
         )
     elif is_ot and is_absent:
         return (

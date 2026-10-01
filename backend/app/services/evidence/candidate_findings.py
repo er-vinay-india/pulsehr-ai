@@ -240,7 +240,7 @@ def inventory_candidate_findings(
                 "date_range": period_summary,
                 "is_partial_year": is_partial,
                 "calculation_methodology": "Cross-tabulation of performance rating scores against attrition risk score boundaries.",
-                "what_it_establishes": "Identifies critical talent cohorts requiring retention incentives versus performance coaching.",
+                "what_it_establishes": "Identifies critical talent cohorts requiring retention incentives versus performance mentoring.",
                 "what_it_does_not_establish": "Does not replace individualized annual employee reviews.",
                 "chart": t9_chart,
                 "likely_questions": [

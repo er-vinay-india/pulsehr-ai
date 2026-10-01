@@ -42,10 +42,16 @@ def calculate_burnout_strain_index(df_perf: pd.DataFrame, df_absent: pd.DataFram
                     shared_key = cand
                     break
             if shared_key:
-                m_sub = df_absent[[shared_key, absent_col]].copy()
-                m_sub['__abs_days'] = coerce_to_numeric(m_sub[absent_col]).fillna(0)
-                merged = pd.merge(merged, m_sub, on=shared_key, how='left')
-                merged['__abs_days'] = merged['__abs_days'].fillna(0)
+                try:
+                    m_sub = df_absent[[shared_key, absent_col]].copy()
+                    m_sub['__abs_days'] = coerce_to_numeric(m_sub[absent_col]).fillna(0)
+                    merged_join = merged.copy()
+                    merged_join[shared_key] = merged_join[shared_key].astype(str).str.strip()
+                    m_sub[shared_key] = m_sub[shared_key].astype(str).str.strip()
+                    merged = pd.merge(merged_join, m_sub, on=shared_key, how='left')
+                    merged['__abs_days'] = merged['__abs_days'].fillna(0)
+                except Exception:
+                    merged['__abs_days'] = 0.0
             else:
                 merged['__abs_days'] = 0.0
         else:
@@ -110,7 +116,15 @@ def calculate_cross_sheet_elasticity(df_perf: pd.DataFrame, df_absent: pd.DataFr
     if df_perf is None or df_absent is None or join_key not in df_perf.columns or join_key not in df_absent.columns:
         return {'available': False, 'message': 'Missing join key between performance and absence datasets.'}
 
-    m = pd.merge(df_perf, df_absent, on=join_key, suffixes=('_perf', '_abs'))
+    try:
+        df_perf_join = df_perf.copy()
+        df_absent_join = df_absent.copy()
+        df_perf_join[join_key] = df_perf_join[join_key].astype(str).str.strip()
+        df_absent_join[join_key] = df_absent_join[join_key].astype(str).str.strip()
+        m = pd.merge(df_perf_join, df_absent_join, on=join_key, suffixes=('_perf', '_abs'))
+    except Exception as merge_err:
+        return {'available': False, 'message': f'Join failed: {merge_err}'}
+
     if len(m) < 4:
         return {'available': False, 'message': 'Insufficient matched records for regression analysis.'}
 

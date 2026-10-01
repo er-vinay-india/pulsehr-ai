@@ -16,6 +16,7 @@ from .storyline_generator import plan_dynamic_storyline
 from .builders import (
     THEMES,
     build_default_evidence_ledger,
+    build_executive_title_cover_slide,
     build_executive_summary_slide,
     build_baseline_scope_slide,
     build_strengths_slides,
@@ -25,6 +26,7 @@ from .builders import (
     build_roadmap_slides,
     build_evidence_ledger_slides,
 )
+from .persona_router import detect_dataset_persona
 from ...core import config
 
 logger = logging.getLogger(__name__)
@@ -60,8 +62,21 @@ def generate_presentation_deck_spec(
     snapshot_hash = dataset_context["snapshot_hash"]
     visuals = dataset_context["visuals"]
 
-    objective = scope.get("objective") or "Executive Leadership Review"
-    audience = scope.get("audience") or "C-Suite & Operations Leadership"
+    detected_persona = detect_dataset_persona(dataset_context)
+    persona_report_title = detected_persona.get("standard_report_name") or "Executive Operational Review & Strategic Performance Diagnostic"
+
+    raw_obj = scope.get("objective")
+    if not raw_obj or raw_obj == "Executive Leadership Review":
+        objective = persona_report_title
+    else:
+        objective = raw_obj
+
+    raw_aud = scope.get("audience")
+    if not raw_aud or raw_aud == "C-Suite & Operations Leadership":
+        audience = detected_persona.get("target_audience") or "C-Suite & Operations Leadership"
+    else:
+        audience = raw_aud
+
     theme_id = scope.get("theme_id") or "executive_dark"
     theme = THEMES.get(theme_id, THEMES.get("executive_dark", {}))
     instructions = scope.get("instructions") or ""
@@ -305,7 +320,21 @@ def generate_presentation_deck_spec(
                 except Exception:
                     pass
 
-        # Slide 1: Executive Summary
+        # Slide 1: Executive Title Cover (Beautified Boardroom Title Slide)
+        _notify_slide_start(persona_report_title, "Executive")
+        slide_cover = build_executive_title_cover_slide(
+            persona=detected_persona,
+            included_sheets=included_sheets,
+            total_eval_records=total_eval_records,
+            reporting_period_summary=reporting_period_summary,
+            file_label=file_label,
+            evidence_ledger=evidence_ledger,
+            current_slide_order=len(slides) + 1
+        )
+        slides.append(slide_cover)
+        _notify_slide(slide_cover)
+
+        # Slide 2: Executive Summary
         _notify_slide_start("Executive Summary & Core Performance", "Strategy")
         slide_1 = build_executive_summary_slide(
             target_sheet=target_sheet,
@@ -496,12 +525,16 @@ def generate_presentation_deck_spec(
         "spec_version": "2.0",
         "theme": theme,
         "metadata": {
-            "title": slides[0]["title"] if slides else "Executive Presentation Review",
+            "title": persona_report_title if (slides and slides[0].get("layout") == "title_cover") else (slides[0]["title"] if slides else persona_report_title),
             "theme_id": theme_id,
             "theme": theme,
             "domain": domain,
             "audience": audience,
             "objective": objective,
+            "detected_persona": detected_persona,
+            "persona_key": detected_persona.get("persona_key"),
+            "persona_role": detected_persona.get("role_title"),
+            "standard_report_name": persona_report_title,
             "file_label": file_label,
             "total_records": total_eval_records,
             "snapshot_hash": snapshot_hash,

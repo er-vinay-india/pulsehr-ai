@@ -13,6 +13,7 @@ from ..services.copilot_tools import ToolRequest, CalculationRequest, load_frame
 from ..services.ai_copilot import query_copilot, get_available_models, stream_copilot_generator
 from ..services.data_engine.semantic_classifier import SemanticClassifier
 from ..services.copilot.generic_copilot_engine import GenericCopilotEngine
+from ..services.copilot.union_war_room import UnionWarRoomEngine, COUNCIL_DELEGATES
 from ..services.data_engine.analysis_context import AnalysisContext
 from ..services.reporting.workflow_orchestrator import _GENERIC_WORKFLOW_CACHE
 
@@ -30,7 +31,8 @@ class CopilotQueryRequest(BaseModel):
     prior_context: dict | None = None
     snapshot_id: str | None = None
     page: str | None = None
-    engine: Literal["generic", "legacy", "auto"] = "auto"
+    engine: Literal["generic", "legacy", "auto", "war_room"] = "war_room"
+    timeout_seconds: float | None = 30.0
 
 
 def _load_active_sheet_dataframe(sheet_id: int | None = None, dataset_id: int | None = None) -> tuple[pd.DataFrame | None, str | None, AnalysisContext | None, int | None]:
@@ -477,7 +479,24 @@ def ask_copilot_stream(req: CopilotQueryRequest):
                 headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"}
             )
 
-    if req.engine == "generic" or (req.engine == "auto" and not _is_explicit_legacy_hr_request(req)):
+    if req.engine == "war_room" or (req.engine == "auto" and not req.tool):
+        return StreamingResponse(
+            UnionWarRoomEngine.stream_war_room_deliberation(
+                user_query=req.query,
+                df=df,
+                sheet_name=name,
+                context=ctx,
+                timeout_seconds=req.timeout_seconds or 60.0
+            ),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no"
+            }
+        )
+
+    if req.engine == "generic":
         if df is not None and not df.empty:
             result = _execute_generic_copilot(req, df, name or "Uploaded Dataset", context=ctx)
             def _generic_stream():
@@ -512,6 +531,62 @@ def ask_copilot_stream(req: CopilotQueryRequest):
             "X-Accel-Buffering": "no"
         }
     )
+
+
+@router.get("/council/delegates")
+def get_council_delegates():
+    """Returns the active AI Union Council members, their specialized roles, and icons."""
+    return {
+        "delegates": [
+            {
+                "id": d.id,
+                "name": d.name,
+                "role_title": d.role_title,
+                "domain_specialty": d.domain_specialty,
+                "icon": d.icon,
+                "badge_color": d.badge_color,
+                "primary_model": d.primary_model
+            }
+            for d in COUNCIL_DELEGATES
+        ],
+        "total": len(COUNCIL_DELEGATES),
+        "default_timeout_seconds": 60.0
+    }
+
+
+@router.post("/war-room")
+def ask_union_war_room(req: CopilotQueryRequest):
+    """Executes multi-model AI Union War Room deliberation synchronously."""
+    df, name, ctx, sid = _load_active_sheet_dataframe(req.sheet_id, req.dataset_id)
+    return UnionWarRoomEngine.execute_deliberation(
+        user_query=req.query,
+        df=df,
+        sheet_name=name,
+        context=ctx,
+        timeout_seconds=req.timeout_seconds or 60.0
+    )
+
+
+@router.post("/war-room/stream")
+def stream_union_war_room(req: CopilotQueryRequest):
+    """Streams live countdown timer, delegate perspectives, votes, and final consensus via SSE."""
+    df, name, ctx, sid = _load_active_sheet_dataframe(req.sheet_id, req.dataset_id)
+    return StreamingResponse(
+        UnionWarRoomEngine.stream_war_room_deliberation(
+            user_query=req.query,
+            df=df,
+            sheet_name=name,
+            context=ctx,
+            timeout_seconds=req.timeout_seconds or 60.0
+        ),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
+    )
+
 
 @router.get("/models")
 def list_models():

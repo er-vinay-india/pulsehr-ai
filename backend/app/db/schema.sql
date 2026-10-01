@@ -159,4 +159,20 @@ CREATE TABLE IF NOT EXISTS presentation_jobs (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS industry_personas (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    persona_key TEXT UNIQUE NOT NULL,
+    role_title TEXT NOT NULL,
+    industry_domain TEXT NOT NULL,
+    target_audience TEXT NOT NULL,
+    standard_report_name TEXT NOT NULL,
+    report_description TEXT NOT NULL,
+    identifying_keywords_json TEXT NOT NULL,
+    required_metrics_json TEXT NOT NULL,
+    core_kpis_json TEXT NOT NULL,
+    slide_outline_json TEXT NOT NULL,
+    tone_guidelines TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 
+CREATE INDEX IF NOT EXISTS idx_personas_domain ON industry_personas(industry_domain);

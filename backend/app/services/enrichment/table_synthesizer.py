@@ -87,7 +87,7 @@ class AnalyticalTableSynthesizer:
 
                 grouped = grouped.sort_values(by="total_val", ascending=False)
                 grouped = grouped.round(2)
-                preview = json.loads(grouped.head(10).to_json(orient="records"))
+                preview = json.loads(grouped.head(500).to_json(orient="records"))
 
                 table_id = f"tbl_dim_{dim}_summary"
                 t = AnalyticalTable(
@@ -118,7 +118,7 @@ class AnalyticalTableSynthesizer:
                 temp_grouped = temp_grouped.rename(columns={"count": "volume", "mean": "average", "sum": "total"})
                 temp_grouped["periodic_change_%"] = temp_grouped["total"].pct_change().mul(100).round(2)
                 temp_grouped = temp_grouped.round(2)
-                preview = json.loads(temp_grouped.head(10).to_json(orient="records"))
+                preview = json.loads(temp_grouped.head(500).to_json(orient="records"))
 
                 table_id = f"tbl_temporal_{t_col}_trend"
                 t = AnalyticalTable(
@@ -152,7 +152,7 @@ class AnalyticalTableSynthesizer:
                 ).round(2).reset_index()
 
                 pivot.columns = [str(c) for c in pivot.columns]
-                preview = json.loads(pivot.head(10).to_json(orient="records"))
+                preview = json.loads(pivot.head(500).to_json(orient="records"))
 
                 table_id = f"tbl_crosstab_{dim1}_vs_{dim2}"
                 t = AnalyticalTable(

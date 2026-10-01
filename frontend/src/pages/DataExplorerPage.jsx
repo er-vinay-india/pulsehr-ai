@@ -14,6 +14,7 @@ import {
 } from '../api/client';
 import DataTable from '../components/DataTable';
 import DeleteConsentModal from '../components/ingestion/DeleteConsentModal';
+import EnrichmentReviewCard from '../components/ingestion/EnrichmentReviewCard';
 import {
   FileSpreadsheet,
   Download,
@@ -21,12 +22,15 @@ import {
   GitMerge,
   Search,
   Layers,
-  ChevronDown
+  ChevronDown,
+  ChevronUp,
+  Sparkles
 } from 'lucide-react';
 import VisualEdaDashboard from '../components/eda/VisualEdaDashboard';
 
 export default function DataExplorerPage() {
   const [catalog, setCatalog] = useState({ sheets: [], relationships: [] });
+  const [showEnrichmentReview, setShowEnrichmentReview] = useState(false);
   const [selected, setSelected] = useState(() => {
     const params = new URLSearchParams(window.location.search);
     return params.get('sheet_id') || '';
@@ -210,7 +214,9 @@ export default function DataExplorerPage() {
   };
 
   const selectedSheet = catalog.sheets.find((s) => String(s.id) === String(selected));
-  const activeDataset = datasets.find((d) => d.id === selectedSheet?.dataset_id);
+  const activeDataset = datasets.find((d) => d.id === selectedSheet?.dataset_id) || datasets[0];
+  const enrichment = activeDataset?.enrichment;
+  const derivedFeatCount = enrichment?.derived_features_count || enrichment?.derived_features?.length || 0;
   const link = catalog.relationships.find((r) => String(r.id) === relation);
   const left = catalog.sheets.find((s) => s.id === link?.left_sheet);
   const right = catalog.sheets.find((s) => s.id === link?.right_sheet);
@@ -360,13 +366,44 @@ export default function DataExplorerPage() {
                 }}
               >
                 <option value="">Single Sheet</option>
-                {derivedTables.map((dt) => (
-                  <option key={dt.id} value={dt.id}>
-                    🔗 {dt.display_name} ({dt.row_count} rows)
-                  </option>
-                ))}
+                {derivedTables.map((dt) => {
+                  const isRollup = dt.join_keys?.type === 'scientific_enrichment_rollup';
+                  return (
+                    <option key={dt.id} value={dt.id}>
+                      {isRollup ? '📊 ' : '🔗 '}
+                      {dt.display_name} ({dt.row_count} rows)
+                    </option>
+                  );
+                })}
               </select>
             </div>
+          )}
+
+          {/* Scientific Enrichment Toggle Button */}
+          {enrichment && derivedFeatCount > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowEnrichmentReview((prev) => !prev)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                background: showEnrichmentReview ? 'rgba(224, 86, 36, 0.22)' : 'rgba(224, 86, 36, 0.08)',
+                border: '1px solid rgba(224, 86, 36, 0.4)',
+                borderRadius: '8px',
+                padding: '0 10px',
+                minHeight: '38px',
+                color: 'var(--brand-400)',
+                fontSize: '0.82rem',
+                fontWeight: 600,
+                cursor: 'pointer'
+              }}
+              title="Toggle discovery inspection: semantic groups, discovered formulas, derived features, and analytical tables"
+            >
+              <Sparkles size={14} />
+              <span>+{derivedFeatCount} Scientific Features</span>
+              {showEnrichmentReview ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            </button>
           )}
 
           {/* Table-specific Mode Controls: Version Pill + Search */}
@@ -623,6 +660,13 @@ export default function DataExplorerPage() {
       </div>
       </header>
 
+      {/* Collapsible Scientific Enrichment Review Panel */}
+      {showEnrichmentReview && enrichment && (
+        <div style={{ marginBottom: '1.25rem' }}>
+          <EnrichmentReviewCard enrichment={enrichment} />
+        </div>
+      )}
+
       {error && (
         <div className="alert-box alert-error" style={{ marginBottom: '1rem' }}>
           <span>{error}</span>
@@ -635,21 +679,30 @@ export default function DataExplorerPage() {
           {selectedDerivedId && activeDerivedTable && (
             <div
               style={{
-                background: 'rgba(255, 176, 137, 0.1)',
-                border: '1px solid rgba(255, 176, 137, 0.3)',
+                background: activeDerivedTable.join_keys?.type === 'scientific_enrichment_rollup'
+                  ? 'rgba(16, 185, 129, 0.08)'
+                  : 'rgba(255, 176, 137, 0.1)',
+                border: activeDerivedTable.join_keys?.type === 'scientific_enrichment_rollup'
+                  ? '1px solid rgba(16, 185, 129, 0.3)'
+                  : '1px solid rgba(255, 176, 137, 0.3)',
                 borderRadius: '8px',
                 padding: '0.6rem 0.9rem',
                 marginBottom: '0.75rem',
                 fontSize: '0.85rem',
-                color: '#fff9f2',
+                color: 'var(--fg-primary)',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '0.5rem'
               }}
             >
-              <GitMerge size={16} color="#ffb089" />
+              <GitMerge size={16} color={activeDerivedTable.join_keys?.type === 'scientific_enrichment_rollup' ? 'var(--emerald-tier)' : '#ffb089'} />
               <span>
-                <strong>Synthesized Cross-Sheet View:</strong> {activeDerivedTable.description}
+                <strong>
+                  {activeDerivedTable.join_keys?.type === 'scientific_enrichment_rollup'
+                    ? 'Synthesized Analytical Rollup Table:'
+                    : 'Synthesized Cross-Sheet View:'}
+                </strong>{' '}
+                {activeDerivedTable.description}
               </span>
             </div>
           )}

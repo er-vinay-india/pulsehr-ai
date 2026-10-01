@@ -18,6 +18,8 @@ from app.services.fact_discovery import discover_prioritized_hr_facts
 from app.services.visual_intelligence import build_workspace_visual_dashboard
 from app.services.investigation_service import run_contextual_investigation
 
+pytestmark = [pytest.mark.eda]
+
 
 WALMART_SAMPLE_ROWS = [
     {"Store": 1, "Date": "05-02-2010", "Weekly_Sales": 1643690.90, "Holiday_Flag": 0, "Temperature": 42.31, "Fuel_Price": 2.572, "CPI": 211.0963582, "Unemployment": 8.106},

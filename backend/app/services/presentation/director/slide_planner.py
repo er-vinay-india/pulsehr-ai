@@ -221,7 +221,7 @@ def _normalize_and_bound_slides(
 
         # Validate layout compatibility with slide sequence and visual_type
         if idx == 0:
-            layout = "title_hero"
+            layout = "title_cover"
         elif idx == 1:
             layout = "kpi_summary"
         elif visual_type in ("line_chart", "bar_chart", "donut_chart", "rel_chart", "talent_9box", "burnout_strain", "bradford_factor"):
@@ -320,13 +320,13 @@ def _build_fallback_slide_plans(
     industrial_models = ctx.industrial_models or {}
 
     templates = [
-        # Slide 1: Hero
+        # Slide 1: Executive Title Cover
         {
-            "layout": "title_hero",
+            "layout": "title_cover",
             "visual_type": "none",
-            "headline": f"{ctx.domain.upper()}: Executive Operating Review",
-            "subtitle": f"Empirical Ground Truth Across {ctx.total_records:,} Records",
-            "key_message": f"Verified dataset establishes {ctx.baseline_benchmark or 'audited baseline'} throughput.",
+            "headline": ctx.objective or f"{ctx.domain.title()} Executive Audit & Review",
+            "subtitle": f"Empirical Ground Truth Across {ctx.total_records:,} Records ({ctx.reporting_period or 'Full Window'})",
+            "key_message": f"Verified empirical assessment reconciling across {ctx.total_records:,} records with {ctx.completeness_pct}% data completeness.",
             "section_id": "sec_exec",
         },
         # Slide 2: Scope & Baseline

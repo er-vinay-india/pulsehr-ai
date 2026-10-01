@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowRight, Info, X, Presentation } from "lucide-react";
+import { ArrowRight, Info, X, Presentation, Layers, Sparkles, TrendingUp, BarChart2, Table } from "lucide-react";
 import SafeReactECharts from "../components/charts/SafeReactECharts";
 import ExecutiveBriefingCard from "../components/adaptive/ExecutiveBriefingCard";
 import ExceptionWatchCard from "../components/adaptive/ExceptionWatchCard";
@@ -10,6 +10,8 @@ import AnalysisCoverageSection from "../components/adaptive/AnalysisCoverageSect
 import InvestigationDrawer from "../components/InvestigationDrawer";
 import EmployeeDrawer from "../components/EmployeeDrawer";
 import "../styles/adaptive-dashboard.scss";
+import { useTheme } from "../context/ThemeContext";
+import { getThemeTokens } from "../theme/tokens";
 
 async function fetchJson(url, options = {}) {
   const res = await fetch(url, options);
@@ -81,6 +83,8 @@ function computeRelativeAge(dateStr) {
 }
 
 export default function AdaptiveDashboardPage({ onNavigateTab }) {
+  const { isDark } = useTheme();
+  const themeTokens = getThemeTokens(isDark);
   // Source State
   const [sources, setSources] = useState([]);
   const [sourcesLoading, setSourcesLoading] = useState(true);
@@ -133,6 +137,128 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
   }, []);
   const activeControllerRef = useRef(null);
   const requestCounter = useRef(0);
+
+  // Dimensional Cohort Projections State & Options
+  const [selectedCohortDim, setSelectedCohortDim] = useState(null);
+  const [selectedCohortMeas, setSelectedCohortMeas] = useState(null);
+
+  const groupByProj = data?.group_by_projections || null;
+  const analyticalTables = data?.analytical_tables || [];
+
+  const cohortDims = useMemo(() => {
+    if (!groupByProj?.breakdowns) return groupByProj?.dimensions || [];
+    const dims = groupByProj.dimensions || [];
+    const valid = dims.filter(
+      (dim) => Object.keys(groupByProj.breakdowns[dim] || {}).length > 0
+    );
+    return valid.length > 0 ? valid : dims;
+  }, [groupByProj]);
+
+  const currentCohortDim = useMemo(() => {
+    if (selectedCohortDim && cohortDims.includes(selectedCohortDim)) {
+      return selectedCohortDim;
+    }
+    return cohortDims[0] || "";
+  }, [selectedCohortDim, cohortDims]);
+
+  const cohortMeasures = useMemo(() => {
+    if (!currentCohortDim || !groupByProj?.breakdowns?.[currentCohortDim]) {
+      return groupByProj?.measures || [];
+    }
+    const measList = Object.keys(groupByProj.breakdowns[currentCohortDim]);
+    return measList.length > 0 ? measList : (groupByProj?.measures || []);
+  }, [groupByProj, currentCohortDim]);
+
+  const currentCohortMeas = useMemo(() => {
+    if (selectedCohortMeas && cohortMeasures.includes(selectedCohortMeas)) {
+      return selectedCohortMeas;
+    }
+    return cohortMeasures[0] || "";
+  }, [selectedCohortMeas, cohortMeasures]);
+
+  const activeCohortBreakdown = useMemo(() => {
+    if (!currentCohortDim || !currentCohortMeas) return null;
+    return groupByProj?.breakdowns?.[currentCohortDim]?.[currentCohortMeas] || null;
+  }, [groupByProj, currentCohortDim, currentCohortMeas]);
+
+  const hasCohortProjections = (cohortDims.length > 0 && cohortMeasures.length > 0) || analyticalTables.length > 0;
+
+  const cohortBarOption = useMemo(() => {
+    if (!activeCohortBreakdown) return null;
+    const cats = activeCohortBreakdown.categories || [];
+    const means = activeCohortBreakdown.means || [];
+    const topCat = activeCohortBreakdown.top_category;
+    const overallMean = activeCohortBreakdown.overall_mean;
+
+    return {
+      backgroundColor: "transparent",
+      tooltip: {
+        trigger: "axis",
+        axisPointer: { type: "shadow" },
+        backgroundColor: themeTokens.colors.surface,
+        borderColor: themeTokens.colors.borderStrong,
+        textStyle: { color: themeTokens.colors.textPrimary, fontSize: 12 },
+        formatter: (params) => {
+          const item = params[0];
+          const idx = item.dataIndex;
+          const count = activeCohortBreakdown.counts?.[idx] ?? "";
+          const isTop = cats[idx] === topCat;
+          return `
+            <div style="font-weight:700;margin-bottom:4px;color:${themeTokens.colors.textPrimary};">${item.name} ${isTop ? "🏆 (Top Cohort)" : ""}</div>
+            <div style="color:${themeTokens.colors.gold};font-size:13px;font-weight:600;">Mean ${activeCohortBreakdown.measure_label}: ${item.value}</div>
+            <div style="color:${themeTokens.colors.textMuted};font-size:11px;margin-top:2px;">Cohort Size: ${count} observations</div>
+          `;
+        }
+      },
+      grid: {
+        top: 25,
+        bottom: 45,
+        left: "4%",
+        right: "4%",
+        containLabel: true
+      },
+      xAxis: {
+        type: "category",
+        data: cats,
+        axisLabel: {
+          color: themeTokens.colors.textSecondary,
+          rotate: cats.length > 5 ? 20 : 0,
+          fontSize: 11
+        },
+        axisLine: { lineStyle: { color: themeTokens.colors.borderStrong } }
+      },
+      yAxis: {
+        type: "value",
+        name: `Mean ${activeCohortBreakdown.measure_label}`,
+        nameTextStyle: { color: themeTokens.colors.textMuted, fontSize: 11 },
+        splitLine: { lineStyle: { color: themeTokens.chart.splitLine } },
+        axisLabel: { color: themeTokens.colors.textMuted, fontSize: 11 }
+      },
+      series: [
+        {
+          name: `Mean ${activeCohortBreakdown.measure_label}`,
+          type: "bar",
+          data: means.map((val, idx) => ({
+            value: val,
+            itemStyle: {
+              color: cats[idx] === topCat ? themeTokens.colors.gold : themeTokens.colors.brandBlue,
+              borderRadius: [4, 4, 0, 0]
+            }
+          })),
+          markLine: overallMean != null ? {
+            data: [{ type: "average", name: "Org Baseline", yAxis: overallMean }],
+            lineStyle: { color: themeTokens.colors.statusSuccess, type: "dashed", width: 2 },
+            label: {
+              formatter: `Baseline: ${overallMean}`,
+              position: "insideEndTop",
+              color: themeTokens.colors.statusSuccess,
+              fontSize: 11
+            }
+          } : undefined
+        }
+      ]
+    };
+  }, [activeCohortBreakdown, themeTokens]);
 
   const handleSourceSelect = (newId) => {
     setSelectedSheetId(newId);
@@ -459,8 +585,8 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
         symbol: p.is_partial ? "diamond" : "circle",
         symbolSize: p.is_partial ? 8 : 5,
         itemStyle: {
-          color: "#ffb089",
-          borderColor: p.is_partial ? "#fff9f2" : "#ffb089",
+          color: themeTokens.colors.gold,
+          borderColor: p.is_partial ? themeTokens.colors.textPrimary : themeTokens.colors.gold,
           borderWidth: p.is_partial ? 1.5 : 0,
         },
       };
@@ -491,17 +617,17 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
         axisPointer: {
           type: "line",
           lineStyle: {
-            color: "rgba(255, 176, 137, 0.4)",
+            color: themeTokens.colors.softGold,
             width: 1,
             type: "dashed",
           },
         },
-        backgroundColor: "#1c1815",
-        borderColor: "#524940",
+        backgroundColor: themeTokens.colors.surface,
+        borderColor: themeTokens.colors.borderStrong,
         borderWidth: 1,
         padding: [10, 14],
         textStyle: {
-          color: "#fff9f2",
+          color: themeTokens.colors.textPrimary,
           fontSize: 12,
           fontFamily: "system-ui, sans-serif",
         },
@@ -516,8 +642,8 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
                 : formatFullMonthName(pt?.period));
           if (!pt || pt.average_hours === null) {
             return `
-              <div style="font-weight:600;margin-bottom:4px;color:#fff9f2">${periodHeader}</div>
-              <div style="color:#ded5cb">No recorded intervals in this period</div>
+              <div style="font-weight:600;margin-bottom:4px;color:${themeTokens.colors.textPrimary}">${periodHeader}</div>
+              <div style="color:${themeTokens.colors.textSecondary}">No recorded intervals in this period</div>
             `;
           }
           const displayAvg = secondaryElement.glance?.unit === "$"
@@ -526,30 +652,30 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
                 ? `${pt.average_hours.toFixed(2)} d (${pt.formatted_hours})`
                 : `${pt.average_hours.toFixed(2)}h (${pt.formatted_hours})`);
           return `
-            <div style="font-weight:600;margin-bottom:6px;color:#fff9f2">${periodHeader}</div>
+            <div style="font-weight:600;margin-bottom:6px;color:${themeTokens.colors.textPrimary}">${periodHeader}</div>
             <div style="display:flex;justify-content:space-between;gap:16px;margin-bottom:4px">
-              <span style="color:#ded5cb">${secondaryElement.title || "Average"}:</span>
-              <strong style="color:#ffb089">${displayAvg}</strong>
+              <span style="color:${themeTokens.colors.textSecondary}">${secondaryElement.title || "Average"}:</span>
+              <strong style="color:${themeTokens.colors.gold}">${displayAvg}</strong>
             </div>
             ${
               pt.has_band
                 ? `<div style="display:flex;justify-content:space-between;gap:16px;margin-bottom:4px">
-                    <span style="color:#ded5cb">${secondaryElement.band_name || "Middle 80% range"}:</span>
-                    <span style="color:#fff9f2">${pt.formatted_p10} – ${pt.formatted_p90}</span>
+                    <span style="color:${themeTokens.colors.textSecondary}">${secondaryElement.band_name || "Middle 80% range"}:</span>
+                    <span style="color:${themeTokens.colors.textPrimary}">${pt.formatted_p10} – ${pt.formatted_p90}</span>
                   </div>`
                 : ""
             }
             <div style="display:flex;justify-content:space-between;gap:16px;margin-bottom:2px">
-              <span style="color:#ded5cb">Observations:</span>
-              <span style="color:#fff9f2">${pt.valid_entries.toLocaleString()}</span>
+              <span style="color:${themeTokens.colors.textSecondary}">Observations:</span>
+              <span style="color:${themeTokens.colors.textPrimary}">${pt.valid_entries.toLocaleString()}</span>
             </div>
             <div style="display:flex;justify-content:space-between;gap:16px;margin-bottom:2px">
-              <span style="color:#ded5cb">${secondaryElement.temporal_grain === "weekly" ? "Week date:" : "Observed dates:"}</span>
-              <span style="color:#fff9f2">${secondaryElement.temporal_grain === "weekly" ? pt.first_observed_date : pt.observed_dates}</span>
+              <span style="color:${themeTokens.colors.textSecondary}">${secondaryElement.temporal_grain === "weekly" ? "Week date:" : "Observed dates:"}</span>
+              <span style="color:${themeTokens.colors.textPrimary}">${secondaryElement.temporal_grain === "weekly" ? pt.first_observed_date : pt.observed_dates}</span>
             </div>
             ${
               pt.excluded_entries > 0
-                ? `<div style="display:flex;justify-content:space-between;gap:16px;color:#ded5cb">
+                ? `<div style="display:flex;justify-content:space-between;gap:16px;color:${themeTokens.colors.textSecondary}">
                     <span>Excluded entries:</span>
                     <span>${pt.excluded_entries.toLocaleString()}</span>
                   </div>`
@@ -557,7 +683,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
             }
             ${
               pt.is_partial
-                ? `<div style="margin-top:6px;font-size:11px;color:#fbbb27;border-top:1px solid #524940;padding-top:4px">
+                ? `<div style="margin-top:6px;font-size:11px;color:${themeTokens.colors.statusWarning};border-top:1px solid ${themeTokens.colors.borderStrong};padding-top:4px">
                     ⚠️ ${pt.partial_reason || "Partial period"}
                   </div>`
                 : ""
@@ -576,7 +702,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
         nameLocation: "middle",
         nameGap: isMobile ? 72 : 32,
         nameTextStyle: {
-          color: "#ded5cb",
+          color: themeTokens.colors.textSecondary,
           fontSize: 12,
           fontWeight: 500,
         },
@@ -585,10 +711,10 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
           show: true,
           inside: false,
           alignWithLabel: true,
-          lineStyle: { color: "#3d362f" },
+          lineStyle: { color: themeTokens.colors.borderStrong },
         },
         axisLabel: {
-          color: "#ded5cb",
+          color: themeTokens.colors.textSecondary,
           fontSize: isMobile ? 10 : 11,
           rotate: isMobile ? 35 : 0,
           align: isMobile ? "right" : "center",
@@ -623,7 +749,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
           showMaxLabel: true,
         },
         axisLine: {
-          lineStyle: { color: "#3d362f" },
+          lineStyle: { color: themeTokens.colors.borderStrong },
         },
       },
       yAxis: {
@@ -639,17 +765,17 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
         nameRotate: 90,
         nameGap: isMobile ? 56 : 52,
         nameTextStyle: {
-          color: "#ded5cb",
+          color: themeTokens.colors.textSecondary,
           fontSize: 12,
           fontWeight: 500,
         },
         axisTick: {
           show: true,
           inside: false,
-          lineStyle: { color: "#3d362f" },
+          lineStyle: { color: themeTokens.colors.borderStrong },
         },
         axisLabel: {
-          color: "#ded5cb",
+          color: themeTokens.colors.textSecondary,
           fontSize: 11,
           formatter: (val) => {
             const key = val.toFixed(2);
@@ -668,7 +794,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
         splitLine: {
           show: true,
           lineStyle: {
-            color: "#524940",
+            color: themeTokens.colors.borderStrong,
             type: "dashed",
           },
         },
@@ -694,7 +820,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
           symbol: "none",
           lineStyle: { opacity: 0 },
           areaStyle: {
-            color: "rgba(255, 176, 137, 0.16)",
+            color: themeTokens.colors.softGold,
           },
           silent: true,
           connectNulls: false,
@@ -706,7 +832,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
           data: p10LineData,
           symbol: "none",
           lineStyle: {
-            color: "rgba(255, 176, 137, 0.4)",
+            color: themeTokens.colors.softGold,
             width: 1,
             type: "dashed",
           },
@@ -720,7 +846,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
           data: p90LineData,
           symbol: "none",
           lineStyle: {
-            color: "rgba(255, 176, 137, 0.4)",
+            color: themeTokens.colors.softGold,
             width: 1,
             type: "dashed",
           },
@@ -736,20 +862,20 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
           smooth: false,
           z: 10,
           lineStyle: {
-            color: "#ffb089",
+            color: themeTokens.colors.gold,
             width: 2.5,
           },
           emphasis: {
             scale: false,
             itemStyle: {
-              borderColor: "#fff9f2",
+              borderColor: themeTokens.colors.textPrimary,
               borderWidth: 2,
             },
           },
         },
       ],
     };
-  }, [chartPoints, secondaryElement, isMobile]);
+  }, [chartPoints, secondaryElement, isMobile, themeTokens]);
 
   // Element 3 (Tertiary Ranked Breakdown) option for Apache ECharts
   const breakdownItems = tertiaryElement?.items || [];
@@ -789,12 +915,12 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
       tooltip: {
         trigger: "item",
         confine: true,
-        backgroundColor: "#1c1815",
-        borderColor: "#524940",
+        backgroundColor: themeTokens.colors.surface,
+        borderColor: themeTokens.colors.borderStrong,
         borderWidth: 1,
         padding: [10, 14],
         textStyle: {
-          color: "#fff9f2",
+          color: themeTokens.colors.textPrimary,
           fontSize: 12,
           fontFamily: "system-ui, sans-serif",
         },
@@ -806,20 +932,20 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
             ? `Other (${d.formattedSecondary} consolidated)`
             : d.category;
           return `
-            <div style="font-weight:600;margin-bottom:6px;color:#fff9f2">${header}</div>
+            <div style="font-weight:600;margin-bottom:6px;color:${themeTokens.colors.textPrimary}">${header}</div>
             <div style="display:flex;justify-content:space-between;gap:16px;margin-bottom:4px">
-              <span style="color:#ded5cb">${tertiaryElement.metric_name || "Headcount"}:</span>
-              <strong style="color:#ffb089">${d.formattedValue}</strong>
+              <span style="color:${themeTokens.colors.textSecondary}">${tertiaryElement.metric_name || "Headcount"}:</span>
+              <strong style="color:${themeTokens.colors.gold}">${d.formattedValue}</strong>
             </div>
             <div style="display:flex;justify-content:space-between;gap:16px;margin-bottom:4px">
-              <span style="color:#ded5cb">Share of Total:</span>
-              <strong style="color:#f3d19a">${d.sharePct}%</strong>
+              <span style="color:${themeTokens.colors.textSecondary}">Share of Total:</span>
+              <strong style="color:${themeTokens.colors.gold}">${d.sharePct}%</strong>
             </div>
             ${
               d.formattedSecondary && !isOther
-                ? `<div style="display:flex;justify-content:space-between;gap:16px;border-top:1px solid #524940;padding-top:4px;margin-top:4px">
-                    <span style="color:#ded5cb">Average / Metric:</span>
-                    <span style="color:#fff9f2">${d.formattedSecondary}</span>
+                ? `<div style="display:flex;justify-content:space-between;gap:16px;border-top:1px solid ${themeTokens.colors.borderStrong};padding-top:4px;margin-top:4px">
+                    <span style="color:${themeTokens.colors.textSecondary}">Average / Metric:</span>
+                    <span style="color:${themeTokens.colors.textPrimary}">${d.formattedSecondary}</span>
                   </div>`
                 : ""
             }
@@ -856,15 +982,15 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
         splitLine: {
           show: true,
           lineStyle: {
-            color: "#524940",
+            color: themeTokens.colors.borderStrong,
             type: "dashed",
           },
         },
         axisLine: {
-          lineStyle: { color: "#3d362f" },
+          lineStyle: { color: themeTokens.colors.borderStrong },
         },
         axisLabel: {
-          color: "#ded5cb",
+          color: themeTokens.colors.textSecondary,
           fontSize: 11,
           formatter: (val) => {
             const absVal = Math.abs(val);
@@ -893,21 +1019,21 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
         name: tertiaryElement.dimension_name || "Store",
         nameLocation: "end",
         nameTextStyle: {
-          color: "#ded5cb",
+          color: themeTokens.colors.textSecondary,
           fontSize: 11,
           fontWeight: 600,
           padding: [0, 0, 6, 0],
         },
         data: categories,
         axisLine: {
-          lineStyle: { color: "#3d362f" },
+          lineStyle: { color: themeTokens.colors.borderStrong },
         },
         axisTick: {
           alignWithLabel: true,
-          lineStyle: { color: "#3d362f" },
+          lineStyle: { color: themeTokens.colors.borderStrong },
         },
         axisLabel: {
-          color: "#ded5cb",
+          color: themeTokens.colors.textSecondary,
           fontSize: isMobile ? 11 : 12,
           width: isMobile ? 110 : 200,
           overflow: "truncate",
@@ -929,14 +1055,14 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
           data: seriesData,
           barWidth: isMobile ? 16 : 20,
           itemStyle: {
-            color: "#ffb089",
+            color: themeTokens.colors.gold,
             borderRadius: [0, 4, 4, 0],
           },
           label: {
             show: true,
             position: (params) => (params.data?.sharePct > 20 ? "insideRight" : "right"),
             distance: 8,
-            color: (params) => (params.data?.sharePct > 20 ? "#1c1815" : "#ded5cb"),
+            color: (params) => (params.data?.sharePct > 20 ? themeTokens.colors.surface : themeTokens.colors.textSecondary),
             fontWeight: (params) => (params.data?.sharePct > 20 ? 700 : 400),
             fontSize: 11,
             formatter: (params) => `${params.data?.sharePct ?? 0}%`,
@@ -944,7 +1070,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
         },
       ],
     };
-  }, [breakdownItems, tertiaryElement, isMobile]);
+  }, [breakdownItems, tertiaryElement, isMobile, themeTokens]);
 
   // Element 4 (Quaternary Explanatory Comparator) option for Apache ECharts (Gate 4)
   const comparatorItems = quaternaryElement?.items || [];
@@ -963,7 +1089,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
       isBaseline: it.is_baseline,
       cohort: it.cohort,
       itemStyle: {
-        color: it.is_baseline ? "#968b7e" : "#ffb089",
+        color: it.is_baseline ? themeTokens.colors.textMuted : themeTokens.colors.gold,
         borderRadius: [0, 4, 4, 0],
       },
     }));
@@ -981,12 +1107,12 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
       tooltip: {
         trigger: "item",
         confine: true,
-        backgroundColor: "#1c1815",
-        borderColor: "#524940",
+        backgroundColor: themeTokens.colors.surface,
+        borderColor: themeTokens.colors.borderStrong,
         borderWidth: 1,
         padding: [10, 14],
         textStyle: {
-          color: "#fff9f2",
+          color: themeTokens.colors.textPrimary,
           fontSize: 12,
           fontFamily: "system-ui, sans-serif",
         },
@@ -994,22 +1120,22 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
           const d = params.data;
           if (!d) return "";
           return `
-            <div style="font-weight:600;margin-bottom:6px;color:#fff9f2">
-              ${d.cohort} ${d.isBaseline ? '<span style="font-size:10px;color:#ded5cb">(Baseline)</span>' : ''}
+            <div style="font-weight:600;margin-bottom:6px;color:${themeTokens.colors.textPrimary}">
+              ${d.cohort} ${d.isBaseline ? `<span style="font-size:10px;color:${themeTokens.colors.textSecondary}">(Baseline)</span>` : ''}
             </div>
             <div style="display:flex;justify-content:space-between;gap:16px;margin-bottom:4px">
-              <span style="color:#ded5cb">${quaternaryElement.metric_name || "Metric"}:</span>
-              <strong style="color:#ffb089">${d.formattedValue}</strong>
+              <span style="color:${themeTokens.colors.textSecondary}">${quaternaryElement.metric_name || "Metric"}:</span>
+              <strong style="color:${themeTokens.colors.gold}">${d.formattedValue}</strong>
             </div>
             <div style="display:flex;justify-content:space-between;gap:16px;margin-bottom:4px">
-              <span style="color:#ded5cb">Sample:</span>
-              <span style="color:#fff9f2">${d.sampleLabel}</span>
+              <span style="color:${themeTokens.colors.textSecondary}">Sample:</span>
+              <span style="color:${themeTokens.colors.textPrimary}">${d.sampleLabel}</span>
             </div>
             ${
               d.sharePct !== null && d.sharePct !== undefined
                 ? `<div style="display:flex;justify-content:space-between;gap:16px">
-                    <span style="color:#ded5cb">Share of Total:</span>
-                    <strong style="color:#f3d19a">${d.sharePct}%</strong>
+                    <span style="color:${themeTokens.colors.textSecondary}">Share of Total:</span>
+                    <strong style="color:${themeTokens.colors.gold}">${d.sharePct}%</strong>
                   </div>`
                 : ""
             }
@@ -1038,15 +1164,15 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
         splitLine: {
           show: true,
           lineStyle: {
-            color: "#524940",
+            color: themeTokens.colors.borderStrong,
             type: "dashed",
           },
         },
         axisLine: {
-          lineStyle: { color: "#3d362f" },
+          lineStyle: { color: themeTokens.colors.borderStrong },
         },
         axisLabel: {
-          color: "#ded5cb",
+          color: themeTokens.colors.textSecondary,
           fontSize: 11,
           formatter: (val) => {
             const absVal = Math.abs(val);
@@ -1069,21 +1195,21 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
         name: quaternaryElement.dimension_name || "Cohort",
         nameLocation: "end",
         nameTextStyle: {
-          color: "#ded5cb",
+          color: themeTokens.colors.textSecondary,
           fontSize: 11,
           fontWeight: 600,
           padding: [0, 0, 6, 0],
         },
         data: categories,
         axisLine: {
-          lineStyle: { color: "#3d362f" },
+          lineStyle: { color: themeTokens.colors.borderStrong },
         },
         axisTick: {
           alignWithLabel: true,
-          lineStyle: { color: "#3d362f" },
+          lineStyle: { color: themeTokens.colors.borderStrong },
         },
         axisLabel: {
-          color: "#ded5cb",
+          color: themeTokens.colors.textSecondary,
           fontSize: isMobile ? 11 : 12,
           width: isMobile ? 115 : 150,
           overflow: "truncate",
@@ -1100,7 +1226,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
             show: true,
             position: "right",
             distance: 8,
-            color: "#fff9f2",
+            color: themeTokens.colors.textPrimary,
             fontSize: 11,
             fontFamily: "system-ui, sans-serif",
             fontWeight: "600",
@@ -1109,7 +1235,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
         },
       ],
     };
-  }, [comparatorItems, quaternaryElement, isMobile]);
+  }, [comparatorItems, quaternaryElement, isMobile, themeTokens]);
 
   const activeInspect =
     inspectTarget === "priority" && priorityInsight
@@ -1982,6 +2108,225 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
             infoButtonRef={enterpriseTriggerBtnRef}
           />
         )}
+
+        {/* Layer 1: Element 11 — Dimensional Group-By & Cohort Projections Card */}
+        {!calculating && !calcError && hasCohortProjections && (
+          <div className="adaptive-element-card executive-briefing-card" style={{ marginTop: "1.5rem" }}>
+            <div className="card-header-bar" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "1rem" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <div className="card-icon-badge" style={{ background: themeTokens.colors.softGold, color: themeTokens.colors.gold, padding: "8px", borderRadius: "8px" }}>
+                  <Layers size={20} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: "1.1rem", fontWeight: 700, color: "var(--fg-primary)" }}>
+                    Dimensional Group-By & Cohort Projections
+                  </h3>
+                  <p style={{ margin: "2px 0 0 0", fontSize: "0.82rem", color: "var(--fg-muted)" }}>
+                    Executive cohort segmentation and Day-of-Week rollup patterns derived from verified records
+                  </p>
+                </div>
+              </div>
+
+              {analyticalTables.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => onNavigateTab?.("explorer")}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    padding: "0.4rem 0.8rem",
+                    borderRadius: "6px",
+                    border: "1px solid rgba(255, 176, 137, 0.3)",
+                    background: themeTokens.colors.softGold,
+                    color: themeTokens.colors.gold,
+                    fontSize: "0.8rem",
+                    fontWeight: 600,
+                    cursor: "pointer"
+                  }}
+                >
+                  <Table size={14} />
+                  <span>{analyticalTables.length} Rollup Tables in Data Explorer</span>
+                  <ArrowRight size={14} />
+                </button>
+              )}
+            </div>
+
+            {/* Dimension & Metric Selector Pills */}
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "1.25rem", margin: "1.25rem 0" }}>
+              {cohortDims.length > 1 && (
+                <div>
+                  <span style={{ fontSize: "0.72rem", fontWeight: 700, color: "var(--fg-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginRight: "8px" }}>
+                    Dimension:
+                  </span>
+                  <div style={{ display: "inline-flex", flexWrap: "wrap", gap: "6px" }}>
+                    {cohortDims.map((dim) => {
+                      const isSel = dim === currentCohortDim;
+                      const label = dim.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+                      return (
+                        <button
+                          key={dim}
+                          type="button"
+                          onClick={() => setSelectedCohortDim(dim)}
+                          style={{
+                            padding: "0.3rem 0.7rem",
+                            borderRadius: "5px",
+                            border: isSel ? `1px solid ${themeTokens.colors.gold}` : "1px solid var(--border-strong)",
+                            background: isSel ? themeTokens.colors.softGold : "var(--bg-surface)",
+                            color: isSel ? themeTokens.colors.gold : "var(--fg-secondary)",
+                            fontSize: "0.78rem",
+                            fontWeight: isSel ? 600 : 400,
+                            cursor: "pointer"
+                          }}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {cohortMeasures.length > 1 && (
+                <div>
+                  <span style={{ fontSize: "0.72rem", fontWeight: 700, color: "var(--fg-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginRight: "8px" }}>
+                    Measure:
+                  </span>
+                  <div style={{ display: "inline-flex", flexWrap: "wrap", gap: "6px" }}>
+                    {cohortMeasures.map((meas) => {
+                      const isSel = meas === currentCohortMeas;
+                      const label = meas.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+                      return (
+                        <button
+                          key={meas}
+                          type="button"
+                          onClick={() => setSelectedCohortMeas(meas)}
+                          style={{
+                            padding: "0.3rem 0.7rem",
+                            borderRadius: "5px",
+                            border: isSel ? `1px solid ${themeTokens.colors.brandBlue}` : "1px solid var(--border-strong)",
+                            background: isSel ? themeTokens.colors.softBlue : themeTokens.colors.surface,
+                            color: isSel ? themeTokens.colors.brandBlue : "var(--fg-secondary)",
+                            fontSize: "0.78rem",
+                            fontWeight: isSel ? 600 : 400,
+                            cursor: "pointer"
+                          }}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Key Pattern & Disparity Insight Banner */}
+            {activeCohortBreakdown && (
+              <div
+                style={{
+                  background: themeTokens.colors.softGold,
+                  border: `1px solid ${themeTokens.colors.borderStrong}`,
+                  borderRadius: "8px",
+                  padding: "1rem",
+                  marginBottom: "1.25rem"
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "0.4rem" }}>
+                  <Sparkles size={16} color={themeTokens.colors.gold} />
+                  <span style={{ fontSize: "0.85rem", fontWeight: 700, color: themeTokens.colors.textPrimary }}>
+                    Executive Segment Insight ({activeCohortBreakdown.dimension_label})
+                  </span>
+                </div>
+                <p style={{ margin: 0, fontSize: "0.88rem", color: themeTokens.colors.textSecondary, lineHeight: "1.5" }}>
+                  {activeCohortBreakdown.insight}
+                </p>
+
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem", marginTop: "0.75rem" }}>
+                  <div style={{ background: "var(--color-bg-surface)", padding: "0.35rem 0.7rem", borderRadius: "5px", fontSize: "0.78rem" }}>
+                    <span style={{ color: themeTokens.colors.textMuted }}>🏆 Top Cohort: </span>
+                    <strong style={{ color: themeTokens.colors.gold }}>{activeCohortBreakdown.top_category}</strong>{" "}
+                    <span style={{ color: themeTokens.colors.textMuted }}>(Avg: {activeCohortBreakdown.top_mean})</span>
+                  </div>
+                  <div style={{ background: "var(--color-bg-surface)", padding: "0.35rem 0.7rem", borderRadius: "5px", fontSize: "0.78rem" }}>
+                    <span style={{ color: themeTokens.colors.textMuted }}>🔻 Lagging Cohort: </span>
+                    <strong style={{ color: themeTokens.colors.statusError }}>{activeCohortBreakdown.bottom_category}</strong>{" "}
+                    <span style={{ color: themeTokens.colors.textMuted }}>(Avg: {activeCohortBreakdown.bottom_mean})</span>
+                  </div>
+                  <div style={{ background: "var(--color-bg-surface)", padding: "0.35rem 0.7rem", borderRadius: "5px", fontSize: "0.78rem" }}>
+                    <span style={{ color: themeTokens.colors.textMuted }}>📈 Cohort Gap: </span>
+                    <strong style={{ color: themeTokens.colors.statusSuccess }}>+{activeCohortBreakdown.disparity_pct}%</strong>
+                  </div>
+                  <div style={{ background: "var(--color-bg-surface)", padding: "0.35rem 0.7rem", borderRadius: "5px", fontSize: "0.78rem" }}>
+                    <span style={{ color: themeTokens.colors.textMuted }}>📊 Org Baseline: </span>
+                    <strong style={{ color: themeTokens.colors.textPrimary }}>{activeCohortBreakdown.overall_mean}</strong>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Bar Chart & Rollup Table Grid */}
+            {activeCohortBreakdown && (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", gap: "1.25rem", alignItems: "start" }}>
+                {/* Cohort Comparison Bar Chart */}
+                <div style={{ background: "var(--color-bg-elevated)", border: "1px solid var(--border-subtle)", borderRadius: "8px", padding: "1rem" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
+                    <h4 style={{ margin: 0, fontSize: "0.85rem", fontWeight: 600, color: "var(--fg-secondary)" }}>
+                      Cohort Average: {activeCohortBreakdown.measure_label}
+                    </h4>
+                    <span style={{ fontSize: "0.72rem", color: themeTokens.colors.gold }}>Top highlighted</span>
+                  </div>
+                  {cohortBarOption ? (
+                    <SafeReactECharts option={cohortBarOption} opts={{ renderer: "svg" }} style={{ height: "260px", width: "100%", minHeight: "260px" }} />
+                  ) : (
+                    <div style={{ height: "260px", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--fg-muted)", fontSize: "0.85rem" }}>
+                      Calculating cohort chart…
+                    </div>
+                  )}
+                </div>
+
+                {/* Cohort Rollup Table */}
+                <div style={{ background: "var(--color-bg-elevated)", border: "1px solid var(--border-subtle)", borderRadius: "8px", padding: "1rem", overflowX: "auto" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
+                    <h4 style={{ margin: 0, fontSize: "0.85rem", fontWeight: 600, color: "var(--fg-secondary)" }}>
+                      Rollup Summary
+                    </h4>
+                    <span style={{ fontSize: "0.72rem", color: "var(--fg-muted)" }}>{activeCohortBreakdown.total_records} rows</span>
+                  </div>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.8rem", color: "var(--fg-secondary)" }}>
+                    <thead>
+                      <tr style={{ borderBottom: "1px solid var(--border-subtle)", textAlign: "left", color: "var(--fg-muted)" }}>
+                        <th style={{ padding: "6px 8px" }}>Cohort</th>
+                        <th style={{ padding: "6px 8px", textAlign: "right" }}>Count</th>
+                        <th style={{ padding: "6px 8px", textAlign: "right" }}>Share</th>
+                        <th style={{ padding: "6px 8px", textAlign: "right" }}>Mean</th>
+                        <th style={{ padding: "6px 8px", textAlign: "right" }}>Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {activeCohortBreakdown.table_rows.map((row, idx) => {
+                        const isTop = row.category === activeCohortBreakdown.top_category;
+                        return (
+                          <tr key={idx} style={{ borderBottom: "1px solid rgba(255,255,255,0.04)", background: isTop ? "rgba(255, 159, 67, 0.08)" : undefined }}>
+                            <td style={{ padding: "6px 8px", fontWeight: isTop ? 700 : 500, color: isTop ? themeTokens.colors.gold : "inherit" }}>
+                              {row.category}
+                            </td>
+                            <td style={{ padding: "6px 8px", textAlign: "right" }}>{row.count}</td>
+                            <td style={{ padding: "6px 8px", textAlign: "right" }}>{row.share_records_pct}%</td>
+                            <td style={{ padding: "6px 8px", textAlign: "right", fontWeight: 700, color: isTop ? themeTokens.colors.gold : "inherit" }}>
+                              {row.mean}
+                            </td>
+                            <td style={{ padding: "6px 8px", textAlign: "right" }}>{row.total}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </section>
 
       {/* Layer 3: Inspect Modal Details Dialog / Sheet */}
@@ -2101,7 +2446,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
                             <th scope="row" style={{ textAlign: "left" }}>
                               <strong>{pt.period_label}</strong>
                               {secondaryElement?.temporal_grain === "weekly" && pt.first_observed_date && (
-                                <span style={{ display: "block", fontSize: "11px", fontWeight: "normal", color: "#a89f94" }}>
+                                <span style={{ display: "block", fontSize: "11px", fontWeight: "normal", color: themeTokens.colors.textMuted }}>
                                   {formatHumanDate(pt.first_observed_date)}
                                 </span>
                               )}
@@ -2164,7 +2509,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
                             <th scope="row" style={{ textAlign: "left" }}>
                               <strong>{it.category}</strong>
                               {it.category === "Other" && it.formatted_secondary && (
-                                <span style={{ display: "block", fontSize: "11px", fontWeight: "normal", color: "#a89f94" }}>
+                                <span style={{ display: "block", fontSize: "11px", fontWeight: "normal", color: themeTokens.colors.textMuted }}>
                                   ({it.formatted_secondary} consolidated)
                                 </span>
                               )}
@@ -2209,7 +2554,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
                             <th scope="row" style={{ textAlign: "left" }}>
                               <strong>{it.cohort}</strong>
                               {it.is_baseline && (
-                                <span style={{ display: "inline-block", marginLeft: "6px", fontSize: "10px", padding: "1px 5px", borderRadius: "3px", background: "#3d362f", color: "#c9bdb0" }}>
+                                <span style={{ display: "inline-block", marginLeft: "6px", fontSize: "10px", padding: "1px 5px", borderRadius: "3px", background: themeTokens.colors.borderStrong, color: themeTokens.colors.textSecondary }}>
                                   Baseline
                                 </span>
                               )}

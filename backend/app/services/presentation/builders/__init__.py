@@ -9,6 +9,7 @@ from .common import (
     load_json_template,
 )
 from .summary_builder import (
+    build_executive_title_cover_slide,
     build_executive_summary_slide,
     build_baseline_scope_slide,
 )
@@ -38,6 +39,7 @@ __all__ = [
     "format_briefing",
     "build_default_evidence_ledger",
     "load_json_template",
+    "build_executive_title_cover_slide",
     "build_executive_summary_slide",
     "build_baseline_scope_slide",
     "build_strengths_slides",

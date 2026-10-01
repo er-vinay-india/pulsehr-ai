@@ -277,15 +277,20 @@ def analyze_hr_attendance_sheet(
             # Enforce 1-to-1 cardinality before cross-sheet join
             cdf_has_dups = bool(cdf.duplicated(subset=[c_id_col]).any())
             cdf_clean = cdf.drop_duplicates(subset=[c_id_col], keep='first') if cdf_has_dups else cdf
-            df_clean = df.drop_duplicates(subset=[id_col], keep='first') if duplicate_records_detected else df
+            df_clean = df.drop_duplicates(subset=[id_col], keep='first') if duplicate_records_detected else df.copy()
+            df_clean_join = df_clean.copy()
+            df_clean_join[id_col] = df_clean_join[id_col].astype(str).str.strip()
 
-            merged = pd.merge(
-                df_clean[[id_col, '__num_app_leave']],
-                cdf_clean[[c_id_col, '__num_c_leave']],
-                left_on=id_col,
-                right_on=c_id_col,
-                how='inner'
-            )
+            try:
+                merged = pd.merge(
+                    df_clean_join[[id_col, '__num_app_leave']],
+                    cdf_clean[[c_id_col, '__num_c_leave']],
+                    left_on=id_col,
+                    right_on=c_id_col,
+                    how='inner'
+                )
+            except Exception:
+                merged = pd.DataFrame()
             valid_merge = merged['__num_app_leave'].notna()
             diff_cross = (merged.loc[valid_merge, '__num_app_leave'] - merged.loc[valid_merge, '__num_c_leave']).abs()
             cross_mismatches = int((diff_cross > 0.01).sum())
