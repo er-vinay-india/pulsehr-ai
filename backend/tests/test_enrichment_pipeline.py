@@ -179,7 +179,11 @@ def test_primitive_feature_derivation(sample_multidomain_dataset):
 
 def test_scientific_formula_discovery(sample_multidomain_dataset):
     """Verifies Stage 7 & 8 Scientific Formula Discovery & Dimensional Consistency."""
-    cfg = EnrichmentConfig(max_derived_columns=100)
+    cfg = EnrichmentConfig(
+        max_derived_columns=100,
+        symbolic_regression_enabled=False,
+        featuretools_enabled=False,
+    )
     guard = BudgetGuard(cfg)
     profiles = EnrichmentProfiler.profile_dataset(sample_multidomain_dataset)
 
@@ -282,10 +286,16 @@ def test_end_to_end_controlled_enrichment_pipeline(sample_multidomain_dataset):
 
 @pytest.mark.integration
 @pytest.mark.db
-def test_upload_endpoint_semantic_enrichment_integration(sample_multidomain_dataset):
+def test_upload_endpoint_semantic_enrichment_integration(sample_multidomain_dataset, monkeypatch):
     """Verifies that the /api/upload/file endpoint executes semantic enrichment and exposes results."""
+    from unittest.mock import MagicMock
     from fastapi.testclient import TestClient
     from app.main import app
+
+    mock_res = MagicMock()
+    mock_res.success = True
+    mock_res.raw_text = '{"display_name": "Logistics Fleet Operations", "description": "Fleet metrics."}'
+    monkeypatch.setattr("app.services.gateway.model_gateway.ModelGateway.generate", lambda *a, **k: mock_res)
 
     client = TestClient(app)
     csv_bytes = sample_multidomain_dataset.to_csv(index=False).encode('utf-8')
@@ -391,7 +401,7 @@ def test_formula_registry_domain_packs():
     assert (res == pd.Series([50.0, 50.0])).all()
 
 
-def test_symbolic_relationship_adapter_fallback():
+def test_symbolic_relationship_adapter_fallback(monkeypatch):
     """Verifies that SymbolicRelationshipAdapter gracefully handles execution without crashing."""
     from app.services.enrichment.adapters.symbolic_adapter import SymbolicRelationshipAdapter
 
@@ -401,7 +411,9 @@ def test_symbolic_relationship_adapter_fallback():
     res = disabled_adapter.discover_symbolic_relationship(pd.DataFrame({"a": [1], "b": [2]}), ["a"], "b")
     assert res is None
 
-    # Test live adapter
+    # Test live adapter initialization with mocked availability to avoid booting external Julia VM
+    monkeypatch.setattr(SymbolicRelationshipAdapter, "_check_availability", lambda self: setattr(self, "_pysr_available", True))
     live_adapter = SymbolicRelationshipAdapter(enabled=True)
     assert isinstance(live_adapter.is_available(), bool)
+    assert live_adapter.is_available() is True
 

@@ -5,6 +5,20 @@ import pytest
 from app.services.copilot.union_war_room import UnionWarRoomEngine, COUNCIL_DELEGATES
 
 
+@pytest.fixture(autouse=True)
+def mock_ollama_calls(monkeypatch):
+    """Mocks all Ollama HTTP calls so unit tests run instantaneously without network or GPU latency."""
+    def fake_call_ollama(model, prompt, max_tokens=150, timeout_s=12.0, temperature=0.2):
+        if "STRICT DEMOCRATIC VOTING RULE" in prompt:
+            # Enforce peer voting: if voter is deepseek_reasoner, vote for qwen_analyst; otherwise vote for deepseek_reasoner
+            if "You are DeepSeek-R1" in prompt:
+                return "VOTE_FOR: qwen_analyst\nRATIONALE: Robust empirical baselines and ground-truth metrics."
+            return "VOTE_FOR: deepseek_reasoner\nRATIONALE: Rigorous deductive causality and systemic dependency analysis."
+        return f"Authoritative analysis from {model} addressing the inquiry with domain-grounded operational recommendations."
+
+    monkeypatch.setattr("app.services.copilot.union_war_room._call_ollama_completion", fake_call_ollama)
+
+
 def test_war_room_council_election_structure():
     """Verify that council deliberation gathers candidate answers and democratically elects a replier."""
     result = UnionWarRoomEngine.execute_deliberation(

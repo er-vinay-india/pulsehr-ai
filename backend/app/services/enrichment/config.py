@@ -30,7 +30,7 @@ class EnrichmentConfig(BaseModel):
     max_measures_per_table: int = Field(default=6, description="Maximum aggregated measures per analytical table.")
     featuretools_enabled: bool = Field(default=True, description="Enable Featuretools DFS feature derivation.")
     unit_processing_enabled: bool = Field(default=True, description="Enable Pint unit validation and dimensional analysis.")
-    symbolic_regression_enabled: bool = Field(default=True, description="Enable PySR symbolic regression discovery.")
+    symbolic_regression_enabled: bool = Field(default=False, description="Enable PySR symbolic regression discovery.")
     visions_enabled: bool = Field(default=True, description="Enable Visions semantic type profiling.")
 
     @classmethod

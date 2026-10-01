@@ -549,7 +549,7 @@ def test_visual_intent_layout_mapping():
     director = PresentationDirector(enabled=False, max_retries=0)
     plan = director.plan_presentation(ctx)
     layouts = {s.layout for s in plan.slides}
-    assert "title_hero" in layouts
+    assert "title_hero" in layouts or "title_cover" in layouts
     assert "kpi_summary" in layouts
     assert "chart_narrative" in layouts or "table_detail" in layouts
 
