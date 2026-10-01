@@ -1,0 +1,181 @@
+// Application chrome only. PPT presets and the slide stage keep their own palette.
+// :root scopes these overrides above legacy light/dark interface rules.
+:root .presentation-page-container {
+  .pres-studio-body {
+    .studio-sub-toolbar, .studio-thumbnails-rail, .studio-speaker-notes-bar {
+      background: var(--color-bg-surface);
+      color: var(--color-text-primary);
+      border-color: var(--color-border);
+    }
+
+    .studio-presenter-center { background: var(--color-bg-page); }
+
+    .studio-sub-toolbar .slide-counter-badge,
+    .studio-sub-toolbar .theme-quick-dropdown,
+    .notes-header-left { color: var(--color-text-secondary); }
+
+    .notes-hint, .thumb-layout-tag { color: var(--color-text-muted); }
+
+    .thumbnail-card {
+      background: var(--color-bg-subtle);
+      border-color: var(--color-border);
+      box-shadow: none;
+
+      &:hover { border-color: var(--border-strong); }
+      &.active {
+        background: var(--color-bg-soft-teal);
+        border-color: var(--border-focus);
+        box-shadow: 0 0 0 1px var(--border-focus);
+      }
+      .thumb-idx { color: var(--color-brand-secondary); }
+      .thumb-title-preview { color: var(--color-text-primary); }
+      .thumb-actions { border-color: var(--color-border); }
+      .btn-thumb-action {
+        color: var(--color-text-secondary);
+        &:hover:not(:disabled) { background: var(--color-bg-surface); color: var(--color-text-primary); }
+        &.danger:hover:not(:disabled) { color: var(--color-error); }
+      }
+    }
+
+    .symbolic-action-btn, .btn-ghost-sm {
+      background: var(--color-bg-subtle);
+      color: var(--color-text-secondary);
+      border-color: var(--border-strong);
+      &:hover { background: var(--color-bg-soft-blue); color: var(--color-text-primary); border-color: var(--border-focus); }
+      &.active, &.btn-export-pptx {
+        background: var(--btn-primary-bg);
+        color: var(--btn-primary-fg);
+        border-color: var(--btn-primary-border);
+        &:hover { background: var(--btn-primary-hover); }
+      }
+      &.btn-present-orb {
+        background: var(--color-bg-soft-teal);
+        color: var(--color-brand-secondary);
+        border-color: var(--border-focus);
+        &:hover { background: var(--btn-primary-bg); color: var(--btn-primary-fg); }
+      }
+    }
+
+    .select-theme-inline, .notes-textarea, .copilot-input {
+      background: var(--color-bg-surface);
+      color: var(--color-text-primary);
+      border-color: var(--border-input);
+      &::placeholder { color: var(--color-text-muted); }
+    }
+
+    .hriday-curation-bar {
+      background: var(--color-bg-soft-teal);
+      color: var(--color-text-secondary);
+      border-color: var(--border-strong);
+      .copilot-badge, .copilot-status { color: var(--color-brand-secondary); }
+      .copilot-badge svg { stroke: currentColor; }
+      .suggestion-pill {
+        background: var(--color-bg-surface);
+        color: var(--color-text-secondary);
+        border-color: var(--border-input);
+        &:hover:not(:disabled) { background: var(--color-bg-subtle); color: var(--color-text-primary); border-color: var(--border-focus); }
+      }
+      .btn-curate {
+        background: var(--btn-primary-bg);
+        color: var(--btn-primary-fg);
+        border-color: var(--btn-primary-border);
+        &:hover:not(:disabled) { background: var(--btn-primary-hover); border-color: var(--btn-primary-border); }
+      }
+      .copilot-error-msg { background: var(--color-bg-soft-error); color: var(--color-error); border-color: var(--color-error); }
+    }
+
+    // These controls surround the output; never override .frontend-slides-stage.
+    .frontend-slides-top-bar, .frontend-slides-controls {
+      background: var(--color-bg-surface);
+      color: var(--color-text-secondary);
+      border-color: var(--color-border);
+    }
+    .symbolic-brand-pill, .edit-toggle-badge {
+      background: var(--color-bg-subtle);
+      color: var(--color-text-secondary);
+      border-color: var(--border-strong);
+      .brand-dot { background: var(--color-brand-secondary); }
+    }
+    .frontend-slides-controls {
+      .slide-indicator { color: var(--color-text-secondary); }
+      .nav-btn {
+        background: var(--color-bg-subtle);
+        color: var(--color-text-secondary);
+        border-color: var(--border-strong);
+        &:hover:not(:disabled) { background: var(--btn-primary-bg); color: var(--btn-primary-fg); border-color: var(--btn-primary-border); }
+      }
+    }
+    .symbolic-tooltip {
+      background: var(--color-bg-elevated);
+      color: var(--color-text-primary);
+      border-color: var(--border-strong);
+      &::after { border-top-color: var(--border-strong); }
+    }
+    .mobile-deck-header .mobile-deck-pagination,
+    .mobile-deck-nav-bar .mobile-step-pill { color: var(--color-text-secondary); }
+
+    .pres-approval-banner {
+      background: var(--color-bg-soft-teal);
+      color: var(--color-text-primary);
+      border-color: var(--border-strong);
+      .banner-left { color: var(--color-success); }
+      .btn-approve { background: var(--btn-primary-bg); color: var(--btn-primary-fg); }
+      .btn-revert { background: var(--color-bg-surface); color: var(--color-text-secondary); border-color: var(--border-input); }
+    }
+  }
+
+  .pres-slide-text-editor {
+    background: var(--color-bg-surface);
+    color: var(--color-text-primary);
+    border-color: var(--color-border);
+    label { color: var(--color-text-secondary); }
+    textarea, textarea:focus { background: var(--color-bg-subtle); color: var(--color-text-primary); border-color: var(--border-input); }
+  }
+
+  .pres-generating-body {
+    .generating-header-card, .pipeline-stages-list { background: var(--color-bg-surface); border-color: var(--color-border); }
+    .generating-phase-title, .stage-title { color: var(--color-text-primary); }
+    .generating-subtitle, .generating-detail-label, .stage-desc, .stage-num { color: var(--color-text-secondary); }
+    .pipeline-spinner-badge { background: var(--color-bg-soft-teal); color: var(--color-brand-secondary); border-color: var(--border-strong); }
+    .pipeline-progress-track { background: var(--color-bg-subtle); border-color: var(--border-strong); }
+    .pipeline-progress-bar { background: var(--color-brand-secondary); }
+    .pipeline-progress-pct, .icon-active, .icon-success { color: var(--color-brand-secondary); }
+    .pipeline-stage-row.active, .pipeline-stage-row.completed { background: var(--color-bg-soft-teal); border-color: var(--border-strong); }
+    .stage-active-pulse { background: var(--color-bg-soft-teal); color: var(--color-brand-secondary); }
+    .pipeline-stage-row .stage-meta .stage-slide-pills-row .slide-step-pill {
+      background: var(--color-bg-subtle); color: var(--color-text-secondary); border-color: var(--border-strong);
+      &.done, &.building { background: var(--color-bg-soft-teal); color: var(--color-brand-secondary); border-color: var(--border-focus); box-shadow: none; }
+      &.pending { background: var(--color-bg-subtle); color: var(--color-text-muted); border-color: var(--border-strong); }
+    }
+    .pres-error-callout { background: var(--color-bg-soft-error); color: var(--color-error); border-color: var(--color-error); }
+    .pipeline-stage-row {
+      .stage-meta .stage-title { color: var(--color-text-primary); }
+      .stage-meta .stage-desc, .stage-status-icon .stage-num { color: var(--color-text-secondary); }
+      .stage-status-icon .icon-success, .stage-status-icon .icon-active { color: var(--color-brand-secondary); }
+    }
+  }
+
+  .pres-regen-dialog, .pres-image-picker-modal {
+    background: var(--color-bg-surface); color: var(--color-text-primary); border-color: var(--color-border);
+    .dialog-header, .dialog-footer, .pres-image-picker-header, .pres-image-picker-controls, .pres-image-picker-footer { background: var(--color-bg-surface); border-color: var(--color-border); }
+    h3, h4, label, .header-title { color: var(--color-text-primary); }
+    .dialog-hint, .header-sub, .footer-hint, .btn-close, .btn-icon-close { color: var(--color-text-secondary); }
+    .header-icon { background: var(--color-bg-soft-teal); color: var(--color-brand-secondary); }
+    .form-textarea, .search-form { background: var(--color-bg-subtle); color: var(--color-text-primary); border-color: var(--border-input); }
+    .search-input, .search-icon { color: var(--color-text-secondary); }
+    .form-textarea::placeholder, .search-input::placeholder { color: var(--color-text-muted); }
+    .btn-search, .cat-pill { background: var(--color-bg-subtle); color: var(--color-text-secondary); border-color: var(--border-input); }
+    .btn-search:hover, .cat-pill:hover, .cat-pill.active { background: var(--btn-primary-bg); color: var(--btn-primary-fg); border-color: var(--btn-primary-border); }
+    .scrim-control-bar { background: var(--color-bg-subtle); border-color: var(--color-border); }
+    .scrim-slider-group, .scrim-hint { color: var(--color-text-secondary); }
+    .scrim-value, .selected-preview-pill { color: var(--color-brand-secondary); }
+  }
+  .pres-regen-dialog-backdrop, .pres-image-picker-overlay { background: var(--overlay-backdrop); }
+
+  // Focus styling is restricted to interface regions outside the slide canvas.
+  .studio-sub-toolbar, .studio-thumbnails-rail, .hriday-curation-bar,
+  .studio-speaker-notes-bar, .frontend-slides-top-bar, .frontend-slides-controls,
+  .pres-slide-text-editor, .pres-regen-dialog, .pres-image-picker-modal {
+    :focus-visible { outline: 3px solid var(--border-focus); outline-offset: 3px; box-shadow: none; }
+  }
+}

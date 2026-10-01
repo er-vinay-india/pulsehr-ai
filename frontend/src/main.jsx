@@ -9,6 +9,7 @@ import "katex/dist/katex.min.css";
 import "./styles/mobile-layout.scss";
 import "./styles/eda-explorer.scss";
 import "./styles/theme-components.scss";
+import "./styles/presentation-interface.scss";
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>

@@ -68,5 +68,10 @@ certify complete WCAG AAA conformance, which also includes keyboard operation,
 content, assistive technology support and other requirements. Existing exported
 slide template palettes are separate from the application's light/dark themes.
 
+`src/styles/presentation-interface.scss` applies the shared tokens to studio
+toolbars, slide navigation cards, refinement controls, speaker notes and dialogs.
+It deliberately excludes the slide canvas and preset variables. Application
+mode changes must not recolour PPT content or change exported template palettes.
+
 Reference: [WCAG 2.2 Contrast (Enhanced)](https://www.w3.org/WAI/WCAG22/Understanding/contrast-enhanced.html)
 and [Non-text Contrast](https://www.w3.org/WAI/WCAG22/Understanding/non-text-contrast.html).
