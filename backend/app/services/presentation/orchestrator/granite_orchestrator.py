@@ -122,8 +122,17 @@ class PresentationExecutionOrchestrator:
             )
             seq_counter += 1
 
-            # Task 2: Calculate metrics or aggregates
+            # Task 2: Calculate metrics or aggregates from verified evidence
             calc_task_id = f"task-{s_id}-calc-metric"
+            ev_vals: list[float] = []
+            for ev in (ctx.current_evidence or []):
+                if ev.get("evidence_id") in s_ev_ids:
+                    if ev.get("numeric_value") is not None:
+                        try:
+                            ev_vals.append(float(ev["numeric_value"]))
+                        except (ValueError, TypeError):
+                            pass
+
             task_graph.add_task(
                 ExecutionTask(
                     task_id=calc_task_id,
@@ -133,8 +142,9 @@ class PresentationExecutionOrchestrator:
                     objective=f"Calculate key quantitative metrics for slide {slide.sequence_number}",
                     inputs={
                         "metric_type": "percentage_share" if v_type == "donut_chart" else "mean",
-                        "values": [float(ctx.total_records), max(1.0, float(ctx.total_records) * 0.8)],
-                        "evidence_ids": s_ev_ids
+                        "values": ev_vals,
+                        "evidence_ids": s_ev_ids,
+                        "calculation_status": "verified_evidence_inputs" if ev_vals else "unavailable_no_evidence"
                     },
                     executor=ExecutorType.DETERMINISTIC_ANALYTICS,
                     tool_name="calculate_metric",

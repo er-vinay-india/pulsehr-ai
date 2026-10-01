@@ -43,10 +43,23 @@ def detect_sheet_date_range(records: list[dict], columns: list[str]) -> dict[str
         s = df[col].dropna()
         if len(s) < 2:
             continue
+
+        # Prevent numeric columns (like 4.5, 10.0) from being falsely converted to 1970 epoch timestamps
+        if pd.api.types.is_numeric_dtype(s):
+            if not ((s.between(1950, 2050).all()) or (s > 1e9).all()):
+                continue
+        elif s.astype(str).str.match(r"^\s*[-+]?\d*\.?\d+\s*$").all():
+            num_vals = pd.to_numeric(s, errors="coerce")
+            if not ((num_vals.between(1950, 2050).all()) or (num_vals > 1e9).all()):
+                continue
+
         try:
             converted = pd.to_datetime(s, errors="coerce", format="mixed")
             valid_dates = converted.dropna()
             if len(valid_dates) >= max(2, int(len(s) * 0.35)):
+                # If dates falsely collapsed to 1970 epoch without source text containing 1970, skip
+                if valid_dates.min().year == 1970 and not s.astype(str).str.contains("1970").any():
+                    continue
                 min_dt = valid_dates.min()
                 max_dt = valid_dates.max()
                 days_span = max(0, (max_dt - min_dt).days)
@@ -82,6 +95,38 @@ def detect_sheet_date_range(records: list[dict], columns: list[str]) -> dict[str
                 }
         except Exception:
             continue
+
+    # Fallback: Multi-Grain & Wide-Format Sequential Period Detection
+    try:
+        from ..analytics.temporal_categorical_engine import extract_multi_grain_temporal_insights
+        temporal_res = extract_multi_grain_temporal_insights(df, columns)
+        if temporal_res.get("has_temporal_data"):
+            weekly = temporal_res.get("weekly", {}).get("timeline", [])
+            monthly = temporal_res.get("monthly", {}).get("timeline", [])
+            active_timeline = weekly if weekly else monthly
+
+            if active_timeline and len(active_timeline) >= 2:
+                first_label = active_timeline[0]["period_label"]
+                last_label = active_timeline[-1]["period_label"]
+                days_span = temporal_res.get("days_span", len(active_timeline) * 7)
+                months_span = round(days_span / 30.4375, 1)
+                is_partial = temporal_res.get("is_partial_year", True)
+                p_label = f"{first_label} – {last_label} ({len(active_timeline)} Observation Cycles · Partial Year)" if is_partial else f"{first_label} – {last_label} (Annual Cycle)"
+
+                return {
+                    "has_date": True,
+                    "date_col": temporal_res.get("date_column") or "Sequential Periods",
+                    "min_date": first_label,
+                    "max_date": last_label,
+                    "min_label": first_label,
+                    "max_label": last_label,
+                    "period_label": p_label,
+                    "is_partial_year": is_partial,
+                    "days_span": days_span,
+                    "months_span": months_span
+                }
+    except Exception as exc:
+        logger.debug(f"Multi-grain temporal fallback detection skipped: {exc}")
 
     return {
         "has_date": False,

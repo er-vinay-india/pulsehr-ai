@@ -1,9 +1,12 @@
-export function slideBackground(slide, color) {
+import { getSlideTheme, photoScrimColor } from '../theme/slideTokens.js';
+export function slideBackground(slide, input) {
+  const theme = getSlideTheme(input);
+  const color = theme.bg_color;
   if (!slide.background_image) return { backgroundColor: color };
-  const opacity = Math.max(0, Math.min(90, Number(slide.scrim_opacity ?? 70))) / 100;
+  const scrim = photoScrimColor(slide, theme);
   return {
     backgroundColor: color,
-    backgroundImage: `linear-gradient(rgba(0,0,0,${opacity}), rgba(0,0,0,${opacity})), url(${JSON.stringify(slide.background_image)})`,
-    backgroundSize: "cover", backgroundPosition: "center",
+    backgroundImage: `linear-gradient(${scrim}, ${scrim}), url(${JSON.stringify(slide.background_image)})`,
+    backgroundSize: 'cover', backgroundPosition: 'center',
   };
 }

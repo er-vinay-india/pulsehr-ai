@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import "../styles/presentation-responsive.scss";
 import { AlertCircle, X } from "lucide-react";
 import {
@@ -23,6 +23,8 @@ export default function PresentationPage({
 }) {
   const {
     viewMode,
+    configSession,
+    handleNewDeck,
     setViewMode,
     themes,
     sheets,
@@ -78,6 +80,12 @@ export default function PresentationPage({
     initialScopeType,
     onJobUpdate
   });
+  const configRef = useRef(null);
+  useEffect(() => {
+    if (!configSession) return;
+    configRef.current?.scrollIntoView({ block: "start" });
+    configRef.current?.querySelector("button")?.focus({ preventScroll: true });
+  }, [configSession]);
 
   // Active Dashboard Truth preview state
   const [dashboardData, setDashboardData] = useState(null);
@@ -220,7 +228,7 @@ export default function PresentationPage({
         isRegeneratingSlide={isRegeneratingSlide}
         isExportingPptx={isExportingPptx}
         onResetAndStartGeneration={handleResetAndStartGeneration}
-        onGoBackToConfig={handleGoBackToConfig}
+        onGoBackToConfig={handleNewDeck}
         onExportHtml={handleExportHtml}
         onOpenRegenerateModal={() => setShowRegenModal(true)}
         onExportPptx={handleExportPptx}
@@ -248,8 +256,9 @@ export default function PresentationPage({
       {/* Main Presentation View Container */}
       <div className={`presentation-modal-shell presentation-page-shell mode-${viewMode}`}>
         {/* VIEW 1: PROMPT STUDIO SCREEN (AI Dashboard-to-Deck Configurator) */}
-        <div hidden={viewMode !== "config"}>
+        <div ref={configRef} hidden={viewMode !== "config"}>
           <PromptStudioScreen
+            key={configSession}
             dashboardData={dashboardData}
             onGenerateDeck={handleStartGeneration}
             isGenerating={viewMode === "generating"}

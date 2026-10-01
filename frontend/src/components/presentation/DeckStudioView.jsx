@@ -1,3 +1,4 @@
+import DeckControl from './DeckControl.jsx';
 import React, { useState } from "react";
 import {
   Palette,
@@ -21,10 +22,12 @@ import {
   Zap,
   Film,
   Sliders,
+  ShieldCheck,
 } from "lucide-react";
 import PresentationRevealDeck from "../PresentationRevealDeck.jsx";
 import { exportStandaloneHtmlPresentation } from "../../utils/standaloneHtmlExporter";
 import SlideImagePickerModal from "./SlideImagePickerModal.jsx";
+import ReviewGatesModal from "./ReviewGatesModal.jsx";
 import AcousticOrbPresenter from "./AcousticOrbPresenter.jsx";
 import AnimatedAcousticOrb from "./AnimatedAcousticOrb.jsx";
 
@@ -63,6 +66,7 @@ export default function DeckStudioView({
 }) {
   const [isSlideOptionsOpen, setIsSlideOptionsOpen] = useState(false);
   const [isImagePickerOpen, setIsImagePickerOpen] = useState(false);
+  const [isReviewGatesOpen, setIsReviewGatesOpen] = useState(false);
   const [isPresenterMode, setIsPresenterMode] = useState(false);
   const [curatePrompt, setCuratePrompt] = useState("");
   const [isCurating, setIsCurating] = useState(false);
@@ -161,7 +165,7 @@ export default function DeckStudioView({
             Slide {activeSlideIndex + 1} of {deckSpec.slides.length}
           </span>
 
-          <div className="symbolic-btn-wrap">
+          <DeckControl className="symbolic-btn-wrap">
             <div className="theme-quick-dropdown">
               <Palette size={14} />
               <select
@@ -178,9 +182,9 @@ export default function DeckStudioView({
               </select>
             </div>
             <span className="symbolic-tooltip">Visual Theme Palette</span>
-          </div>
+          </DeckControl>
 
-          <div className="symbolic-btn-wrap">
+          <DeckControl className="symbolic-btn-wrap">
             <div className="theme-quick-dropdown">
               <Film size={14} />
               <select
@@ -200,9 +204,9 @@ export default function DeckStudioView({
               </select>
             </div>
             <span className="symbolic-tooltip">Slide Transition Effect</span>
-          </div>
+          </DeckControl>
 
-          <div className="symbolic-btn-wrap">
+          <DeckControl className="symbolic-btn-wrap">
             <div className="theme-quick-dropdown">
               <Sliders size={14} />
               <select
@@ -225,12 +229,12 @@ export default function DeckStudioView({
               </select>
             </div>
             <span className="symbolic-tooltip">Slide Layout Variant</span>
-          </div>
+          </DeckControl>
         </div>
 
         <div className="toolbar-right">
           {/* Executive AI Orb Launcher */}
-          <div className="symbolic-btn-wrap">
+          <DeckControl className="symbolic-btn-wrap">
             <button
               type="button"
               className={`symbolic-action-btn btn-present-orb ${isPresenterMode ? "active" : ""}`}
@@ -243,10 +247,10 @@ export default function DeckStudioView({
             <span className="symbolic-tooltip">
               {isPresenterMode ? "Exit Fullscreen Presenter Mode" : "Present with Autonomous Acoustic HRIDAY Voiceover"}
             </span>
-          </div>
+          </DeckControl>
 
           {/* Royalty-Free Image Picker Trigger */}
-          <div className="symbolic-btn-wrap">
+          <DeckControl className="symbolic-btn-wrap">
             <button
               type="button"
               className="symbolic-action-btn"
@@ -259,10 +263,10 @@ export default function DeckStudioView({
             <span className="symbolic-tooltip">
               Slide Photography: Browse free commercial photos with dark contrast scrim
             </span>
-          </div>
+          </DeckControl>
 
           {/* Speaker Notes Drawer Toggle */}
-          <div className="symbolic-btn-wrap">
+          <DeckControl className="symbolic-btn-wrap">
             <button
               type="button"
               className={`symbolic-action-btn ${speakerNotesOpen ? "active" : ""}`}
@@ -280,10 +284,26 @@ export default function DeckStudioView({
             <span className="symbolic-tooltip">
               Speaker Notes: Executive talking points and speech script
             </span>
-          </div>
+          </DeckControl>
+
+          {/* 5 Review Gates Trigger */}
+          <DeckControl className="symbolic-btn-wrap">
+            <button
+              type="button"
+              className={`symbolic-action-btn ${isReviewGatesOpen ? "active" : ""}`}
+              onClick={() => setIsReviewGatesOpen(true)}
+              aria-label="Presentation Review Gates"
+            >
+              <ShieldCheck size={14} />
+              <span className="btn-label-responsive">Review Gates</span>
+            </button>
+            <span className="symbolic-tooltip">
+              5 Review Gates: Automated checks and explicit human sign-off audit
+            </span>
+          </DeckControl>
 
           {/* Add Slide */}
-          <div className="symbolic-btn-wrap">
+          <DeckControl className="symbolic-btn-wrap">
             <button
               type="button"
               className="symbolic-action-btn"
@@ -297,11 +317,11 @@ export default function DeckStudioView({
             <span className="symbolic-tooltip">
               Add Slide: Append a new executive slide to current deck
             </span>
-          </div>
+          </DeckControl>
 
           {/* Export Options */}
           {onExportPptx && (
-            <div className="symbolic-btn-wrap studio-pptx-action">
+            <DeckControl className="symbolic-btn-wrap studio-pptx-action">
               <button
                 type="button"
                 className="symbolic-action-btn btn-export-pptx"
@@ -314,11 +334,11 @@ export default function DeckStudioView({
               <span className="symbolic-tooltip">
                 Export PPTX: Native PowerPoint presentation with editable charts
               </span>
-            </div>
+            </DeckControl>
           )}
 
           {/* PDF Export */}
-          <div className="symbolic-btn-wrap">
+          <DeckControl className="symbolic-btn-wrap">
             <button
               type="button"
               className="symbolic-action-btn"
@@ -331,7 +351,7 @@ export default function DeckStudioView({
             <span className="symbolic-tooltip">
               Export PDF: Print or save presentation as PDF document
             </span>
-          </div>
+          </DeckControl>
         </div>
       </fieldset>
 
@@ -566,6 +586,18 @@ export default function DeckStudioView({
         onClose={() => setIsImagePickerOpen(false)}
         onSelectImage={handleSelectImage}
         currentImageUrl={currentSlide?.background_image}
+      />
+
+      {/* Five Review Gates Modal */}
+      <ReviewGatesModal
+        isOpen={isReviewGatesOpen}
+        onClose={() => setIsReviewGatesOpen(false)}
+        deckSpec={deckSpec}
+        onDeckUpdated={(updatedDeck) => {
+          if (onUpdateSlide && updatedDeck?.slides?.[activeSlideIndex]) {
+            onUpdateSlide(activeSlideIndex, updatedDeck.slides[activeSlideIndex]);
+          }
+        }}
       />
 
       {/* Standalone Fullscreen Presenter Mode with Floating Orb */}

@@ -1,3 +1,4 @@
+import { slideChartOptions } from '../../theme/slideChartOptions.js';
 import React, { useRef, useEffect, useState } from 'react';
 import * as echarts from 'echarts';
 import { lightPalette, darkPalette, isCurrentThemeDark } from './chartOptions';
@@ -192,7 +193,7 @@ function minimalOptions(option, isDark = false) {
   };
 }
 
-export default function SafeReactECharts({ option = {}, style, onEvents, opts = {} }) {
+export default function SafeReactECharts({ option = {}, style, onEvents, opts = {}, presentationTheme }) {
   const container = useRef(null);
   const instance = useRef(null);
   const handlers = useRef(onEvents);
@@ -220,7 +221,7 @@ export default function SafeReactECharts({ option = {}, style, onEvents, opts = 
   useEffect(() => {
     try {
       if (instance.current) {
-        instance.current.setOption(minimalOptions(option, isDark), true);
+        instance.current.setOption(presentationTheme ? slideChartOptions(option, presentationTheme) : minimalOptions(option, isDark), true);
         instance.current.resize();
         setError(false);
       }
@@ -228,7 +229,7 @@ export default function SafeReactECharts({ option = {}, style, onEvents, opts = 
       console.warn('Chart rendering failed', err);
       setError(true);
     }
-  }, [option, isDark]);
+  }, [option, isDark, presentationTheme]);
 
   const eventNames = Object.keys(onEvents || {}).sort().join('|');
   useEffect(() => {

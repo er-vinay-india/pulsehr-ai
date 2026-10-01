@@ -44,10 +44,10 @@ class ThemeIntegrityGate:
                 content = f.read()
 
             expected_tokens = [
-                ("--color-bg-page: #F8FAFC;", "Page background token changed"),
-                ("--color-text-primary: #0B1F3A;", "Primary text color token changed"),
-                ("--color-brand-primary: #0B1F3A;", "Brand primary color token changed"),
-                ("--color-brand-accent: #155EEF;", "Brand accent color token changed"),
+                ("--color-bg-page: #F6F5F0;", "Page background token changed"),
+                ("--color-text-primary: #172B3A;", "Primary text color token changed"),
+                ("--color-brand-primary: #183B56;", "Brand primary color token changed"),
+                ("--color-brand-accent: #075443;", "Brand accent color token changed"),
                 (':root, [data-theme="light"]', "Application root theme selector missing"),
             ]
 

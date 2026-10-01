@@ -1,15 +1,16 @@
 import React from 'react';
 import SafeReactECharts from '../../charts/SafeReactECharts';
-import DataChart from '../../charts/DataChart';
+import { getSlideTheme } from '../../../theme/slideTokens.js';
 import { cartesian, numeric } from '../../charts/chartOptions';
-import { useTheme } from '../../../context/ThemeContext';
+
 
 export default function SlideChart({ chart, chartData, theme }) {
-  const { isDark } = useTheme();
+  theme = getSlideTheme(theme);
+  const isDark = theme.is_dark;
   const actualChart = chart || chartData;
 
   if (!actualChart) {
-    return <p className="text-muted p-3">No chart data available.</p>;
+    return <p style={{color:theme.muted_text,padding:12}}>No chart data available.</p>;
   }
 
   const chartLabel = actualChart.title || actualChart.chart_title || actualChart.series?.[0]?.name || "Data visualization chart";
@@ -22,13 +23,13 @@ export default function SlideChart({ chart, chartData, theme }) {
         aria-label={chartLabel}
         style={{ width: '100%', minWidth: 0, height: '100%', minHeight: '260px' }}
       >
-        <SafeReactECharts option={actualChart} style={{ height: '100%', minHeight: '260px', width: '100%' }} />
+        <SafeReactECharts presentationTheme={theme} option={actualChart} style={{ height: '100%', minHeight: '260px', width: '100%' }} />
       </div>
     );
   }
 
   if (!actualChart.categories?.length || !actualChart.series?.length) {
-    return <p className="text-muted p-3">No chart data available.</p>;
+    return <p style={{color:theme.muted_text,padding:12}}>No chart data available.</p>;
   }
 
   const type = (actualChart.type || actualChart.chart_type || 'column').toLowerCase();
@@ -41,17 +42,13 @@ export default function SlideChart({ chart, chartData, theme }) {
       style={{ width: '100%', minWidth: 0, height: '100%', minHeight: '260px' }}
     >
       {pie ? (
-        <DataChart
-          type={type}
-          items={actualChart.categories.map((label, i) => ({
-            label,
-            value: actualChart.series[0].values?.[i] ?? actualChart.series[0].data?.[i]
-          }))}
-          unit={actualChart.unit || ''}
-          metric={actualChart.series[0].name || ''}
+        <SafeReactECharts presentationTheme={theme}
+          style={{height:'100%',minHeight:'260px',width:'100%'}}
+          option={{legend:{type:'scroll',bottom:0}, tooltip:{trigger:'item'},series:[{type:'pie',name:actualChart.series[0].name || '',radius:type==='donut'?['45%','68%']:'68%',center:['50%','44%'],label:{show:false},itemStyle:{borderWidth:2},data:actualChart.categories.map((label,i)=>({name:String(label),value:actualChart.series[0].values?.[i] ?? actualChart.series[0].data?.[i]}))}]}}
         />
       ) : (
         <SafeReactECharts
+          presentationTheme={theme}
           option={cartesian(
             actualChart.categories,
             actualChart.series.map(s => ({

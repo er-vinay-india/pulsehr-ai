@@ -228,7 +228,7 @@
     min-height: 280px;
 
     .matrix-quadrant {
-      background: rgba(255, 255, 255, 0.02);
+      background: var(--card-bg-alt);
       border: 1px dashed var(--card-border, rgba(255, 255, 255, 0.12));
       border-radius: 10px;
       padding: 18px 20px;

@@ -1,3 +1,5 @@
+import DeckControl from './presentation/DeckControl.jsx';
+import { getSlideTheme, slideCssVariables } from '../theme/slideTokens.js';
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import {
   ChevronLeft,
@@ -43,7 +45,9 @@ export default function FrontendSlidesDeck({
   const touchStartY = useRef(null);
   const lastWheelTime = useRef(0);
 
-  const themeName = theme?.id || theme?.name || "bold_signal";
+  theme = getSlideTheme(theme);
+  const themeName = theme.id;
+  const slideVariables = slideCssVariables(theme);
 
   // Compute fixed 16:9 stage scaling (1920x1080 canvas)
   const computeStageScale = useCallback(() => {
@@ -240,7 +244,7 @@ export default function FrontendSlidesDeck({
   // Render Mobile Reflow View
   if (showMobileView) {
     return (
-      <div className={`mobile-presentation-reflow theme-${themeName}`} data-slide-theme={themeName}>
+      <div className={`mobile-presentation-reflow theme-${themeName}`} data-slide-theme={themeName} style={slideVariables}>
         <div className="mobile-deck-header" role="navigation" aria-label="Quick slide navigation">
           <button type="button" className="btn-secondary" disabled={activeSlideIndex <= 0}
             onClick={() => onSlideChange(Math.max(0, activeSlideIndex - 1))} aria-label="Previous Slide">
@@ -318,25 +322,25 @@ export default function FrontendSlidesDeck({
   return (
     <div
       className={`frontend-slides-viewport theme-${themeName}`}
-      data-slide-theme={themeName}
+      data-slide-theme={themeName} style={slideVariables}
       onWheel={handleWheel}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
     >
       {/* Top Header Bar */}
       <div className="frontend-slides-top-bar">
-        <div className="symbolic-brand-wrap" title={`16:9 Fixed Stage · Theme: ${themeName.replace(/_/g, " ")}`}>
+        <DeckControl className="symbolic-brand-wrap">
           <div className="symbolic-brand-pill">
             <Monitor size={13} />
             <span className="brand-dot" />
             <span className="brand-label-responsive">{themeName.replace(/_/g, " ")}</span>
           </div>
           <span className="symbolic-tooltip">16:9 Stage · Theme: {themeName.replace(/_/g, " ")}</span>
-        </div>
+        </DeckControl>
 
         <div className="deck-actions">
           {onExportHtml && (
-            <div className="symbolic-btn-wrap">
+            <DeckControl className="symbolic-btn-wrap">
               <button
                 type="button"
                 className="symbolic-action-btn"
@@ -347,10 +351,10 @@ export default function FrontendSlidesDeck({
                 <span className="btn-label-responsive">HTML</span>
               </button>
               <span className="symbolic-tooltip">Download Standalone HTML Deck (Zero-Dependency)</span>
-            </div>
+            </DeckControl>
           )}
 
-          <div className="symbolic-btn-wrap">
+          <DeckControl className="symbolic-btn-wrap">
             <button
               type="button"
               className={`symbolic-action-btn ${inlineEditActive ? "active" : ""}`}
@@ -362,9 +366,9 @@ export default function FrontendSlidesDeck({
               <span className="btn-label-responsive">{readOnly ? "Locked" : inlineEditActive ? "Editing" : "Edit"}</span>
             </button>
             <span className="symbolic-tooltip">{readOnly ? "Evidence Locked by Governance" : "Inline Text Editing (Shortcut: E)"}</span>
-          </div>
+          </DeckControl>
 
-          <div className="symbolic-btn-wrap">
+          <DeckControl className="symbolic-btn-wrap">
             <button
               type="button"
               className="symbolic-action-btn"
@@ -375,9 +379,9 @@ export default function FrontendSlidesDeck({
               <span className="btn-label-responsive">Reflow</span>
             </button>
             <span className="symbolic-tooltip">Mobile Reflow View: Vertical scrolling responsive deck</span>
-          </div>
+          </DeckControl>
 
-          <div className="symbolic-btn-wrap">
+          <DeckControl className="symbolic-btn-wrap">
             <button
               type="button"
               className="symbolic-action-btn"
@@ -387,7 +391,7 @@ export default function FrontendSlidesDeck({
               {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
             </button>
             <span className="symbolic-tooltip">{isFullscreen ? "Exit Fullscreen" : "Fullscreen Stage (Shortcut: F)"}</span>
-          </div>
+          </DeckControl>
         </div>
       </div>
 

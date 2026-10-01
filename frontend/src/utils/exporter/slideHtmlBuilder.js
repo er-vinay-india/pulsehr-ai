@@ -1,15 +1,20 @@
+import { getSlideTheme, photoScrimColor } from '../../theme/slideTokens.js';
 /**
  * Slide HTML layout generators for standalone presentation export.
  */
 
-import { escapeHtml, parseFormattedText, generateSvgChartHtml } from "./exportFormatter";
+import { escapeHtml, parseFormattedText as formatText, generateSvgChartHtml as formatChart } from "./exportFormatter.js";
 
 export function buildSlideHtml(slide, index, total, theme) {
   const layout = slide.layout || "chart_narrative";
-  const brandColor = theme.accent_color || "#ff8a62";
-  const cardBg = theme.card_bg || "#1e293b";
-  const cardBorder = theme.card_border || "rgba(255,255,255,0.08)";
-  const palette = theme.chart_palette || ["#ff8a62", "#7ee7d9", "#8ef0c8", "#a78bfa", "#fbbf24"];
+  theme = getSlideTheme(theme);
+  const brandColor = theme.brand_color;
+  const accentColor = theme.accent_color;
+  const cardBg = theme.card_bg;
+  const cardBorder = theme.card_border;
+  const palette = theme.chart_palette;
+  const parseFormattedText = (text, color) => formatText(text, color, theme);
+  const generateSvgChartHtml = (chart, colors, color) => formatChart(chart, colors, color, theme);
 
   const headerHtml = `
     <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:28px;">
@@ -17,14 +22,14 @@ export function buildSlideHtml(slide, index, total, theme) {
         <div style="font-size:12px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:${brandColor};margin-bottom:8px;">
           ${escapeHtml(slide.category || "EXECUTIVE REVIEW")}
         </div>
-        <h2 style="font-family:var(--font-display);font-size:38px;font-weight:800;color:#ffffff;line-height:1.2;margin:0 0 6px 0;">
+        <h2 style="font-family:var(--font-display);font-size:38px;font-weight:800;color:${theme.primary_text};line-height:1.2;margin:0 0 6px 0;">
           ${escapeHtml(slide.title)}
         </h2>
-        ${slide.subtitle ? `<div style="font-size:17px;color:#94a3b8;">${escapeHtml(slide.subtitle)}</div>` : ""}
+        ${slide.subtitle ? `<div style="font-size:17px;color:${theme.secondary_text};">${escapeHtml(slide.subtitle)}</div>` : ""}
       </div>
       ${slide.evidence_id ? `
-        <div style="display:flex;align-items:center;gap:6px;padding:6px 14px;background:rgba(255,255,255,0.05);border:1px solid ${cardBorder};border-radius:9999px;font-size:12px;color:#94a3b8;">
-          <span style="color:#10b981;">&#x2714;</span>
+        <div style="display:flex;align-items:center;gap:6px;padding:6px 14px;background:${cardBg};border:1px solid ${cardBorder};border-radius:9999px;font-size:12px;color:${theme.secondary_text};">
+          <span style="color:${theme.success_color};">&#x2714;</span>
           <span>${escapeHtml(slide.evidence_id)}</span>
         </div>
       ` : ""}
@@ -32,9 +37,9 @@ export function buildSlideHtml(slide, index, total, theme) {
   `;
 
   const footerHtml = `
-    <div style="position:absolute;bottom:36px;left:70px;right:70px;display:flex;align-items:center;justify-content:space-between;font-size:13px;color:#64748b;border-top:1px solid rgba(255,255,255,0.08);padding-top:16px;">
+    <div style="position:absolute;bottom:36px;left:70px;right:70px;display:flex;align-items:center;justify-content:space-between;font-size:13px;color:${theme.muted_text};border-top:1px solid ${cardBg};padding-top:16px;">
       <div style="display:flex;align-items:center;gap:8px;">
-        <span style="color:#10b981;">&#x25CF;</span>
+        <span style="color:${theme.success_color};">&#x25CF;</span>
         <span>Evidence: ${escapeHtml((slide.evidence_sources || ["Verified Ground Truth Engine"]).join(" · "))}</span>
       </div>
       <div>
@@ -50,21 +55,21 @@ export function buildSlideHtml(slide, index, total, theme) {
     const bulletsHtml = (slide.bullets || []).map(b => `
       <div style="background:${cardBg};border:1px solid ${cardBorder};border-radius:12px;padding:16px 20px;display:flex;align-items:center;gap:12px;box-shadow:0 4px 16px rgba(0,0,0,0.2);text-align:left;">
         <span style="width:8px;height:8px;border-radius:50%;background:${brandColor};flex-shrink:0;"></span>
-        <div style="font-size:15px;color:#f8fafc;">${parseFormattedText(typeof b === 'string' ? b : b.text, brandColor)}</div>
+        <div style="font-size:15px;color:${theme.primary_text};">${parseFormattedText(typeof b === 'string' ? b : b.text, brandColor)}</div>
       </div>
     `).join("");
 
     bodyHtml = `
       <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:40px 20px;max-width:960px;margin:0 auto;">
-        <div style="display:inline-flex;align-items:center;gap:8px;padding:6px 16px;background:rgba(255,255,255,0.06);border:1px solid ${cardBorder};border-radius:24px;margin-bottom:24px;">
+        <div style="display:inline-flex;align-items:center;gap:8px;padding:6px 16px;background:${cardBg};border:1px solid ${cardBorder};border-radius:24px;margin-bottom:24px;">
           <span style="width:8px;height:8px;border-radius:50%;background:${brandColor};"></span>
           <span style="font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:${brandColor};">${escapeHtml(slide.category || "EXECUTIVE BRIEFING")}</span>
         </div>
-        <h1 style="font-size:44px;font-weight:800;color:#ffffff;line-height:1.2;margin:0 0 16px 0;letter-spacing:-0.02em;">
+        <h1 style="font-size:44px;font-weight:800;color:${theme.primary_text};line-height:1.2;margin:0 0 16px 0;letter-spacing:-0.02em;">
           ${escapeHtml(slide.title)}
         </h1>
         ${slide.subtitle ? `<div style="font-size:19px;color:${accentColor};margin-bottom:24px;font-weight:500;">${escapeHtml(slide.subtitle)}</div>` : ""}
-        ${slide.narrative ? `<div style="font-size:16px;color:#94a3b8;line-height:1.6;max-width:800px;margin:0 auto 32px auto;">${parseFormattedText(slide.narrative, brandColor)}</div>` : ""}
+        ${slide.narrative ? `<div style="font-size:16px;color:${theme.secondary_text};line-height:1.6;max-width:800px;margin:0 auto 32px auto;">${parseFormattedText(slide.narrative, brandColor)}</div>` : ""}
         <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));gap:16px;width:100%;">
           ${bulletsHtml}
         </div>
@@ -75,7 +80,7 @@ export function buildSlideHtml(slide, index, total, theme) {
   // LAYOUT 1: TITLE HERO
   else if (layout === "title_hero") {
     const bulletsHtml = (slide.bullets || []).map(b => `
-      <li style="display:flex;align-items:flex-start;gap:12px;margin-bottom:12px;font-size:18px;color:#cbd5e1;">
+      <li style="display:flex;align-items:flex-start;gap:12px;margin-bottom:12px;font-size:18px;color:${theme.secondary_text};">
         <span style="width:8px;height:8px;border-radius:50%;background:${brandColor};margin-top:7px;flex-shrink:0;"></span>
         <div>${parseFormattedText(b, brandColor)}</div>
       </li>
@@ -83,16 +88,16 @@ export function buildSlideHtml(slide, index, total, theme) {
 
     const metricsHtml = (slide.metrics || []).map(m => `
       <div style="background:${cardBg};border:1px solid ${cardBorder};border-radius:14px;padding:22px;display:flex;flex-direction:column;gap:6px;">
-        <span style="font-size:13px;color:#94a3b8;text-transform:uppercase;letter-spacing:0.05em;">${escapeHtml(m.label)}</span>
+        <span style="font-size:13px;color:${theme.secondary_text};text-transform:uppercase;letter-spacing:0.05em;">${escapeHtml(m.label)}</span>
         <span style="font-size:36px;font-weight:800;color:${brandColor};font-family:var(--font-display);">${escapeHtml(m.value)}</span>
-        ${m.context ? `<span style="font-size:12px;color:#64748b;">${escapeHtml(m.context)}</span>` : ""}
+        ${m.context ? `<span style="font-size:12px;color:${theme.muted_text};">${escapeHtml(m.context)}</span>` : ""}
       </div>
     `).join("");
 
     bodyHtml = `
       <div style="display:grid;grid-template-columns:1.2fr 0.8fr;gap:36px;align-items:start;">
         <div style="background:${cardBg};border:1px solid ${cardBorder};border-radius:18px;padding:36px;box-shadow:0 12px 32px rgba(0,0,0,0.4);">
-          <div style="font-size:22px;line-height:1.6;color:#f8fafc;margin-bottom:24px;">
+          <div style="font-size:22px;line-height:1.6;color:${theme.primary_text};margin-bottom:24px;">
             ${parseFormattedText(slide.narrative, brandColor)}
           </div>
           <ul style="list-style:none;padding:0;margin:0;">${bulletsHtml}</ul>
@@ -108,11 +113,11 @@ export function buildSlideHtml(slide, index, total, theme) {
   else if (layout === "kpi_summary") {
     const kpiCards = (slide.metrics || []).map(m => `
       <div style="background:${cardBg};border:1px solid ${cardBorder};border-radius:18px;padding:32px;display:flex;flex-direction:column;gap:10px;box-shadow:0 10px 30px rgba(0,0,0,0.3);">
-        <span style="font-size:14px;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:0.05em;">${escapeHtml(m.label)}</span>
+        <span style="font-size:14px;font-weight:600;color:${theme.secondary_text};text-transform:uppercase;letter-spacing:0.05em;">${escapeHtml(m.label)}</span>
         <span style="font-size:48px;font-weight:900;color:${brandColor};font-family:var(--font-display);line-height:1;">${escapeHtml(m.value)}</span>
-        ${m.change ? `<span style="font-size:14px;font-weight:700;color:#10b981;">&#x2191; ${escapeHtml(m.change)} vs prior</span>` : ""}
-        ${m.benchmark ? `<span style="font-size:13px;color:#64748b;">Benchmark: ${escapeHtml(m.benchmark)}</span>` : ""}
-        ${m.context ? `<span style="font-size:13px;color:#94a3b8;margin-top:6px;">${escapeHtml(m.context)}</span>` : ""}
+        ${m.change ? `<span style="font-size:14px;font-weight:700;color:${theme.success_color};">&#x2191; ${escapeHtml(m.change)} vs prior</span>` : ""}
+        ${m.benchmark ? `<span style="font-size:13px;color:${theme.muted_text};">Benchmark: ${escapeHtml(m.benchmark)}</span>` : ""}
+        ${m.context ? `<span style="font-size:13px;color:${theme.secondary_text};margin-top:6px;">${escapeHtml(m.context)}</span>` : ""}
       </div>
     `).join("");
 
@@ -122,7 +127,7 @@ export function buildSlideHtml(slide, index, total, theme) {
           ${kpiCards}
         </div>
         ${slide.narrative ? `
-          <div style="background:rgba(255,255,255,0.03);border-left:4px solid ${brandColor};padding:18px 24px;border-radius:0 12px 12px 0;font-size:17px;color:#cbd5e1;line-height:1.6;">
+          <div style="background:${cardBg};border-left:4px solid ${brandColor};padding:18px 24px;border-radius:0 12px 12px 0;font-size:17px;color:${theme.secondary_text};line-height:1.6;">
             ${parseFormattedText(slide.narrative, brandColor)}
           </div>
         ` : ""}
@@ -133,7 +138,7 @@ export function buildSlideHtml(slide, index, total, theme) {
   // LAYOUT 3: CHART NARRATIVE
   else if (layout === "chart_narrative") {
     const bulletsHtml = (slide.bullets || []).map(b => `
-      <li style="display:flex;align-items:flex-start;gap:10px;margin-bottom:12px;font-size:16px;color:#cbd5e1;line-height:1.5;">
+      <li style="display:flex;align-items:flex-start;gap:10px;margin-bottom:12px;font-size:16px;color:${theme.secondary_text};line-height:1.5;">
         <span style="width:6px;height:6px;border-radius:50%;background:${brandColor};margin-top:8px;flex-shrink:0;"></span>
         <div>${parseFormattedText(b, brandColor)}</div>
       </li>
@@ -145,7 +150,7 @@ export function buildSlideHtml(slide, index, total, theme) {
           ${generateSvgChartHtml(slide.chart, palette, brandColor)}
         </div>
         <div style="background:${cardBg};border:1px solid ${cardBorder};border-radius:18px;padding:32px;">
-          <div style="font-size:19px;line-height:1.6;color:#ffffff;margin-bottom:20px;font-weight:500;">
+          <div style="font-size:19px;line-height:1.6;color:${theme.primary_text};margin-bottom:20px;font-weight:500;">
             ${parseFormattedText(slide.narrative, brandColor)}
           </div>
           <ul style="list-style:none;padding:0;margin:0;">${bulletsHtml}</ul>
@@ -158,7 +163,7 @@ export function buildSlideHtml(slide, index, total, theme) {
   else if (layout === "full_chart_takeaway") {
     bodyHtml = `
       <div style="display:flex;flex-direction:column;gap:20px;">
-        <div style="background:rgba(255,255,255,0.03);border-left:4px solid ${brandColor};padding:16px 24px;border-radius:0 10px 10px 0;font-size:18px;color:#ffffff;">
+        <div style="background:${cardBg};border-left:4px solid ${brandColor};padding:16px 24px;border-radius:0 10px 10px 0;font-size:18px;color:${theme.primary_text};">
           ${parseFormattedText(slide.narrative, brandColor)}
         </div>
         <div style="background:${cardBg};border:1px solid ${cardBorder};border-radius:18px;padding:32px;height:380px;">
@@ -176,15 +181,15 @@ export function buildSlideHtml(slide, index, total, theme) {
       <div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-bottom:20px;">
           <div style="background:${cardBg};border:1px solid ${cardBorder};border-radius:18px;padding:26px;">
-            <div style="font-size:14px;font-weight:700;color:#94a3b8;margin-bottom:12px;">${escapeHtml(chart1.title || "Primary Analysis")}</div>
+            <div style="font-size:14px;font-weight:700;color:${theme.secondary_text};margin-bottom:12px;">${escapeHtml(chart1.title || "Primary Analysis")}</div>
             ${generateSvgChartHtml(chart1, palette, brandColor)}
           </div>
           <div style="background:${cardBg};border:1px solid ${cardBorder};border-radius:18px;padding:26px;">
-            <div style="font-size:14px;font-weight:700;color:#94a3b8;margin-bottom:12px;">${escapeHtml(chart2.title || "Comparative View")}</div>
+            <div style="font-size:14px;font-weight:700;color:${theme.secondary_text};margin-bottom:12px;">${escapeHtml(chart2.title || "Comparative View")}</div>
             ${generateSvgChartHtml(chart2, palette.slice().reverse(), brandColor)}
           </div>
         </div>
-        <div style="font-size:16px;color:#94a3b8;line-height:1.5;">${parseFormattedText(slide.narrative, brandColor)}</div>
+        <div style="font-size:16px;color:${theme.secondary_text};line-height:1.5;">${parseFormattedText(slide.narrative, brandColor)}</div>
       </div>
     `;
   }
@@ -192,21 +197,21 @@ export function buildSlideHtml(slide, index, total, theme) {
   // LAYOUT 6: COMPARISON SPLIT
   else if (layout === "comparison_split") {
     const leftItems = (slide.left_points || slide.bullets?.slice(0, Math.ceil((slide.bullets.length||0)/2)) || []).map(p => `
-      <li style="margin-bottom:10px;font-size:16px;color:#cbd5e1;">&#x2714; ${parseFormattedText(p, brandColor)}</li>
+      <li style="margin-bottom:10px;font-size:16px;color:${theme.secondary_text};">&#x2714; ${parseFormattedText(p, brandColor)}</li>
     `).join("");
 
     const rightItems = (slide.right_points || slide.bullets?.slice(Math.ceil((slide.bullets.length||0)/2)) || []).map(p => `
-      <li style="margin-bottom:10px;font-size:16px;color:#cbd5e1;">&#x26A0; ${parseFormattedText(p, "#f59e0b")}</li>
+      <li style="margin-bottom:10px;font-size:16px;color:${theme.secondary_text};">&#x26A0; ${parseFormattedText(p, theme.warning_color)}</li>
     `).join("");
 
     bodyHtml = `
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:28px;">
-        <div style="background:${cardBg};border:1px solid rgba(16,185,129,0.3);border-radius:18px;padding:32px;">
-          <h3 style="color:#10b981;font-size:20px;font-weight:700;margin:0 0 16px 0;">${escapeHtml(slide.left_title || "Key Strengths & Gains")}</h3>
+        <div style="background:${cardBg};border:1px solid ${theme.success_color};border-radius:18px;padding:32px;">
+          <h3 style="color:${theme.success_color};font-size:20px;font-weight:700;margin:0 0 16px 0;">${escapeHtml(slide.left_title || "Key Strengths & Gains")}</h3>
           <ul style="list-style:none;padding:0;margin:0;">${leftItems}</ul>
         </div>
-        <div style="background:${cardBg};border:1px solid rgba(245,158,11,0.3);border-radius:18px;padding:32px;">
-          <h3 style="color:#f59e0b;font-size:20px;font-weight:700;margin:0 0 16px 0;">${escapeHtml(slide.right_title || "Headwinds & Strategic Risks")}</h3>
+        <div style="background:${cardBg};border:1px solid ${theme.warning_color};border-radius:18px;padding:32px;">
+          <h3 style="color:${theme.warning_color};font-size:20px;font-weight:700;margin:0 0 16px 0;">${escapeHtml(slide.right_title || "Headwinds & Strategic Risks")}</h3>
           <ul style="list-style:none;padding:0;margin:0;">${rightItems}</ul>
         </div>
       </div>
@@ -227,18 +232,18 @@ export function buildSlideHtml(slide, index, total, theme) {
       return `
       <div style="background:${cardBg};border:1px solid ${cardBorder};border-radius:14px;padding:22px;display:flex;flex-direction:column;gap:10px;box-shadow:0 8px 24px rgba(0,0,0,0.3);">
         <div style="display:flex;align-items:center;justify-content:space-between;">
-          <span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:9999px;background:rgba(239,68,68,0.15);color:#f87171;border:1px solid rgba(239,68,68,0.3);text-transform:uppercase;">${escapeHtml(priority)}</span>
-          <span style="font-size:12px;font-weight:600;color:${theme.accent_color || "#7ee7d9"};">${escapeHtml(owner)}</span>
+          <span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:9999px;background:${cardBg};color:${theme.danger_color};border:1px solid ${theme.danger_color};text-transform:uppercase;">${escapeHtml(priority)}</span>
+          <span style="font-size:12px;font-weight:600;color:${theme.accent_color};">${escapeHtml(owner)}</span>
         </div>
-        <div style="font-size:16px;font-weight:800;color:#ffffff;line-height:1.3;">${escapeHtml(title)}</div>
+        <div style="font-size:16px;font-weight:800;color:${theme.primary_text};line-height:1.3;">${escapeHtml(title)}</div>
         ${finding ? `
-          <div style="font-size:13px;color:#94a3b8;line-height:1.4;">
+          <div style="font-size:13px;color:${theme.secondary_text};line-height:1.4;">
             <strong style="color:${brandColor};">Finding:</strong> ${escapeHtml(finding)}
           </div>
         ` : ""}
-        <div style="margin-top:auto;padding-top:10px;border-top:1px solid rgba(255,255,255,0.08);font-size:12px;color:#64748b;display:flex;flex-direction:column;gap:4px;">
-          ${metric ? `<div><strong style="color:#cbd5e1;">Target:</strong> ${escapeHtml(metric)}</div>` : ""}
-          ${dependency ? `<div><strong style="color:#cbd5e1;">Prerequisite:</strong> ${escapeHtml(dependency)}</div>` : ""}
+        <div style="margin-top:auto;padding-top:10px;border-top:1px solid ${cardBg};font-size:12px;color:${theme.muted_text};display:flex;flex-direction:column;gap:4px;">
+          ${metric ? `<div><strong style="color:${theme.secondary_text};">Target:</strong> ${escapeHtml(metric)}</div>` : ""}
+          ${dependency ? `<div><strong style="color:${theme.secondary_text};">Prerequisite:</strong> ${escapeHtml(dependency)}</div>` : ""}
         </div>
       </div>
     `;
@@ -250,7 +255,7 @@ export function buildSlideHtml(slide, index, total, theme) {
           ${actions}
         </div>
         ${slide.narrative ? `
-          <div style="background:rgba(255,255,255,0.03);border-left:4px solid ${brandColor};padding:14px 20px;border-radius:0 10px 10px 0;font-size:16px;color:#cbd5e1;line-height:1.5;">
+          <div style="background:${cardBg};border-left:4px solid ${brandColor};padding:14px 20px;border-radius:0 10px 10px 0;font-size:16px;color:${theme.secondary_text};line-height:1.5;">
             ${parseFormattedText(slide.narrative, brandColor)}
           </div>
         ` : ""}
@@ -264,22 +269,22 @@ export function buildSlideHtml(slide, index, total, theme) {
     const tableHeaders = tableData.headers || slide.table_headers || ["Metric", "Value", "Status", "Variance"];
     const tableRows = tableData.rows || slide.table_rows || [];
     const rows = tableRows.slice(0, 8).map(row => `
-      <tr style="border-bottom:1px solid rgba(255,255,255,0.06);">
-        ${(row || []).map((cell, cIdx) => `<td style="padding:12px 16px;font-size:14px;color:${cIdx === 0 ? "#ffffff" : "#cbd5e1"};font-weight:${cIdx === 0 ? "600" : "400"};">${escapeHtml(cell)}</td>`).join("")}
+      <tr style="border-bottom:1px solid ${cardBg};">
+        ${(row || []).map((cell, cIdx) => `<td style="padding:12px 16px;font-size:14px;color:${cIdx === 0 ? theme.primary_text : theme.secondary_text};font-weight:${cIdx === 0 ? "600" : "400"};">${escapeHtml(cell)}</td>`).join("")}
       </tr>
     `).join("");
 
     bodyHtml = `
       <div>
         ${slide.narrative ? `
-          <div style="margin-bottom:18px;font-size:16px;color:#cbd5e1;line-height:1.5;">
+          <div style="margin-bottom:18px;font-size:16px;color:${theme.secondary_text};line-height:1.5;">
             ${parseFormattedText(slide.narrative, brandColor)}
           </div>
         ` : ""}
         <div style="background:${cardBg};border:1px solid ${cardBorder};border-radius:18px;padding:24px;overflow-x:auto;box-shadow:0 8px 24px rgba(0,0,0,0.3);">
           <table style="width:100%;border-collapse:collapse;text-align:left;">
             <thead>
-              <tr style="border-bottom:1px solid rgba(255,255,255,0.12);">
+              <tr style="border-bottom:1px solid ${cardBg};">
                 ${tableHeaders.map(h => `
                   <th style="padding:12px 16px;font-size:13px;font-weight:700;color:${brandColor};text-transform:uppercase;letter-spacing:0.04em;">${escapeHtml(h)}</th>
                 `).join("")}
@@ -293,10 +298,10 @@ export function buildSlideHtml(slide, index, total, theme) {
   }
 
   const photo = slide.background_image;
-  const scrim = Math.max(0, Math.min(90, Number(slide.scrim_opacity ?? 70))) / 100;
-  const background = photo ? `background-image:linear-gradient(rgba(0,0,0,${scrim}),rgba(0,0,0,${scrim})),url(${escapeHtml(JSON.stringify(photo))});background-size:cover;background-position:center;` : "";
+  const scrim = photoScrimColor(slide, theme);
+  const background = photo ? `background-image:linear-gradient(${scrim},${scrim}),url(${escapeHtml(JSON.stringify(photo))});background-size:cover;background-position:center;` : "";
   return `
-    <div class="slide ${index === 0 ? "active visible" : ""}" data-index="${index}" style="position:absolute;inset:0;width:1920px;height:1080px;box-sizing:border-box;padding:64px 70px;background:${theme.slide_bg || "#0f172a"};color:${theme.primary_text || "#f8fafc"};${background}">
+    <div class="slide ${index === 0 ? "active visible" : ""}" data-index="${index}" style="position:absolute;inset:0;width:1920px;height:1080px;box-sizing:border-box;padding:64px 70px;background:${theme.bg_color};color:${theme.primary_text};${background}">
       ${headerHtml}
       <div style="margin-top:10px;">${bodyHtml}</div>
       ${footerHtml}

@@ -246,7 +246,7 @@ class SlideContextObserver:
         while the progress stream smoothly updates to focus on it.
         """
         if 1 <= slide_num <= len(self.slides):
-            clean_title = slide_title.split(":")[0].strip() if ":" in slide_title else slide_title.strip()
+            clean_title = slide_title.strip()
             if clean_title:
                 self.slides[slide_num - 1]["title"] = clean_title
             if category:
@@ -279,7 +279,7 @@ class SlideContextObserver:
         Marks this slide as 'complete' (green checkmark), records its key takeaway
         into the Observer's memory ledger, and prepares to advance to the next slide.
         """
-        clean_title = slide_title.split(":")[0].strip() if ":" in slide_title else slide_title.strip()
+        clean_title = slide_title.strip()
 
         # Extract takeaway if available from slide data
         takeaway = ""

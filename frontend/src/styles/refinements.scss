@@ -6380,16 +6380,16 @@ label { min-width: 0; }
           border-radius: 12px;
 
           &.priority-high {
-            background: rgba(244, 63, 94, 0.15);
-            color: #f43f5e;
+            background: var(--card-bg-alt);
+            color: var(--danger-color);
           }
           &.priority-medium {
-            background: rgba(251, 191, 36, 0.15);
-            color: #fbbf24;
+            background: var(--card-bg-alt);
+            color: var(--warning-color);
           }
           &.priority-low {
-            background: rgba(142, 240, 200, 0.15);
-            color: #8ef0c8;
+            background: var(--card-bg-alt);
+            color: var(--success-color);
           }
         }
 

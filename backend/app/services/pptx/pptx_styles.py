@@ -1,5 +1,6 @@
 """PowerPoint styling, themes, colors, and common shape utilities."""
 
+import json
 import re
 from pathlib import Path
 from uuid import uuid4
@@ -15,17 +16,17 @@ class ChartExportError(RuntimeError):
     pass
 
 
-# Executive Theme Palette (matching web UI)
-C_BG = RGBColor(23, 20, 18)          # --surface #171412
-C_CARD = RGBColor(32, 27, 24)        # --surface-card #201b18
-C_CARD_BORDER = RGBColor(61, 54, 47) # --border #3d362f
-C_BRAND = RGBColor(255, 138, 98)     # --brand-500 #ff8a62
-C_ACCENT = RGBColor(126, 231, 217)   # --accent-500 #7ee7d9
-C_TEXT_LIGHT = RGBColor(255, 249, 242) # --fg-primary #fff9f2
-C_TEXT_MUTED = RGBColor(190, 178, 166) # --fg-secondary
-C_SUCCESS = RGBColor(142, 240, 200)  # --emerald-tier
-C_DANGER = RGBColor(255, 140, 160)   # --rose-tier
-
+# Default report colours share the outcome slide palette; no app-theme dependency.
+_DEFAULT_THEME = json.loads((Path(__file__).parent.parent / "presentation" / "templates" / "themes.json").read_text())["executive_dark"]
+C_BG = RGBColor.from_string(_DEFAULT_THEME["bg_color"].lstrip("#"))
+C_CARD = RGBColor.from_string(_DEFAULT_THEME["card_bg"].lstrip("#"))
+C_CARD_BORDER = RGBColor.from_string(_DEFAULT_THEME["card_border"].lstrip("#"))
+C_BRAND = RGBColor.from_string(_DEFAULT_THEME["brand_color"].lstrip("#"))
+C_ACCENT = RGBColor.from_string(_DEFAULT_THEME["accent_color"].lstrip("#"))
+C_TEXT_LIGHT = RGBColor.from_string(_DEFAULT_THEME["primary_text"].lstrip("#"))
+C_TEXT_MUTED = RGBColor.from_string(_DEFAULT_THEME["secondary_text"].lstrip("#"))
+C_SUCCESS = RGBColor.from_string(_DEFAULT_THEME["success_color"].lstrip("#"))
+C_DANGER = RGBColor.from_string(_DEFAULT_THEME["danger_color"].lstrip("#"))
 
 def hex_to_rgb(hex_str: str, default: RGBColor = RGBColor(255, 255, 255)) -> RGBColor:
     try:

@@ -164,6 +164,14 @@ class ToolRegistry:
             res_val: float | None = None
             method = f"Deterministic formula: {metric_type}"
 
+            if not vals and baseline is None and comparison_value is None:
+                return ToolExecutionResult(
+                    tool_name="calculate_metric",
+                    status="unavailable",
+                    data={"metric_type": metric_type, "value": None, "limitation": "Calculation inputs unavailable in empirical ledger"},
+                    calculation_method="Explicit limitation: empirical inputs unavailable"
+                )
+
             if metric_type == "mean":
                 res_val = round(sum(vals) / len(vals), 2) if vals else 0.0
             elif metric_type == "percentage_share":

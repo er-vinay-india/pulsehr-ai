@@ -1,0 +1,50 @@
+.deck-floating-layer {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  box-sizing: border-box;
+  z-index: 10000;
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-lg);
+  font-family: inherit;
+  line-height: 1.5;
+  overflow: auto;
+  overflow-wrap: anywhere;
+  &::backdrop { background: transparent; pointer-events: none; }
+}
+
+.deck-floating-tooltip {
+  width: max-content;
+  max-width: min(360px, calc(100vw - 24px));
+  border-radius: 6px;
+  padding: 7px 10px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.deck-floating-popover {
+  width: min(480px, calc(100vw - 24px));
+  border-radius: 12px;
+  padding: 14px;
+  text-align: left;
+  .popover-header, .popover-title-row { display: flex; align-items: center; gap: 8px; }
+  .popover-header { justify-content: space-between; padding-bottom: 10px; margin-bottom: 10px; border-bottom: 1px solid var(--color-border); }
+  .popover-title-row { color: var(--color-text-primary); font-size: 14px; font-weight: 700; }
+  .popover-suggestions-list { display: flex; flex-direction: column; gap: 8px; }
+  button {
+    background: var(--color-bg-subtle);
+    color: var(--color-text-primary);
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    min-height: 44px;
+    cursor: pointer;
+    font-family: inherit;
+    &:hover { background: var(--color-bg-soft-blue); }
+    &:focus-visible { outline: 2px solid var(--border-focus); outline-offset: 2px; }
+  }
+  .popover-close-btn { flex-shrink: 0; width: 44px; font-size: 22px; }
+  .suggestion-tile-btn { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 12px; text-align: left; font-size: 14px; }
+  .sug-index { flex-shrink: 0; color: var(--color-text-secondary); }
+}

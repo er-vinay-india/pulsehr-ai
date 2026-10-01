@@ -7,8 +7,14 @@ Guarantees 100% isolation from the web application shell theme.
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from typing import Any
 from pydantic import BaseModel, Field
+
+
+SLIDE_THEME_PRESETS = json.loads((Path(__file__).parent.parent / "templates" / "themes.json").read_text())
+_DEFAULT = SLIDE_THEME_PRESETS["executive_dark"]
 
 
 class SlideDesignTokens(BaseModel):
@@ -16,27 +22,23 @@ class SlideDesignTokens(BaseModel):
     theme_id: str
     name: str
     is_dark: bool = True
-    background: str = "#0F172A"
-    surface: str = "#1E293B"
-    surface_alt: str = "#141F32"
-    primary_text: str = "#F8FAFC"
-    secondary_text: str = "#94A3B8"
-    muted_text: str = "#64748B"
-    brand: str = "#38BDF8"
-    accent: str = "#FF8A62"
-    positive: str = "#10B981"
-    negative: str = "#EF4444"
-    warning: str = "#F59E0B"
-    border: str = "rgba(255, 255, 255, 0.08)"
-    grid: str = "rgba(255, 255, 255, 0.04)"
-    chart_palette: list[str] = Field(
-        default_factory=lambda: [
-            "#38BDF8", "#FF8A62", "#10B981", "#A78BFA", "#FBBF24", "#F43F5E", "#34D399", "#60A5FA"
-        ]
-    )
-    font_heading: str = "'Space Grotesk', system-ui, sans-serif"
-    font_body: str = "'Plus Jakarta Sans', system-ui, sans-serif"
-    font_mono: str = "'Space Mono', monospace"
+    background: str = _DEFAULT["bg_color"]
+    surface: str = _DEFAULT["card_bg"]
+    surface_alt: str = _DEFAULT["surface_alt"]
+    primary_text: str = _DEFAULT["primary_text"]
+    secondary_text: str = _DEFAULT["secondary_text"]
+    muted_text: str = _DEFAULT["muted_text"]
+    brand: str = _DEFAULT["brand_color"]
+    accent: str = _DEFAULT["accent_color"]
+    positive: str = _DEFAULT["success_color"]
+    negative: str = _DEFAULT["danger_color"]
+    warning: str = _DEFAULT["warning_color"]
+    border: str = _DEFAULT["card_border"]
+    grid: str = _DEFAULT["card_border"]
+    chart_palette: list[str] = Field(default_factory=lambda: list(_DEFAULT["chart_palette"]))
+    font_heading: str = _DEFAULT["font_display"]
+    font_body: str = _DEFAULT["font_body"]
+    font_mono: str = _DEFAULT["font_mono"]
     radius: str = "12px"
     shadow: str = "0 20px 40px -15px rgba(0, 0, 0, 0.5)"
     spacing: str = "16px"
@@ -107,170 +109,30 @@ class SlideDesignTokens(BaseModel):
         }
 
 
-# Canonical Normalized Presentation Slide Themes (Preserving all existing themes)
-DEFAULT_SLIDE_THEMES: dict[str, SlideDesignTokens] = {
-    "bold_signal": SlideDesignTokens(
-        theme_id="bold_signal",
-        name="Bold Signal",
-        is_dark=True,
-        background="#131418",
-        surface="#1C1E24",
-        surface_alt="#17191E",
-        primary_text="#FFFFFF",
-        secondary_text="#94A3B8",
-        muted_text="#64748B",
-        brand="#FF5722",
-        accent="#FF8A65",
-        positive="#10B981",
-        negative="#EF4444",
-        warning="#F59E0B",
-        border="rgba(255, 255, 255, 0.08)",
-        grid="rgba(255, 255, 255, 0.04)",
-        chart_palette=["#FF5722", "#FF8A65", "#00B4D8", "#90E0EF", "#FFD166", "#06D6A0"],
-        font_heading="'Archivo Black', 'Space Grotesk', sans-serif",
-        font_body="'Space Grotesk', system-ui, sans-serif"
-    ),
-    "electric_studio": SlideDesignTokens(
-        theme_id="electric_studio",
-        name="Electric Studio",
-        is_dark=True,
-        background="#0A0C10",
-        surface="#141820",
-        surface_alt="#0F1218",
-        primary_text="#FFFFFF",
-        secondary_text="#A1A1AA",
-        muted_text="#71717A",
-        brand="#4361EE",
-        accent="#4CC9F0",
-        positive="#10B981",
-        negative="#F72585",
-        warning="#FFB703",
-        border="rgba(67, 97, 238, 0.25)",
-        grid="rgba(67, 97, 238, 0.08)",
-        chart_palette=["#4361EE", "#4CC9F0", "#7209B7", "#F72585", "#4895EF", "#560BAD"],
-        font_heading="'Manrope', system-ui, sans-serif",
-        font_body="'Manrope', system-ui, sans-serif"
-    ),
-    "creative_voltage": SlideDesignTokens(
-        theme_id="creative_voltage",
-        name="Creative Voltage",
-        is_dark=True,
-        background="#090914",
-        surface="#111126",
-        surface_alt="#0D0D1D",
-        primary_text="#F8FAFC",
-        secondary_text="#94A3B8",
-        muted_text="#64748B",
-        brand="#00F0FF",
-        accent="#0055FF",
-        positive="#00F5D4",
-        negative="#FF0055",
-        warning="#FEE440",
-        border="rgba(0, 240, 255, 0.2)",
-        grid="rgba(0, 240, 255, 0.05)",
-        chart_palette=["#00F0FF", "#0055FF", "#7B2CBF", "#FF0055", "#00F5D4", "#FEE440"],
-        font_heading="'Syne', system-ui, sans-serif",
-        font_body="'Plus Jakarta Sans', system-ui, sans-serif"
-    ),
-    "executive_dark": SlideDesignTokens(
-        theme_id="executive_dark",
-        name="Executive Dark",
-        is_dark=True,
-        background="#0F172A",
-        surface="#1E293B",
-        surface_alt="#162032",
-        primary_text="#F8FAFC",
-        secondary_text="#94A3B8",
-        muted_text="#64748B",
-        brand="#38BDF8",
-        accent="#FF8A62",
-        positive="#10B981",
-        negative="#EF4444",
-        warning="#F59E0B",
-        border="rgba(255, 255, 255, 0.08)",
-        grid="rgba(255, 255, 255, 0.04)",
-        chart_palette=["#38BDF8", "#FF8A62", "#10B981", "#A78BFA", "#FBBF24", "#F43F5E"],
-        font_heading="'Space Grotesk', system-ui, sans-serif",
-        font_body="'Plus Jakarta Sans', system-ui, sans-serif"
-    ),
-    "minimal_stark": SlideDesignTokens(
-        theme_id="minimal_stark",
-        name="Minimal Stark (Light)",
-        is_dark=False,
-        background="#F8FAFC",
-        surface="#FFFFFF",
-        surface_alt="#F1F5F9",
-        primary_text="#0F172A",
-        secondary_text="#475569",
-        muted_text="#94A3B8",
-        brand="#0F172A",
-        accent="#2563EB",
-        positive="#059669",
-        negative="#DC2626",
-        warning="#D97706",
-        border="#E2E8F0",
-        grid="#F1F5F9",
-        chart_palette=["#0F172A", "#2563EB", "#059669", "#7C3AED", "#D97706", "#DC2626"],
-        font_heading="'Space Grotesk', system-ui, sans-serif",
-        font_body="'Plus Jakarta Sans', system-ui, sans-serif"
-    ),
-    "corporate_navy": SlideDesignTokens(
-        theme_id="corporate_navy",
-        name="Corporate Navy",
-        is_dark=True,
-        background="#0B192C",
-        surface="#1E3E62",
-        surface_alt="#152B44",
-        primary_text="#FFFFFF",
-        secondary_text="#CBD5E1",
-        muted_text="#94A3B8",
-        brand="#008DDA",
-        accent="#41C9E2",
-        positive="#10B981",
-        negative="#EF4444",
-        warning="#F59E0B",
-        border="rgba(255, 255, 255, 0.12)",
-        grid="rgba(255, 255, 255, 0.05)",
-        chart_palette=["#008DDA", "#41C9E2", "#ACE2E1", "#F7EEDD", "#38BDF8", "#818CF8"],
-        font_heading="'Plus Jakarta Sans', system-ui, sans-serif",
-        font_body="'Plus Jakarta Sans', system-ui, sans-serif"
-    ),
+# The same preset source generates the React/SCSS and HTML export tokens.
+SLIDE_THEME_ALIASES = {"executive_studio": "executive_dark", "minimal_stark": "clean_light"}
+DEFAULT_SLIDE_THEMES = {
+    key: SlideDesignTokens(
+        theme_id=key, name=t["name"], is_dark=t["is_dark"],
+        background=t["bg_color"], surface=t["card_bg"], surface_alt=t["surface_alt"],
+        primary_text=t["primary_text"], secondary_text=t["secondary_text"], muted_text=t["muted_text"],
+        brand=t["brand_color"], accent=t["accent_color"], positive=t["success_color"],
+        negative=t["danger_color"], warning=t["warning_color"], border=t["card_border"], grid=t["card_border"],
+        chart_palette=t["chart_palette"], font_heading=t["font_display"], font_body=t["font_body"], font_mono=t["font_mono"]
+    ) for key, t in SLIDE_THEME_PRESETS.items()
 }
+for alias, key in SLIDE_THEME_ALIASES.items():
+    DEFAULT_SLIDE_THEMES[alias] = DEFAULT_SLIDE_THEMES[key].model_copy(update={"theme_id": alias})
+
+
+def slide_theme_preset(theme_input: dict[str, Any] | str | None) -> dict:
+    """Upgrade saved built-in palettes on read; a deck does not need regeneration."""
+    raw_id = theme_input if isinstance(theme_input, str) else (theme_input or {}).get("id") or (theme_input or {}).get("theme_id")
+    key = str(raw_id or "executive_dark").strip().lower().replace("-", "_")
+    return dict(SLIDE_THEME_PRESETS.get(SLIDE_THEME_ALIASES.get(key, key), SLIDE_THEME_PRESETS["executive_dark"]))
 
 
 def normalize_slide_theme(theme_input: dict[str, Any] | str | None) -> SlideDesignTokens:
-    """Safely normalizes raw theme dictionaries or ID strings into canonical SlideDesignTokens."""
-    if isinstance(theme_input, str):
-        clean_id = theme_input.strip().lower()
-        if clean_id in DEFAULT_SLIDE_THEMES:
-            return DEFAULT_SLIDE_THEMES[clean_id]
-        clean_id = clean_id.replace("-", "_")
-        if clean_id in DEFAULT_SLIDE_THEMES:
-            return DEFAULT_SLIDE_THEMES[clean_id]
-        return DEFAULT_SLIDE_THEMES["executive_dark"]
-
-    if isinstance(theme_input, dict):
-        t_id = theme_input.get("id") or theme_input.get("name") or "executive_dark"
-        if t_id in DEFAULT_SLIDE_THEMES:
-            base = DEFAULT_SLIDE_THEMES[t_id]
-            # Override with any explicit custom values if provided
-            data = base.model_dump()
-            if "bg_color" in theme_input:
-                data["background"] = theme_input["bg_color"]
-            if "background" in theme_input:
-                data["background"] = theme_input["background"]
-            if "card_bg" in theme_input:
-                data["surface"] = theme_input["card_bg"]
-            if "primary_text" in theme_input:
-                data["primary_text"] = theme_input["primary_text"]
-            if "secondary_text" in theme_input:
-                data["secondary_text"] = theme_input["secondary_text"]
-            if "accent_color" in theme_input:
-                data["accent"] = theme_input["accent_color"]
-            if "brand_color" in theme_input:
-                data["brand"] = theme_input["brand_color"]
-            if "chart_palette" in theme_input:
-                data["chart_palette"] = theme_input["chart_palette"]
-            return SlideDesignTokens(**data)
-
-    return DEFAULT_SLIDE_THEMES["executive_dark"]
+    raw_id = theme_input if isinstance(theme_input, str) else (theme_input or {}).get("id") or (theme_input or {}).get("theme_id")
+    key = str(raw_id or "executive_dark").strip().lower().replace("-", "_")
+    return DEFAULT_SLIDE_THEMES.get(key, DEFAULT_SLIDE_THEMES["executive_dark"]).model_copy(deep=True)

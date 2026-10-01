@@ -1,0 +1,32 @@
+// Outcome slide styles: independent of application light/dark tokens.
+.slide-card-wrapper, .presentation-runtime {
+  --primary-text: var(--text-primary);
+  --secondary-text: var(--text-secondary);
+  color: var(--text-primary);
+
+  .text-muted { color: var(--text-muted) !important; }
+  .title-cover-narrative-p, .editable-cursor:hover { opacity: 1; }
+  .title-cover-top-badge {
+    background: var(--card-bg-alt);
+    color: var(--text-secondary);
+    border-color: var(--card-border);
+  }
+  input, textarea, .title-cover-input, .slide-title-input, .slide-narrative-textarea {
+    background: var(--card-bg);
+    color: var(--text-primary);
+    border-color: var(--card-border);
+    &:focus-visible { outline: 2px solid var(--brand-color); }
+  }
+  button, .suggestion-tile-btn, .sug-index {
+    background: var(--card-bg);
+    color: var(--text-primary);
+    border-color: var(--card-border);
+    &:hover:not(:disabled), &:focus-visible {
+      background: var(--card-bg-alt);
+      color: var(--text-primary);
+      outline: 2px solid var(--brand-color);
+      opacity: 1;
+    }
+  }
+  .slide-footer-block { border-color: var(--card-border); }
+}

@@ -85,11 +85,14 @@ def build_boundary_and_evidence_slides(
                 "Verified Record Count"
             ])
     if not evidence_table_rows:
+        ev_str_item = find_evidence(evidence_ledger, "EVID-STRENGTH-01")
+        surge_val_display = ev_str_item.get("metric_value") if ev_str_item and ev_str_item.get("numeric_value") is not None else "Not Recorded"
+        surge_subtext = "Seasonal High Throughput" if surge_val_display != "Not Recorded" else "Longitudinal surge not recorded"
         evidence_table_rows = [
             ["Total Evaluated Population", f"{total_eval_records:,}", "100.0%", "Audited Ground Truth"],
             ["Network Baseline Mean", mean_val_str, "—", "Arithmetic Mean Benchmark"],
             ["Data Completeness Rate", f"{completeness_pct}%", "—", "Non-Null Record Integrity"],
-            ["Peak Observed Surge", "+7.8%", "—", "Seasonal High Throughput"],
+            ["Peak Observed Surge", surge_val_display, "—", surge_subtext],
             ["Performance Dispersion", dispersion_metric_str, "—", "Quartile Spread Ratio"]
         ]
 
@@ -279,7 +282,7 @@ def build_evidence_ledger_slides(
             appendix_rows = [
                 ["EVID-EXEC-01", "Evaluated Population & Reporting Scope", source_summary, f"{total_eval_records:,} Records", "Verified (±0.1%)"],
                 ["EVID-KPI-01", "Macro Performance Baseline Mean", source_summary, mean_val_str, "Verified (±0.1%)"],
-                ["EVID-STRENGTH-01", "Throughput Surge Highs", source_summary, "+7.8% Surge", "Verified (±0.1%)"],
+                ["EVID-STRENGTH-01", "Throughput Surge Highs", source_summary, (find_evidence(evidence_ledger, "EVID-STRENGTH-01").get("metric_value") if find_evidence(evidence_ledger, "EVID-STRENGTH-01") and find_evidence(evidence_ledger, "EVID-STRENGTH-01").get("numeric_value") is not None else "Not Recorded"), "Verified (±0.1%)"],
                 ["EVID-HEADWIND-01", "Store Performance Dispersion", source_summary, dispersion_metric_str, "Verified (±0.1%)"],
                 ["EVID-GOV-01", "Cryptographic Snapshot Seal", source_summary, snapshot_hash[:12], "Verified (SHA-256)"]
             ]

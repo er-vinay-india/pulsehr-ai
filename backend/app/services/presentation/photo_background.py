@@ -55,7 +55,27 @@ def photo_bytes(url: str) -> bytes:
     return data
 
 
-def add_photo_background(slide, slide_data, width, height):
+def _contrast(a, b):
+    def lum(c):
+        values = [int(c[i:i+2], 16) / 255 for i in (1, 3, 5)]
+        return sum(w * (v / 12.92 if v <= .04045 else ((v + .055) / 1.055) ** 2.4) for w, v in zip((.2126, .7152, .0722), values))
+    low, high = sorted((lum(a), lum(b)))
+    return (high + .05) / (low + .05)
+
+
+def photo_scrim_opacity(slide_data, theme):
+    import math
+    foregrounds = [theme[k] for k in ("primary_text", "secondary_text", "muted_text", "brand_color", "accent_color", "success_color", "danger_color", "warning_color")]
+    requested = max(0, min(100, float(slide_data.get("scrim_opacity", 70)))) / 100
+    for step in range(math.ceil(requested * 1000), 1001):
+        alpha = step / 1000
+        extremes = ["#" + "".join(f"{int(int(theme['bg_color'][i:i+2],16)*alpha+pixel*(1-alpha)+.5):02x}" for i in (1,3,5)) for pixel in (0,255)]
+        if all(_contrast(c, bg) >= 7.1 for c in foregrounds for bg in extremes):
+            return alpha
+    return 1.0
+
+
+def add_photo_background(slide, slide_data, width, height, theme=None):
     url = slide_data.get("background_image")
     if not url:
         return
@@ -63,10 +83,12 @@ def add_photo_background(slide, slide_data, width, height):
         raw_data = photo_bytes(url)
         with Image.open(BytesIO(raw_data)) as source:
             canvas = ImageOps.fit(source.convert("RGB"), (1920, 1080))
-        opacity = max(0, min(90, float(slide_data.get("scrim_opacity", 70)))) / 100
-        canvas = Image.blend(canvas, Image.new("RGB", canvas.size, "black"), opacity)
+        from .visual.design_tokens import slide_theme_preset
+        theme = slide_theme_preset(theme)
+        opacity = photo_scrim_opacity(slide_data, theme)
+        canvas = Image.blend(canvas, Image.new("RGB", canvas.size, theme["bg_color"]), opacity)
         output = BytesIO()
-        canvas.save(output, format="JPEG", quality=90)
+        canvas.save(output, format="PNG")
         output.seek(0)
         slide.shapes.add_picture(output, 0, 0, width=width, height=height)
     except Exception as exc:

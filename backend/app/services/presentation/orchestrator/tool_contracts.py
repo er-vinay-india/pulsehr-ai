@@ -31,9 +31,10 @@ class FetchEvidenceArgs(BaseModel):
 
 class CalculateMetricArgs(BaseModel):
     metric_type: str  # percentage_share | dispersion_ratio | surge_delta | growth_rate | mean
-    values: list[float]
+    values: list[float] = Field(default_factory=list)
     baseline: float | None = None
     comparison_value: float | None = None
+    calculation_status: str | None = None
 
 
 class AggregateDataArgs(BaseModel):

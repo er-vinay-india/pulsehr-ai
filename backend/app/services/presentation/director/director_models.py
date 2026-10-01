@@ -179,6 +179,27 @@ class VisualIntent(BaseModel):
     model_hook: str | None = None
 
 
+class PresentationBrief(BaseModel):
+    """Structured, validated presentation brief defining audience, decision, and constraints."""
+    objective: str = "Executive Leadership Review"
+    audience: str = "C-Suite & Operations Leadership"
+    decision_requested: str = ""
+    main_takeaway: str = ""
+    presentation_time_minutes: int = 15
+    deliverable: str = "pptx"  # "pptx" | "pdf" | "both"
+    content_preferences: dict[str, list[str]] = Field(default_factory=dict)
+    citation_requirement: str = "standard"  # "standard" | "strict" | "footnote_only" | "none"
+    motion_preference: str = "none"  # "none" | "subtle" | "full"
+    success_criterion: str = ""
+    is_inferred: bool = True
+
+    def build_success_criterion(self) -> str:
+        """Computes: 'After viewing this deck, the audience should understand X and decide or do Y.'"""
+        x_val = self.main_takeaway or f"operational baseline and performance metrics for {self.objective}"
+        y_val = self.decision_requested or "align on operational priority initiatives"
+        return f"After viewing this deck, the audience should understand {x_val} and decide or do {y_val}."
+
+
 class SlidePlan(BaseModel):
     """Specification of an individual slide planned by the Presentation Director."""
     slide_id: str
@@ -188,6 +209,10 @@ class SlidePlan(BaseModel):
     headline: str
     subtitle: str = ""
     key_message: str = ""
+    primary_message: str = ""
+    minimum_supporting_evidence: list[str] = Field(default_factory=list)
+    implication_for_audience: str = ""
+    transition_to_next: str = ""
     bullet_points: list[str] = Field(default_factory=list)
     visual_intent: VisualIntent = Field(default_factory=VisualIntent)
     information_unit_ids: list[str] = Field(default_factory=list)
@@ -219,6 +244,7 @@ class PresentationPlanningContext(BaseModel):
     dispersion_metric: str = ""
     reporting_period: str = ""
     is_partial_year: bool = False
+    brief: PresentationBrief | None = None
     dataset_profiles: list[dict[str, Any]] = Field(default_factory=list)
     current_evidence: list[dict[str, Any]] = Field(default_factory=list)
     historical_context: dict[str, Any] = Field(default_factory=dict)

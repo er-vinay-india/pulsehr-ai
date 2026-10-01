@@ -482,6 +482,22 @@ export async function updatePresentationDeck(deckId, deckSpec) {
   return res.json();
 }
 
+export async function getPresentationReviewGates(deckId) {
+  const res = await fetch(`${API_BASE}/presentations/decks/${deckId}/review-gates`);
+  if (!res.ok) throw new Error("Failed to load presentation review gates");
+  return res.json();
+}
+
+export async function approvePresentationReviewGate(deckId, gateId, approved = true, userName = "Executive Reviewer", notes = null) {
+  const res = await fetch(`${API_BASE}/presentations/decks/${deckId}/review-gates/${gateId}/approve`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ approved, user_name: userName, notes })
+  });
+  if (!res.ok) throw new Error("Failed to record review gate sign-off");
+  return res.json();
+}
+
 export async function regenerateSlide(deckSpec, slideId, prompt) {
   const res = await fetch(`${API_BASE}/presentations/regenerate-slide`, {
     method: "POST",

@@ -16,6 +16,57 @@ def synthesize_fallback_line_chart(sheet_candidates: list[dict[str, Any]]) -> di
         if not records:
             continue
 
+        # Multi-grain temporal extraction (supports long date columns and wide-format sequential periods)
+        try:
+            from ..analytics.temporal_categorical_engine import extract_multi_grain_temporal_insights
+            temp_res = extract_multi_grain_temporal_insights(pd.DataFrame(records), cols)
+            if temp_res.get("has_temporal_data"):
+                weekly_tl = temp_res.get("weekly", {}).get("timeline", [])
+                monthly_tl = temp_res.get("monthly", {}).get("timeline", [])
+                tl_series = temp_res.get("timeline_series", [])
+
+                if weekly_tl and len(weekly_tl) >= 2:
+                    active_tl = weekly_tl
+                    period_type = "Weekly"
+                    cats = [t["period_label"] for t in active_tl]
+                    vals = [round(float(t["mean"]), 2) for t in active_tl]
+                elif monthly_tl and len(monthly_tl) >= 2:
+                    active_tl = monthly_tl
+                    period_type = "Monthly"
+                    cats = [t["period_label"] for t in active_tl]
+                    vals = [round(float(t["mean"]), 2) for t in active_tl]
+                elif tl_series and len(tl_series) >= 2:
+                    active_tl = tl_series
+                    period_type = "Observation Cycle"
+                    cats = [t["period"] for t in active_tl]
+                    vals = [round(float(t["value"]), 2) for t in active_tl]
+                else:
+                    active_tl = []
+
+                if active_tl and len(cats) == len(vals) and len(cats) >= 2:
+                    u = temp_res.get("unit", "units")
+                    meas_name = temp_res.get("primary_measure", "Metric")
+                    meas_label = format_display_label(meas_name)
+                    val_mean = round(sum(vals) / len(vals), 2)
+                    avg_wow = temp_res.get("weekly", {}).get("avg_wow_velocity", 0.0)
+                    wow_note = f" (Avg WoW Momentum: {avg_wow:+.1f}%)" if avg_wow else ""
+
+                    return {
+                        "chart_type": "line",
+                        "title": f"{meas_label} Multi-Grain Trajectory",
+                        "subtitle": f"{period_type} operational trend across {len(cats)} continuous observation periods{wow_note}",
+                        "metric_col": meas_name,
+                        "dimension_col": temp_res.get("date_column", "Date"),
+                        "unit": u,
+                        "categories": cats,
+                        "series": [{"name": f"{meas_label} ({period_type} Mean)", "values": vals}],
+                        "overall_mean": val_mean,
+                        "ranking_basis": "Chronological Observation Window",
+                        "source_reference": f"Source: {sc['original_name']} ({len(cats)} {period_type.lower()} periods)"
+                    }
+        except Exception:
+            pass
+
         person_cols = [c for c in cols if str(c).startswith("Person_")]
         date_col = next((c for c in cols if any(k in str(c).lower() for k in ("date", "period", "timestamp", "day"))), None)
 
@@ -132,6 +183,40 @@ def synthesize_fallback_bar_chart(sheet_candidates: list[dict[str, Any]]) -> dic
                     "ranking_basis": "Ranked High to Low",
                     "source_reference": f"Source: {sc['original_name']} ({len(p_means)} tracked personnel)"
                 }
+
+        # Bivariate categorical group-by extraction
+        try:
+            from ..analytics.temporal_categorical_engine import extract_bivariate_categorical_insights
+            cat_res = extract_bivariate_categorical_insights(pd.DataFrame(records), cols)
+            if cat_res.get("has_categorical_data"):
+                p_dims = cat_res.get("dimensions", [])
+                p_meas = cat_res.get("measures", [])
+                if p_dims and p_meas:
+                    first_dim = p_dims[0]
+                    first_meas = p_meas[0]
+                    b_info = cat_res.get("breakdowns", {}).get(first_dim, {}).get(first_meas)
+                    if b_info and b_info.get("categories"):
+                        top_cats = b_info["categories"][:8]
+                        top_vals = b_info["means"][:8]
+                        all_bars = [{"label": c, "value": m} for c, m in zip(b_info["categories"], b_info["means"])]
+                        disp_str = f" ({b_info['dispersion_ratio']}x spread)" if b_info.get("dispersion_ratio") else ""
+
+                        return {
+                            "chart_type": "column" if len(top_cats) <= 6 else "bar",
+                            "title": f"Comparative Entity Benchmark: {b_info['dimension_label']}",
+                            "subtitle": f"Top {len(top_cats)} of {len(all_bars)} entities ranked by average {b_info['measure_label'].lower()}{disp_str}",
+                            "metric_col": b_info["measure"],
+                            "dimension_col": b_info["dimension"],
+                            "unit": b_info["unit"],
+                            "categories": top_cats,
+                            "series": [{"name": f"Average {b_info['measure_label']}", "values": top_vals}],
+                            "overall_mean": b_info["overall_mean"],
+                            "all_bars": all_bars,
+                            "ranking_basis": "Ranked High to Low",
+                            "source_reference": f"Source: {sc['original_name']} ({len(all_bars)} {b_info['dimension_label'].lower()} entities)"
+                        }
+        except Exception:
+            pass
 
         cat_col = next((c for c in cols if any(k in str(c).lower() for k in ("store", "dept", "department", "team", "region", "category", "role", "entity"))), None)
         if not cat_col:

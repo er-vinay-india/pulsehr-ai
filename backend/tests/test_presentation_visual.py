@@ -25,6 +25,7 @@ from app.services.presentation.visual.chart_selector import ChartSelector
 from app.services.presentation.visual.design_tokens import (
     DEFAULT_SLIDE_THEMES,
     SlideDesignTokens,
+    SLIDE_THEME_PRESETS,
     normalize_slide_theme,
 )
 from app.services.presentation.visual.diagram_models import (
@@ -449,21 +450,21 @@ def test_source_footer_provenance_statement():
 def test_theme_tokens_bold_signal():
     t = normalize_slide_theme("bold_signal")
     assert t.theme_id == "bold_signal"
-    assert t.accent == "#FF8A65"
-    assert t.brand == "#FF5722"
+    assert t.accent == SLIDE_THEME_PRESETS["bold_signal"]["accent_color"]
+    assert t.brand == SLIDE_THEME_PRESETS["bold_signal"]["brand_color"]
     assert t.is_dark is True
 
 def test_theme_tokens_electric_studio():
     t = normalize_slide_theme("electric_studio")
     assert t.theme_id == "electric_studio"
-    assert t.brand == "#4361EE"
+    assert t.brand == SLIDE_THEME_PRESETS["electric_studio"]["brand_color"]
     assert t.accent == "#4CC9F0"
 
 def test_theme_tokens_creative_voltage():
     t = normalize_slide_theme("creative_voltage")
     assert t.theme_id == "creative_voltage"
     assert t.brand == "#00F0FF"
-    assert t.accent == "#0055FF"
+    assert t.accent == SLIDE_THEME_PRESETS["creative_voltage"]["accent_color"]
 
 def test_theme_tokens_executive_dark():
     t = normalize_slide_theme("executive_dark")
@@ -474,14 +475,14 @@ def test_theme_tokens_minimal_stark():
     t = normalize_slide_theme("minimal_stark")
     assert t.theme_id == "minimal_stark"
     assert t.is_dark is False
-    assert t.background == "#F8FAFC"
-    assert t.accent == "#2563EB"
+    assert t.background == SLIDE_THEME_PRESETS["clean_light"]["bg_color"]
+    assert t.accent == SLIDE_THEME_PRESETS["clean_light"]["accent_color"]
 
 def test_theme_tokens_corporate_navy():
     t = normalize_slide_theme("corporate_navy")
     assert t.theme_id == "corporate_navy"
-    assert t.background == "#0B192C"
-    assert t.brand == "#008DDA"
+    assert t.background == SLIDE_THEME_PRESETS["corporate_navy"]["bg_color"]
+    assert t.brand == SLIDE_THEME_PRESETS["corporate_navy"]["brand_color"]
 
 
 # =========================================================================

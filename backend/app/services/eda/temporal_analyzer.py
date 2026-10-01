@@ -6,6 +6,7 @@ from __future__ import annotations
 import re
 from typing import Any
 import numpy as np
+import pandas as pd
 
 
 PERIOD_REGEX = re.compile(
@@ -66,6 +67,22 @@ def analyze_temporal_dynamics(
     """Computes period-over-period attendance, leave rates, and temporal correlations."""
     periods_meta = extract_temporal_periods(columns)
     if not periods_meta or len(periods_meta) < 2:
+        from ..analytics.temporal_categorical_engine import extract_multi_grain_temporal_insights
+        df_temp = pd.DataFrame(records)
+        mg = extract_multi_grain_temporal_insights(df_temp, columns)
+        if mg.get("has_temporal_data"):
+            return {
+                "has_temporal_data": True,
+                "timeline_series": mg.get("timeline_series", []),
+                "temporal_correlations": [],
+                "peak_period": mg.get("weekly", {}).get("peak_week") or mg.get("monthly", {}).get("peak_month"),
+                "insights": mg.get("insights", []),
+                "daily": mg.get("daily", {}),
+                "weekly": mg.get("weekly", {}),
+                "monthly": mg.get("monthly", {}),
+                "annual": mg.get("annual", {}),
+                "multi_grain": mg
+            }
         return None
 
     timeline_points = []
@@ -155,10 +172,25 @@ def analyze_temporal_dynamics(
             f"Lowest Attendance Window: '{lowest_att_period['period_label']}' averaged {lowest_att_period['average_attendance']} days attendance."
         )
 
+    # Compute multi-grain temporal insights (Daily, Weekly, Monthly, Annual)
+    from ..analytics.temporal_categorical_engine import extract_multi_grain_temporal_insights
+    df_temp = pd.DataFrame(records)
+    multi_grain = extract_multi_grain_temporal_insights(df_temp, columns)
+
+    for ins in multi_grain.get("insights", []):
+        if ins not in hr_insights:
+            hr_insights.append(ins)
+
     return {
         "has_temporal_data": True,
-        "timeline_series": timeline_points,
+        "timeline_series": timeline_points if timeline_points else multi_grain.get("timeline_series", []),
         "temporal_correlations": temporal_correlations,
-        "peak_period": peak_leave_period["period_label"] if peak_leave_period else None,
-        "insights": hr_insights
+        "peak_period": peak_leave_period["period_label"] if peak_leave_period else multi_grain.get("weekly", {}).get("peak_week"),
+        "insights": hr_insights,
+        "daily": multi_grain.get("daily", {}),
+        "weekly": multi_grain.get("weekly", {}),
+        "monthly": multi_grain.get("monthly", {}),
+        "annual": multi_grain.get("annual", {}),
+        "multi_grain": multi_grain
     }
+

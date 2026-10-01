@@ -22,13 +22,17 @@ def build_roadmap_slides(
         s7_title = "Strategic Roadmap: Prioritized Operational Initiatives"
     s7_sub = "Actionable, resource-aware operational plan linking findings to execution owners"
 
+    ev_str = find_evidence(evidence_ledger, "EVID-STRENGTH-01")
+    motivating_surge = ev_str.get("metric_value") if ev_str and ev_str.get("numeric_value") is not None else None
+    motivating_1 = f"Peak throughput surge of {motivating_surge} observed during demand peaks." if motivating_surge else f"Audited volume across {total_eval_records:,} records confirms baseline operating capacity."
+
     default_proposals = DECK_DEFAULTS.get("structured_proposals", [])
     if default_proposals:
         structured_proposals = [
             {
                 "priority": "HIGH",
                 "owner_role": default_proposals[0]["owner"],
-                "motivating_finding": "Throughput peaked at +7.8% above baseline mean during peak cycles.",
+                "motivating_finding": motivating_1,
                 "proposed_response": default_proposals[0]["title"],
                 "success_metric": "Maintain zero service disruption across peak weeks.",
                 "dependencies": "HR staffing data stream integration"
@@ -55,7 +59,7 @@ def build_roadmap_slides(
             {
                 "priority": "HIGH",
                 "owner_role": "Unassigned - Operations Lead",
-                "motivating_finding": "Throughput peaked at +7.8% above baseline mean during peak cycles.",
+                "motivating_finding": motivating_1,
                 "proposed_response": "Implement dynamic workforce shifts to buffer seasonal volume peaks.",
                 "success_metric": "Maintain zero service disruption across peak weeks.",
                 "dependencies": "HR staffing data stream integration"

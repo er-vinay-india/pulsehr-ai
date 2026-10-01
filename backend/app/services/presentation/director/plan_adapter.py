@@ -52,11 +52,11 @@ def adapt_plan_to_deck_spec(
     ev_headwind = next((e for e in ev_ledger if e.get("evidence_id") == "EVID-HEADWIND-01"), None)
     ev_exec = next((e for e in ev_ledger if e.get("evidence_id") == "EVID-EXEC-01"), None)
 
-    strength_val = (ev_strength.get("metric_value") or "+7.8%") if ev_strength else "+7.8%"
-    strength_lbl = (ev_strength.get("metric_name") or "Surge Peak") if ev_strength else "Surge Peak"
+    strength_val = ev_strength.get("metric_value") if ev_strength and ev_strength.get("metric_value") else "Baseline Stabilized"
+    strength_lbl = ev_strength.get("metric_name") if ev_strength and ev_strength.get("metric_name") else "Operating Baseline"
 
-    headwind_val = (ev_headwind.get("metric_value") or ctx.dispersion_metric or "1.8x") if ev_headwind else (ctx.dispersion_metric or "1.8x")
-    headwind_lbl = (ev_headwind.get("metric_name") or "Dispersion Ratio") if ev_headwind else "Dispersion Ratio"
+    headwind_val = (ev_headwind.get("metric_value") or ctx.dispersion_metric or "Observed Spread") if ev_headwind else (ctx.dispersion_metric or "Observed Spread")
+    headwind_lbl = (ev_headwind.get("metric_name") or "Dispersion Metric") if ev_headwind else "Dispersion Metric"
 
     exec_val = ev_exec.get("metric_value", f"{ctx.total_records:,}") if ev_exec else f"{ctx.total_records:,}"
 
@@ -207,14 +207,14 @@ def adapt_plan_to_deck_spec(
             talent_9box_data = t9
             metrics = [
                 {"label": "Evaluated Staff", "value": f"{t9.get('total_evaluated', ctx.total_records)}", "subtext": "Complete Cohort", "evidence_id": "EVID-EXEC-01"},
-                {"label": "Top Performers", "value": f"{t9.get('high_performers_count', 0)}", "subtext": "Star Talent"},
-                {"label": "Flight Risk Stars", "value": f"{t9.get('retention_vulnerable_stars', 0)}", "subtext": "Action Priority"}
+                {"label": "Top Performers", "value": f"{t9.get('high_performers_count', 0)}", "subtext": "Star Talent", "evidence_id": "EVID-TALENT-TOP"},
+                {"label": "Flight Risk Stars", "value": f"{t9.get('retention_vulnerable_stars', 0)}", "subtext": "Action Priority", "evidence_id": "EVID-TALENT-RISK"}
             ]
         elif v_type == "burnout_strain" and bs:
             burnout_strain_data = bs
             metrics = [
-                {"label": "Severe Strain", "value": f"{bs.get('severe_strain_count', 0)}", "subtext": "Critical Action"},
-                {"label": "At-Risk Share", "value": f"{bs.get('at_risk_share_pct', 0)}%", "subtext": "Cohort Prevalence"}
+                {"label": "Severe Strain", "value": f"{bs.get('severe_strain_count', 0)}", "subtext": "Critical Action", "evidence_id": "EVID-STRAIN-01"},
+                {"label": "At-Risk Share", "value": f"{bs.get('at_risk_share_pct', 0)}%", "subtext": "Cohort Prevalence", "evidence_id": "EVID-STRAIN-02"}
             ]
         elif v_type == "action_plan" or layout == "action_plan":
             structured_props = proposals
@@ -439,13 +439,14 @@ def adapt_plan_to_deck_spec(
             "created_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
             "is_partial_year": ctx.is_partial_year,
             "reporting_period_summary": ctx.reporting_period,
+            "industrial_models": ctx.industrial_models or {},
             "planning_intent": plan.intent.model_dump(),
             "narrative_strategy": plan.narrative_strategy.model_dump(),
             "validation_summary": {
-                "status": "PASSED" if plan.planning_validation.is_valid else "WARNING",
+                "status": "PENDING_VERIFICATION",
                 "total_metrics_checked": len(ev_ledger),
-                "passed_verification": len(ev_ledger),
-                "discrepancies_flagged": len(plan.planning_validation.duplicate_concepts_detected),
+                "passed_verification": 0,
+                "discrepancies_flagged": 0,
                 "unanswered_questions": plan.planning_validation.unanswered_user_questions
             }
         },

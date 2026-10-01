@@ -11,11 +11,11 @@ export function SlideTalent9BoxMatrix({ data, theme }) {
             <div
               key={cell.key}
               className={`slide-9box-cell ${hasStaff ? 'has-staff' : ''}`}
-              style={{ borderTop: `3px solid ${cell.color || theme?.brand_color || '#ff8a62'}` }}
+              style={{ borderTop: `3px solid ${theme.brand_color}` }}
             >
               <div className="cell-header-line">
                 <span className="cell-title">{cell.title}</span>
-                <span className="cell-count-pill" style={{ backgroundColor: cell.color || theme?.brand_color || '#ff8a62' }}>
+                <span className="cell-count-pill" style={{ backgroundColor: theme.card_bg, color: theme.primary_text, border: `1px solid ${theme.brand_color}` }}>
                   {cell.count}
                 </span>
               </div>
@@ -35,7 +35,7 @@ export function SlideBurnoutStrainPanel({ data, theme }) {
       {depts.slice(0, 6).map((d, idx) => {
         const pct = Math.min(100, Math.max(0, Number(d.strain_index_pct || d.strain_pct || 0)));
         const isHigh = pct >= 20;
-        const barColor = isHigh ? (theme?.danger_color || '#ef4444') : (theme?.brand_color || '#ff8a62');
+        const barColor = isHigh ? theme.danger_color : theme.brand_color;
         return (
           <div key={idx} className="slide-strain-item">
             <div className="strain-meta-line">

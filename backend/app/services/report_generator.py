@@ -67,17 +67,18 @@ def export_spec_to_pptx(deck_spec: dict) -> Path:
         if verify_decision_deck(deck_spec, deck_spec.get("evidence_ledger", []))["status"] != "PASSED":
             raise ValueError("Decision brief changed after evidence verification. Regenerate the brief before export.")
     prs = _new_deck()
-    theme = deck_spec.get("theme", {})
+    from .presentation.visual.design_tokens import slide_theme_preset
+    theme = slide_theme_preset({**(deck_spec.get("theme") or {}), "id": (deck_spec.get("theme") or {}).get("id") or deck_spec.get("metadata", {}).get("theme_id")})
     colors = {
-        "bg": hex_to_rgb(theme.get("bg_color", "#171412"), C_BG),
-        "card_bg": hex_to_rgb(theme.get("card_bg", "#201b18"), C_CARD),
-        "card_border": hex_to_rgb(theme.get("card_border", "#3d362f"), C_CARD_BORDER),
-        "primary": hex_to_rgb(theme.get("primary_text", "#fff9f2"), C_TEXT_LIGHT),
-        "secondary": hex_to_rgb(theme.get("secondary_text", "#beb2a6"), C_TEXT_MUTED),
-        "brand": hex_to_rgb(theme.get("brand_color", "#ff8a62"), C_BRAND),
-        "accent": hex_to_rgb(theme.get("accent_color", "#7ee7d9"), C_ACCENT),
-        "success": hex_to_rgb(theme.get("success_color", "#8ef0c8"), C_SUCCESS),
-        "danger": hex_to_rgb(theme.get("danger_color", "#ff8ca0"), C_DANGER),
+        "bg": hex_to_rgb(theme["bg_color"]),
+        "card_bg": hex_to_rgb(theme["card_bg"]),
+        "card_border": hex_to_rgb(theme["card_border"]),
+        "primary": hex_to_rgb(theme["primary_text"]),
+        "secondary": hex_to_rgb(theme["secondary_text"]),
+        "brand": hex_to_rgb(theme["brand_color"]),
+        "accent": hex_to_rgb(theme["accent_color"]),
+        "success": hex_to_rgb(theme["success_color"]),
+        "danger": hex_to_rgb(theme["danger_color"]),
     }
 
     slides = deck_spec.get("slides", [])
@@ -87,7 +88,7 @@ def export_spec_to_pptx(deck_spec: dict) -> Path:
         set_slide_background(slide, colors["bg"])
         try:
             from .presentation.photo_background import add_photo_background
-            add_photo_background(slide, slide_data, prs.slide_width, prs.slide_height)
+            add_photo_background(slide, slide_data, prs.slide_width, prs.slide_height, theme)
         except Exception as photo_err:
             logger.warning(f"Could not apply slide photo background: {photo_err}")
         layout = slide_data.get("layout", "chart_narrative")
@@ -119,6 +120,40 @@ def export_spec_to_pptx(deck_spec: dict) -> Path:
                 _render_table_detail_slide(slide, slide_data, colors)
             else:
                 _render_generic_slide(slide, slide_data, colors)
+
+        from pptx.oxml.xmlchemy import OxmlElement
+        for shape in slide.shapes:
+            if not shape.has_table:
+                continue
+            for row in shape.table.rows:
+                for cell in row.cells:
+                    properties = cell._tc.get_or_add_tcPr()
+                    for edge in ("lnL", "lnR", "lnT", "lnB"):
+                        for existing in properties.findall(f"{{http://schemas.openxmlformats.org/drawingml/2006/main}}{edge}"):
+                            properties.remove(existing)
+                        line = OxmlElement(f"a:{edge}")
+                        line.set("w", "12700")
+                        fill = OxmlElement("a:solidFill")
+                        color = OxmlElement("a:srgbClr")
+                        color.set("val", str(colors["card_border"]))
+                        fill.append(color)
+                        line.append(fill)
+                        properties.append(line)
+
+        # Apply technical export accessibility: assign meaningful names and alt text descriptions
+        for shape in slide.shapes:
+            try:
+                c_nv_pr = shape._element.find('.//{http://schemas.openxmlformats.org/drawingml/2006/main}cNvPr')
+                if shape.has_table:
+                    shape.name = f"Data Table: {slide_data.get('title', 'Table')[:35]}"
+                    if c_nv_pr is not None:
+                        c_nv_pr.set('descr', f"Empirical data table supporting slide: {slide_data.get('title', '')}")
+                elif shape.has_chart:
+                    shape.name = f"Chart: {slide_data.get('title', 'Chart')[:35]}"
+                    if c_nv_pr is not None:
+                        c_nv_pr.set('descr', f"Analytical chart visualization for slide: {slide_data.get('title', '')}")
+            except Exception:
+                pass
 
         _render_footer(slide, slide_data, colors, slide_num=idx + 1, total_slides=total_slides)
 

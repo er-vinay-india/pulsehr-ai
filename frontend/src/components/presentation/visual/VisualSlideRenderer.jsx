@@ -1,3 +1,4 @@
+import { getSlideTheme, slideCssVariables } from '../../../theme/slideTokens.js';
 import { slideBackground } from "../../../utils/slideBackground";
 import React, { useState } from "react";
 import { ArrowRight, Edit3, Image as ImageIcon } from "lucide-react";
@@ -15,12 +16,13 @@ export default function VisualSlideRenderer({
   const spec = visualSpec || slide?.visual_spec;
   if (!spec) return null;
 
+  theme = getSlideTheme(theme?.id ? theme : spec.design_tokens?.theme_id);
   const tokens = spec.design_tokens || {};
-  const primaryText = theme.primary_text || tokens.primary_text || "#f8fafc";
-  const secondaryText = theme.secondary_text || tokens.secondary_text || "#94a3b8";
-  const accentColor = theme.accent_color || tokens.accent || "#ff5722";
-  const cardBg = theme.card_bg || tokens.surface || "#1e293b";
-  const cardBorder = theme.card_border || tokens.border || "rgba(255, 255, 255, 0.08)";
+  const primaryText = theme.primary_text;
+  const secondaryText = theme.secondary_text;
+  const accentColor = theme.accent_color;
+  const cardBg = theme.card_bg;
+  const cardBorder = theme.card_border;
 
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [titleVal, setTitleVal] = useState(spec.headline || slide.title || "Executive Briefing");
@@ -227,7 +229,8 @@ export default function VisualSlideRenderer({
       className="presentation-runtime w-100 h-100 d-flex flex-column justify-content-between"
       style={{
         padding: "24px 32px",
-        ...slideBackground(slide, theme.bg_color || tokens.background || "#0f172a"),
+        ...slideCssVariables(theme),
+        ...slideBackground(slide, theme),
         color: primaryText,
         overflow: "hidden"
       }}
@@ -256,7 +259,7 @@ export default function VisualSlideRenderer({
               fontSize: "36px",
               fontWeight: 800,
               width: "100%",
-              background: "rgba(255,255,255,0.05)",
+              background: theme.surface_alt,
               color: primaryText,
               border: `1px solid ${accentColor}`,
               borderRadius: "6px",
@@ -286,7 +289,7 @@ export default function VisualSlideRenderer({
             style={{
               fontSize: "18px",
               width: "100%",
-              background: "rgba(255,255,255,0.05)",
+              background: theme.surface_alt,
               color: secondaryText,
               border: `1px solid ${accentColor}`,
               borderRadius: "4px",
@@ -329,7 +332,7 @@ export default function VisualSlideRenderer({
                         fontSize: "20px",
                         fontWeight: 700,
                         width: "100%",
-                        background: "rgba(255,255,255,0.05)",
+                        background: theme.surface_alt,
                         color: accentColor,
                         border: `1px solid ${accentColor}`,
                         borderRadius: "4px"
@@ -358,7 +361,7 @@ export default function VisualSlideRenderer({
                         top: "4px",
                         right: "6px",
                         fontSize: "9px",
-                        color: "#fbbf24",
+                        color: theme.warning_color,
                         fontWeight: 600
                       }}
                       title="User Override (manual modification)"
@@ -479,7 +482,7 @@ export default function VisualSlideRenderer({
                                 rows={2}
                                 style={{
                                   width: "100%",
-                                  background: "rgba(255,255,255,0.05)",
+                                  background: theme.surface_alt,
                                   color: primaryText,
                                   border: `1px solid ${accentColor}`,
                                   borderRadius: "4px",

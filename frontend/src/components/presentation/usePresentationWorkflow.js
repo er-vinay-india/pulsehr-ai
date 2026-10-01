@@ -14,17 +14,19 @@ import {
 import { exportStandaloneHtmlPresentation } from "../../utils/standaloneHtmlExporter";
 
 export const STAGES = [
-  { id: "layout", label: "Layout build up", desc: "Freezing snapshot and assembling layout wireframes" },
-  { id: "headings", label: "Title & subpage headings", desc: "Outlining deck title, section categories, and slide titles" },
-  { id: "data_math", label: "Mathematical derivation", desc: "Computing exact totals, percentages, and evidence ledgers" },
-  { id: "narrative_ai", label: "AI storyline & narrative", desc: "Synthesizing executive findings, storylines, and insights" },
-  { id: "enrichment", label: "Executive tone & narrative polish", desc: "Refining language, C-suite tone, and executive subtitles slide by slide" },
-  { id: "graphics", label: "Graphic content", desc: "Rendering charts, metric cards, and visual callouts" },
-  { id: "text", label: "Text content & density audit", desc: "Validating evidence claims and auditing spatial density" },
-  { id: "animation", label: "Animation", desc: "Configuring entrance, emphasis, and motion cues" },
-  { id: "transitions", label: "Transitions", desc: "Setting smooth slide-to-slide progression" },
-  { id: "transcript", label: "HRIDAY voiceover transcript", desc: "Synthesizing executive talking points and speech notes" },
-  { id: "formatting", label: "Final setup & PPTX/PDF formatting", desc: "Layout spatial audit, quality repair, and file generation" },
+  { id: "brief_setup", label: "Objective & Brief Setup", desc: "Defining audience seniority, time budget, and decision requested" },
+  { id: "evidence_audit", label: "Evidence Audit & Inventory", desc: "Auditing empirical metrics, data completeness, and sources" },
+  { id: "narrative_arc", label: "Narrative Architecture & Sequence", desc: "Establishing narrative arc, sections, and executive thesis" },
+  { id: "headlines", label: "Slide Headlines & Subheadings", desc: "Crafting evidence-grounded conclusion headlines" },
+  { id: "layout_selection", label: "Wireframes & Layout Selection", desc: "Allocating layout structures based on narrative intent" },
+  { id: "math_reconciliation", label: "Mathematical Reconciliation", desc: "Auditing numbers, denominators, and claim verification" },
+  { id: "graphics_charts", label: "Graphic Content & Charts", desc: "Materializing native charts, data tables, and metrics" },
+  { id: "executive_polish", label: "Executive Language Polish", desc: "Refining tone and narrative clarity preserving complete conclusions" },
+  { id: "visual_qa", label: "Visual Hierarchy & Layout QA", desc: "Auditing spatial canvas density and bounding boxes" },
+  { id: "animation", label: "Animation & Transitions", desc: "Configuring slide motion and entrance cues" },
+  { id: "speaker_notes", label: "Speaker Notes & Rehearsal Timing", desc: "Generating structured notes and timing comparison" },
+  { id: "export_qa", label: "Accessibility & Technical Export QA", desc: "Verifying reading order, chart series, and PPTX export" },
+  { id: "ready", label: "Rehearsal Ready & Review Gates", desc: "Presentation certified and ready for executive review" },
 ];
 
 
@@ -36,6 +38,9 @@ export function usePresentationWorkflow({
   onJobUpdate = () => {}
 }) {
   const [viewMode, setViewMode] = useState("config"); // "config" | "generating" | "studio"
+  const [configSession, setConfigSession] = useState(0);
+  const externalSourceRef = useRef({ deck: null, job: null });
+  const navigationRevisionRef = useRef(0);
   const [themes, setThemes] = useState([]);
   const [sheets, setSheets] = useState([]);
 
@@ -46,9 +51,14 @@ export function usePresentationWorkflow({
   const [scopePreview, setScopePreview] = useState(null);
   const [isLoadingPreview, setIsLoadingPreview] = useState(false);
 
-  // Core config form state
+  // Core config & Brief form state
   const [objective, setObjective] = useState("Executive Leadership Review");
   const [audience, setAudience] = useState("C-Suite & Operations Leadership");
+  const [decisionRequested, setDecisionRequested] = useState("");
+  const [mainTakeaway, setMainTakeaway] = useState("");
+  const [presentationTimeMinutes, setPresentationTimeMinutes] = useState(15);
+  const [deliverable, setDeliverable] = useState("pptx");
+  const [motionPreference, setMotionPreference] = useState("none");
   const [targetLength, setTargetLength] = useState(null);
   const [deckStyle, setDeckStyle] = useState("standard");
   const [selectedThemeId, setSelectedThemeId] = useState("executive_dark");
@@ -160,21 +170,29 @@ export function usePresentationWorkflow({
 
   // 3. Initial viewMode determination
   useEffect(() => {
+    let cancelled = false;
+    const revision = navigationRevisionRef.current;
+    const deckId = initialDeck?.id ?? initialDeck?.deck_id;
+    const deckIdentity = deckId != null ? String(deckId) : initialDeck;
+    const previous = externalSourceRef.current;
+    externalSourceRef.current = { deck: deckIdentity, job: activeJobId };
     if (initialDeck) {
       setDeckSpec(initialDeck);
-      setViewMode("studio");
+      if (previous.deck !== deckIdentity) setViewMode("studio");
     } else if (activeJobId) {
-      setCurrentJobId(activeJobId);
-      setViewMode("generating");
+      if (previous.job !== activeJobId) {
+        setCurrentJobId(activeJobId);
+        setViewMode("generating");
+      }
     } else {
       try {
         const params = new URLSearchParams(window.location.search);
         const urlDeckId = params.get("deck_id");
-        if (urlDeckId) {
+        if (urlDeckId && revision === 0) {
           getPresentationDeck(urlDeckId)
             .then(res => {
               const d = res.deck || res;
-              if (d && d.slides) {
+              if (!cancelled && revision === navigationRevisionRef.current && d && d.slides) {
                 setDeckSpec(d);
                 setViewMode("studio");
               }
@@ -183,6 +201,7 @@ export function usePresentationWorkflow({
         }
       } catch {}
     }
+    return () => { cancelled = true; };
   }, [initialDeck, activeJobId]);
 
   // 4. Polling for background job
@@ -256,6 +275,7 @@ export function usePresentationWorkflow({
           }
 
           if (deck) {
+            if (!isMounted) return;
             setDeckSpec(deck);
             setJobProgress(100);
             setJobStage("ready");
@@ -304,10 +324,11 @@ export function usePresentationWorkflow({
 
   // Handlers (Memoized for render performance and reliability)
   const handleStartGeneration = useCallback(async (options = generationOptionsRef.current) => {
+    const revision = ++navigationRevisionRef.current;
     generationOptionsRef.current = options;
     setViewMode("generating");
     setCurrentJobId(null);
-    setJobStage("layout");
+    setJobStage("brief_setup");
     setJobProgress(0);
     setJobError(null);
     setSlideProgressData(null);
@@ -315,6 +336,11 @@ export function usePresentationWorkflow({
       const scope = {
         objective: options.customPrompt || options.objective || objective,
         audience: options.audience || audience,
+        decision_requested: options.decisionRequested || decisionRequested || null,
+        main_takeaway: options.mainTakeaway || mainTakeaway || null,
+        presentation_time_minutes: options.presentationTimeMinutes || presentationTimeMinutes || 15,
+        deliverable: options.deliverable || deliverable || "pptx",
+        motion_preference: options.motionPreference || motionPreference || "none",
         target_length: options.targetLength ?? targetLength,
         deck_style: deckStyle,
         theme_id: options.themeId || selectedThemeId,
@@ -330,19 +356,21 @@ export function usePresentationWorkflow({
         animation: options.animation || "none",
       };
       const res = await startPresentationGeneration(scope);
+      if (revision !== navigationRevisionRef.current) return;
       setCurrentJobId(res.job_id);
-      setJobProgress(5);
-      setJobStage("layout");
+      setJobProgress(3);
+      setJobStage("brief_setup");
       setJobStageLabel("Initiating workspace presentation pipeline...");
       setViewMode("generating");
-      onJobUpdate({ ...res, progress_pct: 5, deck: null, status: "in_progress" });
+      onJobUpdate({ ...res, progress_pct: 3, deck: null, status: "in_progress" });
     } catch (err) {
-      setJobError(err.message || "Failed to start presentation generation");
+      if (revision === navigationRevisionRef.current) setJobError(err.message || "Failed to start presentation generation");
     }
-  }, [objective, audience, targetLength, deckStyle, selectedThemeId, selectedSheetId, scopeType, customSheetIds, selectedGroupId, instructions, onJobUpdate]);
+  }, [objective, audience, decisionRequested, mainTakeaway, presentationTimeMinutes, deliverable, motionPreference, targetLength, deckStyle, selectedThemeId, selectedSheetId, scopeType, customSheetIds, selectedGroupId, instructions, onJobUpdate]);
 
   const handleGoBackToConfig = useCallback((force = false) => {
     if (force !== true && ((viewMode === "generating" && !jobError) || isRegeneratingSlide)) return;
+    navigationRevisionRef.current += 1;
     if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
     setJobError(null);
     setCurrentJobId(null);
@@ -351,6 +379,13 @@ export function usePresentationWorkflow({
     setJobStage("layout");
     setViewMode("config");
   }, [viewMode, jobError, isRegeneratingSlide]);
+
+  const handleNewDeck = useCallback(() => {
+    if (viewMode === "generating" || isRegeneratingSlide) return;
+    generationOptionsRef.current = {};
+    setConfigSession(session => session + 1);
+    handleGoBackToConfig();
+  }, [viewMode, isRegeneratingSlide, handleGoBackToConfig]);
 
   const handleResetAndStartGeneration = useCallback(() => {
     if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
@@ -368,7 +403,7 @@ export function usePresentationWorkflow({
 
   const handleCancelGeneration = useCallback(async () => {
     if (!currentJobId) {
-      handleGoBackToConfig();
+      handleGoBackToConfig(true);
       return;
     }
     try {
@@ -606,6 +641,8 @@ export function usePresentationWorkflow({
   };
 
   return {
+    configSession,
+    handleNewDeck,
     viewMode,
     setViewMode,
     themes,

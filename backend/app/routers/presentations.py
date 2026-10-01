@@ -32,6 +32,13 @@ class GeneratePresentationRequest(BaseModel):
     deck_style: Literal["standard", "decision_brief"] = "standard"
     objective: str | None = "Executive Leadership Review"
     audience: str | None = "C-Suite & Operations Leadership"
+    decision_requested: str | None = None
+    main_takeaway: str | None = None
+    presentation_time_minutes: int | None = 15
+    deliverable: Literal["pptx", "pdf", "both"] = "pptx"
+    content_preferences: dict[str, list[str]] | None = None
+    citation_requirement: Literal["standard", "strict", "footnote_only", "none"] = "standard"
+    motion_preference: Literal["none", "subtle", "full"] = "none"
     target_length: int | None = None
     theme_id: str | None = "executive_dark"
     scope_type: str | None = "workspace"  # "workspace" | "connected_group" | "custom_sheets" | "single_sheet"
@@ -45,6 +52,12 @@ class GeneratePresentationRequest(BaseModel):
     transition: Literal["none", "fade", "slide", "scale", "reveal"] = "none"
     animation: Literal["none", "fade"] = "none"
     enable_ai_planner: bool = True
+
+
+class ReviewGateSignoffRequest(BaseModel):
+    approved: bool = True
+    user_name: str = "User"
+    notes: str | None = None
 
 
 class ScopePreviewRequest(BaseModel):
@@ -144,11 +157,18 @@ def get_scope_preview(req: ScopePreviewRequest):
 
 @router.post("/generate")
 def start_presentation_generation(req: GeneratePresentationRequest):
-    """Spawns an asynchronous 7-stage presentation generation job."""
+    """Spawns an asynchronous 13-phase presentation generation job."""
     scope = {
         "deck_style": req.deck_style,
         "objective": req.objective or "Executive Leadership Review",
         "audience": req.audience or "C-Suite & Operations Leadership",
+        "decision_requested": req.decision_requested,
+        "main_takeaway": req.main_takeaway,
+        "presentation_time_minutes": req.presentation_time_minutes or 15,
+        "deliverable": req.deliverable,
+        "content_preferences": req.content_preferences or {},
+        "citation_requirement": req.citation_requirement,
+        "motion_preference": req.motion_preference,
         "target_length": req.target_length,
         "theme_id": req.theme_id or "executive_dark",
         "scope_type": req.scope_type or "workspace",
@@ -168,9 +188,9 @@ def start_presentation_generation(req: GeneratePresentationRequest):
     return {
         "job_id": job_id,
         "status": "in_progress",
-        "stage": "reviewing_coverage",
-        "progress": 15,
-        "message": "Initiating 7-stage analytical presentation pipeline...",
+        "stage": "brief_setup",
+        "progress": 3,
+        "message": "Initiating 13-phase evidence-based presentation pipeline...",
     }
 
 
@@ -344,9 +364,58 @@ def get_presentation_deck(deck_id: str):
         raise HTTPException(status_code=500, detail="Corrupted presentation deck specification")
 
 
+@router.get("/decks/{deck_id}/review-gates")
+def get_deck_review_gates(deck_id: str):
+    """Returns the five review gates evaluation and human approval status."""
+    with get_connection() as conn:
+        row = conn.execute("SELECT spec_json FROM presentation_decks WHERE id = ?", (deck_id,)).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Presentation deck not found")
+    spec = json.loads(row["spec_json"])
+    rg = spec.get("metadata", {}).get("review_gates")
+    if not rg:
+        from ..services.presentation.review_gates import initialize_review_gates, evaluate_automated_gates
+        rg = evaluate_automated_gates(spec)
+        spec.setdefault("metadata", {})["review_gates"] = rg
+        with get_connection() as conn:
+            conn.execute("UPDATE presentation_decks SET spec_json = ? WHERE id = ?", (json.dumps(spec), deck_id))
+            conn.commit()
+    return rg
+
+
+@router.post("/decks/{deck_id}/review-gates/{gate_id}/approve")
+def approve_review_gate(deck_id: str, gate_id: str, req: ReviewGateSignoffRequest):
+    """Records an explicit human approval or rejection for one of the five review gates."""
+    with get_connection() as conn:
+        row = conn.execute("SELECT spec_json FROM presentation_decks WHERE id = ?", (deck_id,)).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Presentation deck not found")
+    spec = json.loads(row["spec_json"])
+    from ..services.presentation.review_gates import record_human_signoff, initialize_review_gates
+    rg = spec.get("metadata", {}).get("review_gates") or initialize_review_gates()
+    try:
+        updated_rg = record_human_signoff(
+            review_gates=rg,
+            gate_id=gate_id,
+            approved=req.approved,
+            user_name=req.user_name,
+            notes=req.notes
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    spec.setdefault("metadata", {})["review_gates"] = updated_rg
+    with get_connection() as conn:
+        conn.execute("UPDATE presentation_decks SET spec_json = ? WHERE id = ?", (json.dumps(spec), deck_id))
+        conn.commit()
+    return updated_rg
+
+
 @router.put("/decks/{deck_id}")
 def update_presentation_deck(deck_id: str, deck_spec: dict[str, Any]):
-    """Saves updated PresentationDeckSpec after user inline edits or theme changes."""
+    """Saves updated PresentationDeckSpec after user inline edits or theme changes, invalidating relevant review gates."""
+    from ..services.presentation.review_gates import invalidate_review_gates_on_edit
+    deck_spec = invalidate_review_gates_on_edit(deck_spec, edited_scope="content")
+
     title = deck_spec.get("metadata", {}).get("title") or deck_spec.get("slides", [{}])[0].get("title", "Presentation")
     dataset_id = deck_spec.get("metadata", {}).get("dataset_id")
     sheet_id = deck_spec.get("metadata", {}).get("sheet_id")
@@ -417,10 +486,11 @@ def download_deck_pptx(deck_id: str):
         deck_spec = json.loads(row["spec_json"])
 
     pptx_path = config.EXPORTS_DIR / f"presentation_{deck_id}.pptx"
-    if not pptx_path.exists():
-        if not deck_spec:
-            raise HTTPException(status_code=404, detail="Presentation deck not found")
+    # Rebuild saved specs with current slide tokens; cached files may predate contrast repairs.
+    if deck_spec:
         pptx_path = export_spec_to_pptx(deck_spec)
+    elif not pptx_path.exists():
+        raise HTTPException(status_code=404, detail="Presentation deck not found")
 
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     title_raw = (deck_spec.get("metadata", {}).get("title") if deck_spec else None) or f"presentation_{deck_id}"

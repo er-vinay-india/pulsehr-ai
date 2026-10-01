@@ -82,9 +82,32 @@ def build_default_evidence_ledger(
     snapshot_hash: str,
     reporting_period_summary: str,
     is_partial_year: bool,
-    mean_sales: float | None = None
+    mean_sales: float | None = None,
+    surge_metric_str: str | None = None,
+    dispersion_numeric_val: float | None = None
 ) -> list[dict[str, Any]]:
     numeric_mean = float(mean_sales) if mean_sales is not None else float(total_records)
+    if dispersion_numeric_val is not None:
+        numeric_disp = float(dispersion_numeric_val)
+    else:
+        try:
+            import re
+            m = re.search(r"[\d.]+", str(dispersion_metric_str or ""))
+            numeric_disp = float(m.group(0)) if m else None
+        except Exception:
+            numeric_disp = None
+
+    if surge_metric_str:
+        try:
+            import re
+            sm = re.search(r"[\d.]+", str(surge_metric_str))
+            numeric_surge = float(sm.group(0)) if sm else None
+        except Exception:
+            numeric_surge = None
+    else:
+        numeric_surge = None
+        surge_metric_str = "Longitudinal surge not recorded"
+
     return [
         {
             "evidence_id": "EVID-EXEC-01",
@@ -130,8 +153,8 @@ def build_default_evidence_ledger(
             "date_range": reporting_period_summary,
             "is_partial_year": is_partial_year,
             "metric_name": "Peak Volume Surge",
-            "metric_value": "+7.8% Surge",
-            "numeric_value": 7.8,
+            "metric_value": surge_metric_str,
+            "numeric_value": numeric_surge,
             "calculation_methodology": "Peak period throughput compared to baseline mean.",
             "what_it_establishes": "Confirms capacity absorption under seasonal volume peaks.",
             "what_it_does_not_establish": "Does not prove infinite operating elasticity.",
@@ -148,7 +171,7 @@ def build_default_evidence_ledger(
             "is_partial_year": is_partial_year,
             "metric_name": "Dispersion Ratio",
             "metric_value": dispersion_metric_str,
-            "numeric_value": 8.11,
+            "numeric_value": numeric_disp,
             "calculation_methodology": "Top decile entity throughput divided by bottom decile.",
             "what_it_establishes": "Quantifies wide operational variance across units.",
             "what_it_does_not_establish": "Does not establish manager incompetence without field audit.",

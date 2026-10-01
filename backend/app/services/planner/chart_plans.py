@@ -220,62 +220,105 @@ def build_line_chart_plans(
 ) -> list[dict[str, Any]]:
     """Builds time-series trend line chart plans."""
     plans = []
-    if not (date_cols and sorted_numeric):
-        return plans
 
-    d_col = date_cols[0]
-    date_series = df[f'__date_{d_col}'].dropna()
-    if len(date_series) < 5:
-        return plans
+    if date_cols and sorted_numeric and f'__date_{date_cols[0]}' in df:
+        d_col = date_cols[0]
+        date_series = df[f'__date_{d_col}'].dropna()
+        if len(date_series) >= 5:
+            sorted_df = df.sort_values(by=f'__date_{d_col}').copy()
+            sorted_df['__date_str'] = sorted_df[f'__date_{d_col}'].dt.strftime('%Y-%m-%d')
 
-    sorted_df = df.sort_values(by=f'__date_{d_col}').copy()
-    sorted_df['__date_str'] = sorted_df[f'__date_{d_col}'].dt.strftime('%Y-%m-%d')
+            for num_col, num_meta in sorted_numeric[:2]:
+                c_name = num_meta['clean_col']
+                unit = num_meta['unit']
+                is_additive = num_meta['is_additive']
 
-    for num_col, num_meta in sorted_numeric[:2]:
-        c_name = num_meta['clean_col']
-        unit = num_meta['unit']
-        is_additive = num_meta['is_additive']
+                if is_additive:
+                    time_grp = sorted_df.groupby('__date_str')[c_name].sum().reset_index()
+                else:
+                    time_grp = sorted_df.groupby('__date_str')[c_name].mean().reset_index()
 
-        if is_additive:
-            time_grp = sorted_df.groupby('__date_str')[c_name].sum().reset_index()
-        else:
-            time_grp = sorted_df.groupby('__date_str')[c_name].mean().reset_index()
+                points = [
+                    {"period": str(r['__date_str']), "value": round(float(r[c_name]), 2)}
+                    for _, r in time_grp.iterrows()
+                    if pd.notna(r[c_name])
+                ]
 
-        points = [
-            {"period": str(r['__date_str']), "value": round(float(r[c_name]), 2)}
-            for _, r in time_grp.iterrows()
-            if pd.notna(r[c_name])
-        ]
+                if len(points) >= 5:
+                    available_years = sorted(list({p['period'][:4] for p in points if len(p['period']) >= 4 and p['period'][:4].isdigit()}))
+                    line_title, line_sub = generate_analytical_title(
+                        calc_type="Total" if is_additive else "Average",
+                        metric_col=num_col,
+                        group_col=d_col,
+                        comparison_type="time_series",
+                        total_count=len(points)
+                    )
+                    plans.append({
+                        "chart_type": "line",
+                        "plan_id": f"line_{num_col}_{d_col}",
+                        "title": line_title,
+                        "subtitle": line_sub,
+                        "measured_metric": num_col,
+                        "metric_label": format_display_label(num_col),
+                        "category_label": format_display_label(d_col),
+                        "unit": unit,
+                        "date_col": d_col,
+                        "metric_col": num_col,
+                        "points": points,
+                        "population": f"{n_rows} records aggregated across {len(points)} time periods",
+                        "source_sheets": [original_file],
+                        "coverage_pct": round((num_meta['valid_count'] / max(1, n_rows)) * 100, 1),
+                        "missing_records": num_meta['missing_count'],
+                        "total_periods": len(points),
+                        "period_min_date": points[0]['period'],
+                        "period_max_date": points[-1]['period'],
+                        "available_years": available_years
+                    })
 
-        if len(points) >= 5:
-            available_years = sorted(list({p['period'][:4] for p in points if len(p['period']) >= 4 and p['period'][:4].isdigit()}))
-            line_title, line_sub = generate_analytical_title(
-                calc_type="Total" if is_additive else "Average",
-                metric_col=num_col,
-                group_col=d_col,
-                comparison_type="time_series",
-                total_count=len(points)
-            )
-            plans.append({
-                "chart_type": "line",
-                "plan_id": f"line_{num_col}_{d_col}",
-                "title": line_title,
-                "subtitle": line_sub,
-                "measured_metric": num_col,
-                "metric_label": format_display_label(num_col),
-                "category_label": format_display_label(d_col),
-                "unit": unit,
-                "date_col": d_col,
-                "metric_col": num_col,
-                "points": points,
-                "population": f"{n_rows} records aggregated across {len(points)} time periods",
-                "source_sheets": [original_file],
-                "coverage_pct": round((num_meta['valid_count'] / max(1, n_rows)) * 100, 1),
-                "missing_records": num_meta['missing_count'],
-                "total_periods": len(points),
-                "period_min_date": points[0]['period'],
-                "period_max_date": points[-1]['period'],
-                "available_years": available_years
-            })
+    # Wide sequential periods or multi-grain fallback
+    if not plans:
+        try:
+            from ..analytics.temporal_categorical_engine import extract_multi_grain_temporal_insights
+            temp_res = extract_multi_grain_temporal_insights(df)
+            if temp_res.get("has_temporal_data"):
+                weekly_tl = temp_res.get("weekly", {}).get("timeline", [])
+                monthly_tl = temp_res.get("monthly", {}).get("timeline", [])
+                tl_series = temp_res.get("timeline_series", [])
+                active_tl = weekly_tl if (weekly_tl and len(weekly_tl) >= 2) else (monthly_tl if (monthly_tl and len(monthly_tl) >= 2) else tl_series)
+
+                if active_tl and len(active_tl) >= 2:
+                    points = [
+                        {"period": str(t.get("period_label") or t.get("period")), "value": round(float(t.get("mean") if "mean" in t else t.get("value", 0)), 2)}
+                        for t in active_tl
+                    ]
+                    meas_name = temp_res.get("primary_measure", "Recorded Volume")
+                    d_col_name = temp_res.get("date_column", "Observation Cycle")
+                    u = temp_res.get("unit", "units")
+                    avg_wow = temp_res.get("weekly", {}).get("avg_wow_velocity", 0.0)
+                    wow_note = f" (Avg WoW Momentum: {avg_wow:+.1f}%)" if avg_wow else ""
+
+                    plans.append({
+                        "chart_type": "line",
+                        "plan_id": f"line_multigrain_{meas_name}",
+                        "title": f"{format_display_label(meas_name)} Trajectory",
+                        "subtitle": f"Multi-grain sequential tracking across {len(points)} observation cycles{wow_note}",
+                        "measured_metric": meas_name,
+                        "metric_label": format_display_label(meas_name),
+                        "category_label": format_display_label(d_col_name),
+                        "unit": u,
+                        "date_col": d_col_name,
+                        "metric_col": meas_name,
+                        "points": points,
+                        "population": f"{n_rows} records across {len(points)} sequential observation periods",
+                        "source_sheets": [original_file],
+                        "coverage_pct": 100.0,
+                        "missing_records": 0,
+                        "total_periods": len(points),
+                        "period_min_date": points[0]["period"],
+                        "period_max_date": points[-1]["period"],
+                        "available_years": []
+                    })
+        except Exception:
+            pass
 
     return plans

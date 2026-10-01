@@ -1,3 +1,4 @@
+import { getSlideTheme, slideCssVariables } from '../theme/slideTokens.js';
 import { slideBackground } from "../utils/slideBackground";
 import React, { useState } from "react";
 import FormattedText from "./presentation/slides/FormattedText.jsx";
@@ -17,21 +18,7 @@ export default function PresentationSlideContent({
   onUpdate = () => {},
   onViewEvidence = () => {}
 }) {
-  const activeTheme = {
-    bg_color: theme?.bg_color || "var(--slide-bg, #0f172a)",
-    card_bg: theme?.card_bg || "var(--card-bg, #1e293b)",
-    card_border: theme?.card_border || "var(--card-border, rgba(255, 255, 255, 0.08))",
-    primary_text: theme?.primary_text || "var(--text-primary, #f8fafc)",
-    secondary_text: theme?.secondary_text || "var(--text-secondary, #94a3b8)",
-    brand_color: theme?.brand_color || "var(--accent-color, #ff8a62)",
-    accent_color: theme?.accent_color || "var(--accent-color, #ff8a62)",
-    chart_palette: theme?.chart_palette || ["#ff8a62", "#7ee7d9", "#8ef0c8", "#a78bfa", "#fbbf24", "#f43f5e"],
-    success_color: theme?.success_color || "#10b981",
-    warning_color: theme?.warning_color || "#f59e0b",
-    danger_color: theme?.danger_color || "#ef4444",
-    ...(theme || {})
-  };
-  theme = activeTheme;
+  theme = getSlideTheme(theme);
 
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [titleVal, setTitleVal] = useState(slide.title);
@@ -145,7 +132,7 @@ export default function PresentationSlideContent({
 
   if (layout === "visual_intelligence" || layout === "process_flow" || (!slide.layout && slide?.visual_spec)) {
     return (
-      <div className={`slide-card-wrapper layout-${layout} visual-spec-active`}>
+      <div className={`slide-card-wrapper layout-${layout} visual-spec-active`} style={slideCssVariables(theme)}>
         <VisualSlideRenderer
           slide={slide}
           visualSpec={slide.visual_spec}
@@ -162,7 +149,8 @@ export default function PresentationSlideContent({
     <div
       className={`slide-card-wrapper layout-${layout}`}
       style={{
-        ...slideBackground(slide, theme.bg_color),
+        ...slideCssVariables(theme),
+        ...slideBackground(slide, theme),
         color: theme.primary_text,
         "--brand-color": theme.brand_color,
         "--accent-color": theme.accent_color,

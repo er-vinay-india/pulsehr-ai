@@ -3,6 +3,8 @@
 import logging
 import math
 from pptx.util import Inches, Pt
+from pptx.oxml.xmlchemy import OxmlElement
+from pptx.dml.fill import FillFormat
 from pptx.enum.shapes import MSO_SHAPE
 from pptx.chart.data import CategoryChartData
 from pptx.enum.chart import XL_CHART_TYPE, XL_LEGEND_POSITION
@@ -73,6 +75,28 @@ def _add_native_chart_shape(slide, chart_info: dict, x, y, cx, cy, colors: dict,
         chart.has_legend = True
         chart.legend.position = XL_LEGEND_POSITION.TOP
         chart.legend.include_in_layout = False
+        chart.font.color.rgb = colors["secondary"]
+        chart.font.size = Pt(11)
+        chart.legend.font.color.rgb = colors["secondary"]
+        chart.legend.font.size = Pt(11)
+        # Explicit fills prevent Office's default white chart area in dark decks.
+        for element in (chart._chartSpace, chart._chartSpace.plotArea):
+            sp_pr = OxmlElement("c:spPr")
+            fill = FillFormat.from_fill_parent(sp_pr)
+            fill.solid()
+            fill.fore_color.rgb = colors["card_bg"]
+            if element is chart._chartSpace:
+                element.insert_element_before(sp_pr, "c:txPr", "c:externalData", "c:printSettings", "c:userShapes", "c:extLst")
+            else:
+                element.insert_element_before(sp_pr, "c:extLst")
+        if xl_type not in (XL_CHART_TYPE.PIE, XL_CHART_TYPE.DOUGHNUT):
+            for axis in (chart.category_axis, chart.value_axis):
+                axis.tick_labels.font.color.rgb = colors["secondary"]
+                axis.tick_labels.font.size = Pt(11)
+                axis.format.line.color.rgb = colors["card_border"]
+                if axis.has_major_gridlines:
+                    axis.major_gridlines.format.line.color.rgb = colors["card_border"]
+
 
         if theme_palette:
             if xl_type in (XL_CHART_TYPE.PIE, XL_CHART_TYPE.DOUGHNUT):
@@ -82,6 +106,8 @@ def _add_native_chart_shape(slide, chart_info: dict, x, y, cx, cy, colors: dict,
                         try:
                             point.format.fill.solid()
                             point.format.fill.fore_color.rgb = hex_to_rgb(c_hex)
+                            point.format.line.color.rgb = colors["card_bg"]
+                            point.format.line.width = Pt(1.5)
                         except Exception:
                             pass
             elif xl_type == XL_CHART_TYPE.LINE:

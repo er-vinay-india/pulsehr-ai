@@ -65,7 +65,7 @@ export default function PresentationPageHeader({
         type="button"
         className="btn-secondary btn-sm"
         disabled={isRegeneratingSlide}
-        onClick={onGoBackToConfig}
+        onClick={() => onGoBackToConfig()}
         title="Configure and generate a new presentation"
       >
         <Plus size={14} />

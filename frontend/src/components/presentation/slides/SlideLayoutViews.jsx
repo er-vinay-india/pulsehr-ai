@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useId } from "react";
+import DeckFloatingLayer from "../DeckFloatingLayer.jsx";
 import { TrendingUp, Award, ChevronRight, Sparkles, Layers, Check } from "lucide-react";
 import FormattedText from "./FormattedText.jsx";
 import SlideChart from "./SlideChart.jsx";
@@ -23,6 +24,12 @@ export default function SlideLayoutViews({
   onUpdate
 }) {
   const [showTitleSuggestions, setShowTitleSuggestions] = useState(false);
+  const titleSuggestionsAnchor = useRef(null);
+  const titleSuggestionsId = useId();
+  const closeTitleSuggestions = () => {
+    setShowTitleSuggestions(false);
+    titleSuggestionsAnchor.current?.focus({ preventScroll: true });
+  };
 
   // Resilient resolution of slide data across both canonical slide and visual_spec schemas
   const effectiveSlide = {
@@ -80,10 +87,12 @@ export default function SlideLayoutViews({
             {/* AI Title Suggestions Trigger Button */}
             <div className="title-cover-ai-actions">
               <button
+                ref={titleSuggestionsAnchor}
                 type="button"
                 className="btn-ai-title-suggest"
                 aria-haspopup="dialog"
                 aria-expanded={showTitleSuggestions}
+                aria-controls={showTitleSuggestions ? titleSuggestionsId : undefined}
                 onClick={() => setShowTitleSuggestions(!showTitleSuggestions)}
                 title="Explore intelligent title suggestions from HRIDAY"
               >
@@ -93,7 +102,8 @@ export default function SlideLayoutViews({
 
               {/* AI Title Suggestions Popover / Panel */}
               {showTitleSuggestions && (
-                <div className="title-suggestions-popover" role="dialog" aria-label="AI Title Alternatives">
+                <DeckFloatingLayer anchorRef={titleSuggestionsAnchor} placement="bottom" role="dialog"
+                  id={titleSuggestionsId} aria-label="AI Title Alternatives" onClose={() => setShowTitleSuggestions(false)}>
                   <div className="popover-header">
                     <div className="popover-title-row">
                       <Sparkles size={14} />
@@ -102,7 +112,7 @@ export default function SlideLayoutViews({
                     <button
                       type="button"
                       className="popover-close-btn"
-                      onClick={() => setShowTitleSuggestions(false)}
+                      onClick={closeTitleSuggestions}
                       aria-label="Close suggestions"
                     >
                       &times;
@@ -117,7 +127,7 @@ export default function SlideLayoutViews({
                         onClick={() => {
                           if (setTitleVal) setTitleVal(sug);
                           if (onUpdate) onUpdate({ ...slide, title: sug });
-                          setShowTitleSuggestions(false);
+                          closeTitleSuggestions();
                         }}
                       >
                         <span className="sug-index">{idx + 1}</span>
@@ -125,7 +135,7 @@ export default function SlideLayoutViews({
                       </button>
                     ))}
                   </div>
-                </div>
+                </DeckFloatingLayer>
               )}
             </div>
 
@@ -250,7 +260,7 @@ export default function SlideLayoutViews({
         <div className="layout-grid chart-narrative-grid">
           <div className="narrative-side-card" style={{ backgroundColor: theme.card_bg, borderColor: theme.card_border }}>
             {slide.stat_callout && (
-              <div className="callout-hero-stat" style={{ marginBottom: "14px", padding: "10px 14px", borderRadius: "8px", background: "rgba(255,255,255,0.03)", border: `1px solid ${theme.card_border}` }}>
+              <div className="callout-hero-stat" style={{ marginBottom: "14px", padding: "10px 14px", borderRadius: "8px", background: theme.surface_alt, border: `1px solid ${theme.card_border}` }}>
                 <div style={{ fontSize: "28px", fontWeight: "700", color: theme.brand_color }}>
                   {slide.stat_callout.value} {slide.stat_callout.unit || ""}
                 </div>
@@ -536,7 +546,7 @@ export default function SlideLayoutViews({
             <div style={{ width: "100%", flex: 1, minHeight: 0, overflowX: "hidden", borderRadius: "10px", border: `1px solid ${theme.card_border}`, background: theme.card_bg, display: "flex", flexDirection: "column" }}>
               <table style={{ width: "100%", height: "100%", tableLayout: "fixed", borderCollapse: "collapse", fontSize: "14px", textAlign: "left" }}>
                 <thead>
-                  <tr style={{ borderBottom: `2px solid ${theme.card_border}`, background: "rgba(255,255,255,0.03)" }}>
+                  <tr style={{ borderBottom: `2px solid ${theme.card_border}`, background: theme.surface_alt }}>
                     {(slide.table.headers || []).map((h, hi) => {
                       const totalCols = (slide.table.headers || []).length;
                       let width = `${100 / totalCols}%`;
@@ -571,7 +581,7 @@ export default function SlideLayoutViews({
                       key={ri}
                       style={{
                         borderBottom: ri === Math.min(slide.table.rows.length - 1, 7) ? "none" : `1px solid ${theme.card_border}`,
-                        background: ri % 2 === 0 ? "transparent" : "rgba(255,255,255,0.015)"
+                        background: ri % 2 === 0 ? "transparent" : theme.surface_alt
                       }}
                     >
                       {row.map((cell, ci) => {
@@ -619,7 +629,7 @@ export default function SlideLayoutViews({
           {slide.bullets && slide.bullets.length > 0 && (
             <div style={{ display: "flex", flexWrap: "wrap", gap: "10px", marginTop: "4px" }}>
               {slide.bullets.map((b, i) => (
-                <div key={i} style={{ display: "inline-flex", alignItems: "center", gap: "8px", padding: "6px 14px", borderRadius: "8px", background: "rgba(255,255,255,0.02)", border: `1px solid ${theme.card_border}`, fontSize: "13px" }}>
+                <div key={i} style={{ display: "inline-flex", alignItems: "center", gap: "8px", padding: "6px 14px", borderRadius: "8px", background: theme.surface_alt, border: `1px solid ${theme.card_border}`, fontSize: "13px" }}>
                   <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: theme.brand_color, flexShrink: 0 }} />
                   <FormattedText text={typeof b === "string" ? b : b.text} defaultColor={theme.secondary_text} />
                 </div>

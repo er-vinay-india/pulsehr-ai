@@ -2,7 +2,7 @@
  * Full HTML document wrapper template with embedded CSS and presentation controller.
  */
 
-import { escapeHtml } from "./exportFormatter";
+import { escapeHtml } from "./exportFormatter.js";
 
 export function generateFullPresentationHtml(title, slidesHtml, totalSlides, currentTheme) {
   return `<!DOCTYPE html>
@@ -21,6 +21,7 @@ export function generateFullPresentationHtml(title, slidesHtml, totalSlides, cur
        =========================================== */
     :root {
       --stage-bg: ${currentTheme.stage_bg};
+      color: ${currentTheme.primary_text};
       --slide-bg: ${currentTheme.slide_bg};
       --accent-color: ${currentTheme.accent_color};
       --font-display: ${currentTheme.font_display};
@@ -94,7 +95,7 @@ export function generateFullPresentationHtml(title, slidesHtml, totalSlides, cur
       display: flex;
       align-items: center;
       gap: 12px;
-      background: rgba(15, 23, 42, 0.9);
+      background: ${currentTheme.card_bg};
       backdrop-filter: blur(16px);
       padding: 8px 18px;
       border-radius: 9999px;
@@ -105,9 +106,9 @@ export function generateFullPresentationHtml(title, slidesHtml, totalSlides, cur
     }
 
     .deck-controls button {
-      background: rgba(255, 255, 255, 0.08);
+      background: ${currentTheme.card_bg};
       border: none;
-      color: #fff;
+      color: ${currentTheme.primary_text};
       padding: 6px 14px;
       border-radius: 9999px;
       font-size: 13px;
@@ -117,8 +118,9 @@ export function generateFullPresentationHtml(title, slidesHtml, totalSlides, cur
     }
 
     .deck-controls button:hover:not(:disabled) {
-      background: var(--accent-color);
-      color: #fff;
+      background: ${currentTheme.surface_alt};
+      outline: 2px solid var(--accent-color);
+      color: ${currentTheme.primary_text};
       transform: scale(1.04);
     }
 
@@ -128,7 +130,7 @@ export function generateFullPresentationHtml(title, slidesHtml, totalSlides, cur
     }
 
     .slide-counter {
-      color: #94a3b8;
+      color: ${currentTheme.muted_text};
       font-size: 13px;
       font-weight: 600;
       padding: 0 4px;

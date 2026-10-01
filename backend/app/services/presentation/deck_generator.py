@@ -142,15 +142,38 @@ def generate_presentation_deck_spec(
             "included_sheets": included_sheets
         }
         mean_val_str_calc = f"{mean_sales:,.2f}" if mean_sales else f"{total_records:,}"
+
+        # Data-driven dispersion and surge metrics from profiling
+        disp_metric_str = "Dispersion Uncalculated"
+        disp_num_val = None
+        cat_prof = profiled_data.get("categorical_profile", {})
+        if cat_prof.get("has_categorical_data"):
+            dims = cat_prof.get("dimensions", [])
+            meas = cat_prof.get("measures", [])
+            if dims and meas:
+                b_info = cat_prof.get("breakdowns", {}).get(dims[0], {}).get(meas[0])
+                if b_info and b_info.get("dispersion_ratio"):
+                    disp_num_val = float(b_info["dispersion_ratio"])
+                    disp_metric_str = f"{disp_num_val}x Spread"
+
+        surge_metric_str = "Longitudinal surge not recorded"
+        temp_prof = profiled_data.get("temporal_profile", {})
+        if temp_prof.get("has_temporal_data"):
+            weekly = temp_prof.get("weekly", {})
+            if weekly.get("avg_wow_velocity") is not None:
+                surge_metric_str = f"{weekly['avg_wow_velocity']:+.1f}% WoW Momentum"
+
         evidence_ledger = build_default_evidence_ledger(
             file_label=file_label,
             total_records=total_records,
             mean_val_str=mean_val_str_calc,
-            dispersion_metric_str="8.11x Spread",
+            dispersion_metric_str=disp_metric_str,
             snapshot_hash=snapshot_hash,
             reporting_period_summary=reporting_period_summary,
             is_partial_year=is_partial_year,
-            mean_sales=mean_sales
+            mean_sales=mean_sales,
+            surge_metric_str=surge_metric_str,
+            dispersion_numeric_val=disp_num_val
         )
 
     # Ingest Executive Overview Visual Dashboard & Prioritized Facts
@@ -235,6 +258,7 @@ def generate_presentation_deck_spec(
             from .director import (
                 presentation_director,
                 PresentationPlanningContext,
+                PresentationBrief,
                 SlideCountConstraint,
             )
             constraint = SlideCountConstraint.from_inputs(
@@ -242,6 +266,20 @@ def generate_presentation_deck_spec(
                 target_length=scope.get("target_length"),
                 default_mode=getattr(config, "PRESENTATION_DEFAULT_SLIDE_COUNT_MODE", "ADAPTIVE")
             )
+            brief_obj = PresentationBrief(
+                objective=objective,
+                audience=audience,
+                decision_requested=scope.get("decision_requested") or "",
+                main_takeaway=scope.get("main_takeaway") or "",
+                presentation_time_minutes=scope.get("presentation_time_minutes") or 15,
+                deliverable=scope.get("deliverable") or "pptx",
+                content_preferences=scope.get("content_preferences") or {},
+                citation_requirement=scope.get("citation_requirement") or "standard",
+                motion_preference=scope.get("motion_preference") or "none",
+                is_inferred=not bool(scope.get("decision_requested") and scope.get("main_takeaway"))
+            )
+            brief_obj.success_criterion = brief_obj.build_success_criterion()
+
             planning_ctx = PresentationPlanningContext(
                 domain=domain,
                 objective=objective,
@@ -254,6 +292,7 @@ def generate_presentation_deck_spec(
                 dispersion_metric=dispersion_metric_str,
                 reporting_period=reporting_period_summary,
                 is_partial_year=is_partial_year,
+                brief=brief_obj,
                 dataset_profiles=[profiled_data] if profiled_data else [],
                 current_evidence=evidence_ledger,
                 historical_context=workspace_evidence.get("retrieved_context", {}) if workspace_evidence else {},
@@ -520,7 +559,7 @@ def generate_presentation_deck_spec(
             ]
         }
 
-    return {
+    deck_dict = {
         "id": deck_id,
         "spec_version": "2.0",
         "theme": theme,
@@ -542,10 +581,25 @@ def generate_presentation_deck_spec(
             "is_partial_year": is_partial_year,
             "reporting_period_summary": reporting_period_summary,
             "traceable_metrics": traceable_metrics,
+            "brief": {
+                "objective": objective,
+                "audience": audience,
+                "decision_requested": scope.get("decision_requested") or "",
+                "main_takeaway": scope.get("main_takeaway") or "",
+                "presentation_time_minutes": scope.get("presentation_time_minutes") or 15,
+                "deliverable": scope.get("deliverable") or "pptx",
+                "content_preferences": scope.get("content_preferences") or {},
+                "citation_requirement": scope.get("citation_requirement") or "standard",
+                "motion_preference": scope.get("motion_preference") or "none",
+                "success_criterion": f"After viewing this deck, the audience should understand {scope.get('main_takeaway') or objective} and decide or do {scope.get('decision_requested') or 'align on operational priority initiatives'}.",
+                "is_inferred": not bool(scope.get("decision_requested") and scope.get("main_takeaway")),
+            },
+            "success_criterion": f"After viewing this deck, the audience should understand {scope.get('main_takeaway') or objective} and decide or do {scope.get('decision_requested') or 'align on operational priority initiatives'}.",
+            "is_brief_inferred": not bool(scope.get("decision_requested") and scope.get("main_takeaway")),
             "validation_summary": {
-                "status": "PASSED",
+                "status": "PENDING_VERIFICATION",
                 "total_metrics_checked": len(evidence_ledger),
-                "passed_verification": len(evidence_ledger),
+                "passed_verification": 0,
                 "discrepancies_flagged": 0
             }
         },
@@ -554,3 +608,15 @@ def generate_presentation_deck_spec(
         "coverage_manifest": coverage_manifest,
         "retrieved_context": workspace_evidence.get("retrieved_context", {"status": "empty", "results": [], "historical_decks": []}) if workspace_evidence else {"status": "empty", "results": [], "historical_decks": []}
     }
+
+    # Evaluate automated claim verification and review gates
+    from .claim_verifier import verify_presentation_claims
+    from .review_gates import evaluate_automated_gates
+    actual_verification = verify_presentation_claims(deck_dict, evidence_ledger)
+    deck_dict["metadata"]["validation_summary"] = actual_verification
+    deck_dict["metadata"]["review_gates"] = evaluate_automated_gates(
+        deck_spec=deck_dict,
+        verification_summary=actual_verification,
+        brief=deck_dict["metadata"]["brief"]
+    )
+    return deck_dict

@@ -188,6 +188,108 @@ def profile_presentation_dataset(
                     "summary": f"{laggard['count']} records ({laggard['percentage']}%) in minority cohort '{laggard['category']}' require inspection."
                 })
 
+    # 4. Multi-Grain Temporal Profiling (Per Day, Per Week, Per Month, Per Annum)
+    temporal_profile = {}
+    try:
+        from ..analytics.temporal_categorical_engine import extract_multi_grain_temporal_insights
+        temporal_profile = extract_multi_grain_temporal_insights(df, columns)
+        if temporal_profile.get("has_temporal_data"):
+            weekly = temporal_profile.get("weekly", {})
+            if weekly.get("has_weekly"):
+                timeline = weekly.get("timeline", [])
+                if timeline:
+                    top_w = max(timeline, key=lambda x: x["mean"])
+                    traceable_metrics.append({
+                        "metric_id": "METRIC-TEMP-WEEKLY-PEAK",
+                        "label": f"Peak Week ({top_w['period_label']}) Mean",
+                        "value": top_w["mean"],
+                        "denominator": top_w["count"],
+                        "percentage": None,
+                        "source_column": temporal_profile.get("primary_measure") or temporal_profile.get("date_column"),
+                        "calculation": f"max(weekly_mean({temporal_profile.get('primary_measure')}))"
+                    })
+                if weekly.get("avg_wow_velocity") is not None:
+                    traceable_metrics.append({
+                        "metric_id": "METRIC-TEMP-WOW-VELOCITY",
+                        "label": "Average Week-over-Week Momentum",
+                        "value": weekly["avg_wow_velocity"],
+                        "denominator": len(timeline),
+                        "percentage": weekly["avg_wow_velocity"],
+                        "source_column": temporal_profile.get("primary_measure") or temporal_profile.get("date_column"),
+                        "calculation": "mean(wow_growth_pct)"
+                    })
+            daily = temporal_profile.get("daily", {})
+            if daily.get("has_daily") and daily.get("peak_day"):
+                traceable_metrics.append({
+                    "metric_id": "METRIC-TEMP-PEAK-DAY",
+                    "label": "Peak Day of Week",
+                    "value": daily["peak_day"],
+                    "denominator": total_records,
+                    "percentage": None,
+                    "source_column": temporal_profile.get("date_column"),
+                    "calculation": "mode(day_of_week)"
+                })
+            annual = temporal_profile.get("annual", {})
+            if annual.get("has_annual") and annual.get("annualized_run_rate"):
+                traceable_metrics.append({
+                    "metric_id": "METRIC-TEMP-ANNUAL-RUNRATE",
+                    "label": "Annualized Projected Volume",
+                    "value": annual["annualized_run_rate"],
+                    "denominator": total_records,
+                    "percentage": None,
+                    "source_column": temporal_profile.get("primary_measure"),
+                    "calculation": "sum(period_totals) * annualization_factor"
+                })
+            for ins in temporal_profile.get("insights", []):
+                patterns.append({
+                    "pattern_type": "temporal_trajectory",
+                    "column": temporal_profile.get("date_column") or "Temporal",
+                    "category": temporal_profile.get("grain_type", "time_series"),
+                    "count": len(weekly.get("timeline", [])),
+                    "percentage": weekly.get("avg_wow_velocity"),
+                    "summary": ins
+                })
+    except Exception as exc:
+        logger.debug(f"Data profiler temporal extraction skipped: {exc}")
+
+    # 5. Bivariate Categorical Group-By Cross-Tabulations
+    categorical_profile = {}
+    try:
+        from ..analytics.temporal_categorical_engine import extract_bivariate_categorical_insights
+        categorical_profile = extract_bivariate_categorical_insights(df, columns)
+        if categorical_profile.get("has_categorical_data"):
+            for dim, meas_map in categorical_profile.get("breakdowns", {}).items():
+                for meas, b_info in meas_map.items():
+                    traceable_metrics.append({
+                        "metric_id": f"METRIC-CAT-DISP-{dim[:4].upper()}-{meas[:4].upper()}",
+                        "label": f"{b_info['dimension_label']} Dispersion Ratio ({b_info['measure_label']})",
+                        "value": b_info["dispersion_ratio"],
+                        "denominator": b_info["total_records"],
+                        "percentage": b_info["disparity_pct"],
+                        "source_column": f"{dim} x {meas}",
+                        "calculation": f"max({meas}) / min({meas}) across {dim}"
+                    })
+                    traceable_metrics.append({
+                        "metric_id": f"METRIC-CAT-LEAD-{dim[:4].upper()}-{meas[:4].upper()}",
+                        "label": f"Top Cohort: {b_info['top_category']} Mean",
+                        "value": b_info["top_mean"],
+                        "denominator": b_info["counts"][0] if b_info["counts"] else total_records,
+                        "percentage": b_info["shares"][0] if b_info["shares"] else None,
+                        "source_column": f"{dim} x {meas}",
+                        "calculation": f"mean({meas}) for {dim} == '{b_info['top_category']}'"
+                    })
+            for ins in categorical_profile.get("insights", []):
+                patterns.append({
+                    "pattern_type": "categorical_disparity",
+                    "column": categorical_profile.get("dimensions", ["Categorical"])[0],
+                    "category": "bivariate_breakdown",
+                    "count": total_records,
+                    "percentage": None,
+                    "summary": ins
+                })
+    except Exception as exc:
+        logger.debug(f"Data profiler categorical extraction skipped: {exc}")
+
     return {
         "total_records": total_records,
         "valid_records": valid_rows,
@@ -197,5 +299,7 @@ def profile_presentation_dataset(
         "ranked_numeric": numeric_rankings,
         "status_distributions": status_distributions,
         "patterns": patterns,
-        "traceable_metrics": traceable_metrics
+        "traceable_metrics": traceable_metrics,
+        "temporal_profile": temporal_profile,
+        "categorical_profile": categorical_profile
     }

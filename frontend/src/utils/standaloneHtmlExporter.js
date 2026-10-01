@@ -11,7 +11,7 @@
  * - Offline capability: opens and presents anywhere with zero server or npm dependencies!
  */
 
-import { EXPORT_THEMES } from "./exporter/exportThemes";
+import { getSlideTheme } from "../theme/slideTokens.js";
 import { buildSlideHtml } from "./exporter/slideHtmlBuilder";
 import { generateFullPresentationHtml } from "./exporter/exportTemplate";
 
@@ -26,7 +26,7 @@ export function exportStandaloneHtmlPresentation(deck, selectedTheme = "bold_sig
 
   const title = deck.metadata?.title || deck.title || "Executive Presentation";
   const slides = deck.slides;
-  const currentTheme = { ...(EXPORT_THEMES[deck.metadata?.theme_id || selectedTheme] || EXPORT_THEMES.bold_signal), ...(deck.theme || {}), slide_bg: deck.theme?.bg_color || EXPORT_THEMES[selectedTheme]?.slide_bg };
+  const currentTheme = getSlideTheme(deck.theme?.id || deck.metadata?.theme_id || selectedTheme);
 
   const slidesHtml = slides.map((s, idx) => buildSlideHtml(s, idx, slides.length, currentTheme)).join("\n");
   const fullHtml = generateFullPresentationHtml(title, slidesHtml, slides.length, currentTheme);
