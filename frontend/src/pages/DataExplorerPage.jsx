@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
   getSheets,
   getSheetRows,
@@ -15,6 +15,7 @@ import {
 import DataTable from '../components/DataTable';
 import DeleteConsentModal from '../components/ingestion/DeleteConsentModal';
 import EnrichmentReviewCard from '../components/ingestion/EnrichmentReviewCard';
+import DataCompletenessChips from '../components/eda/DataCompletenessChips';
 import {
   FileSpreadsheet,
   Download,
@@ -220,6 +221,106 @@ export default function DataExplorerPage() {
   const link = catalog.relationships.find((r) => String(r.id) === relation);
   const left = catalog.sheets.find((s) => s.id === link?.left_sheet);
   const right = catalog.sheets.find((s) => s.id === link?.right_sheet);
+
+  // Compute comprehensive completeness, missing values, and data type breakdown metrics
+  const dataHealth = useMemo(() => {
+    if (!selectedSheet) return null;
+
+    const summary = edaReport?.summary;
+    const profiles = selectedSheet.profiles || [];
+    const colDiags = edaReport?.column_diagnostics || {};
+
+    const totalRows = summary?.total_rows ?? selectedSheet.row_count ?? 0;
+    const totalCols = summary?.total_columns ?? selectedSheet.columns?.length ?? 0;
+    const totalCells = summary?.total_cells ?? ((totalRows * totalCols) || 1);
+
+    // Total missing / null cells
+    const totalNullCells = summary?.total_null_cells ?? selectedSheet.completeness?.total_missing ?? profiles.reduce((acc, p) => acc + (p.missing || 0), 0);
+    const nullPct = summary?.null_cells_pct ?? (totalCells > 0 ? Number(((totalNullCells / totalCells) * 100).toFixed(1)) : 0);
+    const completenessPct = summary?.completeness_pct ?? (totalCells > 0 ? Number((100 - nullPct).toFixed(1)) : 100);
+
+    // Incomplete rows count
+    const incompleteRows = summary?.incomplete_rows_count ?? (profiles.length > 0 ? Math.min(totalRows, Math.max(...profiles.map(p => p.missing || 0), 0)) : 0);
+    const incompleteRowsPct = summary?.incomplete_rows_pct ?? (totalRows > 0 ? Number(((incompleteRows / totalRows) * 100).toFixed(1)) : 0);
+
+    // Columns with missing values
+    let colsWithNulls = summary?.columns_with_nulls;
+    if (!colsWithNulls || colsWithNulls.length === 0) {
+      if (Object.keys(colDiags).length > 0) {
+        colsWithNulls = Object.values(colDiags)
+          .filter(d => (d.null_count || 0) > 0)
+          .map(d => ({
+            column: d.column,
+            null_count: d.null_count,
+            null_percentage: d.null_percentage,
+            inferred_type: d.inferred_type
+          }));
+      } else {
+        colsWithNulls = profiles
+          .filter(p => (p.missing || 0) > 0)
+          .map(p => ({
+            column: p.column,
+            null_count: p.missing,
+            null_percentage: p.null_percentage,
+            inferred_type: p.numeric ? 'numeric' : 'categorical'
+          }));
+      }
+    }
+
+    // Data types breakdown
+    let typeBreakdown = summary?.data_types_breakdown;
+    if (!typeBreakdown) {
+      if (Object.keys(colDiags).length > 0) {
+        typeBreakdown = { numeric: 0, categorical: 0, datetime: 0, identifier: 0, boolean: 0 };
+        Object.values(colDiags).forEach(d => {
+          const t = d.inferred_type || 'categorical';
+          if (t.startsWith('numeric')) typeBreakdown.numeric++;
+          else if (t.includes('date') || t.includes('time')) typeBreakdown.datetime++;
+          else if (t.includes('id')) typeBreakdown.identifier++;
+          else typeBreakdown.categorical++;
+        });
+      } else if (selectedSheet.completeness?.data_types_breakdown) {
+        typeBreakdown = selectedSheet.completeness.data_types_breakdown;
+      } else {
+        const numCount = profiles.filter(p => p.numeric).length;
+        const dateCount = profiles.filter(p => /date|time|period|year|month/i.test(p.column)).length;
+        typeBreakdown = {
+          numeric: numCount,
+          categorical: Math.max(0, totalCols - numCount - dateCount),
+          datetime: dateCount
+        };
+      }
+    }
+
+    // Column list for detail inspection cards
+    const columnList = Object.keys(colDiags).length > 0
+      ? Object.values(colDiags)
+      : profiles.map(p => ({
+          column: p.column,
+          inferred_type: p.numeric ? 'numeric' : (/date|time|period|year|month/i.test(p.column) ? 'datetime' : 'categorical'),
+          null_count: p.missing || 0,
+          null_percentage: p.null_percentage || 0,
+          distinct_count: p.distinct
+        }));
+
+    const healthScore = edaReport?.health_score ?? (totalNullCells === 0 ? 100 : Math.max(20, Math.round(100 - nullPct * 2)));
+
+    return {
+      totalRows,
+      totalCols,
+      totalCells,
+      totalNullCells,
+      nullPct,
+      completenessPct,
+      incompleteRows,
+      incompleteRowsPct,
+      colsWithNulls: colsWithNulls || [],
+      typeBreakdown: typeBreakdown || {},
+      healthScore,
+      isClean: totalNullCells === 0,
+      columnList
+    };
+  }, [selectedSheet, edaReport]);
 
   const activeDerivedTable = derivedTables.find((dt) => String(dt.id) === String(selectedDerivedId));
 
@@ -659,6 +760,15 @@ export default function DataExplorerPage() {
         </div>
       </div>
       </header>
+
+      {/* Prominent Data Completeness, Missing Values & Data Types Highlight Chips */}
+      {selectedSheet && !selectedDerivedId && dataHealth && (
+        <DataCompletenessChips
+          dataHealth={dataHealth}
+          sheetName={selectedSheet.display_name || selectedSheet.original_name || selectedSheet.name}
+          onReupload={() => { window.location.hash = 'upload'; }}
+        />
+      )}
 
       {/* Collapsible Scientific Enrichment Review Panel */}
       {showEnrichmentReview && enrichment && (

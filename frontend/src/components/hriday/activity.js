@@ -1,10 +1,11 @@
+import { DEFAULT_ASSISTANT_IDENTITY } from './identity.js';
 // Activity reflects received events. Animation indicates an active request;
 // it never schedules stages, estimates progress, or generates status messages.
-export const initialHRIDAYActivity = () => ({
-  stage: 'connecting', text: 'Connecting to HRIDAY…', revision: 0,
+export const initialHRIDAYActivity = (assistantName = DEFAULT_ASSISTANT_IDENTITY.name) => ({
+  stage: 'connecting', text: `Connecting to ${assistantName}…`, revision: 0,
   approachIds: [], reviewIds: [], stepIndex: 0, totalApproaches: null,
 });
-const stageOrder = { connecting: 0, understanding: 1, exploring: 2, retrieving: 2, calculating: 3, presenting: 3, working: 3, comparing: 4, reviewing: 4, composing: 5, writing: 6 };
+const stageOrder = { connecting: 0, understanding: 1, exploring: 2, retrieving: 2, calculating: 3, presenting: 3, working: 3, comparing: 4, reviewing: 4, composing: 5, writing: 6, refining: 6 };
 const exploration = [
   'Exploring your question…',
   'Considering another approach…',
@@ -52,6 +53,8 @@ export function advanceHRIDAYActivity(previous, { type, data = {} }, tool = null
     patch = { stage: 'reviewing', reviewIds,
       text: reviewIds.length === previous.totalApproaches ? 'The reviews are complete…'
         : reviewIds.length === 1 ? 'A review is complete…' : 'Another review is complete…' };
+  } else if (type === 'answer_reset') {
+    patch = { stage: 'refining', text: 'Refining your response…' };
   } else if (type === 'token' && data.token) {
     patch = { stage: 'writing', text: 'Writing your answer…' };
   }

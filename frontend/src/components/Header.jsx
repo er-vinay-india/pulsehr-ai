@@ -1,3 +1,4 @@
+import { useHRIDAY } from './hriday/HRIDAYProvider.jsx';
 import React from "react";
 import {
   LayoutDashboard,
@@ -12,6 +13,7 @@ import ThemeToggle from "./ThemeToggle";
 import AnimatedAcousticOrb from "./presentation/AnimatedAcousticOrb.jsx";
 
 export default function Header({ activeTab, onSelectTab, onOpenUploadModal, activeJob, isUploadingBackground }) {
+  const { identity } = useHRIDAY();
   const tabs = [
     { id: "adaptive", label: "Executive Dashboard", short: "Dashboard", icon: LayoutDashboard },
     { id: "explorer", label: "Data Explorer", short: "Explorer", icon: Table },
@@ -54,11 +56,11 @@ export default function Header({ activeTab, onSelectTab, onOpenUploadModal, acti
             type="button"
             className="btn-header-hriday"
             onClick={() => onSelectTab("copilot")}
-            aria-label="Open HRIDAY"
-            title="Open HRIDAY"
+            aria-label={`Open ${identity.name}`}
+            title={`Open ${identity.name}`}
           >
             <span className="hriday-header-heart" aria-hidden="true"><AnimatedAcousticOrb compact /></span>
-            <span>HRIDAY</span>
+            <span>{identity.name}</span>
           </button>
           <button
             type="button"

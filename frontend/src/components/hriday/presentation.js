@@ -1,9 +1,10 @@
+import { DEFAULT_ASSISTANT_IDENTITY } from './identity.js';
 // Customer presentation only. Original answers, events, votes and evidence stay
 // in the conversation's internal diagnostics; the backend contract is unchanged.
 const COUNCIL_HEADING = '### 🏆 Elected Council Replier:';
 const escapeRegex = value => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-export function presentHRIDAYAnswer(raw, { streaming = false, delegates = [] } = {}) {
+export function presentHRIDAYAnswer(raw, { streaming = false, delegates = [], assistantName = DEFAULT_ASSISTANT_IDENTITY.name } = {}) {
   let text = String(raw || '').trimStart();
   const lower = text.toLowerCase();
   if (streaming && text && COUNCIL_HEADING.toLowerCase().startsWith(lower)) return '';
@@ -39,11 +40,12 @@ export function presentHRIDAYAnswer(raw, { streaming = false, delegates = [] } =
     const firstSentence = end ? introText.slice(0, end.index + 1) : introText;
     const identityDescription = firstSentence.replace(/\*\*|__/g, '').replace(intro, '');
     const knownIdentity = identities.some(name => new RegExp('^' + escapeRegex(name) + '(?=\\b|[ -])', 'i').test(identityDescription));
-    if (/council|war room|model|HRIDAY/i.test(firstSentence) || knownIdentity) {
+    const productIdentity = new RegExp('^' + escapeRegex(assistantName) + '(?=\\b|[ ,])', 'i').test(identityDescription);
+    if (!productIdentity && (/council|war room/i.test(firstSentence) || knownIdentity)) {
       const remainder = introText.slice(firstSentence.length).trimStart();
       const welcome = 'welcome to the war room';
       const partialWelcome = welcome.startsWith(remainder.toLowerCase()) || remainder.toLowerCase().startsWith(welcome);
-      text = 'Hi, I’m HRIDAY. ' + (streaming && partialWelcome && !/[!?]/.test(remainder) ? '' : remainder);
+      text = `Hi, I’m ${assistantName}. ` + (streaming && partialWelcome && !/[!?]/.test(remainder) ? '' : remainder);
       text = text.replace(/Welcome to the War Room[—–-][^!?]*[!?]/i, 'How can I help?');
     }
   }

@@ -25,6 +25,9 @@ class ExecutionTrace(BaseModel):
     finding_ids_referenced: list[str] = Field(default_factory=list)
     critic_verdict: str | None = None
     error: str | None = None
+    assistant_identity: str | None = None
+    identity_guard_triggered: bool = False
+    identity_retry_count: int = 0
 
 
 class LineageRecord(BaseModel):

@@ -65,8 +65,17 @@ def build_sheet_eda_report(
         "summary": {
             "total_rows": norm_result["total_rows"],
             "total_columns": norm_result["total_columns"],
+            "total_cells": norm_result.get("total_cells", norm_result["total_rows"] * norm_result["total_columns"]),
             "total_normalized_cells": norm_result["total_normalized_cells"],
             "total_null_cells": norm_result["total_null_cells"],
+            "null_cells_pct": norm_result.get("null_cells_pct", round(((norm_result["total_null_cells"] / max(1, norm_result["total_rows"] * norm_result["total_columns"])) * 100), 2)),
+            "completeness_pct": norm_result.get("completeness_pct", round(100.0 - ((norm_result["total_null_cells"] / max(1, norm_result["total_rows"] * norm_result["total_columns"])) * 100), 1)),
+            "incomplete_rows_count": norm_result.get("incomplete_rows_count", 0),
+            "incomplete_rows_pct": norm_result.get("incomplete_rows_pct", 0.0),
+            "columns_with_nulls_count": norm_result.get("columns_with_nulls_count", len([c for c, d in norm_result.get("column_diagnostics", {}).items() if d.get("null_count", 0) > 0])),
+            "columns_with_nulls": norm_result.get("columns_with_nulls", []),
+            "data_types_breakdown": norm_result.get("data_types_breakdown", {}),
+            "is_incomplete": norm_result.get("is_incomplete", norm_result["total_null_cells"] > 0),
             "total_anomalies": norm_result["total_anomalies"],
             "cleanliness_pct": round(100.0 - ((norm_result["total_null_cells"] / max(1, norm_result["total_rows"] * norm_result["total_columns"])) * 100), 1),
         },
@@ -128,8 +137,11 @@ def _generate_recommendations(
             f"Review {norm_result['total_anomalies']} statistical outliers detected via IQR profiling in the Explore table view."
         )
     if norm_result["total_null_cells"] > 0:
+        cols_cnt = norm_result.get("columns_with_nulls_count", 1)
+        incomp_rows = norm_result.get("incomplete_rows_count", 0)
         recs.append(
-            f"Detected {norm_result['total_null_cells']} missing values across columns. Automated imputation strategies have been prepared."
+            f"Detected {norm_result['total_null_cells']} missing/null values across {cols_cnt} column(s) affecting {incomp_rows} row(s). "
+            f"Incomplete sheet markers are flagged in the Data Explorer; you may re-upload a complete spreadsheet if needed."
         )
 
     # 3. Cross-sheet joins

@@ -454,6 +454,30 @@ def catalogue(conn):
                 p['display_name'] = format_display_label(p['column'])
         entry['profiles'] = [{k: v for k, v in p.items() if k not in ('vector', 'embedding_model')} for p in profiles]
         entry['display_columns'] = {c: format_display_label(c) for c in entry['columns']}
+
+        # Summary completeness and data types metrics for instant display in Data Explorer
+        total_rows = entry.get('row_count', 0)
+        total_cols = len(entry['columns'])
+        total_cells = max(1, total_rows * total_cols)
+        total_missing = sum(p.get('missing', 0) for p in profiles)
+        cols_with_missing = [p['column'] for p in profiles if p.get('missing', 0) > 0]
+        numeric_count = sum(1 for p in profiles if p.get('numeric') is not None)
+        date_count = sum(1 for p in profiles if any(t in p.get('column', '').lower() for t in ('date', 'time', 'year', 'month', 'day', 'timestamp', 'period')) or p.get('unit') in ('date', 'datetime'))
+        cat_count = max(0, total_cols - numeric_count - date_count)
+        entry['completeness'] = {
+            'total_missing': total_missing,
+            'total_cells': total_cells,
+            'missing_pct': round((total_missing / total_cells) * 100, 2),
+            'completeness_pct': round(100.0 - ((total_missing / total_cells) * 100), 2),
+            'cols_with_missing_count': len(cols_with_missing),
+            'cols_with_missing': cols_with_missing,
+            'is_incomplete': total_missing > 0,
+            'data_types_breakdown': {
+                'numeric': numeric_count,
+                'categorical': cat_count,
+                'datetime': date_count
+            }
+        }
         output.append(entry)
     return output
 

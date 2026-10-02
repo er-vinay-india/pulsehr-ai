@@ -9,6 +9,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from ..db.database import get_connection
+from ..services.gateway.assistant_identity import public_identity, finalize_identity_response
 from ..services.copilot_tools import ToolRequest, CalculationRequest, load_frame
 from ..services.ai_copilot import query_copilot, get_available_models, stream_copilot_generator
 from ..services.data_engine.semantic_classifier import SemanticClassifier
@@ -377,7 +378,8 @@ def _execute_generic_copilot(req: CopilotQueryRequest, df: pd.DataFrame, dataset
     return {
         "query": req.query,
         "answer": grounded.answer_markdown,
-        "model_used": "generic_copilot_engine" if grounded.metadata.get("llm_calls", 0) == 0 else "qwen2.5:latest",
+        "model_used": grounded.metadata.get("runtime_model") or "generic_copilot_engine",
+        "runtime_model": grounded.metadata.get("runtime_model"),
         "citations": [{"fact_id": f.fact_id, "type": "verified_candidate_fact"} for f in grounded.cited_facts],
         "exact_matches": [],
         "suggested_questions": grounded.followup_questions,
@@ -415,8 +417,8 @@ def ask_generic_copilot(req: CopilotQueryRequest):
     if sid is not None:
         direct_ans = _answer_from_shared_findings(req.query, sid, name or "Uploaded Dataset")
         if direct_ans is not None:
-            return direct_ans
-    return _execute_generic_copilot(req, df, name or "Uploaded Dataset", context=ctx)
+            return finalize_identity_response(direct_ans, req.query)
+    return finalize_identity_response(_execute_generic_copilot(req, df, name or "Uploaded Dataset", context=ctx), req.query)
 
 
 @router.post("/query")
@@ -431,16 +433,16 @@ def ask_copilot(req: CopilotQueryRequest):
     if sid is not None:
         direct_ans = _answer_from_shared_findings(req.query, sid, name or "Uploaded Dataset")
         if direct_ans is not None:
-            return direct_ans
+            return finalize_identity_response(direct_ans, req.query)
 
     if req.engine == "generic":
         if df is not None and not df.empty:
-            return _execute_generic_copilot(req, df, name or "Uploaded Dataset", context=ctx)
+            return finalize_identity_response(_execute_generic_copilot(req, df, name or "Uploaded Dataset", context=ctx), req.query)
         raise HTTPException(400, "No active tabular dataset found. Please upload a dataset first.")
 
     if req.engine == "auto" and not _is_explicit_legacy_hr_request(req):
         if df is not None and not df.empty:
-            return _execute_generic_copilot(req, df, name or "Uploaded Dataset", context=ctx)
+            return finalize_identity_response(_execute_generic_copilot(req, df, name or "Uploaded Dataset", context=ctx), req.query)
 
     # Explicit legacy HR route or fallback
     return query_copilot(
@@ -465,6 +467,7 @@ def ask_copilot_stream(req: CopilotQueryRequest):
     if sid is not None:
         direct_ans = _answer_from_shared_findings(req.query, sid, name or "Uploaded Dataset")
         if direct_ans is not None:
+            direct_ans = finalize_identity_response(direct_ans, req.query)
             def _direct_stream():
                 yield f"event: status\ndata: {json.dumps({'status': 'Authoritative shared findings loaded', 'step': 'ready'})}\n\n"
                 answer = direct_ans["answer"]
@@ -498,7 +501,7 @@ def ask_copilot_stream(req: CopilotQueryRequest):
 
     if req.engine == "generic":
         if df is not None and not df.empty:
-            result = _execute_generic_copilot(req, df, name or "Uploaded Dataset", context=ctx)
+            result = finalize_identity_response(_execute_generic_copilot(req, df, name or "Uploaded Dataset", context=ctx), req.query)
             def _generic_stream():
                 yield f"event: status\ndata: {json.dumps({'status': 'Grounded in verified candidate facts', 'step': 'ready'})}\n\n"
                 answer = result["answer"]
@@ -611,3 +614,8 @@ def calculation_columns(dataset_id: int | None = None, sheet: str | None = None,
         return {"columns": list(frame.columns), "source": source, "rows": len(frame)}
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/identity")
+def get_assistant_identity():
+    return public_identity()

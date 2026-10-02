@@ -68,5 +68,10 @@ PRESENTATION_VISUAL_QA_KEEP_SCREENSHOTS = os.getenv("PRESENTATION_VISUAL_QA_KEEP
 PRESENTATION_VISUAL_QA_DIR = EXPORTS_DIR / "qa"
 PRESENTATION_VISUAL_QA_DIR.mkdir(parents=True, exist_ok=True)
 
-
-
+# Assistant branding is independent of model routing, roles and embeddings.
+ASSISTANT_NAME = os.getenv('ASSISTANT_NAME', 'HRIDAY')
+ASSISTANT_PRODUCT_NAME = os.getenv('ASSISTANT_PRODUCT_NAME', PROJECT_NAME)
+ASSISTANT_IDENTITY_ENABLED = os.getenv('ASSISTANT_IDENTITY_ENABLED', 'true').lower() in ('true', '1', 'yes')
+ASSISTANT_HIDE_MODEL_IDENTITY = os.getenv('ASSISTANT_HIDE_MODEL_IDENTITY', 'true').lower() in ('true', '1', 'yes')
+ASSISTANT_ALLOW_MODEL_DISCLOSURE = os.getenv('ASSISTANT_ALLOW_MODEL_DISCLOSURE', 'true').lower() in ('true', '1', 'yes')
+ASSISTANT_MAX_IDENTITY_RETRIES = max(0, min(1, int(os.getenv('ASSISTANT_MAX_IDENTITY_RETRIES', '1'))))

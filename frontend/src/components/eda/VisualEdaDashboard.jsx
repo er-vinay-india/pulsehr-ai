@@ -40,6 +40,22 @@ export default function VisualEdaDashboard({
   const predictiveModeling = visualAnalytics.predictive_modeling || { linear_models: [], logistic_models: [] };
   const groupByAnalytics = visualAnalytics.group_by_analytics || { dimensions: [], measures: [], breakdowns: {}, insights: [] };
 
+  const typeBreakdown = useMemo(() => {
+    if (edaReport?.summary?.data_types_breakdown) {
+      return edaReport.summary.data_types_breakdown;
+    }
+    const diags = edaReport?.column_diagnostics || {};
+    const res = { numeric: 0, categorical: 0, datetime: 0, identifier: 0, boolean: 0 };
+    Object.values(diags).forEach(d => {
+      const t = d.inferred_type || 'categorical';
+      if (t.startsWith('numeric')) res.numeric++;
+      else if (t.includes('date') || t.includes('time')) res.datetime++;
+      else if (t.includes('id')) res.identifier++;
+      else res.categorical++;
+    });
+    return res;
+  }, [edaReport]);
+
   const [selectedGroupDim, setSelectedGroupDim] = useState(null);
   const [selectedGroupMeas, setSelectedGroupMeas] = useState(null);
 
@@ -713,13 +729,52 @@ export default function VisualEdaDashboard({
             <div className="chip-label">Columns</div>
             <div className="chip-val">{edaReport.summary?.total_columns}</div>
           </div>
+
+          {/* Data Types Information Chip */}
+          <div className="summary-chip chip-types-highlight" title="Data Types breakdown across columns">
+            <div className="chip-label">Data Types Info</div>
+            <div className="chip-val text-types" style={{ fontSize: '1.05rem', fontWeight: 700 }}>
+              {typeBreakdown.numeric || 0} Num · {typeBreakdown.categorical || 0} Cat
+              {typeBreakdown.datetime > 0 ? ` · ${typeBreakdown.datetime} Date` : ''}
+              {typeBreakdown.identifier > 0 ? ` · ${typeBreakdown.identifier} ID` : ''}
+            </div>
+          </div>
+
+          {/* Missing / Null Cells Chip - Highlighted in Big Font */}
+          <div
+            className={`summary-chip ${(edaReport.summary?.total_null_cells || 0) > 0 ? 'chip-warning-highlight' : 'chip-clean-highlight'}`}
+            title={(edaReport.summary?.total_null_cells || 0) > 0 ? `${edaReport.summary?.total_null_cells} missing cells found` : 'Complete sheet with zero nulls'}
+          >
+            <div className="chip-label">Missing / Null Cells</div>
+            <div
+              className={`chip-val ${(edaReport.summary?.total_null_cells || 0) > 0 ? 'val-warning' : 'text-clean'}`}
+              style={{ fontSize: '1.25rem', fontWeight: 800 }}
+            >
+              {(edaReport.summary?.total_null_cells || 0) > 0
+                ? `⚠️ ${edaReport.summary?.total_null_cells} (${edaReport.summary?.null_cells_pct ?? 0}%)`
+                : '✓ 0 (100% Clean)'}
+            </div>
+          </div>
+
+          {/* Incomplete Rows Chip - Highlighted in Big Font */}
+          <div
+            className={`summary-chip ${(edaReport.summary?.incomplete_rows_count || 0) > 0 ? 'chip-warning-highlight' : 'chip-clean-highlight'}`}
+            title="Rows containing at least one missing cell"
+          >
+            <div className="chip-label">Incomplete Rows</div>
+            <div
+              className={`chip-val ${(edaReport.summary?.incomplete_rows_count || 0) > 0 ? 'val-warning' : 'text-clean'}`}
+              style={{ fontSize: '1.15rem', fontWeight: 700 }}
+            >
+              {(edaReport.summary?.incomplete_rows_count || 0) > 0
+                ? `⚠️ ${edaReport.summary?.incomplete_rows_count} (${edaReport.summary?.incomplete_rows_pct ?? 0}%)`
+                : '✓ 0 Rows'}
+            </div>
+          </div>
+
           <div className="summary-chip">
             <div className="chip-label">Normalized Cells</div>
             <div className="chip-val val-accent">{edaReport.summary?.total_normalized_cells}</div>
-          </div>
-          <div className="summary-chip">
-            <div className="chip-label">Null Cells</div>
-            <div className="chip-val">{edaReport.summary?.total_null_cells}</div>
           </div>
           <div className="summary-chip">
             <div className="chip-label">Anomalies</div>
@@ -735,6 +790,35 @@ export default function VisualEdaDashboard({
           {isRerunningEda ? 'Recomputing...' : 'Re-run EDA Pipeline'}
         </button>
       </div>
+
+      {/* Incomplete Sheet Alert Ribbon if missing values detected */}
+      {(edaReport.summary?.total_null_cells || 0) > 0 && (
+        <div className="incomplete-sheet-alert-ribbon" style={{ margin: '0 0 1rem 0' }}>
+          <div className="alert-ribbon-left">
+            <div className="alert-ribbon-icon">
+              <AlertTriangle size={20} color="#f43f5e" />
+            </div>
+            <div className="alert-ribbon-text">
+              <div className="alert-ribbon-title">
+                Incomplete Dataset Warning: {edaReport.summary.total_null_cells} Missing / Null Values Detected
+              </div>
+              <div className="alert-ribbon-desc">
+                {edaReport.summary.columns_with_nulls_count || 'Multiple'} columns have missing data affecting{' '}
+                {edaReport.summary.incomplete_rows_count || 'several'} rows ({edaReport.summary.incomplete_rows_pct ?? 0}% of rows).
+                Check the Schema Diagnostics tab for column-by-column missingness rates and automated imputation models,
+                or upload a corrected sheet.
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="btn-upload-corrected"
+            onClick={() => { window.location.hash = 'upload'; }}
+          >
+            Upload Corrected Sheet
+          </button>
+        </div>
+      )}
 
       {/* 2. Plain-Language Recommendations & Domain Points */}
       {edaReport.recommendations && edaReport.recommendations.length > 0 && (
@@ -1382,9 +1466,30 @@ export default function VisualEdaDashboard({
                       <td>
                         <strong>{col.column}</strong>
                       </td>
-                      <td className="type-cell">{col.inferred_type}</td>
+                      <td className="type-cell">
+                        <span
+                          className={`col-type-badge badge-${(col.inferred_type || 'categorical').split('_')[0]}`}
+                          style={{
+                            padding: '3px 8px',
+                            borderRadius: '5px',
+                            fontWeight: 700,
+                            fontSize: '0.74rem',
+                            display: 'inline-block'
+                          }}
+                        >
+                          {col.inferred_type.replace('_', ' ')}
+                        </span>
+                      </td>
                       <td className="stat-cell">
-                        {col.null_count} ({col.null_percentage}%)
+                        {col.null_count > 0 ? (
+                          <span style={{ color: '#f43f5e', fontWeight: 700 }}>
+                            ⚠️ {col.null_count} ({col.null_percentage}%)
+                          </span>
+                        ) : (
+                          <span style={{ color: '#10b981', fontWeight: 600 }}>
+                            ✓ 0 (0.0%)
+                          </span>
+                        )}
                       </td>
                       <td className="stat-cell">
                         {col.imputation ? (

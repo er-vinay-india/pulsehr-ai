@@ -8,7 +8,7 @@ from app.services.copilot.union_war_room import UnionWarRoomEngine, COUNCIL_DELE
 @pytest.fixture(autouse=True)
 def mock_ollama_calls(monkeypatch):
     """Mocks all Ollama HTTP calls so unit tests run instantaneously without network or GPU latency."""
-    def fake_call_ollama(model, prompt, max_tokens=150, timeout_s=12.0, temperature=0.2):
+    def fake_call_ollama(model, prompt, max_tokens=150, timeout_s=12.0, temperature=0.2, system_prompt=None):
         if "STRICT DEMOCRATIC VOTING RULE" in prompt:
             # Enforce peer voting: if voter is deepseek_reasoner, vote for qwen_analyst; otherwise vote for deepseek_reasoner
             if "You are DeepSeek-R1" in prompt:

@@ -246,3 +246,34 @@ def test_adaptive_dashboard_cross_sheet_cohort_comparator():
     assert "Overtime Hours" in resp.quaternary_element.title
     assert "Absent" in resp.quaternary_element.title
     assert resp.quaternary_element.glance.value == -60.0
+
+
+def test_normalize_dataset_missing_values_and_type_breakdown():
+    columns = ["EmpID", "Department", "Salary", "JoinDate", "Score"]
+    raw_records = [
+        {"EmpID": "E1", "Department": "Sales", "Salary": "$1,000", "JoinDate": "2024-01-01", "Score": "90"},
+        {"EmpID": "E2", "Department": None, "Salary": "$1,200", "JoinDate": "2024-02-01", "Score": None},
+        {"EmpID": "E3", "Department": "Engineering", "Salary": None, "JoinDate": "2024-03-01", "Score": "85"},
+        {"EmpID": "E4", "Department": "Engineering", "Salary": "$1,400", "JoinDate": "2024-04-01", "Score": "95"},
+    ]
+
+    res = normalize_dataset(sheet_id=99, sheet_name="Incomplete Sheet", columns=columns, raw_records=raw_records)
+    # Total null cells: E2 (Dept + Score = 2) + E3 (Salary = 1) = 3
+    assert res["total_null_cells"] == 3
+    # Total cells: 4 rows * 5 cols = 20
+    assert res["total_cells"] == 20
+    assert res["null_cells_pct"] == 15.0
+    assert res["completeness_pct"] == 85.0
+    # Incomplete rows: E2 and E3 have nulls = 2 incomplete rows
+    assert res["incomplete_rows_count"] == 2
+    assert res["incomplete_rows_pct"] == 50.0
+    assert res["is_incomplete"] is True
+    # Columns with nulls: Department, Salary, Score
+    assert res["columns_with_nulls_count"] == 3
+    assert len(res["columns_with_nulls"]) == 3
+    # Data types breakdown
+    breakdown = res["data_types_breakdown"]
+    assert breakdown["numeric"] >= 2  # Salary and Score
+    assert breakdown["datetime"] >= 1  # JoinDate
+    assert breakdown["categorical"] >= 1  # Department
+

@@ -1,12 +1,18 @@
 import React, { createContext, useContext, useRef, useSyncExternalStore, useEffect } from 'react';
-import { streamCopilotQuery } from '../../api/client.js';
+import { streamCopilotQuery, getAssistantIdentity } from '../../api/client.js';
 import { HRIDAYConversation } from './conversation.js';
 
 const Context = createContext(null);
 export function HRIDAYProvider({ children }) {
   const ref = useRef(null);
   if (!ref.current) ref.current = new HRIDAYConversation(streamCopilotQuery);
-  useEffect(() => () => ref.current.stop(), []);
+  useEffect(() => {
+    const controller = new AbortController();
+    getAssistantIdentity(controller.signal).then(identity => {
+      if (!controller.signal.aborted) ref.current.setIdentity(identity);
+    }).catch(() => {}); // Keep the central offline bootstrap if the API is unavailable.
+    return () => { controller.abort(); ref.current.stop(); };
+  }, []);
   return <Context.Provider value={ref.current}>{children}</Context.Provider>;
 }
 export function useHRIDAY() {

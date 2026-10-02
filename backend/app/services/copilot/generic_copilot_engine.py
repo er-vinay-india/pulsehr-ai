@@ -380,7 +380,7 @@ class GenericCopilotEngine:
             eval_facts = matching[:4] if matching else facts[:4]
 
             ranked_eval = FactInterestingnessRanker.rank_interesting_facts(eval_facts, limit=4)
-            interpretation, _ = AnalystAgent.interpret(profile, ranked_eval, max_facts=4)
+            interpretation, gateway_result = AnalystAgent.interpret(profile, ranked_eval, max_facts=4)
             audit = InterpretationClaimValidator.audit_response(interpretation, facts_lookup, profile=profile)
 
             ins = interpretation.insights[0] if interpretation.insights else None
@@ -407,7 +407,7 @@ class GenericCopilotEngine:
                 recommended_chart=chart,
                 followup_questions=followups,
                 audit_passed=audit.all_passed,
-                metadata={"llm_calls": 1}
+                metadata={"llm_calls": 1, "runtime_model": getattr(gateway_result, "runtime_model", None) if gateway_result.success else None}
             )
 
         # ---------------------------------------------------------------------

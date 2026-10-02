@@ -12,7 +12,7 @@ def test_copilot_stream_deterministic_calculation():
     """Verify that deterministic tools return immediate done events via stream."""
     response = client.post(
         "/api/copilot/query/stream",
-        json={"query": "Calculate (12 + 8) / 4"}
+        json={"query": "Calculate (12 + 8) / 4", "engine": "legacy"}
     )
     assert response.status_code == 200
     assert "text/event-stream" in response.headers["content-type"]
@@ -56,7 +56,7 @@ def test_copilot_stream_llm_generation(monkeypatch):
 
     response = client.post(
         "/api/copilot/query/stream",
-        json={"query": "Summarize attendance across teams"}
+        json={"query": "Summarize attendance across teams", "engine": "legacy"}
     )
     assert response.status_code == 200
     assert "text/event-stream" in response.headers["content-type"]
@@ -68,7 +68,9 @@ def test_copilot_stream_llm_generation(monkeypatch):
     
     # Check token events
     token_events = [e for e in events if "event: token" in e]
-    assert len(token_events) == 5
+    assert token_events
+    streamed = "".join(json.loads(e.split("data: ", 1)[1])["token"] for e in token_events)
+    assert streamed == "The attendance average is 92%."
     
     # Check final done event
     done_events = [e for e in events if "event: done" in e]

@@ -8,6 +8,10 @@ from ..db.database import get_connection
 from .hybrid_retrieval import hybrid_search
 from .copilot_tools import ToolRequest, infer_tool, execute_tool
 from .display_formatters import format_display_label, sanitize_llm_text
+from .gateway.assistant_identity import (
+    guarded_completion, identity_answer, identity_system_prompt, IdentityStreamGuard,
+    IdentityResult, public_identity, safe_identity_fallback, finalize_identity_response,
+)
 
 
 def get_available_models() -> list[dict]:
@@ -169,7 +173,7 @@ def _build_copilot_prompt(
     ]
 
     return (
-        "You are Pulse Analytics Copilot, an evidence-based analytics assistant for the user's uploaded spreadsheets. "
+        "Provide evidence-based analytics for the user's business records. "
         f"{domain_guideline}"
         f"{labels_context}"
         "When referencing columns or metrics in user-facing explanations, use readable sentence-cased display labels (e.g. 'weekly sales', 'holiday flag', 'fuel price', 'attendance rate') instead of raw underscores or snake_case. Retain raw column names only inside SQL, code blocks, or tool queries. "
@@ -210,7 +214,7 @@ def query_copilot(
             "tool_ms": round(duration_ms, 1),
             "is_deterministic": True
         }
-        return tool_res
+        return finalize_identity_response(tool_res, user_query)
 
     # 2. Retrieval
     t_ret0 = time.perf_counter()
@@ -275,20 +279,21 @@ def query_copilot(
         target_model = selected_model
 
     answer = ''
+    identity_result = IdentityResult('', None)
     t_llm0 = time.perf_counter()
     try:
         with httpx.Client(timeout=35.0) as client:
-            response = client.post(
-                f"{config.OLLAMA_BASE_URL}/api/generate",
-                json={
-                    'model': target_model,
-                    'prompt': prompt,
-                    'stream': False,
-                    'options': {'temperature': 0.15, 'num_predict': 1024, 'num_ctx': 8192}
-                }
-            )
-            response.raise_for_status()
-            answer = response.json().get('response', '').strip()
+            def invoke(system):
+                response = client.post(
+                    f"{config.OLLAMA_BASE_URL}/api/generate",
+                    json={'model': target_model, 'prompt': prompt, 'system': system,
+                          'stream': False,
+                          'options': {'temperature': 0.15, 'num_predict': 1024, 'num_ctx': 8192}}
+                )
+                response.raise_for_status()
+                return clean_cot_reasoning(response.json().get('response', '').strip())
+            identity_result = guarded_completion(invoke, query=user_query, runtime_model=target_model)
+            answer = identity_result.text
     except (httpx.HTTPError, ValueError, TypeError):
         pass
     llm_ms = (time.perf_counter() - t_llm0) * 1000
@@ -303,12 +308,16 @@ def query_copilot(
         if column_mapping:
             answer = sanitize_llm_text(answer, column_mapping)
 
+    answer = identity_answer(user_query, identity_result.runtime_model) or answer
     total_ms = (time.perf_counter() - t_start) * 1000
 
     return {
         'query': user_query,
         'answer': answer,
         'model_used': target_model,
+        'assistant_identity': public_identity(),
+        'runtime_model': identity_result.runtime_model,
+        'identity_diagnostics': identity_result.diagnostics(),
         'citations': [{**item, 'type': 'exact_join' if 'exact_join' in item.get('retrieval_methods', []) else 'hybrid_search'} for item in evidence],
         'exact_matches': [],
         'suggested_questions': [],
@@ -321,6 +330,35 @@ def query_copilot(
             'is_deterministic': False
         }
     }
+
+
+class _ReasoningStreamFilter:
+    """Preserve split-tag handling before the user-facing identity guard."""
+    def __init__(self):
+        self.pending = ''
+        self.thinking = False
+
+    def feed(self, token):
+        self.pending += token
+        output = []
+        while True:
+            tag = '</think>' if self.thinking else '<think>'
+            index = self.pending.lower().find(tag)
+            if index >= 0:
+                if not self.thinking:
+                    output.append(self.pending[:index])
+                self.pending = self.pending[index + len(tag):]
+                self.thinking = not self.thinking
+                continue
+            keep = len(tag) - 1
+            if len(self.pending) > keep:
+                if not self.thinking:
+                    output.append(self.pending[:-keep])
+                self.pending = self.pending[-keep:]
+            return ''.join(output)
+
+    def finish(self):
+        return '' if self.thinking else self.pending
 
 
 def stream_copilot_generator(
@@ -352,7 +390,7 @@ def stream_copilot_generator(
             "is_deterministic": True
         }
         # Yield as complete done event
-        yield f"event: done\ndata: {json.dumps(tool_res)}\n\n"
+        yield f"event: done\ndata: {json.dumps(finalize_identity_response(tool_res, user_query))}\n\n"
         return
 
     # Stage 2: Search & Retrieval
@@ -415,53 +453,87 @@ def stream_copilot_generator(
 
     yield f"event: status\ndata: {json.dumps({'phase': 'generating', 'message': f'Streaming response from {target_model}…'})}\n\n"
 
-    # Stage 4: Stream Tokens from Ollama
+    # Validate sentence/line prefixes before releasing tokens. Routing is unchanged.
     accumulated_chunks = []
+    identity_result = IdentityResult('', None)
     t_llm0 = time.perf_counter()
-    in_think_block = False
-
-    try:
-        timeout = httpx.Timeout(35.0, connect=5.0)
-        with httpx.Client(timeout=timeout) as client:
-            with client.stream(
-                "POST",
-                f"{config.OLLAMA_BASE_URL}/api/generate",
-                json={
-                    "model": target_model,
-                    "prompt": prompt,
-                    "stream": True,
-                    "options": {"temperature": 0.15, "num_predict": 1024, "num_ctx": 8192}
-                }
-            ) as response:
-                response.raise_for_status()
-                for line in response.iter_lines():
-                    if not line:
-                        continue
-                    try:
-                        chunk_obj = json.loads(line)
+    explicit_identity = identity_answer(user_query) is not None
+    for attempt in range(config.ASSISTANT_MAX_IDENTITY_RETRIES + 1):
+        guard = IdentityStreamGuard(target_model)
+        received = False
+        reasoning = _ReasoningStreamFilter()
+        try:
+            timeout = httpx.Timeout(35.0, connect=5.0)
+            with httpx.Client(timeout=timeout) as client:
+                with client.stream(
+                    "POST", f"{config.OLLAMA_BASE_URL}/api/generate",
+                    json={"model": target_model, "prompt": prompt,
+                          "system": identity_system_prompt(target_model, corrective=attempt > 0),
+                          "stream": True, "think": False,
+                          "options": {"temperature": 0.15, "num_predict": 1024, "num_ctx": 8192}}
+                ) as response:
+                    response.raise_for_status()
+                    for line in response.iter_lines():
+                        if not line:
+                            continue
+                        try:
+                            chunk_obj = json.loads(line)
+                        except (ValueError, TypeError):
+                            continue
                         token = chunk_obj.get("response", "")
-                        
-                        # Handle <think> tags for DeepSeek-R1
-                        if "<think>" in token:
-                            in_think_block = True
-                        if "</think>" in token:
-                            in_think_block = False
-                            token = re.sub(r'[\s\S]*?</think>', '', token)
-                        
-                        if not in_think_block and token:
-                            accumulated_chunks.append(token)
-                            yield f"event: token\ndata: {json.dumps({'token': token})}\n\n"
-                    except Exception:
-                        pass
-    except Exception as exc:
-        if not accumulated_chunks:
-            # Fallback to evidence summary if model fails or times out
-            fallback_text = (
-                "The language model is currently unavailable or timed out. Here are relevant source records:\n\n" +
-                '\n'.join('- ' + r['text'] for r in evidence[:8])
-            ) if evidence else "No matching uploaded records were found. Please check your data source."
-            accumulated_chunks.append(fallback_text)
-            yield f"event: token\ndata: {json.dumps({'token': fallback_text})}\n\n"
+                        token = reasoning.feed(token)
+                        if not token:
+                            continue
+                        received = True
+                        identity_result.runtime_model = target_model
+                        if explicit_identity:
+                            continue  # Application metadata supplies these answers, never model guesses.
+                        safe = guard.feed(token)
+                        if safe:
+                            accumulated_chunks.append(safe)
+                            yield f"event: token\ndata: {json.dumps({'token': safe})}\n\n"
+                        if guard.blocked:
+                            break
+            remaining = reasoning.finish()
+            if remaining:
+                received = True
+                identity_result.runtime_model = target_model
+            tail = (guard.feed(remaining) + guard.finish()) if not explicit_identity else ''
+            if tail:
+                accumulated_chunks.append(tail)
+                yield f"event: token\ndata: {json.dumps({'token': tail})}\n\n"
+        except (httpx.HTTPError, ValueError, TypeError):
+            # Keep the original transport fallback. Never release the unchecked tail.
+            remaining = reasoning.finish()
+            if remaining:
+                received = True
+                identity_result.runtime_model = target_model
+            tail = (guard.feed(remaining) + guard.finish()) if not explicit_identity else ''
+            if tail:
+                accumulated_chunks.append(tail)
+                yield f"event: token\ndata: {json.dumps({'token': tail})}\n\n"
+        if explicit_identity:
+            answer = identity_answer(user_query, target_model if received else None)
+            accumulated_chunks.append(answer)
+            yield f"event: token\ndata: {json.dumps({'token': answer})}\n\n"
+            break
+        if not guard.blocked:
+            break
+        identity_result.identity_guard_triggered = True
+        accumulated_chunks.clear()
+        yield f"event: answer_reset\ndata: {json.dumps({'reason': 'identity_validation'})}\n\n"
+        if attempt < config.ASSISTANT_MAX_IDENTITY_RETRIES:
+            identity_result.identity_retry_count += 1
+        else:
+            identity_result.response_blocked = True
+            fallback = safe_identity_fallback(user_query)
+            accumulated_chunks.append(fallback)
+            yield f"event: token\ndata: {json.dumps({'token': fallback})}\n\n"
+    if not accumulated_chunks:
+        fallback = ("The language model is currently unavailable or timed out. Here are relevant source records:\n\n" +
+                    '\n'.join('- ' + r['text'] for r in evidence[:8])) if evidence else "No matching uploaded records were found. Please check your data source."
+        accumulated_chunks.append(fallback)
+        yield f"event: token\ndata: {json.dumps({'token': fallback})}\n\n"
 
     llm_ms = (time.perf_counter() - t_llm0) * 1000
     total_ms = (time.perf_counter() - t_start) * 1000
@@ -469,10 +541,14 @@ def stream_copilot_generator(
     if column_mapping:
         full_answer = sanitize_llm_text(full_answer, column_mapping)
 
+    identity_result.log()
     done_payload = {
         'query': user_query,
         'answer': full_answer,
         'model_used': target_model,
+        'assistant_identity': public_identity(),
+        'runtime_model': identity_result.runtime_model,
+        'identity_diagnostics': identity_result.diagnostics(),
         'citations': [{**item, 'type': 'exact_join' if 'exact_join' in item.get('retrieval_methods', []) else 'hybrid_search'} for item in evidence],
         'exact_matches': [],
         'suggested_questions': [],

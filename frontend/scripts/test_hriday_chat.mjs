@@ -143,3 +143,39 @@ test('loader changes with tool and retrieval signals; stop and completion clear 
   const second = c.send('Next'); calls[1].cb.onDone({ answer: 'Complete' }); assert.equal(c.state.activity, null);
   calls[1].resolve(); await second;
 });
+
+test('trusted product identity and truthful model disclosure survive presentation at every boundary', () => {
+  const answer = "I'm HRIDAY, and this response is powered by qwen3.5:9b.";
+  assert.equal(presentHRIDAYAnswer(answer, { delegates }), answer);
+  for (let end = 1; end <= answer.length; end++) {
+    const shown = presentHRIDAYAnswer(answer.slice(0, end), { streaming: true, delegates });
+    assert(!shown.includes('Hi, I’m HRIDAY.'));
+  }
+  assert.equal(presentHRIDAYAnswer('DeepSeek and Qwen are models.', { delegates }), 'DeepSeek and Qwen are models.');
+  assert.equal(presentHRIDAYAnswer("I'm Configured Assistant, powered by phi4.", { assistantName: 'Configured Assistant' }), "I'm Configured Assistant, powered by phi4.");
+});
+
+test('corrective reset keeps one answer and diagnostics, ignores stale reset callbacks', async () => {
+  const { c, calls } = harness(); c.setIdentity({ name: 'Configured Assistant' });
+  const pending = c.send('Question');
+  assert.equal(c.state.activity.text, 'Connecting to Configured Assistant…');
+  const cb = calls[0].cb;
+  cb.onToken('Hello!'); cb.onReset({ reason: 'identity_validation' });
+  assert.equal(c.state.messages.length, 2); assert.equal(c.state.messages[1].content, '');
+  assert.equal(c.state.status, 'Refining your response…');
+  cb.onToken('Corrected response.'); cb.onDone({ answer: 'Corrected response.', runtime_model: 'qwen3.5:9b', assistant_identity: { name: 'HRIDAY' } });
+  assert.equal(c.state.messages[1].content, 'Corrected response.');
+  cb.onReset({ reason: 'late' }); assert.equal(c.state.messages[1].content, 'Corrected response.');
+  assert.equal(c.getDiagnostics(c.state.messages[1].id).result.runtime_model, 'qwen3.5:9b');
+  calls[0].resolve(); await pending;
+});
+
+test('SSE dispatches a real corrective reset without hiding diagnostics', async () => {
+  const saved = globalThis.fetch;
+  globalThis.fetch = async () => new Response('event: answer_reset\ndata: {"reason":"identity_validation"}\n\nevent: done\ndata: {"answer":"Ready"}\n\n');
+  try {
+    const resets = [], events = [];
+    await streamCopilotQuery('Question', null, null, null, null, { onReset: d => resets.push(d), onEvent: e => events.push(e) });
+    assert.equal(resets.length, 1); assert.equal(events[0].type, 'answer_reset');
+  } finally { globalThis.fetch = saved; }
+});

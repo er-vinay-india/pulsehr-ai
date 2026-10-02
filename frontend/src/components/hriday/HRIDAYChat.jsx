@@ -8,7 +8,7 @@ import IconButton from './IconButton.jsx';
 import HRIDAYActivity from './HRIDAYActivity.jsx';
 
 export default function HRIDAYChat({ scope = {}, onClose, expanded = false, onExpand, inputRef, mobile = false, fullPage = false }) {
-  const { conversation, messages, draft, loading, activity, announcement } = useHRIDAY();
+  const { conversation, messages, draft, loading, activity, announcement, identity } = useHRIDAY();
   const localInput = useRef(null);
   const textarea = inputRef || localInput;
   const transcript = useRef(null);
@@ -48,24 +48,24 @@ export default function HRIDAYChat({ scope = {}, onClose, expanded = false, onEx
   };
   return <div className={`hriday-chat${fullPage ? ' hriday-chat--page' : ''}`}>
     <header className="hriday-chat-header">
-      <div className="hriday-identity"><span className="hriday-original-heart" aria-hidden="true"><AnimatedAcousticOrb compact isPlaying={loading} /></span><h2>HRIDAY</h2></div>
+      <div className="hriday-identity"><span className="hriday-original-heart" aria-hidden="true"><AnimatedAcousticOrb compact isPlaying={loading} /></span><h2>{identity.name}</h2></div>
       <div className="hriday-header-actions">
         <IconButton label="New conversation" onClick={newChat}><SquarePen size={18} aria-hidden="true" /></IconButton>
         {onExpand && !mobile && <IconButton label={expanded ? 'Compact chat' : 'Expand chat'} onClick={onExpand}>
           {expanded ? <Minimize2 size={18} aria-hidden="true" /> : <Maximize2 size={18} aria-hidden="true" />}
         </IconButton>}
-        {onClose && <IconButton label="Close HRIDAY" onClick={onClose}><X size={20} aria-hidden="true" /></IconButton>}
+        {onClose && <IconButton label={`Close ${identity.name}`} onClick={onClose}><X size={20} aria-hidden="true" /></IconButton>}
       </div>
     </header>
-    <div ref={transcript} className="hriday-transcript" role="log" tabIndex={0} aria-label="Conversation with HRIDAY" aria-live="off"
+    <div ref={transcript} className="hriday-transcript" role="log" tabIndex={0} aria-label={`Conversation with ${identity.name}`} aria-live="off"
       onScroll={event => {
         const element = event.currentTarget;
         nearLatest.current = element.scrollHeight - element.clientHeight - element.scrollTop < 80;
         if (nearLatest.current) setShowLatest(false);
       }}>
       {!messages.length && <div className="hriday-welcome"><h3>How can I help?</h3><p>Ask a question, explore an idea, or tell me what you need.</p></div>}
-      {messages.map(message => <article key={message.id} className={`hriday-message hriday-message--${message.role}`} aria-label={message.role === 'user' ? 'You' : 'HRIDAY'}>
-        <div className="hriday-message-author">{message.role === 'user' ? 'You' : 'HRIDAY'}</div>
+      {messages.map(message => <article key={message.id} className={`hriday-message hriday-message--${message.role}`} aria-label={message.role === 'user' ? 'You' : identity.name}>
+        <div className="hriday-message-author">{message.role === 'user' ? 'You' : identity.name}</div>
         {message.role === 'user' ? <div className="hriday-user-bubble">{message.content}</div> : <>
           {message.content && <MarkdownView content={message.content} className="hriday-answer" />}
           {message.phase === 'loading' && <HRIDAYActivity activity={activity} />}
@@ -92,7 +92,7 @@ export default function HRIDAYChat({ scope = {}, onClose, expanded = false, onEx
     }}><ArrowDown size={16} aria-hidden="true" />Jump to latest</button>}
     <form className="hriday-composer" onSubmit={event => { event.preventDefault(); send(); }}>
       <div className="hriday-input-row">
-        <textarea ref={textarea} rows={1} value={draft} aria-label="Message HRIDAY" placeholder="Ask HRIDAY…"
+        <textarea ref={textarea} rows={1} value={draft} aria-label={`Message ${identity.name}`} placeholder={`Ask ${identity.name}…`}
           onChange={event => conversation.setDraft(event.target.value)}
           onKeyDown={event => {
             if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing && !event.isComposing && !loading && !mobile

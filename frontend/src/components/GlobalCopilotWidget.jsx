@@ -1,3 +1,4 @@
+import { useHRIDAY } from './hriday/HRIDAYProvider.jsx';
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import AnimatedAcousticOrb from './presentation/AnimatedAcousticOrb.jsx';
@@ -38,6 +39,7 @@ export default function GlobalCopilotWidget({
   isOpen = false, onToggle, onClose,
   activeDatasetId = null, activeSheetId = null, activeSnapshotId = null, activePage = 'overview',
 }) {
+  const { identity } = useHRIDAY();
   const [open, setOpen] = useState(isOpen);
   const [expanded, setExpanded] = useState(false);
   const [presenterActive, setPresenterActive] = useState(false);
@@ -92,13 +94,13 @@ export default function GlobalCopilotWidget({
   if (presenterActive) return null;
   return createPortal(<>
     {!open && <button type="button" className="global-copilot-launcher hriday-launcher" onClick={show}
-      aria-label="Open HRIDAY" aria-expanded={false} aria-controls="hriday-chat-panel">
-      <span aria-hidden="true"><AnimatedAcousticOrb compact /></span><span>HRIDAY</span>
+      aria-label={`Open ${identity.name}`} aria-expanded={false} aria-controls="hriday-chat-panel">
+      <span aria-hidden="true"><AnimatedAcousticOrb compact /></span><span>{identity.name}</span>
     </button>}
     {visible && <>
       {viewport.mobile && <div className="hriday-backdrop" aria-hidden="true" onClick={close} />}
       <section ref={panel} id="hriday-chat-panel" className={'hriday-panel' + (expanded ? ' hriday-panel--expanded' : '')}
-        role="dialog" aria-label="HRIDAY" aria-modal={viewport.mobile || undefined} onKeyDown={keyDown}
+        role="dialog" aria-label={identity.name} aria-modal={viewport.mobile || undefined} onKeyDown={keyDown}
         style={{ '--hriday-viewport-height': viewport.height + 'px', '--hriday-viewport-top': viewport.top + 'px' }}>
         <HRIDAYChat inputRef={input} mobile={viewport.mobile} expanded={expanded} onExpand={() => setExpanded(value => !value)}
           onClose={close} scope={() => hiddenChatScope({ activeDatasetId, activeSheetId, activeSnapshotId, activePage })} />

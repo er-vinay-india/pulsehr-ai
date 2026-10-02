@@ -438,6 +438,46 @@ def normalize_dataset(sheet_id: int, sheet_name: str, columns: list[str], raw_re
                 )
             })
 
+    # Completeness and data types breakdown
+    incomplete_rows_count = sum(1 for rec in raw_records if any(is_null_val(rec.get(col)) for col in columns))
+    incomplete_rows_pct = round((incomplete_rows_count / max(1, total_rows)) * 100, 1)
+    null_cells_pct = round((total_null_cells / total_cells) * 100, 2)
+    completeness_pct = round(100.0 - ((total_null_cells / total_cells) * 100.0), 2)
+
+    type_counts = {
+        "numeric": 0,
+        "categorical": 0,
+        "datetime": 0,
+        "identifier": 0,
+        "boolean": 0,
+        "other": 0
+    }
+    for col, diag in column_diagnostics.items():
+        t = diag.get("inferred_type", "categorical")
+        if t.startswith("numeric"):
+            type_counts["numeric"] += 1
+        elif t in ("datetime", "date", "time"):
+            type_counts["datetime"] += 1
+        elif t in ("identifier", "id"):
+            type_counts["identifier"] += 1
+        elif t in ("boolean", "bool"):
+            type_counts["boolean"] += 1
+        elif t == "categorical":
+            type_counts["categorical"] += 1
+        else:
+            type_counts["other"] += 1
+
+    columns_with_nulls = [
+        {
+            "column": col,
+            "null_count": diag["null_count"],
+            "null_percentage": diag["null_percentage"],
+            "inferred_type": diag["inferred_type"]
+        }
+        for col, diag in column_diagnostics.items()
+        if diag["null_count"] > 0
+    ]
+
     # Overall Data Cleanliness Health Score (0 - 100)
     avg_null_pct = (total_null_cells / total_cells) * 100.0
     outlier_rate = (total_anomalies / max(1, total_rows)) * 100.0
@@ -449,8 +489,17 @@ def normalize_dataset(sheet_id: int, sheet_name: str, columns: list[str], raw_re
         "health_score": health_score,
         "total_rows": total_rows,
         "total_columns": len(columns),
+        "total_cells": total_cells,
         "total_normalized_cells": total_normalized_cells,
         "total_null_cells": total_null_cells,
+        "null_cells_pct": null_cells_pct,
+        "completeness_pct": completeness_pct,
+        "incomplete_rows_count": incomplete_rows_count,
+        "incomplete_rows_pct": incomplete_rows_pct,
+        "columns_with_nulls_count": len(columns_with_nulls),
+        "columns_with_nulls": columns_with_nulls,
+        "data_types_breakdown": type_counts,
+        "is_incomplete": total_null_cells > 0,
         "total_anomalies": total_anomalies,
         "curated_records": curated_records,
         "anomalies_per_row": anomalies_per_row,

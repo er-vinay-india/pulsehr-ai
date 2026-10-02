@@ -35,6 +35,49 @@ def get_sheet_eda_report(sheet_id: int):
         report = json.loads(row["report_json"])
         report["created_at"] = row["created_at"]
 
+        # Ensure summary completeness & type breakdown fields are always present
+        summary = report.setdefault("summary", {})
+        col_diags = report.get("column_diagnostics", {})
+        if ("data_types_breakdown" not in summary or "columns_with_nulls" not in summary) and col_diags:
+            type_counts = {"numeric": 0, "categorical": 0, "datetime": 0, "identifier": 0, "boolean": 0, "other": 0}
+            cols_with_nulls = []
+            for col, diag in col_diags.items():
+                t = diag.get("inferred_type", "categorical")
+                if t.startswith("numeric"):
+                    type_counts["numeric"] += 1
+                elif t in ("datetime", "date", "time"):
+                    type_counts["datetime"] += 1
+                elif t in ("identifier", "id"):
+                    type_counts["identifier"] += 1
+                elif t in ("boolean", "bool"):
+                    type_counts["boolean"] += 1
+                elif t == "categorical":
+                    type_counts["categorical"] += 1
+                else:
+                    type_counts["other"] += 1
+                if diag.get("null_count", 0) > 0:
+                    cols_with_nulls.append({
+                        "column": col,
+                        "null_count": diag["null_count"],
+                        "null_percentage": diag.get("null_percentage", 0.0),
+                        "inferred_type": t
+                    })
+            summary.setdefault("data_types_breakdown", type_counts)
+            summary.setdefault("columns_with_nulls", cols_with_nulls)
+            summary.setdefault("columns_with_nulls_count", len(cols_with_nulls))
+            t_rows = summary.get("total_rows", 0)
+            t_cols = summary.get("total_columns", len(col_diags))
+            t_cells = max(1, t_rows * t_cols)
+            t_nulls = summary.get("total_null_cells", 0)
+            summary.setdefault("total_cells", t_cells)
+            summary.setdefault("null_cells_pct", round((t_nulls / t_cells) * 100, 2))
+            summary.setdefault("completeness_pct", round(100.0 - ((t_nulls / t_cells) * 100), 2))
+            summary.setdefault("is_incomplete", t_nulls > 0)
+            if "incomplete_rows_count" not in summary:
+                max_null_in_col = max((d.get("null_count", 0) for d in col_diags.values()), default=0)
+                summary["incomplete_rows_count"] = min(t_rows, max_null_in_col)
+                summary["incomplete_rows_pct"] = round((summary["incomplete_rows_count"] / max(1, t_rows)) * 100, 1)
+
         # Attach canonical WorkspaceContext via EDAContextAdapter if available
         try:
             from ..services.input_intelligence import SnapshotManager, EDAContextAdapter

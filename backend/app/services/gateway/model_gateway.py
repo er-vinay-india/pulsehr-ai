@@ -11,6 +11,7 @@ from pydantic import BaseModel, ValidationError
 
 from ...core import config
 from ...core.models_config import ModelRole, get_role_config
+from .assistant_identity import guarded_completion
 from .observability import ExecutionTrace, trace_registry
 
 logger = logging.getLogger(__name__)
@@ -30,7 +31,9 @@ class GatewayResult(Generic[T]):
         fallback_triggered: bool = False,
         retry_count: int = 0,
         success: bool = True,
-        error: str | None = None
+        error: str | None = None,
+        identity_guard_triggered: bool = False,
+        identity_retry_count: int = 0
     ):
         self.raw_text = raw_text
         self.parsed = parsed
@@ -41,6 +44,10 @@ class GatewayResult(Generic[T]):
         self.retry_count = retry_count
         self.success = success
         self.error = error
+        self.runtime_model = model_used if success and raw_text else None
+        self.assistant_identity = config.ASSISTANT_NAME
+        self.identity_guard_triggered = identity_guard_triggered
+        self.identity_retry_count = identity_retry_count
 
     def __repr__(self) -> str:
         return (
@@ -98,7 +105,8 @@ class ModelGateway:
         finding_ids: list[str] | None = None,
         temperature_override: float | None = None,
         max_retries: int = 0,
-        model_override: str | None = None
+        model_override: str | None = None,
+        identity_query: str | None = None
     ) -> GatewayResult[T]:
         """Dispatches an inference request to the configured model for the given role with automatic fallback."""
         if isinstance(role, str):
@@ -123,45 +131,63 @@ class ModelGateway:
 
         last_error = None
         total_retries = 0
+        identity_retries = 0
+        identity_triggered = False
 
         for model_candidate, is_fallback in models_to_try:
             for attempt in range(max_retries + 1):
                 trace_id = f"trace-{uuid4().hex[:10]}"
                 start_time = time.perf_counter()
                 try:
-                    messages = []
-                    if system_prompt:
-                        messages.append({"role": "system", "content": system_prompt})
-                    messages.append({"role": "user", "content": prompt})
+                    def invoke(identity_system):
+                        messages = []
+                        if identity_system:
+                            messages.append({"role": "system", "content": identity_system})
+                        messages.append({"role": "user", "content": prompt})
 
-                    payload: dict[str, Any] = {
-                        "model": model_candidate,
-                        "messages": messages,
-                        "stream": False,
-                        "options": {
-                            "temperature": temp,
-                            "num_predict": cfg.max_tokens,
-                            "num_ctx": 8192
+                        payload: dict[str, Any] = {
+                            "model": model_candidate,
+                            "messages": messages,
+                            "stream": False,
+                            "options": {
+                                "temperature": temp,
+                                "num_predict": cfg.max_tokens,
+                                "num_ctx": 8192
+                            }
                         }
-                    }
-                    # Disable Ollama internal thinking mode for non-REASONER roles (ANALYST, WRITER, FAST)
-                    # to prevent unbounded chain-of-thought token generation and latency timeouts.
-                    if role != ModelRole.REASONER and not any(k in model_candidate.lower() for k in ("deepseek-r1", "r1")):
-                        payload["think"] = False
+                        # Disable Ollama internal thinking mode for non-REASONER roles (ANALYST, WRITER, FAST)
+                        # to prevent unbounded chain-of-thought token generation and latency timeouts.
+                        if role != ModelRole.REASONER and not any(k in model_candidate.lower() for k in ("deepseek-r1", "r1")):
+                            payload["think"] = False
 
-                    # Request structured json format when schema requested
-                    if response_schema is not None:
-                        payload["format"] = "json"
+                        # Request structured json format when schema requested
+                        if response_schema is not None:
+                            payload["format"] = "json"
 
-                    timeout = httpx.Timeout(cfg.timeout_seconds, connect=5.0)
-                    with httpx.Client(timeout=timeout) as client:
-                        resp = client.post(f"{config.OLLAMA_BASE_URL}/api/chat", json=payload)
-                        resp.raise_for_status()
-                        body = resp.json()
+                        timeout = httpx.Timeout(cfg.timeout_seconds, connect=5.0)
+                        with httpx.Client(timeout=timeout) as client:
+                            resp = client.post(f"{config.OLLAMA_BASE_URL}/api/chat", json=payload)
+                            resp.raise_for_status()
+                            body = resp.json()
 
-                    msg_obj = body.get("message", {})
-                    raw_response = msg_obj.get("content", "") or body.get("response", "") or msg_obj.get("thinking", "")
-                    cleaned_response = clean_cot_reasoning(raw_response)
+                        msg_obj = body.get("message", {})
+                        raw_response = msg_obj.get("content", "") or body.get("response", "") or msg_obj.get("thinking", "")
+                        cleaned = clean_cot_reasoning(raw_response)
+                        return extract_json_payload(cleaned) if response_schema else cleaned
+                    identity_result = guarded_completion(
+                        invoke, query=identity_query if identity_query is not None else prompt, runtime_model=model_candidate,
+                        task_system=system_prompt, structured=response_schema is not None,
+                        max_retries=config.ASSISTANT_MAX_IDENTITY_RETRIES - identity_retries,
+                        corrective=identity_triggered,
+                    )
+                    identity_retries += identity_result.identity_retry_count
+                    identity_triggered |= identity_result.identity_guard_triggered
+                    if identity_result.response_blocked:
+                        raise ValueError('Assistant identity validation failed.')
+                    cleaned_response = identity_result.text
+                    if not cleaned_response:
+                        raise ValueError('Model returned an empty response.')
+                    raw_response = cleaned_response
                     duration_ms = (time.perf_counter() - start_time) * 1000
 
                     # Parse structured output if schema requested
@@ -184,7 +210,10 @@ class ModelGateway:
                         retry_count=total_retries,
                         prompt_tokens_approx=len(prompt) // 4,
                         completion_tokens_approx=len(raw_response) // 4,
-                        finding_ids_referenced=finding_ids or []
+                        finding_ids_referenced=finding_ids or [],
+                        assistant_identity=config.ASSISTANT_NAME,
+                        identity_guard_triggered=identity_triggered,
+                        identity_retry_count=identity_retries
                     )
                     trace_registry.record_trace(trace)
 
@@ -196,7 +225,9 @@ class ModelGateway:
                         duration_ms=duration_ms,
                         fallback_triggered=is_fallback,
                         retry_count=total_retries,
-                        success=True
+                        success=True,
+                        identity_guard_triggered=identity_triggered,
+                        identity_retry_count=identity_retries
                     )
 
                 except Exception as exc:
@@ -221,7 +252,10 @@ class ModelGateway:
             success=False,
             fallback_triggered=True,
             retry_count=total_retries,
-            error=last_error
+            error=last_error,
+            assistant_identity=config.ASSISTANT_NAME,
+            identity_guard_triggered=identity_triggered,
+            identity_retry_count=identity_retries
         )
         trace_registry.record_trace(failed_trace)
 
@@ -234,5 +268,7 @@ class ModelGateway:
             fallback_triggered=True,
             retry_count=total_retries,
             success=False,
-            error=last_error
+            error=last_error,
+            identity_guard_triggered=identity_triggered,
+            identity_retry_count=identity_retries
         )

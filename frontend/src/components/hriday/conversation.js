@@ -1,3 +1,4 @@
+import { DEFAULT_ASSISTANT_IDENTITY } from './identity.js';
 import { inferHRIDAYTool, presentHRIDAYAnswer } from './presentation.js';
 import { initialHRIDAYActivity, advanceHRIDAYActivity } from './activity.js';
 
@@ -9,7 +10,7 @@ export class HRIDAYConversation {
     this.sequence = 0;
     this.request = null;
     this.priorContext = null;
-    this.state = { messages: [], draft: '', loading: false, status: '', activity: null, announcement: '' };
+    this.state = { identity: DEFAULT_ASSISTANT_IDENTITY, messages: [], draft: '', loading: false, status: '', activity: null, announcement: '' };
   }
   subscribe = listener => { this.listeners.add(listener); return () => this.listeners.delete(listener); };
   getSnapshot = () => this.state;
@@ -17,6 +18,9 @@ export class HRIDAYConversation {
     this.state = { ...this.state, ...patch };
     this.listeners.forEach(listener => listener());
   }
+  setIdentity = identity => {
+    if (identity?.name) this.publish({ identity });
+  };
   setDraft = draft => this.publish({ draft });
   announce = announcement => this.publish({ announcement });
   updateMessage(id, patch, state = {}) {
@@ -29,7 +33,7 @@ export class HRIDAYConversation {
     if (!text || this.request) return;
     const controller = new AbortController();
     const id = retryId || `hriday-${++this.sequence}`;
-    const request = { id, controller, rawAnswer: '', delegates: [], terminal: false, activity: initialHRIDAYActivity() };
+    const request = { id, controller, rawAnswer: '', delegates: [], terminal: false, activity: initialHRIDAYActivity(this.state.identity.name) };
     const requestDetails = { query: text, scope: { ...scope }, tool };
     this.request = request;
     const diagnostic = { events: [], result: null, request: requestDetails };
@@ -59,7 +63,7 @@ export class HRIDAYConversation {
       diagnostic.error = error;
       request.terminal = true;
       this.request = null;
-      this.updateMessage(id, { phase: 'error' }, { loading: false, activity: null, announcement: 'HRIDAY couldn’t finish. Your question is saved.' });
+      this.updateMessage(id, { phase: 'error' }, { loading: false, activity: null, announcement: `${this.state.identity.name} couldn’t finish. Your question is saved.` });
     };
     try {
       await this.transport(text, null, tool, scope.datasetId ?? null, scope.sheetId ?? null, {
@@ -68,22 +72,29 @@ export class HRIDAYConversation {
         onDelegatePerspective: data => { if (current()) { diagnostic.perspectives = { ...diagnostic.perspectives, [data.delegate_id]: data }; activityEvent({ type: 'delegate_perspective', data }); } },
         onDelegateVote: data => { if (current()) { diagnostic.votes = { ...diagnostic.votes, [data.delegate_id]: data }; activityEvent({ type: 'delegate_vote', data }); } },
         onStatus: data => activityEvent({ type: 'status', data }),
+        onReset: data => {
+          if (!current()) return;
+          request.rawAnswer = '';
+          activityEvent({ type: 'answer_reset', data });
+          this.updateMessage(id, { content: '', phase: 'loading' });
+        },
         onToken: token => {
           if (!current()) return;
           if (!request.rawAnswer) activityEvent({ type: 'token', data: { token } });
           request.rawAnswer += token || '';
-          const content = presentHRIDAYAnswer(request.rawAnswer, { streaming: true, delegates: request.delegates });
+          const content = presentHRIDAYAnswer(request.rawAnswer, { streaming: true, delegates: request.delegates, assistantName: this.state.identity.name });
           this.updateMessage(id, { content, phase: content ? 'streaming' : 'loading' });
         },
         onDone: data => {
           if (!current()) return;
           diagnostic.result = data;
+          if (data.assistant_identity?.name) this.setIdentity(data.assistant_identity);
           if (data.prior_context) this.priorContext = data.prior_context;
-          const content = presentHRIDAYAnswer(data.answer || request.rawAnswer, { delegates: request.delegates });
+          const content = presentHRIDAYAnswer(data.answer || request.rawAnswer, { delegates: request.delegates, assistantName: this.state.identity.name });
           request.terminal = true;
           this.request = null;
           this.updateMessage(id, { content, phase: content ? 'complete' : 'error', artifacts: data.artifacts || [] },
-            { loading: false, activity: null, announcement: content ? 'HRIDAY’s response is ready.' : 'HRIDAY couldn’t finish. Your question is saved.' });
+            { loading: false, activity: null, announcement: content ? `${this.state.identity.name}’s response is ready.` : `${this.state.identity.name} couldn’t finish. Your question is saved.` });
         },
         onError: finishError,
       }, controller.signal, this.priorContext, scope.snapshotId ?? null, scope.page ?? null, 60.0);
@@ -104,7 +115,7 @@ export class HRIDAYConversation {
     this.stop();
     this.priorContext = null;
     this.diagnostics.clear();
-    this.publish({ messages: [], draft: '', loading: false, activity: null, status: '', announcement: 'New conversation with HRIDAY.' });
+    this.publish({ messages: [], draft: '', loading: false, activity: null, status: '', announcement: `New conversation with ${this.state.identity.name}.` });
   };
   feedback = (id, feedback) => this.updateMessage(id, { feedback }, { announcement: feedback === 'helpful' ? 'Marked helpful.' : 'Marked as needing improvement.' });
 }

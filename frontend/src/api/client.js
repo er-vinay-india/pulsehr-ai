@@ -131,7 +131,7 @@ export async function streamCopilotQuery(
   page = null,
   timeoutSeconds = 60.0
 ) {
-  const { onStatus, onToken, onDone, onError, onWarRoomInit, onDelegatePerspective, onDelegateVote, onEvent } = callbacks;
+  const { onStatus, onToken, onReset, onDone, onError, onWarRoomInit, onDelegatePerspective, onDelegateVote, onEvent } = callbacks;
   try {
     const res = await fetch(`${API_BASE}/copilot/query/stream`, {
       method: "POST",
@@ -175,6 +175,7 @@ export async function streamCopilotQuery(
       else if (eventType === "delegate_perspective") onDelegatePerspective?.(data);
       else if (eventType === "delegate_vote") onDelegateVote?.(data);
       else if (eventType === "status") onStatus?.(data);
+      else if (eventType === "answer_reset") onReset?.(data);
       else if (eventType === "token") onToken?.(data.token);
       else if (eventType === "done") onDone?.(data);
       else if (eventType === "error") onError?.(new Error(data.message || "Streaming error"));
@@ -712,3 +713,9 @@ export async function overrideCandidateJoin(workspaceId, relationshipId, accept)
 
 
 
+
+export async function getAssistantIdentity(signal) {
+  const res = await fetch(`${API_BASE}/copilot/identity`, { signal });
+  if (!res.ok) throw new Error("Assistant configuration unavailable");
+  return res.json();
+}

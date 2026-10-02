@@ -17,6 +17,7 @@ import httpx
 import pandas as pd
 
 from ...core import config
+from ..gateway.assistant_identity import guarded_completion, identity_answer, identity_intent, public_identity
 
 logger = logging.getLogger(__name__)
 
@@ -108,7 +109,8 @@ def _call_ollama_completion(
     prompt: str,
     max_tokens: int = 150,
     timeout_s: float = 12.0,
-    temperature: float = 0.2
+    temperature: float = 0.2,
+    system_prompt: str | None = None
 ) -> str:
     """Direct, low-overhead HTTP call to local Ollama instance with timeout guard."""
     url = f"{config.OLLAMA_BASE_URL}/api/generate"
@@ -123,6 +125,8 @@ def _call_ollama_completion(
             "top_p": 0.9
         }
     }
+    if system_prompt:
+        payload["system"] = system_prompt
     try:
         with httpx.Client(timeout=timeout_s) as client:
             resp = client.post(url, json=payload)
@@ -186,12 +190,14 @@ class UnionWarRoomEngine:
         """Runs the complete candidate generation, council voting, and replier election synchronously."""
         t_start = time.perf_counter()
         dataset_summary = _extract_dataset_summary(df, sheet_name)
+        runtime_results: dict[str, dict] = {}
 
         # Phase 1: Each delegate formulates a proposed candidate answer sequentially
         candidate_answers = cls._gather_candidate_answers(
             user_query=user_query,
             dataset_summary=dataset_summary,
-            timeout_per_model=14.0
+            timeout_per_model=14.0,
+            runtime_results=runtime_results
         )
 
         elapsed = time.perf_counter() - t_start
@@ -207,7 +213,8 @@ class UnionWarRoomEngine:
 
         # Phase 3: Deliver the elected replier's answer with full council resolution
         elected_delegate = next((d for d in COUNCIL_DELEGATES if d.id == elected_replier_id), COUNCIL_DELEGATES[1])
-        winner_raw_answer = candidate_answers.get(elected_replier_id, "")
+        runtime_result = runtime_results.get(elected_replier_id, {})
+        winner_raw_answer = identity_answer(user_query, runtime_result.get("runtime_model")) or candidate_answers.get(elected_replier_id, "")
         winner_votes = vote_counts.get(elected_replier_id, 1)
         total_delegates = len(COUNCIL_DELEGATES)
         vote_percentage = round((winner_votes / total_delegates) * 100)
@@ -273,7 +280,11 @@ class UnionWarRoomEngine:
 
         return {
             "query": user_query,
-            "answer": elected_answer,
+            "answer": winner_raw_answer,
+            "raw_council_answer": elected_answer,
+            "assistant_identity": public_identity(),
+            "runtime_model": runtime_result.get("runtime_model"),
+            "identity_diagnostics": runtime_result,
             "elected_replier": {
                 "id": elected_delegate.id,
                 "name": elected_delegate.name,
@@ -281,6 +292,7 @@ class UnionWarRoomEngine:
                 "icon": elected_delegate.icon,
                 "badge_color": elected_delegate.badge_color,
                 "primary_model": elected_delegate.primary_model,
+                "runtime_model": runtime_result.get("runtime_model"),
                 "votes_received": winner_votes,
                 "total_votes": total_delegates,
                 "vote_percentage": vote_percentage
@@ -299,7 +311,7 @@ class UnionWarRoomEngine:
             "deliberation_ledger": deliberation_ledger,
             "deliberation_duration_seconds": total_duration,
             "timeout_seconds": timeout_seconds,
-            "model_used": f"HRIDAY · AI Union Council (Replier: {elected_delegate.name})",
+            "model_used": f"{config.ASSISTANT_NAME} · AI Union Council (Replier: {elected_delegate.name})",
             "engine": "union_war_room"
         }
 
@@ -312,30 +324,29 @@ class UnionWarRoomEngine:
     ) -> str:
         """Generates an intelligent, intent-aware emergency fallback if a model call fails."""
         q_low = user_query.lower().strip()
-        is_greeting = any(w in q_low for w in ["hi", "hello", "hey", "namaste", "good morning", "good evening", "greetings"])
+        is_greeting = identity_intent(user_query) == "greeting"
         is_irrelevant = any(w in q_low for w in ["weather", "temperature", "forecast", "recipe", "cook", "movie", "song", "sports", "score", "game", "joke"])
 
         if is_greeting:
             return (
-                f"Hello! I am {d.name}, serving as {d.role_title} on the HRIDAY Executive AI Council. "
-                f"Welcome to the War Room—how can I assist you with your datasets, workforce performance, or operational decisions today?"
+                f"Hi! I’m {config.ASSISTANT_NAME}, the AI assistant in {config.ASSISTANT_PRODUCT_NAME}. How can I help you today?"
             )
 
         if is_irrelevant:
             return (
                 f"I don't have access to external or real-time web services like weather forecasts. "
-                f"As {d.role_title}, my focus is on analyzing your enterprise datasets, operational metrics, and organizational decisions."
+                "My focus is on analyzing your enterprise data, operational metrics, and organizational decisions."
             )
 
         if "no specific dataset attached" in dataset_summary.lower():
             return (
-                f"I'm ready to provide analysis as {d.role_title}, but no dataset is currently active. "
+                "I can help with analysis, but no dataset is currently active. "
                 f"Please upload or select a spreadsheet dataset so I can evaluate verified metrics and trends for you."
             )
 
         first_line = dataset_summary.splitlines()[0] if dataset_summary else "the active dataset"
         return (
-            f"From my perspective as {d.role_title}, evaluating {first_line} establishes verified operational baselines. "
+            f"Evaluating {first_line} establishes verified operational baselines. "
             f"Key metrics warrant regular monitoring to support sound organizational planning."
         )
 
@@ -345,10 +356,11 @@ class UnionWarRoomEngine:
         d: CouncilDelegate,
         user_query: str,
         dataset_summary: str,
-        timeout_per_model: float = 14.0
+        timeout_per_model: float = 14.0,
+        runtime_results: dict[str, dict] | None = None
     ) -> str:
         """Fetches the proposed complete answer from a single council delegate."""
-        prompt = f"""You are {d.name}, serving as {d.role_title} on the Executive AI Council for HRIDAY.
+        prompt = f"""Apply the analytical perspective of {d.role_title}; this is task expertise, not your assistant identity.
 Your domain specialty: {d.domain_specialty}.
 
 DATASET CONTEXT:
@@ -358,18 +370,35 @@ USER INQUIRY:
 "{user_query}"
 
 INSTRUCTIONS:
-1. GREETINGS & INTRODUCTIONS: If the user says hello or greets (e.g. 'hi', 'hello', 'hey'): give a warm, natural, intelligent welcome as {d.name}. Acknowledge HRIDAY and state how you can help.
-2. IRRELEVANT / OUT-OF-SCOPE INQUIRIES: If the user asks about external topics outside enterprise/data scope (e.g. weather forecast, recipes, sports, pop culture): politely decline, clarifying that the Council specializes in enterprise analytics and operational datasets.
+1. GREETINGS & INTRODUCTIONS: If the user says hello or greets (e.g. 'hi', 'hello', 'hey'): give a concise, natural welcome using the assistant identity in your system instructions and state how you can help.
+2. IRRELEVANT / OUT-OF-SCOPE INQUIRIES: If the user asks about external topics outside enterprise/data scope (e.g. weather forecast, recipes, sports, pop culture): politely decline, clarifying that you specialize in enterprise analytics and operational datasets.
 3. DATA & REPORT QUESTIONS: Give direct, concrete, authoritative answers grounded in the dataset context. If no dataset is attached and a report is requested, clearly let the user know they need to upload or select a dataset first.
 4. TONE & STYLE: Speak naturally and authentically in your own distinct perspective. Avoid formulaic filler phrases like 'From a causal logic standpoint' or mechanical boilerplate.
 Draft your proposed complete answer in 2 to 4 clear, high-signal sentences."""
 
-        res = _call_ollama_completion(d.primary_model, prompt, max_tokens=CANDIDATE_ANSWER_MAX_TOKENS, timeout_s=timeout_per_model)
-        if not res and d.fallback_model != d.primary_model:
-            res = _call_ollama_completion(d.fallback_model, prompt, max_tokens=CANDIDATE_ANSWER_MAX_TOKENS, timeout_s=timeout_per_model * 0.7)
-
+        res = ''
+        retries = 0
+        triggered = False
+        runtime_result = {}
+        models = [d.primary_model] + ([d.fallback_model] if d.fallback_model != d.primary_model else [])
+        for index, model in enumerate(models):
+            outcome = guarded_completion(
+                lambda system: _call_ollama_completion(model, prompt, max_tokens=CANDIDATE_ANSWER_MAX_TOKENS,
+                    timeout_s=timeout_per_model * (0.7 if index else 1.0), system_prompt=system),
+                query=user_query, runtime_model=model,
+                max_retries=config.ASSISTANT_MAX_IDENTITY_RETRIES - retries,
+                corrective=triggered,
+            )
+            retries += outcome.identity_retry_count
+            triggered |= outcome.identity_guard_triggered
+            runtime_result = {**outcome.diagnostics(), 'identity_guard_triggered': triggered, 'identity_retry_count': retries}
+            res = outcome.text
+            if res:
+                break
         if not res:
-            res = cls._generate_resilient_fallback(d, user_query, dataset_summary)
+            res = identity_answer(user_query) or cls._generate_resilient_fallback(d, user_query, dataset_summary)
+        if runtime_results is not None:
+            runtime_results[d.id] = runtime_result
 
         return res
 
@@ -378,7 +407,8 @@ Draft your proposed complete answer in 2 to 4 clear, high-signal sentences."""
         cls,
         user_query: str,
         dataset_summary: str,
-        timeout_per_model: float = 14.0
+        timeout_per_model: float = 14.0,
+        runtime_results: dict[str, dict] | None = None
     ) -> dict[str, str]:
         """Gathers complete proposed answers from each council delegate sequentially to avoid VRAM thrashing."""
         candidate_answers: dict[str, str] = {}
@@ -388,7 +418,8 @@ Draft your proposed complete answer in 2 to 4 clear, high-signal sentences."""
                     d=d,
                     user_query=user_query,
                     dataset_summary=dataset_summary,
-                    timeout_per_model=timeout_per_model
+                    timeout_per_model=timeout_per_model,
+                    runtime_results=runtime_results
                 )
             except Exception as exc:
                 logger.warning(f"Candidate answer task failed for {d.name}: {exc}")
@@ -514,6 +545,7 @@ RATIONALE: <Your single-sentence reason for choosing this replier, under 25 word
         """Server-Sent Events generator streaming live candidate answers, voting ballots, and the elected replier's response."""
         t_start = time.perf_counter()
         dataset_summary = _extract_dataset_summary(df, sheet_name)
+        runtime_results: dict[str, dict] = {}
 
         # 1. Event: War Room Summoned
         init_payload = {
@@ -546,7 +578,8 @@ RATIONALE: <Your single-sentence reason for choosing this replier, under 25 word
                 d=d,
                 user_query=user_query,
                 dataset_summary=dataset_summary,
-                timeout_per_model=14.0
+                timeout_per_model=14.0,
+                runtime_results=runtime_results
             )
             candidate_answers[d.id] = ans
             yield f"event: candidate_answer\ndata: {json.dumps({'delegate_id': d.id, 'name': d.name, 'role_title': d.role_title, 'candidate_answer': ans, 'perspective': ans})}\n\n"
@@ -576,7 +609,8 @@ RATIONALE: <Your single-sentence reason for choosing this replier, under 25 word
 
         # 4. Phase 3: Deliver Elected Replier Resolution
         elected_delegate = next((d for d in COUNCIL_DELEGATES if d.id == elected_replier_id), COUNCIL_DELEGATES[1])
-        winner_raw_answer = candidate_answers.get(elected_replier_id, "")
+        runtime_result = runtime_results.get(elected_replier_id, {})
+        winner_raw_answer = identity_answer(user_query, runtime_result.get("runtime_model")) or candidate_answers.get(elected_replier_id, "")
         winner_votes = vote_counts.get(elected_replier_id, 1)
         total_delegates = len(COUNCIL_DELEGATES)
         vote_percentage = round((winner_votes / total_delegates) * 100)
@@ -589,7 +623,7 @@ RATIONALE: <Your single-sentence reason for choosing this replier, under 25 word
             f"{winner_raw_answer}"
         )
 
-        words = elected_answer_markdown.split(" ")
+        words = winner_raw_answer.split(" ")
         for i in range(0, len(words), 5):
             chunk = " ".join(words[i:i+5]) + " "
             yield f"event: token\ndata: {json.dumps({'token': chunk})}\n\n"
@@ -647,7 +681,11 @@ RATIONALE: <Your single-sentence reason for choosing this replier, under 25 word
 
         done_payload = {
             "query": user_query,
-            "answer": elected_answer_markdown,
+            "answer": winner_raw_answer,
+            "raw_council_answer": elected_answer_markdown,
+            "assistant_identity": public_identity(),
+            "runtime_model": runtime_result.get("runtime_model"),
+            "identity_diagnostics": runtime_result,
             "elected_replier": {
                 "id": elected_delegate.id,
                 "name": elected_delegate.name,
@@ -655,6 +693,7 @@ RATIONALE: <Your single-sentence reason for choosing this replier, under 25 word
                 "icon": elected_delegate.icon,
                 "badge_color": elected_delegate.badge_color,
                 "primary_model": elected_delegate.primary_model,
+                "runtime_model": runtime_result.get("runtime_model"),
                 "votes_received": winner_votes,
                 "total_votes": total_delegates,
                 "vote_percentage": vote_percentage
@@ -673,7 +712,7 @@ RATIONALE: <Your single-sentence reason for choosing this replier, under 25 word
             "deliberation_ledger": deliberation_ledger,
             "deliberation_duration_seconds": total_duration,
             "timeout_seconds": timeout_seconds,
-            "model_used": f"HRIDAY · AI Union Council (Replier: {elected_delegate.name})",
+            "model_used": f"{config.ASSISTANT_NAME} · AI Union Council (Replier: {elected_delegate.name})",
             "engine": "union_war_room"
         }
 
