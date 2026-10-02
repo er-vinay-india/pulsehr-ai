@@ -60,93 +60,20 @@ def adapt_plan_to_deck_spec(
 
     exec_val = ev_exec.get("metric_value", f"{ctx.total_records:,}") if ev_exec else f"{ctx.total_records:,}"
 
-    # Pre-build structured initiative proposals
-    def _ensure_unassigned(role: str) -> str:
-        if not role.startswith("Unassigned"):
-            return f"Unassigned - {role}"
-        return role
-
-    default_proposals = DECK_DEFAULTS.get("structured_proposals", [])
-    if default_proposals:
-        proposals = [
-            {
-                "priority": "HIGH",
-                "owner_role": _ensure_unassigned(default_proposals[0]["owner"]),
-                "motivating_finding": f"Audited volume across {ctx.total_records:,} records confirms baseline throughput.",
-                "proposed_response": default_proposals[0]["title"],
-                "success_metric": "Zero operational disruption during peak throughput cycles.",
-                "dependencies": "Cross-functional staffing stream integration"
-            },
-            {
-                "priority": "HIGH",
-                "owner_role": _ensure_unassigned(default_proposals[1]["owner"]),
-                "motivating_finding": f"{ctx.dispersion_metric or 'Observed'} productivity dispersion between leader and lower-quartile units.",
-                "proposed_response": f"Deploy operating playbook from top performer across lower quartiles.",
-                "success_metric": "Compress entity dispersion ratio by 15% within 90 days.",
-                "dependencies": "Site-level process audit completion"
-            },
-            {
-                "priority": "MEDIUM",
-                "owner_role": _ensure_unassigned(default_proposals[2]["owner"]),
-                "motivating_finding": f"{ctx.total_records:,} records successfully verified under cryptographic seal.",
-                "proposed_response": default_proposals[2]["title"],
-                "success_metric": "100% automated monthly reconciliation.",
-                "dependencies": "ETL pipeline scheduling"
-            }
-        ]
-    else:
-        proposals = [
-            {
-                "priority": "HIGH",
-                "owner_role": "Unassigned - Operations Lead",
-                "motivating_finding": f"Audited volume across {ctx.total_records:,} records.",
-                "proposed_response": "Implement dynamic workforce buffer to stabilize volume peaks.",
-                "success_metric": "Maintain zero service disruption across peak cycles.",
-                "dependencies": "Staffing schedule integration"
-            },
-            {
-                "priority": "HIGH",
-                "owner_role": "Unassigned - Field Director",
-                "motivating_finding": f"{ctx.dispersion_metric or 'Observed'} productivity dispersion.",
-                "proposed_response": "Standardize operational playbooks across lowest performing quartiles.",
-                "success_metric": "Compress dispersion spread by 15% within 90 days.",
-                "dependencies": "On-site playbook rollout"
-            },
-            {
-                "priority": "MEDIUM",
-                "owner_role": "Unassigned - Analytics Lead",
-                "motivating_finding": f"{ctx.total_records:,} records verified.",
-                "proposed_response": "Establish continuous automated snapshot validation.",
-                "success_metric": "100% automated monthly reconciliation.",
-                "dependencies": "ETL trigger scheduling"
-            }
-        ]
-
-    initiatives = [
-        {
-            "priority": p["priority"],
-            "owner": p["owner_role"],
-            "title": p["proposed_response"],
-            "finding": p["motivating_finding"],
-            "metric": p["success_metric"],
-            "dependency": p["dependencies"]
-        }
-        for p in proposals
+    # Proposed actions are tied to recorded findings; targets remain unassigned.
+    proposals = [
+        {"priority": "REVIEW", "owner_role": "Unassigned - Report owner",
+         "motivating_finding": e.get("finding") or e.get("title") or e.get("metric_name", "Recorded finding"),
+         "proposed_response": "Confirm the finding and agree a follow-up action.",
+         "success_metric": "To be agreed after review", "dependencies": "Confirm definitions and policy"}
+        for e in ev_ledger[:3]
     ]
-
-    sla_matrix = DECK_DEFAULTS.get("execution_sla_matrix", {})
-    raci_headers = sla_matrix.get("headers", ["Phase", "Workstream Focus", "Governance Role", "Target SLA", "Risk Control"])
-    raci_rows = sla_matrix.get("rows", [
-        ["Phase 1 (0-30d)", "Capacity & Buffer Rebalancing", "Operations Lead", "<14 Days", "Deploy dynamic buffer"],
-        ["Phase 2 (30-90d)", "Playbook Standardization", "Field Director", "<45 Days", "Peer mentorship & unit audits"],
-        ["Phase 3 (90+d)", "Continuous Verification", "Analytics Lead", "Continuous", "Automated evidence pipeline"]
-    ])
-
-    appendix_headers = ["Evidence ID", "Finding / Claim", "Source Dataset", "Metric Value", "Audit Status"]
-    appendix_rows = [
-        [e.get("evidence_id", f"EVID-{i+1:02d}"), e.get("title", ""), e.get("source_sheets", ["Workspace"])[0] if e.get("source_sheets") else "Workspace", str(e.get("metric_value", "")), "Verified (±0.1%)"]
-        for i, e in enumerate(ev_ledger[:12])
-    ]
+    initiatives = [{"priority": p["priority"], "owner": p["owner_role"], "title": p["proposed_response"],
+                    "finding": p["motivating_finding"], "metric": p["success_metric"], "dependency": p["dependencies"]}
+                   for p in proposals]
+    appendix_headers = ["Recorded finding", "Value", "Unit", "Period"]
+    appendix_rows = [[e.get("title") or e.get("metric_name", ""), str(e.get("metric_value", "")),
+                      str(e.get("unit", "")), str(e.get("date_range", ""))] for e in ev_ledger[:12]]
 
     materialized_slides: list[dict[str, Any]] = []
     total_slides = len(plan.slides)
@@ -184,78 +111,30 @@ def adapt_plan_to_deck_spec(
         structured_props = None
         init_cards = None
 
-        # Bind visual assets based on visual_intent
-        if v_type == "line_chart" or (layout == "chart_narrative" and line_chart and idx == 2):
-            slide_chart = line_chart
-            metrics = [
-                {"label": strength_lbl, "value": strength_val, "subtext": "Above baseline mean", "evidence_id": "EVID-STRENGTH-01"},
-                {"label": "System Resilience", "value": "100%", "subtext": "Zero service failures", "evidence_id": "EVID-GOV-01"}
-            ]
-        elif v_type == "bar_chart" or (layout == "chart_narrative" and bar_chart and idx == 3):
-            slide_chart = bar_chart
-            metrics = [
-                {"label": headwind_lbl, "value": headwind_val, "subtext": "Leader vs laggard", "evidence_id": "EVID-HEADWIND-01"},
-                {"label": "Data Completeness", "value": f"{ctx.completeness_pct}%", "subtext": "Audited Ground Truth", "evidence_id": "EVID-COMP-01"}
-            ]
-        elif v_type == "donut_chart" or (layout == "chart_narrative" and donut_chart and idx == 4):
-            slide_chart = donut_chart
-            metrics = [
-                {"label": "Core Category", "value": "Top Share", "subtext": "High concentration", "evidence_id": "EVID-EXEC-01"},
-                {"label": "Evaluated Population", "value": exec_val, "subtext": "Total Records", "evidence_id": "EVID-EXEC-01"}
-            ]
-        elif v_type == "talent_9box" and t9:
+        # Only measurements actually cited by this slide become metric cards.
+        cited = set(slide_plan.evidence_ids)
+        metrics = [{"label": e.get("metric_name") or e.get("title"), "value": e.get("metric_value"),
+                    "unit": e.get("unit"), "subtext": e.get("date_range") or "Recorded period",
+                    "evidence_id": e["evidence_id"]}
+                   for e in ev_ledger if e.get("evidence_id") in cited and e.get("numeric_value") is not None][:4]
+        from ..visual_binding import bind_chart
+        candidate = charts.get(v_type)
+        slide_chart = bind_chart(candidate, slide_plan.evidence_ids, ev_ledger,
+                                 slide_plan.visual_intent.metrics_to_display)
+        if v_type == "talent_9box" and t9:
             talent_9box_data = t9
-            metrics = [
-                {"label": "Evaluated Staff", "value": f"{t9.get('total_evaluated', ctx.total_records)}", "subtext": "Complete Cohort", "evidence_id": "EVID-EXEC-01"},
-                {"label": "Top Performers", "value": f"{t9.get('high_performers_count', 0)}", "subtext": "Star Talent", "evidence_id": "EVID-TALENT-TOP"},
-                {"label": "Flight Risk Stars", "value": f"{t9.get('retention_vulnerable_stars', 0)}", "subtext": "Action Priority", "evidence_id": "EVID-TALENT-RISK"}
-            ]
         elif v_type == "burnout_strain" and bs:
             burnout_strain_data = bs
-            metrics = [
-                {"label": "Severe Strain", "value": f"{bs.get('severe_strain_count', 0)}", "subtext": "Critical Action", "evidence_id": "EVID-STRAIN-01"},
-                {"label": "At-Risk Share", "value": f"{bs.get('at_risk_share_pct', 0)}%", "subtext": "Cohort Prevalence", "evidence_id": "EVID-STRAIN-02"}
-            ]
         elif v_type == "action_plan" or layout == "action_plan":
-            structured_props = proposals
-            init_cards = initiatives
-        elif v_type in ("raci_matrix", "table") and "raci" in slide_plan.headline.lower():
-            slide_table = {"headers": raci_headers, "rows": raci_rows}
-        elif v_type in ("evidence_ledger", "table") or layout == "table_detail":
-            slide_table = {"headers": appendix_headers, "rows": appendix_rows[:6] if idx < total_slides - 1 else appendix_rows[6:12] or appendix_rows[:6]}
-
-        # If layout is kpi_summary and no metrics assigned, build default scope metrics
-        if layout == "kpi_summary" and not metrics:
-            metrics = [
-                {"label": "Audited Population", "value": f"{ctx.total_records:,}", "subtext": "Verified ground truth", "evidence_id": "EVID-EXEC-01"},
-                {"label": "Data Completeness", "value": f"{ctx.completeness_pct}%", "subtext": "Non-null record rate", "evidence_id": "EVID-COMP-01"},
-                {"label": "Baseline Benchmark", "value": ctx.baseline_benchmark or "Established", "subtext": ctx.reporting_period or "Audited Window", "evidence_id": "EVID-KPI-01"},
-                {"label": "Observed Dispersion", "value": ctx.dispersion_metric or "Calculated", "subtext": "Spread ratio", "evidence_id": "EVID-HEADWIND-01"}
-            ]
-
-
-        # Find section title
-        sec_title = "Executive Review"
-        for sec in plan.sections:
-            if sec.section_id == slide_plan.section_id:
-                sec_title = sec.title
-                break
-
-        # Fallback chart resolution for chart-driven layouts
+            structured_props = [p for p, e in zip(proposals, ev_ledger[:3]) if e.get("evidence_id") in cited]
+            init_cards = [{"title": p["proposed_response"], "owner": p["owner_role"], "metric": p["success_metric"]} for p in structured_props]
+        elif v_type in ("evidence_ledger", "table", "raci_matrix") or layout == "table_detail":
+            rows = [row for row, e in zip(appendix_rows, ev_ledger) if e.get("evidence_id") in cited]
+            slide_table = {"headers": appendix_headers, "rows": rows[:6]} if rows else None
         if layout in ("chart_narrative", "full_chart_takeaway", "two_charts") and not slide_chart and not talent_9box_data and not burnout_strain_data:
-            available_charts = [c for c in (bar_chart, line_chart, donut_chart, rel_chart) if c]
-            if available_charts:
-                slide_chart = available_charts[idx % len(available_charts)]
-                if not metrics:
-                    metrics = [
-                        {"label": "Evaluated Population", "value": exec_val, "subtext": "Audited volume", "evidence_id": "EVID-EXEC-01"},
-                        {"label": "Data Completeness", "value": f"{ctx.completeness_pct}%", "subtext": "Audited Ground Truth", "evidence_id": "EVID-COMP-01"}
-                    ]
-            else:
-                layout = "comparison_split"
-
+            layout = "comparison_split"
         if layout == "table_detail" and not slide_table:
-            slide_table = {"headers": appendix_headers, "rows": appendix_rows[:6] if idx < total_slides - 1 else appendix_rows[6:12] or appendix_rows[:6]}
+            layout = "comparison_split"
 
         # Clean voice narration script without markdown symbols
         raw_script = slide_plan.speaker_notes or ""

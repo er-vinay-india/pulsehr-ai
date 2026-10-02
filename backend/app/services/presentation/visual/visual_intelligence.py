@@ -183,33 +183,8 @@ class VisualIntelligenceEngine:
         diagram_spec = None
         matrix_spec = None
 
-        if v_type in ("talent_9box", "raci_matrix") or "matrix" in layout_spec.family.value.lower():
-            matrix_spec = MatrixSpec(
-                family=MatrixFamily.TALENT_9BOX if v_type == "talent_9box" else MatrixFamily.QUADRANT_2X2,
-                title=headline,
-                x_axis_label="Potential" if v_type == "talent_9box" else "Urgency",
-                y_axis_label="Performance" if v_type == "talent_9box" else "Impact",
-                quadrants=[
-                    MatrixQuadrant(id="q1", label="Stars / High Priority", x=2, y=2, description="Top strategic performers", items=["Core Leaders"]),
-                    MatrixQuadrant(id="q2", label="High Potential", x=1, y=2, description="Emerging core talent", items=["Growth Cohort"]),
-                    MatrixQuadrant(id="q3", label="High Performance", x=2, y=1, description="Consistent solid contributors", items=["Key Contributors"]),
-                    MatrixQuadrant(id="q4", label="Operational Baseline", x=1, y=1, description="Standard operational output", items=["Baseline Population"]),
-                ]
-            )
-        elif layout_spec.family in (LayoutFamily.PROCESS, LayoutFamily.TIMELINE, LayoutFamily.ROADMAP):
-            diagram_spec = DiagramSpec(
-                family=DiagramFamily.HORIZONTAL_PROCESS if layout_spec.family == LayoutFamily.PROCESS else DiagramFamily.TIMELINE_CHEVRON,
-                title=headline,
-                nodes=[
-                    DiagramNode(id="n1", label="Phase 1: Baseline Audit", sublabel="Complete", status="complete", order=1),
-                    DiagramNode(id="n2", label="Phase 2: Execution", sublabel="In Progress", status="active", order=2),
-                    DiagramNode(id="n3", label="Phase 3: Verification", sublabel="Target Q4", status="planned", order=3),
-                ],
-                connections=[
-                    DiagramConnection(from_node="n1", to_node="n2"),
-                    DiagramConnection(from_node="n2", to_node="n3")
-                ]
-            )
+        # Native model renderers use the supplied model data. A layout request
+        # alone cannot establish talent cohorts, completion states or dates.
 
         # 5. Visual Story & Primary Visual Descriptor
         v_family_str = "CHART" if chart_spec else ("MATRIX" if matrix_spec else ("DIAGRAM" if diagram_spec else ("TABLE" if table_data else "TEXT")))
@@ -233,8 +208,9 @@ class VisualIntelligenceEngine:
 
         # 7. Source & Footer
         source_footer = SourceFooterSpec(
-            source_citation="Audited HR Intelligence System",
-            evidence_citation=ev_citation,
+            dataset_label=slide_package_or_dict.get("source_label", "") if isinstance(slide_package_or_dict, dict) else "",
+            source_citation="Recorded data",
+            evidence_citation=ev_citation or "",
             slide_counter_text=f"{seq_num} / {total_slides}",
             confidentiality_label="CONFIDENTIAL - FOR INTERNAL USE ONLY"
         )
@@ -250,7 +226,7 @@ class VisualIntelligenceEngine:
         )
 
         return VisualSpecification(
-            slide_id=getattr(slide_package_or_dict, "slide_id", "") or (slide_package_or_dict.get("id") if isinstance(slide_package_or_dict, dict) else f"slide_{seq_num}"),
+            slide_id=getattr(slide_package_or_dict, "slide_id", "") or (slide_package_or_dict.get("id", f"slide_{seq_num}") if isinstance(slide_package_or_dict, dict) else f"slide_{seq_num}"),
             sequence_number=seq_num,
             headline=headline,
             subtitle=subtitle,

@@ -484,10 +484,9 @@ def test_downstream_adapter_chart_binding():
     plan = director.plan_presentation(ctx)
     deck_spec = adapt_plan_to_deck_spec(plan, ctx, theme={"id": "executive_dark"}, chart_pack=chart_pack)
 
-    charts_found = [s["chart"] for s in deck_spec["slides"] if s.get("chart")]
-    assert len(charts_found) > 0
-    types = [c.get("chart_type") for c in charts_found]
-    assert any(t in ("line", "bar", "donut") for t in types)
+    # Matching a chart family alone does not establish its subject or evidence.
+    assert not any(s.get("chart") for s in deck_spec["slides"])
+    assert not any(m.get("label") == "System Resilience" for s in deck_spec["slides"] for m in s.get("metrics", []))
 
 
 # 22. Downstream adapter metric badges and speaker notes
