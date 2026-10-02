@@ -1,7 +1,15 @@
 import React from "react";
 import { FileSpreadsheet, CheckCircle2, Loader2, Clock, ShieldCheck } from "lucide-react";
 
-export default function UploadProgressCard({ uploadingFile, uploadElapsed, uploadStep }) {
+export default function UploadProgressCard({
+  uploadingFile,
+  uploadElapsed,
+  uploadStep = 1,
+  currentStageMessage = "",
+  progressPercentage = 10,
+}) {
+  const effectivePct = Math.max(5, Math.min(100, progressPercentage || uploadStep * 10));
+
   return (
     <div className="ingestion-progress-card">
       <div className="progress-card-header">
@@ -18,13 +26,16 @@ export default function UploadProgressCard({ uploadingFile, uploadElapsed, uploa
         </div>
         <div className="progress-timer-badge">
           <Clock size={14} />
-          <span>{uploadElapsed}s elapsed</span>
+          <span>{uploadElapsed}s elapsed · {effectivePct}%</span>
         </div>
       </div>
 
-      {/* Visual Animated Progress Bar */}
+      {/* Visual Animated Dynamic Progress Bar */}
       <div className="progress-bar-container">
-        <div className="progress-bar-fill animated-gradient-bar" />
+        <div
+          className="progress-bar-fill animated-gradient-bar"
+          style={{ width: `${effectivePct}%`, transition: "width 0.4s ease-in-out" }}
+        />
       </div>
 
       {/* Pipeline Stage Checklist */}
@@ -98,7 +109,9 @@ export default function UploadProgressCard({ uploadingFile, uploadElapsed, uploa
               </div>
               <div className="step-text">
                 <span className="step-title">{title}</span>
-                <span className="step-sub">{sub}</span>
+                <span className="step-sub">
+                  {isActive && currentStageMessage ? currentStageMessage : sub}
+                </span>
               </div>
             </div>
           );
@@ -107,7 +120,7 @@ export default function UploadProgressCard({ uploadingFile, uploadElapsed, uploa
 
       <div className="progress-safety-footer">
         <ShieldCheck size={16} color="var(--accent-500)" style={{ flexShrink: 0 }} />
-        <span>Large spreadsheets with thousands of rows take 15–40s for full vector embedding. Duplicate uploads are blocked while this job runs.</span>
+        <span>Non-blocking background ingestion with live stage telemetry. You can minimize this modal at any time without interrupting execution.</span>
       </div>
     </div>
   );

@@ -11,7 +11,12 @@ import {
   RotateCcw,
   Minimize2
 } from "lucide-react";
-import { uploadDatasetFile } from "../../api/client";
+import {
+  uploadDatasetFile,
+  uploadDatasetFileAsync,
+  getIngestionJob,
+  subscribeToIngestionJobStream
+} from "../../api/client";
 import UploadProgressCard from "./UploadProgressCard";
 
 export default function UploadModal({
@@ -28,6 +33,9 @@ export default function UploadModal({
   const [uploadingFile, setUploadingFile] = useState(null);
   const [uploadElapsed, setUploadElapsed] = useState(0);
   const [uploadStep, setUploadStep] = useState(1);
+  const [uploadPercentage, setUploadPercentage] = useState(10);
+  const [stageMessage, setStageMessage] = useState("");
+  const [activeJobId, setActiveJobId] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
   const [uploadResult, setUploadResult] = useState(null);
   const [error, setError] = useState(null);
@@ -44,6 +52,10 @@ export default function UploadModal({
       setSelectedFile(null);
       setUserIntent("");
       setUploadElapsed(0);
+      setUploadStep(1);
+      setUploadPercentage(10);
+      setStageMessage("");
+      setActiveJobId(null);
       setUploadResult(null);
       setError(null);
       isBackgroundRef.current = false;
@@ -111,31 +123,17 @@ export default function UploadModal({
     };
   }, [isOpen, step]);
 
-  // Upload timer & step progression
+  // Upload elapsed timer
   useEffect(() => {
     let timer;
-    let stepTimer;
     if (uploading) {
       setUploadElapsed(0);
-      setUploadStep(1);
-
-      // Elapsed seconds counter
       timer = setInterval(() => {
         setUploadElapsed((prev) => prev + 1);
       }, 1000);
-
-      // Responsive stage progressor (ticks every 700ms so steps 5, 7, 8 are visibly highlighted)
-      let currentStage = 1;
-      stepTimer = setInterval(() => {
-        currentStage += 1;
-        if (currentStage <= 10) {
-          setUploadStep(currentStage);
-        }
-      }, 700);
     }
     return () => {
       if (timer) clearInterval(timer);
-      if (stepTimer) clearInterval(stepTimer);
     };
   }, [uploading]);
 
@@ -182,6 +180,9 @@ export default function UploadModal({
 
     setStep(3);
     setUploading(true);
+    setUploadStep(1);
+    setUploadPercentage(10);
+    setStageMessage("Initializing spreadsheet ingestion worker...");
     const fileInfo = {
       name: selectedFile.name,
       size: formatFileSize(selectedFile.size)
@@ -194,20 +195,85 @@ export default function UploadModal({
       onUploadStart(fileInfo);
     }
 
+    let stream = null;
+    let pollInterval = null;
+
     try {
-      const res = await uploadDatasetFile(selectedFile, intentToUse);
+      // Step 1: Start asynchronous ingestion job
+      const startRes = await uploadDatasetFileAsync(selectedFile, intentToUse);
+      const jobId = startRes.job_id;
+      setActiveJobId(jobId);
+
+      // Step 2: Track progress via real-time stream with polling fallback
+      const finalResult = await new Promise((resolve, reject) => {
+        let isDone = false;
+
+        const handleUpdate = (job) => {
+          if (!job) return;
+          if (job.step != null && job.step > 0) setUploadStep(job.step);
+          if (job.percentage != null) setUploadPercentage(job.percentage);
+          if (job.message) setStageMessage(job.message);
+          if (job.elapsed_seconds != null) setUploadElapsed(Math.round(job.elapsed_seconds));
+        };
+
+        const handleComplete = (job) => {
+          if (isDone) return;
+          isDone = true;
+          if (pollInterval) clearInterval(pollInterval);
+          if (stream) stream.close();
+          handleUpdate(job);
+          resolve(job.result);
+        };
+
+        const handleFail = (err) => {
+          if (isDone) return;
+          isDone = true;
+          if (pollInterval) clearInterval(pollInterval);
+          if (stream) stream.close();
+          reject(err);
+        };
+
+        // Attempt SSE streaming first
+        stream = subscribeToIngestionJobStream(jobId, {
+          onUpdate: handleUpdate,
+          onComplete: handleComplete,
+          onError: () => {
+            // If SSE disconnects or isn't available, rely on polling loop
+          }
+        });
+
+        // Concurrently run polling loop every 400ms to guarantee delivery
+        pollInterval = setInterval(async () => {
+          if (isDone) return;
+          try {
+            const job = await getIngestionJob(jobId);
+            handleUpdate(job);
+            if (job.status === "completed") {
+              handleComplete(job);
+            } else if (job.status === "failed") {
+              handleFail(new Error(job.error || "Ingestion job failed"));
+            }
+          } catch {
+            // Non-fatal network blip
+          }
+        }, 400);
+      });
+
       setUploadStep(10);
-      setUploadResult(res);
+      setUploadPercentage(100);
+      setUploadResult(finalResult);
 
       // Visual grace period so user clearly sees all stages complete with green checkmarks
       await new Promise((resolve) => setTimeout(resolve, 600));
 
       if (onUploadSuccess) {
-        onUploadSuccess(res, { wasBackground: isBackgroundRef.current });
+        onUploadSuccess(finalResult, { wasBackground: isBackgroundRef.current });
       }
     } catch (err) {
       setError(err.message || "Failed to process spreadsheet");
     } finally {
+      if (pollInterval) clearInterval(pollInterval);
+      if (stream) stream.close();
       setUploading(false);
       setUploadingFile(null);
       if (onUploadEnd) {
@@ -228,6 +294,10 @@ export default function UploadModal({
     setSelectedFile(null);
     setUserIntent("");
     setUploadResult(null);
+    setUploadStep(1);
+    setUploadPercentage(10);
+    setStageMessage("");
+    setActiveJobId(null);
     setError(null);
     isBackgroundRef.current = false;
   };
@@ -413,6 +483,8 @@ export default function UploadModal({
                     uploadingFile={uploadingFile}
                     uploadElapsed={uploadElapsed}
                     uploadStep={uploadStep}
+                    currentStageMessage={stageMessage}
+                    progressPercentage={uploadPercentage}
                   />
 
                   {/* Option to run in background */}

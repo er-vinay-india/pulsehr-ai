@@ -224,6 +224,61 @@ export async function uploadDatasetFile(file, userObjective = "") {
   return res.json();
 }
 
+export async function uploadDatasetFileAsync(file, userObjective = "") {
+  const formData = new FormData();
+  formData.append("file", file);
+  if (userObjective && typeof userObjective === "string" && userObjective.trim()) {
+    formData.append("user_objective", userObjective.trim());
+  }
+  const res = await fetch(`${API_BASE}/upload/file?async_mode=true`, {
+    method: "POST",
+    body: formData
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Failed to queue dataset file upload");
+  }
+  return res.json();
+}
+
+export async function getIngestionJob(jobId) {
+  const res = await fetch(`${API_BASE}/upload/jobs/${encodeURIComponent(jobId)}`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || `Failed to fetch ingestion job ${jobId}`);
+  }
+  return res.json();
+}
+
+export function subscribeToIngestionJobStream(jobId, { onUpdate, onError, onComplete }) {
+  if (typeof EventSource === "undefined") return null;
+  const url = `${API_BASE}/upload/jobs/${encodeURIComponent(jobId)}/stream`;
+  const es = new EventSource(url);
+
+  es.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      onUpdate?.(data);
+      if (data.status === "completed") {
+        onComplete?.(data);
+        es.close();
+      } else if (data.status === "failed") {
+        onError?.(new Error(data.error || "Ingestion failed"));
+        es.close();
+      }
+    } catch {
+      // Ignore comment pings or parse errors
+    }
+  };
+
+  es.onerror = (err) => {
+    onError?.(err);
+    es.close();
+  };
+
+  return es;
+}
+
 export async function listDatasets() {
   const res = await fetch(`${API_BASE}/upload/datasets`);
   if (!res.ok) throw new Error("Failed to fetch datasets list");
