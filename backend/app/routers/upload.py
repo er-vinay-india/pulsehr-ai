@@ -28,8 +28,8 @@ def upload_file(
     with _upload_lock:
         original = Path((file.filename or 'uploaded.csv').replace('\\', '/')).name
         suffix = Path(original).suffix.lower()
-        if suffix not in ('.csv', '.xlsx', '.xls'):
-            raise HTTPException(400, 'Upload a CSV or Excel file.')
+        if suffix not in ('.csv', '.tsv', '.xlsx', '.xls'):
+            raise HTTPException(400, 'Upload a CSV, TSV, or Excel file.')
         path = config.UPLOADS_DIR / f'{uuid4().hex}{suffix}'
         conn = None
         try:
@@ -60,13 +60,25 @@ def upload_file(
                 )
                 enriched_records = json.loads(final_df.to_json(orient="records"))
                 enriched_cols = list(final_df.columns)
-                first['records'] = enriched_records
-                first['columns'] = enriched_cols
 
-                # Update profiles and hints for enriched columns
-                enriched_frames = {first['name']: final_df.astype(str)}
+                # Preserve raw values for existing columns so leading zeroes ('001') are never lost
+                orig_cols_set = set(first['columns'])
+                new_cols = [c for c in enriched_cols if c not in orig_cols_set]
+                for idx_r, r in enumerate(first['records']):
+                    if idx_r < len(enriched_records):
+                        for c in new_cols:
+                            r[c] = enriched_records[idx_r].get(c)
+                first['columns'] = list(first['columns']) + new_cols
+
+                # Update profiles and hints for enriched columns while preserving existing column embeddings
+                old_vectors = {p['column']: (p.get('vector'), p.get('embedding_model')) for p in first['profiles']}
+                enriched_frames = {first['name']: pd.DataFrame(first['records']).astype(str)}
                 enriched_prep = prepare_sheets(enriched_frames, original, embed=False)
                 if enriched_prep:
+                    for p in enriched_prep[0]['profiles']:
+                        if p['column'] in old_vectors and old_vectors[p['column']][0]:
+                            p['vector'] = old_vectors[p['column']][0]
+                            p['embedding_model'] = old_vectors[p['column']][1]
                     first['profiles'] = enriched_prep[0]['profiles']
                     first['decision_hints'] = enriched_prep[0]['decision_hints']
 

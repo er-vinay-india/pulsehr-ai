@@ -131,7 +131,7 @@ export async function streamCopilotQuery(
   page = null,
   timeoutSeconds = 60.0
 ) {
-  const { onStatus, onToken, onDone, onError, onWarRoomInit, onDelegatePerspective, onDelegateVote } = callbacks;
+  const { onStatus, onToken, onDone, onError, onWarRoomInit, onDelegatePerspective, onDelegateVote, onEvent } = callbacks;
   try {
     const res = await fetch(`${API_BASE}/copilot/query/stream`, {
       method: "POST",
@@ -145,7 +145,7 @@ export async function streamCopilotQuery(
         prior_context: priorContext,
         snapshot_id: snapshotId,
         page,
-        engine: "war_room",
+        engine: tool ? "auto" : "war_room",
         timeout_seconds: timeoutSeconds
       }),
       signal
@@ -160,51 +160,38 @@ export async function streamCopilotQuery(
     const decoder = new TextDecoder();
     let buffer = "";
 
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-
-      const parts = buffer.split("\n\n");
-      buffer = parts.pop() || "";
-
-      for (const part of parts) {
-        if (!part.trim()) continue;
-        const lines = part.split("\n");
-        let eventType = "message";
-        let dataStr = "";
-
-        for (const line of lines) {
-          if (line.startsWith("event: ")) {
-            eventType = line.slice(7).trim();
-          } else if (line.startsWith("data: ")) {
-            dataStr = line.slice(6).trim();
-          }
-        }
-
-        if (dataStr) {
-          try {
-            const data = JSON.parse(dataStr);
-            if (eventType === "war_room_init") {
-              onWarRoomInit?.(data);
-            } else if (eventType === "delegate_perspective") {
-              onDelegatePerspective?.(data);
-            } else if (eventType === "delegate_vote") {
-              onDelegateVote?.(data);
-            } else if (eventType === "status") {
-              onStatus?.(data);
-            } else if (eventType === "token") {
-              onToken?.(data.token);
-            } else if (eventType === "done") {
-              onDone?.(data);
-            } else if (eventType === "error") {
-              onError?.(new Error(data.message || "Streaming error"));
-            }
-          } catch (e) {
-            console.warn("Failed to parse SSE data:", dataStr, e);
-          }
-        }
+    const dispatch = part => {
+      let eventType = "message";
+      const dataLines = [];
+      for (const line of part.split(/\r?\n/)) {
+        if (line.startsWith("event:")) eventType = line.slice(6).trim();
+        else if (line.startsWith("data:")) dataLines.push(line.slice(5).replace(/^ /, ""));
       }
+      if (!dataLines.length) return;
+      // Callback failures must reach onError rather than masquerade as JSON errors.
+      const data = JSON.parse(dataLines.join("\n"));
+      onEvent?.({ type: eventType, data });
+      if (eventType === "war_room_init") onWarRoomInit?.(data);
+      else if (eventType === "delegate_perspective") onDelegatePerspective?.(data);
+      else if (eventType === "delegate_vote") onDelegateVote?.(data);
+      else if (eventType === "status") onStatus?.(data);
+      else if (eventType === "token") onToken?.(data.token);
+      else if (eventType === "done") onDone?.(data);
+      else if (eventType === "error") onError?.(new Error(data.message || "Streaming error"));
+    };
+    try {
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) { buffer += decoder.decode(); break; }
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split(/\r?\n\r?\n/);
+        buffer = parts.pop() || "";
+        for (const part of parts) if (part.trim()) dispatch(part);
+      }
+      // Keep a completion record even when the connection omits its final blank line.
+      if (buffer.trim()) dispatch(buffer);
+    } finally {
+      reader.releaseLock();
     }
   } catch (err) {
     if (err.name === "AbortError") {

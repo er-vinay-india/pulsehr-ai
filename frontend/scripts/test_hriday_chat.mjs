@@ -1,0 +1,91 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import * as sass from 'sass';
+import { HRIDAYConversation } from '../src/components/hriday/conversation.js';
+import { presentHRIDAYAnswer, inferHRIDAYTool, presentArtifacts } from '../src/components/hriday/presentation.js';
+import { streamCopilotQuery } from '../src/api/client.js';
+const delegates = [{ id: 'qwen', name: 'Qwen3.5', primary_model: 'qwen3.5', role_title: 'Chief Quantitative & Data Analytics Director' }];
+const banner = '### 🏆 Elected Council Replier: **Qwen3.5**\n*Chief Quantitative & Data Analytics Director* — *Elected with 3/5 Council Votes (60% Quorum)*\n\n';
+const greeting = 'Hello! I am Qwen3.5, serving as Chief Quantitative & Data Analytics Director on the HRIDAY Executive AI Council. Welcome to the War Room—how can I assist you with your datasets, workforce performance, or operational decisions today?';
+const evidence = '**Attendance** is 87.5% across 259 records. [Evidence](https://example.com/report)';
+function harness() {
+  const calls = [];
+  const c = new HRIDAYConversation((...args) => new Promise(resolve => calls.push({ args, cb: args[5], resolve })));
+  return { c, calls };
+}
+test('model identity and council banner never flash at any streaming boundary', () => {
+  for (const answer of [banner + evidence, banner + greeting, greeting, 'I cannot access live weather. As ' + delegates[0].role_title + ', ' + evidence, 'As ' + delegates[0].role_title + ', ' + evidence, 'From my perspective as ' + delegates[0].role_title + ', ' + evidence]) {
+    for (let end = 1; end <= answer.length; end++) {
+      const displayed = presentHRIDAYAnswer(answer.slice(0, end), { streaming: true, delegates });
+      assert(!/Qwen|Elected|Quorum|Council|War Room|Chief Quantitative/i.test(displayed), displayed);
+    }
+  }
+  assert.equal(presentHRIDAYAnswer(banner + evidence, { delegates }), evidence);
+  assert.equal(presentHRIDAYAnswer(banner + greeting, { delegates }), 'Hi, I’m HRIDAY. How can I help?');
+  assert.equal(presentHRIDAYAnswer('I am concerned about attendance. Please explain.'), 'I am concerned about attendance. Please explain.');
+});
+test('one evolving answer preserves raw events, ballots, candidates and context internally', async () => {
+  const { c, calls } = harness(); c.setDraft('Explain attendance');
+  const pending = c.send(undefined, { scope: { sheetId: 42, snapshotId: 7 } }); const cb = calls[0].cb;
+  cb.onWarRoomInit({ delegates }); const event = { type: 'candidate_answer', data: { answer: 'Internal' } }; cb.onEvent(event);
+  cb.onDelegateVote({ delegate_id: 'qwen', vote: 'Internal vote' }); cb.onToken(banner); cb.onToken(evidence);
+  assert.equal(c.state.messages.length, 2); assert.equal(c.state.messages[1].content, evidence);
+  const result = { answer: banner + evidence, ballots: ['vote'], candidate_answers: ['candidates'], prior_context: { measure: 'attendance' } };
+  cb.onDone(result); calls[0].resolve(); await pending;
+  assert.equal(c.getDiagnostics(c.state.messages[1].id).result, result); assert.equal(c.getDiagnostics(c.state.messages[1].id).events[0], event);
+  assert.equal(c.state.messages[1].phase, 'complete'); assert.equal(calls[0].args[4], 42); assert.equal(calls[0].args[8], 7);
+});
+test('duplicate submits blocked; Stop preserves partial answer and draft, ignores stale callbacks', async () => {
+  const { c, calls } = harness(); const first = c.send('First'); await c.send('Duplicate'); assert.equal(calls.length, 1);
+  calls[0].cb.onToken('Partial'); c.setDraft('Next'); c.stop();
+  assert(calls[0].args[6].aborted); assert.equal(c.state.draft, 'Next'); assert.equal(c.state.messages[1].phase, 'stopped');
+  const second = c.send(); calls[0].cb.onToken('Stale'); calls[0].cb.onDone({ answer: 'Stale' }); calls[0].cb.onError(new Error('Late'));
+  assert.equal(c.state.messages[1].content, 'Partial'); assert(c.state.loading);
+  calls[1].cb.onDone({ answer: 'Second' }); calls.forEach(call => call.resolve()); await Promise.all([first, second]);
+  assert.equal(c.state.messages.length, 4); assert.equal(c.state.messages[3].content, 'Second');
+});
+test('retry keeps one question, original scope, draft; follow-up context resets on new conversation', async () => {
+  const { c, calls } = harness(); const first = c.send('Question', { scope: { sheetId: 99 } });
+  calls[0].cb.onToken('Partial'); calls[0].cb.onError(new Error('Technical credential detail')); calls[0].resolve(); await first;
+  assert.equal(c.state.messages[1].phase, 'error'); assert(!JSON.stringify(c.state).includes('credential'));
+  c.setDraft('Keep draft'); const retry = c.retry(c.state.messages[1]); assert.equal(c.state.messages.length, 2);
+  assert.equal(calls[1].args[4], 99); assert.equal(c.state.draft, 'Keep draft');
+  calls[1].cb.onDone({ answer: 'Recovered', prior_context: { scope: 'internal' } }); calls[1].resolve(); await retry;
+  const next = c.send('Follow up'); assert.deepEqual(calls[2].args[7], { scope: 'internal' });
+  c.newChat(); calls[2].cb.onDone({ answer: 'Late old answer' }); calls[2].resolve(); await next;
+  assert.deepEqual(c.state.messages, []); assert.equal(c.priorContext, null);
+});
+test('unexpected EOF exposes recoverable incomplete state', async () => {
+  const c = new HRIDAYConversation(async (...args) => args[5].onToken('Incomplete'));
+  await c.send('Question'); assert.equal(c.state.messages[1].phase, 'error'); assert.equal(c.state.messages[1].content, 'Incomplete'); assert(!c.state.loading);
+});
+test('query tools preserve exact grammar and filters; artifact URLs stay local', () => {
+  assert.deepEqual(inferHRIDAYTool('Calculate (12 + 8) / 4'), { name: 'arithmetic', expression: '(12 + 8) / 4' });
+  assert.deepEqual(inferHRIDAYTool('Create a presentation'), { name: 'presentation' });
+  assert.deepEqual(inferHRIDAYTool('Average attendance by department'), { name: 'calculate', calculation: { operation: 'mean', column: 'attendance_rate', group_by: 'department' } });
+  assert.equal(inferHRIDAYTool('Average attendance in July for Sales'), null); assert.equal(inferHRIDAYTool('Explain the presentation process'), null);
+  assert.equal(presentArtifacts([{ url: '/api/reports/presentation/files/deck.pptx' }, { url: 'javascript:alert(1)' }]).length, 1);
+});
+test('SSE preserves diagnostic events, split Unicode, CRLF, final completion; tools route through auto', async () => {
+  const originalFetch = globalThis.fetch, requests = [];
+  const bytes = new TextEncoder().encode('event: candidate_answer\r\ndata: {"answer":"internal"}\r\n\r\nevent: token\ndata: {"token":"HRIDAY’s answer"}\n\nevent: done\ndata: {"answer":"Ready"}');
+  globalThis.fetch = async (url, options) => { requests.push(JSON.parse(options.body)); return new Response(new ReadableStream({ start(controller) {
+    for (let start = 0; start < bytes.length; start += 3) controller.enqueue(bytes.slice(start, start + 3)); controller.close();
+  } })); };
+  try {
+    const events = [], tokens = [], completions = [];
+    const cb = { onEvent: e => events.push(e), onToken: t => tokens.push(t), onDone: r => completions.push(r), onError: e => { throw e; } };
+    await streamCopilotQuery('Question', null, null, null, 42, cb);
+    await streamCopilotQuery('2+3', null, { name: 'arithmetic', expression: '2+3' }, null, 42, cb);
+    assert.equal(requests[0].engine, 'war_room'); assert.equal(requests[1].engine, 'auto');
+    assert.equal(events[0].type, 'candidate_answer'); assert.equal(tokens[0], 'HRIDAY’s answer'); assert.equal(completions[0].answer, 'Ready');
+  } finally { globalThis.fetch = originalFetch; }
+});
+test('chat references defined central theme tokens and has no independent palette or theme preference', () => {
+  const source = readFileSync(new URL('../src/styles/hriday-chat.scss', import.meta.url), 'utf8');
+  const tokens = sass.compile(new URL('../src/styles/_tokens.scss', import.meta.url).pathname).css;
+  assert(!/#[\da-f]{3,8}\b|rgba?\(|hsla?\(/i.test(source));
+  for (const [, token] of source.matchAll(/var\((--[\w-]+)/g)) if (!token.startsWith('--hriday-viewport-')) assert(tokens.includes(token + ':'), 'Unknown token: ' + token);
+  const view = readFileSync(new URL('../src/components/hriday/HRIDAYChat.jsx', import.meta.url), 'utf8'); assert(!/Hruday|localStorage|ThemeToggle/.test(view));
+});

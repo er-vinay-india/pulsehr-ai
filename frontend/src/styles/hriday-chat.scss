@@ -1,0 +1,117 @@
+.hriday-panel {
+  position: fixed; z-index: 1500; right: 24px; bottom: max(24px, env(safe-area-inset-bottom));
+  width: min(480px, calc(100vw - 48px)); height: min(680px, calc(100dvh - 120px));
+  border: 1px solid var(--color-border-strong); border-radius: 20px; box-shadow: var(--shadow-lg);
+  background: var(--color-bg-surface); color: var(--color-text-primary);
+  &--expanded { width: min(780px, calc(100vw - 48px)); }
+}
+.hriday-chat {
+  display: flex; flex-direction: column; height: 100%; min-width: 0; min-height: 0;
+  background: var(--color-bg-surface); color: var(--color-text-primary); border-radius: inherit;
+  font-family: var(--font-sans); font-size: 16px; line-height: 1.6;
+  &--page { height: min(800px, calc(100dvh - 180px)); min-height: 420px; border: 1px solid var(--color-border-strong); border-radius: 20px; }
+  :focus-visible { outline: 3px solid var(--color-focus); outline-offset: 3px; }
+}
+.hriday-chat-header {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 12px 16px; flex: none; border-bottom: 1px solid var(--color-divider);
+}
+.hriday-identity { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.hriday-identity h2 { margin: 0; font: 600 16px/1.4 var(--font-sans); color: var(--color-text-primary); }
+.hriday-original-heart { display: inline-flex; align-items: center; flex: none; }
+.hriday-header-actions { display: flex; align-items: center; gap: 2px; }
+.hriday-icon-button {
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+  width: 44px; height: 44px; min-width: 44px; min-height: 44px; padding: 0;
+  border: 0; border-radius: 50%; background: transparent; color: var(--color-text-secondary); cursor: pointer;
+  &:hover, &[aria-pressed='true'] { background: var(--color-bg-subtle); color: var(--color-text-primary); }
+  &:disabled { cursor: default; }
+}
+.hriday-transcript {
+  flex: 1; min-height: 0; min-width: 0; overflow-y: auto; overflow-x: hidden;
+  overscroll-behavior: contain; padding: 24px; scrollbar-gutter: stable;
+}
+.hriday-welcome { padding: 32px 0; }
+.hriday-welcome h3 { margin: 0 0 12px; color: var(--color-text-primary); font: 500 24px/1.4 var(--font-sans); }
+.hriday-welcome p { margin: 0; color: var(--color-text-secondary); }
+.hriday-message { margin-bottom: 28px; overflow-wrap: anywhere; min-width: 0; }
+.hriday-message--user { display: flex; flex-direction: column; align-items: flex-end; }
+.hriday-message-author { color: var(--color-text-secondary); font-size: 14px; margin-bottom: 8px; }
+.hriday-user-bubble { max-width: 92%; padding: 12px 16px; border-radius: 16px 16px 4px 16px; background: var(--color-bg-subtle); color: var(--color-text-primary); white-space: pre-wrap; }
+.hriday-answer {
+  color: var(--color-text-primary); min-width: 0;
+  p, ul, ol { margin: 0 0 14px; }
+  h1, h2, h3, h4, h5, h6 { color: var(--color-text-primary); font-size: 18px; line-height: 1.5; margin: 20px 0 12px; }
+  ul, ol { padding-left: 24px; }
+  a { color: var(--color-brand-secondary); text-decoration: underline; text-underline-offset: 3px; }
+  pre, code { background: var(--color-bg-subtle); color: var(--color-text-primary); white-space: pre-wrap; overflow-wrap: anywhere; }
+  pre { padding: 12px; max-width: 100%; overflow: auto; }
+  blockquote { color: var(--color-text-secondary); border-left: 3px solid var(--color-border-strong); padding-left: 12px; margin-left: 0; }
+  .table-container { max-width: 100%; overflow-x: auto; }
+  table { color: var(--color-text-primary); }
+  th { background: var(--color-bg-subtle); color: var(--color-text-primary); }
+}
+.hriday-working { display: inline-flex; align-items: center; gap: 10px; min-height: 32px; color: var(--color-text-secondary); }
+.hriday-status-dot { width: 7px; height: 7px; flex: none; border-radius: 50%; background: var(--color-brand-secondary); }
+.hriday-recovery { margin: 12px 0 0; color: var(--color-text-secondary); }
+.hriday-recovery p { margin: 0; }
+.hriday-answer-actions { display: flex; flex-wrap: wrap; gap: 2px; margin-top: 8px; }
+.hriday-artifact { display: flex; align-items: center; gap: 8px; min-height: 44px; color: var(--color-brand-secondary); text-decoration: underline; overflow-wrap: anywhere; }
+.hriday-composer { flex: none; margin: 0; padding: 0 16px max(16px, env(safe-area-inset-bottom)); }
+.hriday-input-row {
+  display: flex; align-items: flex-end; gap: 8px; padding: 6px 7px 6px 16px;
+  border: 1px solid var(--color-border-strong); border-radius: 28px; background: var(--color-bg-surface);
+  &:focus-within { border-color: var(--color-focus); }
+  textarea {
+    width: 100%; min-width: 0; min-height: 44px; max-height: 144px; padding: 10px 0; margin: 0;
+    border: 0; border-radius: 0; resize: none; background: transparent; color: var(--color-text-primary);
+    font: 400 16px/1.5 var(--font-sans); box-shadow: none;
+    &::placeholder { color: var(--color-text-muted); opacity: 1; }
+    &:focus-visible { outline: 0; }
+  }
+}
+.hriday-input-row:has(textarea:focus-visible) { outline: 3px solid var(--color-focus); outline-offset: 3px; }
+.hriday-icon-button.hriday-composer-action {
+  background: var(--btn-primary-bg); color: var(--btn-primary-fg);
+  &:hover { background: var(--btn-primary-hover); color: var(--btn-primary-fg); }
+  &:disabled { background: var(--color-bg-subtle); color: var(--color-text-secondary); }
+}
+.hriday-jump-latest { align-self: center; display: flex; align-items: center; gap: 8px; min-height: 44px; margin: 0 0 12px; padding: 8px 16px; border: 1px solid var(--color-border-strong); border-radius: 24px; background: var(--color-bg-surface); color: var(--color-text-primary); font: inherit; cursor: pointer; }
+.hriday-tooltip { position: fixed; z-index: 2100; max-width: min(200px, calc(100vw - 24px)); padding: 7px 10px; border: 1px solid var(--color-border-strong); border-radius: 8px; background: var(--color-bg-elevated); color: var(--color-text-primary); box-shadow: var(--shadow-sm); font: 400 14px/1.5 var(--font-sans); }
+.hriday-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.global-copilot-launcher.hriday-launcher {
+  position: fixed; z-index: 1400; right: 24px; bottom: max(24px, env(safe-area-inset-bottom));
+  display: flex; align-items: center; gap: 0; width: auto; height: auto; min-height: 44px;
+  padding: 6px 18px 6px 2px; border: 1px solid var(--color-border-strong); border-radius: 32px;
+  background: var(--color-bg-surface); color: var(--color-text-primary); font: 600 16px/1.4 var(--font-sans);
+  box-shadow: var(--shadow-md); animation: none; transform: none;
+  &:hover { background: var(--color-bg-subtle); transform: none; }
+  &:focus-visible { outline: 3px solid var(--color-focus); outline-offset: 3px; }
+}
+.hriday-backdrop { position: fixed; z-index: 1490; inset: 0; background: var(--overlay-backdrop); }
+.hriday-header-heart { display: inline-flex; width: 40px; height: 28px; align-items: center; }
+.hriday-header-heart canvas { width: 44px !important; height: 28px !important; }
+@media (max-width: 600px) {
+  .hriday-panel, .hriday-panel--expanded { top: var(--hriday-viewport-top, 0px); bottom: auto; right: 0; width: 100%; height: var(--hriday-viewport-height, 100dvh); max-height: none; border: 0; border-radius: 0; }
+  .hriday-chat-header { padding: max(8px, env(safe-area-inset-top)) 12px 8px; }
+  .hriday-transcript { padding: 20px 16px; }
+  .hriday-composer { padding-left: 12px; padding-right: 12px; }
+  .hriday-chat--page { height: calc(100dvh - 160px); min-height: 360px; }
+  .global-copilot-launcher.hriday-launcher { right: 12px; bottom: max(12px, env(safe-area-inset-bottom)); }
+}
+@media (max-height: 480px) and (min-width: 601px) {
+  .hriday-panel { bottom: 12px; height: calc(100dvh - 24px); }
+}
+@media (forced-colors: active) {
+  .hriday-input-row, .hriday-panel, .hriday-tooltip { border-color: CanvasText; }
+  .hriday-icon-button { color: ButtonText; }
+  .hriday-status-dot { background: CanvasText; }
+}
+
+.btn-header-hriday {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 44px;
+  background: var(--color-bg-soft-teal); border: 1.5px solid var(--color-brand-secondary);
+  border-radius: 8px; padding: 6px 12px; color: var(--color-brand-secondary);
+  font: 700 0.82rem/1.4 var(--font-sans); cursor: pointer;
+  &:focus-visible { outline: 3px solid var(--color-focus); outline-offset: 3px; }
+}

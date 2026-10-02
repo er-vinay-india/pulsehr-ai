@@ -79,6 +79,11 @@ class ControlledEnrichmentPipeline:
                     for v in sample_vals
                 )
                 if not has_unit_or_date:
+                    col_canon = str(col).lower().replace('_', '').replace(' ', '')
+                    is_id_col = col_canon.endswith('id') or 'code' in col_canon
+                    has_leading_zeros = any(len(v) > 1 and v.startswith('0') and v.isdigit() for v in sample_vals)
+                    if is_id_col or has_leading_zeros:
+                        continue
                     converted = pd.to_numeric(cleaned_df[col].astype(str).str.replace(',', ''), errors='coerce')
                     valid_ratio = converted.notna().sum() / max(1, len(non_null_series))
                     if valid_ratio >= 0.8:

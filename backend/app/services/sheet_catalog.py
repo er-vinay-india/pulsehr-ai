@@ -62,14 +62,66 @@ def model_embeddings(texts):
     return []
 
 
+def sniff_delimiter_and_header(sample_text: str, default_sep: str = ',') -> tuple[str, int]:
+    """Sniffs delimiter and detects any leading preamble / metadata rows before table header."""
+    lines = [line for line in sample_text.splitlines() if line.strip()]
+    if not lines:
+        return default_sep, 0
+
+    # 1. Delimiter Sniffing
+    detected_sep = default_sep
+    try:
+        sniffer = csv.Sniffer()
+        dialect = sniffer.sniff(sample_text[:16384], delimiters=[',', ';', '\t', '|'])
+        if dialect and dialect.delimiter:
+            detected_sep = dialect.delimiter
+    except Exception:
+        # Fallback heuristic: count common delimiters in first lines
+        delims = [',', ';', '\t', '|']
+        counts = {d: sum(line.count(d) for line in lines[:10]) for d in delims}
+        max_delim = max(counts, key=counts.get)
+        if counts[max_delim] > 0:
+            detected_sep = max_delim
+
+    # 2. Preamble / Title Row Detection
+    # If the first 1-3 lines have very few delimiters compared to body rows, skip them
+    header_idx = 0
+    if len(lines) >= 3:
+        delim_counts = [line.count(detected_sep) for line in lines[:10]]
+        max_cols = max(delim_counts)
+        if max_cols >= 2:
+            for idx, count in enumerate(delim_counts):
+                if count >= max_cols * 0.7:
+                    header_idx = idx
+                    break
+
+    return detected_sep, header_idx
+
+
 def read_sheets(path):
-    if path.suffix.lower() == '.csv':
-        for encoding in ('utf-8-sig', 'cp1252', 'latin1'):
+    suffix = path.suffix.lower()
+    if suffix in ('.csv', '.tsv', '.txt'):
+        default_sep = '\t' if suffix == '.tsv' else ','
+        frames = None
+        for encoding in ('utf-8-sig', 'utf-8', 'cp1252', 'latin1'):
             try:
-                frames = {'Sheet1': pd.read_csv(path, dtype=str, encoding=encoding, keep_default_na=False)}
+                with open(path, 'r', encoding=encoding, errors='replace') as f:
+                    sample = f.read(65536)
+                sep, skip = sniff_delimiter_and_header(sample, default_sep=default_sep)
+                df = pd.read_csv(
+                    path,
+                    sep=sep,
+                    skiprows=skip if skip > 0 else None,
+                    dtype=str,
+                    encoding=encoding,
+                    keep_default_na=False
+                )
+                frames = {'Sheet1': df}
                 break
-            except UnicodeDecodeError:
+            except (UnicodeDecodeError, Exception):
                 continue
+        if frames is None:
+            frames = {'Sheet1': pd.read_csv(path, dtype=str, encoding='latin1', keep_default_na=False)}
     elif path.suffix.lower() == '.xls':
         try:
             with pd.ExcelFile(path, engine='xlrd') as book:
@@ -110,17 +162,52 @@ def read_sheets(path):
 
 
 def numeric_values(raw, column):
+    """Parses numeric series, recognizing percentages, currencies, thousands commas, and accounting negatives."""
     values = raw.replace(r'^\s*$', pd.NA, regex=True)
     present = values.dropna().astype(str).str.strip()
     unit = None
-    if len(present) and present.str.fullmatch(r'[+-]?(?:\d+(?:\.\d*)?|\.\d+)\s*%').all():
-        values = values.astype('string').str.strip().str.rstrip('%').str.strip()
-        unit = '%'
-    elif 'rating' in canonical(column) and len(present):
+    if not len(present):
+        return pd.to_numeric(values, errors='coerce'), None
+
+    # Check for percentage: e.g. "18.5%", "+18.5%", "-18.5%"
+    if present.str.fullmatch(r'[+-]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?\s*%').all():
+        cleaned = values.astype('string').str.strip().str.replace(',', '', regex=False).str.rstrip('%').str.strip()
+        return pd.to_numeric(cleaned, errors='coerce'), '%'
+
+    # Check for rating fraction: e.g. "4/5", "85/100"
+    if 'rating' in canonical(column) and len(present):
         fractions = present.str.extract(r'^([+-]?(?:\d+(?:\.\d*)?|\.\d+))\s*/\s*(\d+(?:\.\d*)?)$')
         if fractions.notna().all().all() and fractions[1].nunique() == 1:
             values = values.astype('string').str.split('/').str[0].str.strip()
             unit = 'out of ' + fractions[1].iloc[0]
+            return pd.to_numeric(values, errors='coerce'), unit
+
+    # Check for currencies: e.g. "$1,250.00", "€450", "£90.50", "($100.00)"
+    curr_match = present.str.extract(r'^[+-]?\s*([$€£¥₹]|USD|EUR|GBP|INR)?\s*\(?\s*([$€£¥₹]|USD|EUR|GBP|INR)?\s*([+-]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?)\s*\)?\s*([$€£¥₹]|USD|EUR|GBP|INR)?$')
+    currencies_found = [c for c in (curr_match[0].dropna().tolist() + curr_match[1].dropna().tolist() + curr_match[3].dropna().tolist()) if c]
+    if currencies_found:
+        most_common_curr = max(set(currencies_found), key=currencies_found.count).strip()
+        cleaned_curr = values.astype('string').str.strip()
+        is_acct_neg = cleaned_curr.str.match(r'^\s*\(.*\)\s*$')
+        cleaned_curr = cleaned_curr.str.replace(r'[$€£¥₹]|USD|EUR|GBP|INR', '', regex=True)
+        cleaned_curr = cleaned_curr.str.replace(',', '', regex=False)
+        cleaned_curr = cleaned_curr.str.replace(r'[()]', '', regex=True).str.strip()
+        num_series = pd.to_numeric(cleaned_curr, errors='coerce')
+        if num_series.notna().all():
+            num_series = num_series.where(~is_acct_neg, -num_series)
+            return num_series, most_common_curr
+
+    # Check for thousands commas without currency: e.g. "1,250.00", "10,000"
+    if present.str.fullmatch(r'^[+-]?(?:\d{1,3}(?:,\d{3})+)(?:\.\d+)?$').all():
+        cleaned = values.astype('string').str.replace(',', '', regex=False).str.strip()
+        return pd.to_numeric(cleaned, errors='coerce'), None
+
+    # Check for accounting negative without currency: e.g. "(1,250.00)", "(50)"
+    if present.str.fullmatch(r'^\s*\(\s*(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?\s*\)\s*$').all():
+        cleaned = values.astype('string').str.replace(',', '', regex=False).str.replace(r'[()]', '', regex=True).str.strip()
+        num_series = -pd.to_numeric(cleaned, errors='coerce')
+        return num_series, None
+
     return pd.to_numeric(values, errors='coerce'), unit
 
 
