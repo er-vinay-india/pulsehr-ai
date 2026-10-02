@@ -89,6 +89,18 @@ def generate_presentation_deck_spec(
 
     target_sheet = dataset_context["target_sheet"]
     records = dataset_context["records"]
+    from .hr_report import build_hr_report
+    hr_deck = build_hr_report(scope, dataset_context, workspace_evidence)
+    if hr_deck is not None:
+        total = len(hr_deck["slides"])
+        for idx, slide in enumerate(hr_deck["slides"], 1):
+            if callable(on_slide_start):
+                on_slide_start(idx, total, slide["title"], slide["category"])
+            if callable(on_slide_progress):
+                on_slide_progress(idx, total, slide["title"], slide["category"], slide_dict=slide)
+        if materialize_visuals_now:
+            hr_deck["slides"] = materialize_slide_visuals(hr_deck["slides"], hr_deck["metadata"]["theme_id"])
+        return hr_deck
     domain = dataset_context["domain"]
     ground_truth = dataset_context["ground_truth"]
     snapshot_hash = dataset_context["snapshot_hash"]
