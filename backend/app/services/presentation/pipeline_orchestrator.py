@@ -639,14 +639,31 @@ def execute_presentation_pipeline_async(
         mgr.update_stage(job_id, "failed", f"Generation failed: {str(exc)}", 100, error=str(exc))
 
 
+def _launch_presentation_worker(job_id: str, scope: dict[str, Any]):
+    try:
+        thread = threading.Thread(
+            target=execute_presentation_pipeline_async,
+            args=(job_id, scope),
+            daemon=True,
+            name=f"pres-worker-{job_id}"
+        )
+        thread.start()
+    except Exception as exc:
+        job_manager.update_stage(job_id, 'failed', 'Could not start presentation generation', 0, error=str(exc))
+        raise
+
+
+def recover_presentation_jobs(job_id: str | None = None):
+    """Rebuild interrupted runs from persisted settings without changing their IDs."""
+    for job in job_manager.recover_interrupted_jobs(job_id):
+        try:
+            _launch_presentation_worker(job['id'], job['scope'])
+        except Exception:
+            logger.exception("Could not relaunch presentation job %s", job['id'])
+
+
 def start_presentation_job(scope: dict[str, Any]) -> str:
     """Entry point to launch background presentation pipeline."""
     job_id = job_manager.create_job(scope)
-    thread = threading.Thread(
-        target=execute_presentation_pipeline_async,
-        args=(job_id, scope),
-        daemon=True,
-        name=f"pres-worker-{job_id}"
-    )
-    thread.start()
+    _launch_presentation_worker(job_id, scope)
     return job_id

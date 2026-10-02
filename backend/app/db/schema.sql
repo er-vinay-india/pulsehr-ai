@@ -155,6 +155,9 @@ CREATE TABLE IF NOT EXISTS presentation_jobs (
     deck_id TEXT REFERENCES presentation_decks(id),
     error TEXT,
     scope_json TEXT NOT NULL,
+    extra_json TEXT DEFAULT '{}',
+    worker_pid INTEGER,
+    recovery_attempts INTEGER NOT NULL DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

@@ -19,6 +19,7 @@ from ..services.presentation_service import (
     preview_presentation_scope,
     verify_presentation_claims,
 )
+from ..services.presentation.pipeline_orchestrator import recover_presentation_jobs
 from ..services.report_generator import export_spec_to_pptx
 
 logger = logging.getLogger(__name__)
@@ -223,6 +224,7 @@ def revalidate_deck_claims(req: RevalidateRequest):
 @router.get("/jobs/{job_id}")
 def get_presentation_job_status(job_id: str):
     """Polls progress for a background presentation generation job."""
+    recover_presentation_jobs(job_id)
     job = job_manager.get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Presentation job not found")
@@ -656,4 +658,3 @@ def stream_slide_narration(deck_id: str, slide_order: int):
         media_type="audio/mpeg",
         filename=f"slide_{slide_order}.mp3"
     )
-

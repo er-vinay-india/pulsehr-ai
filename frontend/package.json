@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "test": "node scripts/test_markdown_rendering.mjs",
     "test:chat": "node scripts/test_hriday_chat.mjs",
-    "test:deck": "node scripts/test_deck_controls.mjs",
+    "test:deck": "node scripts/test_deck_controls.mjs && node scripts/test_presentation_job_recovery.mjs",
     "pretest:theme": "node scripts/generate_theme_tokens.mjs",
     "test:theme": "node scripts/test_theme_contrast.mjs",
     "test:slides": "node scripts/test_slide_contrast.mjs",

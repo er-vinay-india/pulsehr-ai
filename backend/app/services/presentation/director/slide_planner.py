@@ -21,6 +21,7 @@ from .director_models import (
 )
 
 logger = logging.getLogger(__name__)
+from .evidence_context import evidence_context
 
 
 def plan_slides(
@@ -78,10 +79,7 @@ def plan_slides(
         "evidence_ledger": True
     }
 
-    units_brief = [
-        {"id": u.id, "title": u.title, "evidence_id": u.evidence_id, "source": u.source_type.value}
-        for u in main_units[:10]
-    ]
+    units_brief = evidence_context(ctx, main_units)
 
     prompt = f"""You are the Executive Presentation Director. Generate the concrete slide blueprints for this presentation.
 
@@ -105,6 +103,8 @@ def plan_slides(
 3. Every slide must specify layout: ["title_hero", "kpi_summary", "chart_narrative", "table_detail", "comparison_split", "action_plan"].
 4. Specify visual_type: ["none", "line_chart", "bar_chart", "donut_chart", "kpi_grid", "table", "talent_9box", "burnout_strain", "bradford_factor", "action_plan", "raci_matrix", "evidence_ledger"].
 5. Cite relevant evidence_ids and information_unit_ids for data grounding.
+6. Write the actual finding and its value, unit, period and relevant caveat. Evidence IDs stay in metadata, not in audience copy.
+7. Do not invent policy, causes, seasonal changes, financial impact or targets. A request for these topics is not evidence.
 
 Return ONLY a valid JSON object:
 {{
@@ -117,9 +117,9 @@ Return ONLY a valid JSON object:
       "subtitle": "Clear explanatory subtitle",
       "key_message": "Core takeaway for this slide.",
       "bullet_points": [
-        "[Evidence] Ground truth metric from data.",
-        "[Context] Comparative benchmark.",
-        "[Impact] Strategic implication."
+        "A specific finding with its recorded value and unit",
+        "A supported comparison, if available",
+        "A limitation that affects interpretation, if applicable"
       ],
       "visual_type": "none",
       "evidence_ids": ["EVID-01"],

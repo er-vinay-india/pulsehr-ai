@@ -6,7 +6,7 @@ from .core import config
 from .db.database import init_db, get_connection
 from .services.sheet_catalog import migrate_existing, backfill_display_names
 from .routers import analytics, employees, upload, copilot, reports, sheets, presentations
-from .services.presentation.job_manager import job_manager
+from .services.presentation.pipeline_orchestrator import recover_presentation_jobs
 from .routers import decision_brief, adaptive_dashboard, eda, workspace_context
 
 @asynccontextmanager
@@ -16,7 +16,7 @@ async def lifespan(app: FastAPI):
     init_db()
     migrate_existing()
     backfill_display_names()
-    job_manager.cleanup_stale_jobs()
+    recover_presentation_jobs()
     print("[HighView] Startup completed. System ready on port", config.PORT)
     yield
     print("[HighView] Shutting down...")

@@ -10,6 +10,7 @@ import {
 const STAGE_ALIASES = {
   brief_setup: "brief_setup",
   reviewing_coverage: "brief_setup",
+  recovering: "brief_setup",
   evidence_audit: "evidence_audit",
   collecting_findings: "evidence_audit",
   narrative_arc: "narrative_arc",
@@ -143,7 +144,7 @@ export default function DeckGeneratingView({
         </div>
         <span className="pipeline-progress-pct">{jobProgress}% Complete</span>
 
-        {(jobStage === "ready" || jobProgress >= 100) && onOpenInStudio && (
+        {!jobError && jobStage === "ready" && onOpenInStudio && (
           <div style={{ display: "flex", gap: "10px", marginTop: "16px", justifyContent: "center" }}>
             <button
               type="button"
@@ -180,7 +181,7 @@ export default function DeckGeneratingView({
       {/* 8-Phase Sequential Stepper List */}
       <div className="pipeline-stages-list" role="list" aria-label="8-phase generation sequence">
         {stages.map((st, idx) => {
-          const isPassed = index > idx || jobProgress >= 100;
+          const isPassed = !jobError && (index > idx || jobStage === "ready");
           const isCurrent = index === idx && !jobError;
 
           return (

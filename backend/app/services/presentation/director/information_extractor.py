@@ -34,8 +34,8 @@ def extract_and_triage_information(
     raw_units.append(
         InformationUnit(
             id="INFO-SCOPE-01",
-            title="Audited Population & Integrity",
-            statement=f"Evaluated {ctx.total_records:,} records with {ctx.completeness_pct}% data integrity from '{ctx.dataset_label}'.",
+            title="Reporting scope",
+            statement=f"The review covers {ctx.total_records:,} records from '{ctx.dataset_label}'. {ctx.completeness_pct}% of data cells are non-empty.",
             source_type=InformationSourceType.DATASET_PROFILE,
             source_ref=ctx.dataset_label,
             confidence=1.0,
@@ -67,7 +67,7 @@ def extract_and_triage_information(
         ev_id = ev.get("evidence_id") or f"EVID-{idx+1:02d}"
         headline = ev.get("headline") or ev.get("title") or f"Empirical finding {idx+1}"
         finding = ev.get("finding") or ev.get("statement") or ev.get("why_it_matters") or headline
-        metric_val = ev.get("metric_value") or ev.get("value")
+        metric_val = ev.get("metric_value") if ev.get("metric_value") is not None else ev.get("value")
         comparison = ev.get("comparison") or ""
 
         # Priority triage: First 6-8 findings to MAIN_DECK, remaining to APPENDIX
@@ -86,7 +86,7 @@ def extract_and_triage_information(
                 priority=priority,
                 destination=dest,
                 rationale=f"Verified empirical evidence with status: {ev.get('status', 'audited')}.",
-                metrics={"metric_value": metric_val, "comparison": comparison}
+                metrics={key: ev[key] for key in ('metric_name', 'metric_value', 'numeric_value', 'unit', 'denominator', 'comparison', 'date_range', 'limitations') if key in ev} | {"metric_value": metric_val, "comparison": comparison}
             )
         )
 
