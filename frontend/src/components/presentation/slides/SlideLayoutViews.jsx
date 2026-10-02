@@ -379,9 +379,9 @@ export default function SlideLayoutViews({
 
       {/* LAYOUT 4: comparison_split */}
       {layout === "comparison_split" && (
-        <div className="layout-grid comparison-split-grid">
+        <div className="layout-grid comparison-split-grid" style={!slide.table && !slide.metrics?.length ? { gridTemplateColumns: "1fr" } : undefined}>
           <div className="recommendations-card" style={{ backgroundColor: theme.card_bg, borderColor: theme.card_border }}>
-            <h3 className="card-subhead" style={{ color: theme.accent_color }}>{slide.category === "EVIDENCE APPENDIX" ? "Interpretation boundaries" : slide.category === "DECISION BRIEF" ? "Leadership takeaways" : "Operational Recommendations"}</h3>
+            <h3 className="card-subhead" style={{ color: theme.accent_color }}>{slide.category === "EVIDENCE APPENDIX" ? "Interpretation boundaries" : slide.category === "DECISION BRIEF" ? "Leadership takeaways" : "Key takeaways"}</h3>
             <p className="rec-narrative">
               <FormattedText text={slide.narrative} defaultColor={theme.primary_text} />
             </p>
@@ -435,7 +435,7 @@ export default function SlideLayoutViews({
           {slide.table && slide.table.rows && slide.table.rows.length > 0 ? (
             <div className="diagnostic-table-card" style={{ backgroundColor: theme.card_bg, borderColor: theme.card_border, padding: "20px 22px", borderRadius: "12px", overflow: "hidden", display: "flex", flexDirection: "column", justifyContent: "space-between", height: "100%" }}>
               <div style={{ fontSize: "13px", fontWeight: "700", color: theme.brand_color, marginBottom: "10px", textTransform: "uppercase", letterSpacing: "0.06em" }}>
-                Diagnostic Evidence Matrix
+                Recorded findings
               </div>
               <div style={{ overflowX: "hidden", width: "100%", flex: 1 }}>
                 <table style={{ width: "100%", tableLayout: "fixed", borderCollapse: "collapse", fontSize: "13.5px" }}>
@@ -460,11 +460,7 @@ export default function SlideLayoutViews({
             </div>
           ) : (
             <div className="priorities-card-stack">
-              {(slide.metrics && slide.metrics.length > 0 ? slide.metrics : [
-                { label: "Phase 1", value: "Immediate Alignment", subtext: "0 - 30 Days" },
-                { label: "Phase 2", value: "Variance Mitigation", subtext: "Quarterly Review" },
-                { label: "Phase 3", value: "Automated Governance", subtext: "Long-term Monitoring" }
-              ]).map((m, i) => (
+              {(slide.metrics || []).map((m, i) => (
                 <div key={i} className="priority-tier-card" style={{ backgroundColor: theme.card_bg, borderColor: theme.card_border }}>
                   <div className="priority-step" style={{ color: theme.accent_color }}>{m.label}</div>
                   <div className="priority-title" style={{ color: theme.brand_color }}>{m.value}</div>

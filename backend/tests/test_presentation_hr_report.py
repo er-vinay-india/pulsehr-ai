@@ -58,9 +58,32 @@ def test_non_hr_data_does_not_take_attendance_path():
     assert build_hr_report({}, {'records': [{'Make': 'Ford', 'Price': 100}], 'columns': ['Make', 'Price']}) is None
 
 
+def test_invalid_calendar_period_cannot_be_used_for_rollups():
+    ctx = fixture_context()
+    ctx['columns'].append('30th to 35th July 2026')
+    deck = build_hr_report({}, ctx)
+    assert 'invalid calendar dates' in str(deck['slides'])
+    assert not any(e['metric_name'] == 'Employees' for e in deck['evidence_ledger'])
+
+
 def test_all_missing_attendance_never_becomes_zero():
     ctx = fixture_context()
     for row in ctx['records']:
         row['Total Attendance'] = None
     deck = build_hr_report({}, ctx)
     assert not any(e['metric_name'] in {'Recorded office days', 'Median office days'} for e in deck['evidence_ledger'])
+
+
+def test_cross_sheet_leave_reconciliation_preserves_ids_and_missing_values():
+    ctx = fixture_context()
+    ctx['target_sheet']['id'] = 1
+    comparison = {'sheet': {'id': 2}, 'columns': ['Emp ID', 'Total Leave'],
+                  'records': [{'Emp ID': '001', 'Total Leave': 2}, {'Emp ID': '002', 'Total Leave': None}]}
+    deck = build_hr_report({}, ctx, {'sheet_contexts': {2: comparison}})
+    row = next(row for s in deck['slides'] for row in (s.get('table') or {}).get('rows', []) if row[0] == 'Leave against selected comparison sheet')
+    assert row[1:3] == ['1', '1']  # Missing comparison leave is not a zero.
+    assert '003' in str(deck['slides'])
+    comparison['records'].append({'Emp ID': '001', 'Total Leave': 10})
+    deck = build_hr_report({}, ctx, {'sheet_contexts': {2: comparison}})
+    assert 'Resolve identity before matching leave totals' in str(deck['slides'])
+    assert not any(row[0] == 'Leave against selected comparison sheet' for s in deck['slides'] for row in (s.get('table') or {}).get('rows', []))

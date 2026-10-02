@@ -605,7 +605,8 @@ def test_export_pptx_and_quality_audit_compatibility():
 
     # Verify claims
     claim_res = verify_presentation_claims(deck_spec, deck_spec["evidence_ledger"])
-    assert claim_res["status"] in ("PASSED", "VERIFIED")
+    # Raw fallback planning text is not automatically certified by cited IDs.
+    assert claim_res["discrepancies_flagged"] > 0
 
     # Quality audit
     audit_res = PresentationQualityAuditor.audit_deck_spec(deck_spec, deck_spec["evidence_ledger"])

@@ -184,6 +184,8 @@ def reorder_presentation_deck(deck_spec: dict[str, Any]) -> dict[str, Any]:
     - metadata title alignment
     - total_slides consistency
     """
+    if deck_spec.get("metadata", {}).get("content_contract"):
+        return deck_spec  # Report order is part of its verified business story.
     if not deck_spec or "slides" not in deck_spec:
         return deck_spec
 

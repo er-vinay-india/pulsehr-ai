@@ -17,7 +17,21 @@ def content_digest(slide):
 
 def seal_business_content(deck):
     deck['metadata']['content_contract_digests'] = [content_digest(s) for s in deck['slides']]
+    for s in deck['slides']:
+        s.setdefault('stable_slide_id', s['id'])
+        s.setdefault('evidence_sources', [s.get('source_label') or 'Recorded data'])
+        s.setdefault('narration_script', s.get('speaker_notes') or s.get('narrative', ''))
+        s.setdefault('reading_order', ['slide_header', 'narrative_lead', 'measured_content', 'source_footer'])
+        from .builders.common import calculate_timing
+        s['timing_metadata'] = calculate_timing(s['narration_script'])
+    seal_presenter_notes(deck)
+    deck['metadata']['validation_summary'] = verify_business_content(deck)
     return deck
+
+
+def seal_presenter_notes(deck):
+    deck['metadata']['content_contract_notes'] = [hashlib.sha256(str(s.get('speaker_notes') or '').encode()).hexdigest() for s in deck['slides']]
+
 
 
 def semantic_issues(deck, source_columns=None):
@@ -32,6 +46,9 @@ def semantic_issues(deck, source_columns=None):
     ledger = {e.get('evidence_id'): e for e in deck.get('evidence_ledger', [])}
     slides = deck.get('slides') or []
     expected = deck.get('metadata', {}).get('content_contract_digests')
+    notes = deck.get('metadata', {}).get('content_contract_notes')
+    if notes is not None and notes != [hashlib.sha256(str(s.get('speaker_notes') or '').encode()).hexdigest() for s in slides]:
+        issues.append('Presenter notes changed after content verification.')
     if expected is not None and expected != [content_digest(s) for s in slides]:
         issues.append('Business report wording or values changed after evidence grounding.')
     for e in ledger.values():
@@ -39,6 +56,8 @@ def semantic_issues(deck, source_columns=None):
         method = e.get('calculation_methodology')
         if nums is not None and method in {'sum', 'mean', 'median', 'count'}:
             try:
+                if method in {'mean', 'median'} and e.get('denominator') != len(nums):
+                    issues.append(f"Denominator does not match recorded inputs for {e.get('metric_name')}.")
                 actual = {'sum': sum, 'mean': mean, 'median': median, 'count': len}[method](nums)
                 if not math.isclose(float(e['numeric_value']), actual, rel_tol=1e-9, abs_tol=1e-9):
                     issues.append(f"Calculation does not reproduce {e.get('metric_name')}.")

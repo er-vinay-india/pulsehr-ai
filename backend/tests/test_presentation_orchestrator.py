@@ -567,8 +567,9 @@ def test_claim_verifier_integration():
     )
 
     verification_res = verify_presentation_claims(deck_spec, deck_spec["evidence_ledger"])
-    assert verification_res["discrepancies_flagged"] == 0
-    assert verification_res["status"] == "PASSED"
+    # Execution preserves a plan; it cannot make unsupported fallback wording true.
+    assert verification_res["discrepancies_flagged"] > 0
+    assert verification_res["status"] == "DISCREPANCIES_FLAGGED"
 
 
 # -------------------------------------------------------------------------

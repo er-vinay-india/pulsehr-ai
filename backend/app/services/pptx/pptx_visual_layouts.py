@@ -105,12 +105,15 @@ def _render_table_detail_slide(slide, slide_data, colors):
     if headers and rows:
         num_rows = len(rows) + 1
         num_cols = len(headers)
-        row_h = 0.38
+        row_h = 0.6 if num_cols <= 3 else 0.5
         table_h = row_h * num_rows
         table_shape = slide.shapes.add_table(num_rows, num_cols, Inches(0.8), Inches(2.6), Inches(11.7), Inches(table_h))
         table = table_shape.table
+        if num_cols == 3:
+            for column, width in zip(table.columns, (3.4, 2.7, 5.6)):
+                column.width = Inches(width)
 
-        display_headers = [format_display_label(h) for h in headers]
+        display_headers = [str(h) if slide_data.get("business_report") else format_display_label(h) for h in headers]
         all_data = [display_headers, *rows]
 
         for ri, rvals in enumerate(all_data):
@@ -120,8 +123,9 @@ def _render_table_detail_slide(slide, slide_data, colors):
                 cell.fill.solid()
                 cell.fill.fore_color.rgb = colors["card_bg"]
                 p = cell.text_frame.paragraphs[0]
+                cell.text_frame.word_wrap = True
                 p.text = str(val)
-                p.font.size = Pt(10)
+                p.font.size = Pt(12)
                 if ri == 0:
                     p.font.bold = True
                     p.font.color.rgb = colors["brand"]

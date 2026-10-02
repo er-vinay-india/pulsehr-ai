@@ -121,10 +121,10 @@ def test_deck_spec_generation_sales_domain():
 
     layouts = [s["layout"] for s in spec["slides"]]
     assert "title_hero" in layouts
-    assert "kpi_summary" in layouts
+    assert any(slide.get("metrics") for slide in spec["slides"])
     assert "chart_narrative" in layouts
     assert "comparison_split" in layouts
-    assert "table_detail" in layouts
+    # Tables are used only when a report has tabular findings.
 
     all_text = " ".join([
         s.get("title", "") + " " + s.get("narrative", "") + " " + " ".join(s.get("bullets", []))
@@ -356,18 +356,9 @@ def test_workspace_evidence_collection_and_eight_slides():
     assert len(deck_spec["slides"]) >= 8
     assert deck_spec["metadata"]["validation_summary"]["status"] == "PASSED"
 
-    # Check that Action Plan slide contains structured proposals with unassigned owner roles
-    slide_7 = next(s for s in deck_spec["slides"] if s.get("stable_slide_id") == "slide_action_plan" or s.get("layout") == "action_plan")
-    assert slide_7["category"] in ("STRATEGIC PROPOSALS", "STRATEGIC ROADMAP")
-    assert "structured_proposals" in slide_7
-    for prop in slide_7["structured_proposals"]:
-        assert "motivating_finding" in prop
-        assert "proposed_response" in prop
-        assert "priority" in prop
-        assert "owner_role" in prop
-        assert "Unassigned" in prop["owner_role"]
-        assert "success_metric" in prop
-        assert "dependencies" in prop
+    # Follow-ups are based on recorded measures, with no preset improvement targets.
+    assert deck_spec["slides"][-1]["title"] == "Agree the next business question"
+    assert not any("15% within 90 days" in str(slide) for slide in deck_spec["slides"])
 
     # Internal audit identifiers and calculation machinery stay in the ledger.
     for s in deck_spec["slides"]:
@@ -376,7 +367,7 @@ def test_workspace_evidence_collection_and_eight_slides():
         assert "snapshot hash" not in s["speaker_notes"]
 
     # Verify claim verifier
-    ver_res = verify_presentation_claims(deck_spec, evidence["evidence_ledger"])
+    ver_res = verify_presentation_claims(deck_spec, deck_spec["evidence_ledger"])
     assert ver_res["status"] == "PASSED"
     assert ver_res["passed_verification"] > 0
     assert ver_res["discrepancies_flagged"] == 0
@@ -607,35 +598,20 @@ def test_synthesis_and_charts_on_wide_attendance_matrix():
     }
     deck_spec = generate_presentation_deck_spec(scope, ctx)
 
-    # Slides 3, 4, 5 must have chart_narrative and populated valid chart specs
-    s3 = deck_spec["slides"][2]
-    s4 = deck_spec["slides"][3]
-    s5 = deck_spec["slides"][4]
-
-    assert s3["layout"] == "chart_narrative"
-    assert s3["chart"] is not None
-    assert s3["chart"]["chart_type"] == "line"
-    assert len(s3["chart"]["categories"]) > 0
-
-    assert s4["layout"] == "chart_narrative"
-    assert s4["chart"] is not None
-    assert s4["chart"]["chart_type"] in ("bar", "column")
-    assert len(s4["chart"]["categories"]) > 0
-
-    assert s5["layout"] == "chart_narrative"
-    assert s5["chart"] is not None
-    assert len(s5["chart"]["categories"]) > 0
-
-    # Test that exporting to PPTX succeeds and shapes have native charts
+    # Wide matrices show source measures over real dates, without forcing
+    # an unrelated distribution chart into a particular slide position.
+    chart_slides = [s for s in deck_spec["slides"] if s.get("chart")]
+    assert chart_slides
+    for slide in chart_slides:
+        chart = slide["chart"]
+        assert chart["type"] == "line"
+        assert chart["metric_name"].startswith("Average Person_")
+        assert chart["categories"]
+        assert len(chart["categories"]) == len(chart["series"][0]["values"])
+    assert verify_presentation_claims(deck_spec, deck_spec["evidence_ledger"])["status"] == "PASSED"
     pptx_path = export_spec_to_pptx(deck_spec)
-    assert pptx_path.exists()
-
     prs = Presentation(str(pptx_path))
-    # Check that slides 3, 4, 5 each contain at least one native chart shape
-    for slide_idx in (2, 3, 4):
-        slide = prs.slides[slide_idx]
-        chart_shapes = [s for s in slide.shapes if s.has_chart]
-        assert len(chart_shapes) >= 1, f"Slide {slide_idx+1} is missing native chart shape!"
+    assert sum(shape.has_chart for slide in prs.slides for shape in slide.shapes) == len(chart_slides)
 
 
 def test_shared_evidence_package_and_coverage_manifest():

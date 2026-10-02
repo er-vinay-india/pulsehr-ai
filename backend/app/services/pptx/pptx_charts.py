@@ -7,7 +7,7 @@ from pptx.oxml.xmlchemy import OxmlElement
 from pptx.dml.fill import FillFormat
 from pptx.enum.shapes import MSO_SHAPE
 from pptx.chart.data import CategoryChartData
-from pptx.enum.chart import XL_CHART_TYPE, XL_LEGEND_POSITION
+from pptx.enum.chart import XL_CHART_TYPE, XL_LEGEND_POSITION, XL_DATA_LABEL_POSITION
 
 from .pptx_styles import ChartExportError, hex_to_rgb
 
@@ -72,11 +72,28 @@ def _add_native_chart_shape(slide, chart_info: dict, x, y, cx, cy, colors: dict,
     try:
         chart_shape = slide.shapes.add_chart(xl_type, x, y, cx, cy, cdata)
         chart = chart_shape.chart
+        for element in chart._chartSpace.iter():
+            if element.tag.rsplit('}', 1)[-1] in {'axId', 'crossAx'} and element.get('val'):
+                value = int(element.get('val'))
+                if value < 0:
+                    element.set('val', str(value % (2**32)))
         chart.has_legend = True
         chart.legend.position = XL_LEGEND_POSITION.TOP
         chart.legend.include_in_layout = False
         chart.font.color.rgb = colors["secondary"]
         chart.font.size = Pt(11)
+        chart.has_title = True
+        chart.chart_title.text_frame.text = chart_info.get('title') or series_list[0].get('name') or 'Recorded values'
+        for paragraph in chart.chart_title.text_frame.paragraphs:
+            paragraph.font.color.rgb = colors['primary']
+            paragraph.font.size = Pt(12)
+        chart.plots[0].has_data_labels = True
+        chart.plots[0].data_labels.font.color.rgb = colors['primary']
+        chart.plots[0].data_labels.font.size = Pt(10)
+        count_unit = chart_info.get('unit') in {'rows', 'count', 'employees', 'personnel'}
+        number_format = '0' if count_unit else '0.00'
+        chart.plots[0].data_labels.number_format = number_format
+        chart.plots[0].data_labels.position = XL_DATA_LABEL_POSITION.ABOVE if xl_type == XL_CHART_TYPE.LINE else XL_DATA_LABEL_POSITION.OUTSIDE_END
         chart.legend.font.color.rgb = colors["secondary"]
         chart.legend.font.size = Pt(11)
         # Explicit fills prevent Office's default white chart area in dark decks.
@@ -93,9 +110,13 @@ def _add_native_chart_shape(slide, chart_info: dict, x, y, cx, cy, colors: dict,
             for axis in (chart.category_axis, chart.value_axis):
                 axis.tick_labels.font.color.rgb = colors["secondary"]
                 axis.tick_labels.font.size = Pt(11)
+                axis.tick_labels.number_format = number_format
+                axis.tick_labels.number_format_is_linked = False
                 axis.format.line.color.rgb = colors["card_border"]
                 if axis.has_major_gridlines:
                     axis.major_gridlines.format.line.color.rgb = colors["card_border"]
+            if count_unit:
+                chart.value_axis.major_unit = 1
 
 
         if theme_palette:

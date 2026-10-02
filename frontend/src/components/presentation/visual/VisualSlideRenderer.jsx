@@ -521,7 +521,7 @@ export default function VisualSlideRenderer({
         style={{ borderTop: `1px solid ${cardBorder}`, fontSize: "13px", color: secondaryText }}
       >
         <div className="d-flex align-items-center gap-2">
-          <span>{footer.confidence_statement || "HighView Presentation Studio"}</span>
+          <span>{footer.dataset_label ? `Source: ${footer.dataset_label}` : "HighView Presentation Studio"}</span>
         </div>
         <div>
           Slide {slide.order || 1} of {slide.total_slides || 8}

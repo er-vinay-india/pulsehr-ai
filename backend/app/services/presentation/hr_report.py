@@ -13,7 +13,7 @@ from collections import Counter
 from statistics import mean, median
 from typing import Any
 
-from ..hr_period_analytics import extract_normalized_periods
+from ..hr_period_analytics import extract_normalized_periods, MONTH_ORDER
 from .builders.common import THEMES
 
 
@@ -46,7 +46,10 @@ def build_hr_report(scope: dict, ctx: dict, workspace: dict | None = None) -> di
     leave_col = _column(columns, {"approvedleaves", "approvedleave", "totalapprovedleaves", "totalleave", "totalleaves"})
     final_col = _column(columns, {"finalattendance", "netattendance", "adjustedattendance"})
     dept_col = _column(columns, {"department", "dept", "departmentname"})
-    periods = extract_normalized_periods(columns)
+    source_period_text = ' '.join([*map(str, columns), str((ctx.get('target_sheet') or {}).get('name') or ''), str((ctx.get('target_sheet') or {}).get('original_name') or '')])
+    years = set(re.findall(r'\b(?:19|20)\d{2}\b', source_period_text))
+    known_year = int(next(iter(years))) if len(years) == 1 else None
+    periods = extract_normalized_periods(columns, known_year=known_year)
     if not id_col or not (att_col or any(p.attendance_col for p in periods)):
         return None
     records = ctx.get("records") or []
@@ -58,7 +61,10 @@ def build_hr_report(scope: dict, ctx: dict, workspace: dict | None = None) -> di
     ids = [str(r[id_col]).strip() if r.get(id_col) is not None else "" for r in records]
     missing_ids = sum(not i for i in ids)
     duplicate_ids = sorted(i for i, count in Counter(ids).items() if i and count > 1)
-    safe_population = not missing_ids and not duplicate_ids and len(months) <= 1
+    import calendar
+    invalid_periods = [p for p in periods if p.month not in MONTH_ORDER or p.start_day < 1 or p.end_day < p.start_day or
+                       p.end_day > calendar.monthrange(p.year or 2000, MONTH_ORDER.get(p.month, 1))[1]]
+    safe_population = bool(records) and not missing_ids and not duplicate_ids and len(months) <= 1 and not invalid_periods
     ledger, slides = [], []
     policy_limit = "WFO policy and working-day calendar were not supplied; compliance and working-day rates cannot be determined."
 
@@ -100,6 +106,10 @@ def build_hr_report(scope: dict, ctx: dict, workspace: dict | None = None) -> di
           [policy_limit], [fact("Source rows", len(records), "rows", [1]*len(records), "sum")])
     if not safe_population:
         issues = []
+        if invalid_periods:
+            issues.append("Some weekly headers have invalid calendar dates. Confirm the reporting periods before adding office days.")
+        if not records:
+            issues.append("No attendance records are available in the selected source.")
         if duplicate_ids:
             issues.append("Employee IDs occur more than once: " + ", ".join(duplicate_ids[:8]) + ". Confirm the employee-period grain before adding office days.")
         if missing_ids:
@@ -178,6 +188,22 @@ def build_hr_report(scope: dict, ctx: dict, workspace: dict | None = None) -> di
             if subtraction:
                 exceptions.append(["Final attendance equals office days minus leave", ", ".join(ids[i] for i in subtraction[:5]), "Check for double subtraction if office days already exclude leave; confirm policy first."])
         check_rows = []
+        empty_weeks, over_calendar = [], []
+        for p in periods:
+            if not p.attendance_col or not p.leave_col:
+                continue
+            for i, row in enumerate(records):
+                a, l = _number(row.get(p.attendance_col)), _number(row.get(p.leave_col))
+                if a is None or l is None:
+                    continue
+                if a == 0 and l == 0:
+                    empty_weeks.append(ids[i])
+                if a+l > p.length_days:
+                    over_calendar.append(ids[i])
+        if empty_weeks:
+            exceptions.append(["Weeks with no recorded office days or leave", ", ".join(dict.fromkeys(empty_weeks[:5])), "Confirm whether entries are complete; absence is not inferred."])
+        if over_calendar:
+            exceptions.append(["Office days plus leave exceed the calendar span", ", ".join(dict.fromkeys(over_calendar[:5])), "Check units and overlapping dates; the working calendar is not assumed."])
         for name, column, role in [("Office-day totals", att_col, "attendance_col"), ("Leave totals", leave_col, "leave_col")]:
             fields = [getattr(p, role) for p in periods if getattr(p, role)]
             if not column or not fields:
@@ -196,6 +222,35 @@ def build_hr_report(scope: dict, ctx: dict, workspace: dict | None = None) -> di
             check_rows.append([name, str(matches), str(eligible), "Weekly sum agrees with monthly total"])
             if mismatch_ids:
                 exceptions.append([name + " differ from weekly sums", ", ".join(mismatch_ids[:5]), "Recheck the formula and weekly entries."])
+        contexts = (workspace or {}).get('sheet_contexts') or {}
+        comparisons = []
+        for candidate in contexts.values():
+            if (candidate.get('sheet') or {}).get('id') == sheet.get('id'):
+                continue
+            cols = candidate.get('columns') or []
+            cid = _column(cols, {"id", "empid", "employeeid", "staffid"})
+            cleave = _column(cols, {"approvedleaves", "approvedleave", "totalapprovedleaves", "totalleave", "totalleaves"})
+            if cid and cleave:
+                comparisons.append((candidate, cid, cleave))
+        if len(comparisons) == 1:
+            candidate, cid, cleave = comparisons[0]
+            rows = candidate.get('records') or []
+            cids = [str(r[cid]).strip() if r.get(cid) is not None else '' for r in rows]
+            if any(not i for i in cids) or len(set(cids)) != len(cids):
+                exceptions.append(["Leave comparison has missing or duplicate IDs", "Selected comparison sheet", "Resolve identity before matching leave totals."])
+            else:
+                lookup = {i: _number(r.get(cleave)) for i, r in zip(cids, rows)}
+                eligible = [i for i, identifier in enumerate(ids) if identifier in lookup and lookup[identifier] is not None and leave[i] is not None]
+                matches = sum(abs(lookup[ids[i]]-leave[i]) < 1e-8 for i in eligible)
+                check_rows.append(["Leave against selected comparison sheet", str(matches), str(len(eligible)), "Recorded totals match; confirm both sheets cover the same period"])
+                unmatched = [identifier for identifier in ids if identifier not in lookup]
+                differences = [ids[i] for i in eligible if abs(lookup[ids[i]]-leave[i]) >= 1e-8]
+                if unmatched:
+                    exceptions.append(["IDs absent from leave comparison", ", ".join(unmatched[:5]), "Confirm the comparison population."])
+                if differences:
+                    exceptions.append(["Leave totals differ between selected sheets", ", ".join(differences[:5]), "Check dates, units and approvals."])
+        elif len(comparisons) > 1:
+            exceptions.append(["Several leave comparison sheets are selected", "Comparison not performed", "Select one matching period and population."])
         for offset in range(0, len(exceptions), 5):
             slide("Attendance entries that need checking" + (" — continued" if offset else ""),
                   "These are source checks for HR review, not conclusions about individual employees.",
@@ -207,6 +262,7 @@ def build_hr_report(scope: dict, ctx: dict, workspace: dict | None = None) -> di
         slide("What HR should confirm next", "Use the recorded attendance for discussion, then resolve definitions before making compliance decisions.",
               ["Confirm the WFO requirement and working-day calendar.", "Confirm whether leave is recorded in calendar days or working days.",
                "Check flagged entries and the final-attendance formula."])
+    slides[0]["layout"] = "title_hero"
     theme_id = scope.get("theme_id") or "executive_dark"
     for s in slides:
         s["total_slides"] = len(slides)
@@ -217,7 +273,7 @@ def build_hr_report(scope: dict, ctx: dict, workspace: dict | None = None) -> di
                          "file_label": label, "total_records": len(records), "snapshot_hash": (workspace or {}).get("snapshot_hash") or ctx.get("snapshot_hash"),
                          "reporting_period_summary": period_label, "content_contract": "hr_attendance_v1",
                          "created_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-                         "brief": {"objective": scope.get("objective") or "Attendance review"}},
+                         "brief": {**scope, "objective": scope.get("objective") or "Attendance review", "audience": scope.get("audience") or "HR managers"}},
             "slides": slides, "evidence_ledger": ledger,
             "coverage_manifest": {"items": [{"evidence_id": e["evidence_id"], "title": e["title"], "disposition": "main_deck"} for e in ledger]},
             "retrieved_context": (workspace or {}).get("retrieved_context", {})})

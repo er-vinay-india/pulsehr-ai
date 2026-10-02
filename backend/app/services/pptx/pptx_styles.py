@@ -105,7 +105,7 @@ def _render_footer(slide, slide_data, colors, slide_num: int = 1, total_slides: 
     if is_partial:
         parts.append("Partial Year Data (< 330 days)")
     if limitations:
-        parts.append(f"Scope: {limitations}")
+        parts.append("Definitions and limitations in slide notes")
     if not parts:
         parts.append("HighView · Clarity From Every Sheet. · Powered by HRIDAY")
     

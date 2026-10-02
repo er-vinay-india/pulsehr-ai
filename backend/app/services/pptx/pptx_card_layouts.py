@@ -217,7 +217,7 @@ def _render_kpi_summary_slide(slide, slide_data, colors):
         btf.margin_left = Inches(0.25)
         btf.margin_top = Inches(0.15)
         p_hd = btf.paragraphs[0]
-        p_hd.text = "KEY TAKEAWAYS & EMPIRICAL THRESHOLDS"
+        p_hd.text = "KEY TAKEAWAYS"
         p_hd.font.size = Pt(9)
         p_hd.font.bold = True
         p_hd.font.color.rgb = colors["accent"]
@@ -233,7 +233,8 @@ def _render_kpi_summary_slide(slide, slide_data, colors):
 
 
 def _render_comparison_split_slide(slide, slide_data, colors):
-    left_card = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(0.8), Inches(1.8), Inches(6.5), Inches(4.8))
+    metrics = slide_data.get('metrics') or []
+    left_card = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(0.8), Inches(1.8), Inches(6.5 if metrics else 11.7), Inches(4.8))
     left_card.fill.solid()
     left_card.fill.fore_color.rgb = colors["card_bg"]
     left_card.line.color.rgb = colors["card_border"]
@@ -268,13 +269,6 @@ def _render_comparison_split_slide(slide, slide_data, colors):
         rd.font.bold = True
         add_styled_text_runs(pb, b, font_size=10, default_color=colors["secondary"])
 
-    metrics = slide_data.get("metrics", [])
-    if not metrics:
-        metrics = [
-            {"label": "Priority 1", "value": "Operational Alignment", "subtext": "Immediate focus"},
-            {"label": "Priority 2", "value": "Variance Mitigation", "subtext": "Quarterly milestone"},
-            {"label": "Priority 3", "value": "Continuous Tracking", "subtext": "Automated governance"}
-        ]
     top_offset = 1.8
     card_h = 1.45
     spacing = 0.2

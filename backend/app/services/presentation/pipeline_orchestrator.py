@@ -482,7 +482,7 @@ def execute_presentation_pipeline_async(
         slides_list = deck_spec.get("slides", [])
         time_budget_min = scope.get("presentation_time_minutes") or 15
         for idx, slide in enumerate(slides_list):
-            if deck_spec.get("metadata", {}).get("deck_style") == "decision_brief" and slide.get("speaker_notes"):
+            if (deck_spec.get("metadata", {}).get("deck_style") == "decision_brief" or deck_spec.get("metadata", {}).get("content_contract")) and slide.get("speaker_notes"):
                 slide_duration = _estimate_speaking_time_seconds(slide["speaker_notes"])
                 slide["estimated_speaking_duration_sec"] = slide_duration
                 total_speaking_duration_sec += slide_duration
@@ -558,6 +558,7 @@ def execute_presentation_pipeline_async(
 
         deliverable_mode = brief_data.get("deliverable", "pptx").lower()
         from ..report_generator import export_spec_to_pptx, export_spec_to_pdf
+        pptx_path = None
         if deliverable_mode in ("pptx", "both"):
             pptx_path = export_spec_to_pptx(deck_spec)
             deck_spec["pptx_filename"] = pptx_path.name
@@ -597,7 +598,7 @@ def execute_presentation_pipeline_async(
                         deck_spec["metadata"].get("sheet_id"),
                         deck_spec["metadata"]["theme_id"],
                         json.dumps(deck_spec),
-                        pptx_path.name,
+                        pptx_path.name if pptx_path else None,
                         now,
                         now
                     )

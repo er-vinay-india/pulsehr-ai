@@ -30,6 +30,8 @@ def _extract_unit(text: str) -> str:
         return "£"
     if re.search(r'\b[+\-]?\d+(?:\.\d+)?x\b', t) or "ratio" in t or "spread" in t or "multiple" in t or "dispersion" in t:
         return "x"
+    if "days" in t or "day" in t:
+        return "days"
     if "pts" in t or "points" in t:
         return "pts"
     if any(w in t for w in ("record", "records", "row", "rows", "headcount", "staff", "personnel", "count", "employee", "employees")):
@@ -181,10 +183,10 @@ def _extract_slide_claims(slide: dict[str, Any], slide_idx: int) -> list[dict[st
                 })
 
     # 4. Bullets
-    bullets = []
-    if isinstance(slide.get("content"), dict):
+    bullets = slide.get("bullets") or []
+    if not bullets and isinstance(slide.get("content"), dict):
         bullets = slide.get("content", {}).get("bullets") or []
-    elif isinstance(slide.get("bullet_points"), list):
+    elif not bullets and isinstance(slide.get("bullet_points"), list):
         bullets = slide.get("bullet_points") or []
     for bullet in bullets:
         b_str = str(bullet)
@@ -500,7 +502,7 @@ def verify_presentation_claims(
                     matched_ev = ev_by_id.get("EVID-COMP-01") or ev_by_name.get("data completeness") or ev_by_name.get("completeness") or ev_by_id.get("EVID-GOV-01")
                 elif any(k in full_claim_text for k in ("turnover", "attrition", "separation")):
                     matched_ev = ev_by_id.get("EV-01") or ev_by_name.get("turnover rate") or ev_by_id.get("EVID-STRENGTH-01") or ev_by_id.get("EVID-HEADWIND-01")
-                elif any(k in full_claim_text for k in ("population", "evaluated records", "audited population", "evaluated staff", "total records")) and claimed_unit in ("count", "unit"):
+                elif any(k in full_claim_text for k in ("population", "evaluated records", "audited population", "evaluated staff", "total records", "across")) and claimed_unit in ("count", "unit"):
                     matched_ev = ev_by_id.get("EV-02") or ev_by_id.get("EVID-EXEC-01")
                 elif any(k in full_claim_text for k in ("network baseline", "baseline mean", "baseline benchmark", "performance benchmark")):
                     matched_ev = ev_by_id.get("EVID-KPI-01")

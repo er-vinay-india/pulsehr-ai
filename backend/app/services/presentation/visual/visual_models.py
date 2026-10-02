@@ -63,7 +63,7 @@ class SourceFooterSpec(BaseModel):
     source_sheets: list[str] = Field(default_factory=list)
     source_citation: str = ""
     evidence_citation: str = ""
-    confidence_statement: str = "Audited Ground Truth (±0.1%)"
+    confidence_statement: str = ""
     slide_counter_text: str = ""
 
 

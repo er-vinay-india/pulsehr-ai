@@ -41,6 +41,14 @@ def test_ledger_calculations_are_recomputed_not_just_accepted():
     assert verify_presentation_claims(deck, deck['evidence_ledger'])['status'] == 'FAILED'
 
 
+def test_average_denominator_must_match_recorded_population():
+    deck = build_hr_report({}, fixture_context())
+    fact = next(e for e in deck['evidence_ledger'] if e['metric_name'] == 'Average office days: Design')
+    fact['denominator'] = 3
+    result = verify_presentation_claims(deck, deck['evidence_ledger'])
+    assert any('Denominator' in issue for issue in result['semantic_issues'])
+
+
 def test_completeness_cannot_verify_resilience_even_with_same_value_and_id():
     ledger = [{'evidence_id': 'EVID-GOV-01', 'metric_name': 'Data Completeness', 'numeric_value': 100, 'unit': '%'}]
     deck = {'metadata': {'completeness_pct': 100}, 'slides': [{'title': 'Reliability', 'metrics': [

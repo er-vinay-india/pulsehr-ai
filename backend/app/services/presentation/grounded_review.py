@@ -15,6 +15,7 @@ def build_grounded_review(scope, ctx, workspace=None):
     label = (ctx.get('target_sheet') or {}).get('name') or 'Recorded data'
     period = (workspace or {}).get('reporting_period_summary') or 'Recorded observations'
     ledger, slides = [], []
+    date_col = next((c for c in columns if _norm(c) in {'date', 'recorddate', 'observationdate'}), None)
 
     def fact(name, value, unit, inputs, method):
         eid = f'RECORD-{len(ledger)+1:03d}'
@@ -22,6 +23,8 @@ def build_grounded_review(scope, ctx, workspace=None):
                        'metric_value': f'{value:g} {unit}', 'unit': unit, 'date_range': period,
                        'source_sheets': [label], 'calculation_inputs': inputs, 'calculation_methodology': method,
                        'finding_type': 'measured_fact', 'limitations': 'Recorded values do not establish causes or future results.'})
+        if method in {'mean', 'median'}:
+            ledger[-1]['denominator'] = len(inputs)
         return {'label': name, 'value': f'{value:g}', 'unit': unit, 'subtext': unit, 'evidence_id': eid}
 
     def add(title, narrative, bullets=None, metrics=None, chart=None):
@@ -54,7 +57,27 @@ def build_grounded_review(scope, ctx, workspace=None):
             unit = 'recorded units'
             m = fact('Average '+str(column), mean(nums), unit, nums, 'mean')
             ledger[-1]['denominator'] = len(nums)
-            add(str(column)+' at a glance', 'This average uses records with a numeric value; missing values are excluded.', metrics=[m])
+            chart = None
+            if date_col and column != date_col:
+                by_date = {}
+                for row in records:
+                    value = _number(row.get(column))
+                    date = str(row.get(date_col) or '')
+                    try:
+                        date = datetime.date.fromisoformat(date[:10]).isoformat()
+                    except ValueError:
+                        continue
+                    if value is not None:
+                        by_date.setdefault(date, []).append(value)
+                if len(by_date) > 1:
+                    # Explicitly bounded recent window; no invented category padding.
+                    dates = sorted(by_date)[-8:]
+                    refs = [fact('Average '+str(column)+': '+d, mean(by_date[d]), unit, by_date[d], 'mean')['evidence_id'] for d in dates]
+                    chart = {'type': 'line', 'title': str(column)+' by recorded date', 'metric_name': 'Average '+str(column),
+                             'unit': unit, 'period': period, 'group_by': date_col, 'categories': dates,
+                             'series': [{'name': 'Average '+str(column), 'values': [mean(by_date[d]) for d in dates]}], 'evidence_ids': refs}
+            add(str(column)+' at a glance', 'This average uses records with a numeric value; missing values are excluded.',
+                bullets=['The chart shows the latest recorded dates; it does not forecast future results.'] if chart else None, metrics=[m], chart=chart)
         else:
             counts = Counter(str(v) for v in raw)
             if len(counts) > 12 or len(counts) < 2:
@@ -69,6 +92,7 @@ def build_grounded_review(scope, ctx, workspace=None):
                        'series': [{'name': 'Records', 'values': [n for _, n in pairs]}], 'evidence_ids': refs})
     add('Agree the next business question', 'Confirm the measures needed for the decision, then compare like-for-like records.',
         ['Confirm business definitions and reporting scope.', 'Supply the missing measures before assessing causes or expected benefits.'])
+    slides[0]['layout'] = 'title_hero'
     theme_id = scope.get('theme_id') or 'executive_dark'
     for slide in slides:
         slide['total_slides'] = len(slides)

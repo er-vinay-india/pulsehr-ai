@@ -426,6 +426,8 @@ def capture_dataset_context(conn, sheet_id: int | None = None, dataset_id: int |
     elif dataset_id:
         target_sheet = next((s for s in all_sheets if s["dataset_id"] == dataset_id), None)
 
+    if not target_sheet and (sheet_id or dataset_id):
+        raise ValueError("The selected dataset or sheet is unavailable. Select an existing source before generating a report.")
     if not target_sheet:
         target_sheet = all_sheets[0]
 
