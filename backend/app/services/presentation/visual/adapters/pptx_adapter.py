@@ -89,6 +89,7 @@ class PPTXAdapter:
             "structured_proposals": spec.structured_proposals if spec.structured_proposals else None,
             "speaker_notes": spec.speaker_notes,
             "evidence_id": spec.source_footer.evidence_citation or "EVID-EXEC-01",
+            "source_label": spec.source_footer.dataset_label,
             "metadata": {
                 "canonical_family": spec.layout.family.value,
                 "layout_variant": spec.layout.variant,

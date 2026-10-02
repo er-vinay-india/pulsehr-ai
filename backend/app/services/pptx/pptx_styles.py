@@ -96,10 +96,12 @@ def _render_footer(slide, slide_data, colors, slide_num: int = 1, total_slides: 
     evidence_id = slide_data.get("evidence_id")
     is_partial = slide_data.get("is_partial_year")
     parts = []
-    if evidence_id:
+    if evidence_id and slide_data.get("show_technical_citations"):
         parts.append(f"[{evidence_id}]")
+    if not sources and slide_data.get("source_label"):
+        sources = [slide_data["source_label"]]
     if sources:
-        parts.append(f"Evidence: {', '.join(str(s) for s in sources)}")
+        parts.append(f"Source: {', '.join(str(s) for s in sources)}")
     if is_partial:
         parts.append("Partial Year Data (< 330 days)")
     if limitations:

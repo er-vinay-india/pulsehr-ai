@@ -52,26 +52,12 @@ def format_briefing(
     snapshot_hash: str = "000000000000",
     disconnected_boundary_note: str = "Evaluated on verified empirical records."
 ) -> str:
-    qa_list = ev.get("likely_questions", [])
-    if not qa_list:
-        qa_list = [
-            {"question": "What is the primary data source?", "answer": f"Locally evaluated non-null records in {ev.get('source_sheets', ['database'])[0]}."},
-            {"question": "How can this figure be audited?", "answer": f"Deterministic SQL evaluation against snapshot hash {snapshot_hash[:12]} reproduces the figure within ±0.1%."}
-        ]
-    qa_formatted = "\n".join(f"  Q: {q['question']}\n  A: {q['answer']}" for q in qa_list)
-    return (
-        f"=== PRESENTER BRIEFING (BOARD SCRUTINY) ===\n"
-        f"Evidence ID: [{ev.get('evidence_id', 'EVID-UNIFIED')}] · Finding Type: [{ev.get('finding_type', 'measured_fact').upper()}]\n"
-        f"• What it Establishes: {ev.get('what_it_establishes', 'Defines verified empirical baseline across evaluated records.')}\n"
-        f"• How Calculated: {ev.get('calculation_methodology', 'Deterministic aggregation across verified source rows.')}\n"
-        f"• What it Does NOT Establish: {ev.get('what_it_does_not_establish', 'Does not assert causes beyond recorded observation window.')}\n"
-        f"• Key Assumptions & Limitations: {ev.get('limitations', disconnected_boundary_note)}\n"
-        f"• Chart Explanation: {chart_explanation}\n"
-        f"• Audience Takeaway: {takeaway}\n"
-        f"• Anticipated Board Q&A:\n{qa_formatted}\n\n"
-        f"=== CONVERSATIONAL NARRATION SCRIPT (~140 WPM) ===\n"
-        f"{narration_script}"
-    )
+    # Calculations, hashes and evidence IDs remain on the evidence ledger.
+    # Presenter notes describe the meaning and limits in ordinary language.
+    caveat = ev.get("limitations") or ev.get("what_it_does_not_establish") or ""
+    if any(word in str(caveat).lower() for word in ("sql", "cryptographic", "snapshot hash", "etl")):
+        caveat = "The figures describe the recorded data and do not establish causes."
+    return "\n\n".join(part for part in (takeaway, narration_script, f"Keep in mind: {caveat}" if caveat else "") if part)
 
 
 def build_default_evidence_ledger(

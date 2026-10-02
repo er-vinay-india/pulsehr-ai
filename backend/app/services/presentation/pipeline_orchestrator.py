@@ -127,7 +127,7 @@ def generate_structured_speaker_notes(
     parts = [notice_part, why_part, evidence_part + budget_part, transition_part]
 
     if existing_notes and isinstance(existing_notes, str) and existing_notes.strip():
-        if "WHAT TO NOTICE:" not in existing_notes:
+        if "WHAT TO NOTICE:" not in existing_notes and "=== PRESENTER BRIEFING" not in existing_notes:
             parts.insert(0, f"EXISTING SPEAKER NOTES: {existing_notes.strip()}\n---")
 
     return "\n\n".join(parts)
@@ -359,6 +359,10 @@ def execute_presentation_pipeline_async(
         )
         if mgr.is_cancelled(job_id):
             return
+
+        from .audience_content import polish_audience_content
+        deck_spec = polish_audience_content(deck_spec, bool(scope.get("content_preferences", {}).get("technical_appendix")))
+        deck_spec["slides"] = materialize_slide_visuals(deck_spec["slides"], deck_spec["metadata"].get("theme_id", "executive_dark"))
 
         for idx, slide in enumerate(deck_spec.get("slides", [])):
             clean_title = slide.get("title", f"Slide {idx + 1}").strip()

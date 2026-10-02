@@ -601,7 +601,9 @@ def test_capabilities_brief_pdf_and_speaker_notes():
     assert any("retention" in t.lower() or "peak" in t.lower() for t in intent.key_takeaways) or "peak" in intent.primary_goal.lower()
 
     narrative = plan_narrative(ctx, intent, [], max_retries=-1)
-    assert "critical peak" in narrative.executive_thesis.lower() or "retention" in narrative.executive_thesis.lower()
+    # A requested takeaway is not evidence for an observed turnover peak.
+    assert "critical peak" not in narrative.executive_thesis.lower()
+    assert "review" in narrative.executive_thesis.lower()
 
     # 2. PDF generation
     deck_spec = {

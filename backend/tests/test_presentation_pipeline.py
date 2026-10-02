@@ -369,13 +369,11 @@ def test_workspace_evidence_collection_and_eight_slides():
         assert "success_metric" in prop
         assert "dependencies" in prop
 
-    # Check that speaker notes contain Presenter Briefing (Board Scrutiny)
+    # Internal audit identifiers and calculation machinery stay in the ledger.
     for s in deck_spec["slides"]:
-        assert "=== PRESENTER BRIEFING (BOARD SCRUTINY) ===" in s["speaker_notes"]
-        assert "• How Calculated:" in s["speaker_notes"]
-        assert "• What it Establishes:" in s["speaker_notes"]
-        assert "• What it Does NOT Establish:" in s["speaker_notes"]
-        assert "• Anticipated Board Q&A:" in s["speaker_notes"]
+        assert s["speaker_notes"]
+        assert "=== PRESENTER BRIEFING" not in s["speaker_notes"]
+        assert "snapshot hash" not in s["speaker_notes"]
 
     # Verify claim verifier
     ver_res = verify_presentation_claims(deck_spec, evidence["evidence_ledger"])
