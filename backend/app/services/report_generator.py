@@ -43,6 +43,7 @@ logger = logging.getLogger(__name__)
 __all__ = [
     "ChartExportError",
     "export_spec_to_pptx",
+    "export_spec_to_pdf",
     "generate_pptx_presentation",
     "generate_calculation_presentation",
     "generate_html_executive_report",
@@ -143,14 +144,20 @@ def export_spec_to_pptx(deck_spec: dict) -> Path:
         # Apply technical export accessibility: assign meaningful names and alt text descriptions
         for shape in slide.shapes:
             try:
-                c_nv_pr = shape._element.find('.//{http://schemas.openxmlformats.org/drawingml/2006/main}cNvPr')
+                c_nv_pr = None
+                for elem in shape._element.iter():
+                    if elem.tag.endswith("cNvPr"):
+                        c_nv_pr = elem
+                        break
                 if shape.has_table:
                     shape.name = f"Data Table: {slide_data.get('title', 'Table')[:35]}"
                     if c_nv_pr is not None:
+                        c_nv_pr.set('title', f"Data Table: {slide_data.get('title', 'Table')[:35]}")
                         c_nv_pr.set('descr', f"Empirical data table supporting slide: {slide_data.get('title', '')}")
                 elif shape.has_chart:
                     shape.name = f"Chart: {slide_data.get('title', 'Chart')[:35]}"
                     if c_nv_pr is not None:
+                        c_nv_pr.set('title', f"Chart: {slide_data.get('title', 'Chart')[:35]}")
                         c_nv_pr.set('descr', f"Analytical chart visualization for slide: {slide_data.get('title', '')}")
             except Exception:
                 pass
@@ -216,3 +223,94 @@ def generate_html_executive_report() -> str:
         rows = ''.join(f"<tr><td>{escape(p['column'])}</td><td>{p['nonempty']}</td><td>{p['missing']}</td><td>{_number(p.get('numeric', {}).get('mean'))}</td></tr>" for p in valid_profiles)
         sections.append(f"<h2>{escape(sheet['original_name'])} / {escape(sheet['name'])}</h2><p>{sheet['row_count']} source rows (excludes 100% null columns)</p><table><tr><th>Column</th><th>Present</th><th>Missing</th><th>Mean</th></tr>{rows or '<tr><td colspan=\"4\">No non-empty columns found.</td></tr>'}</table>")
     return '<!doctype html><html><head><title>HighView Executive Report</title><style>body{font-family:Arial;padding:32px}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ccc;padding:8px;text-align:left}</style></head><body><h1>HighView · Clarity From Every Sheet. · Powered by HRIDAY</h1><p>' + escape(data['note']) + '</p>' + (''.join(sections) or '<p>No sheets uploaded.</p>') + '</body></html>'
+
+
+def export_spec_to_pdf(deck_spec: dict) -> Path:
+    """Exports a PresentationDeckSpec to a landscape 16:9 PDF executive presentation."""
+    from reportlab.lib import colors
+    from reportlab.pdfgen import canvas
+
+    deck_id = deck_spec.get("id") or str(uuid4())[:8]
+    config.EXPORTS_DIR.mkdir(parents=True, exist_ok=True)
+    pdf_path = config.EXPORTS_DIR / f"presentation_{deck_id}.pdf"
+
+    # 16:9 aspect ratio: 960 x 540 points
+    page_width = 960.0
+    page_height = 540.0
+
+    c = canvas.Canvas(str(pdf_path), pagesize=(page_width, page_height))
+    slides = deck_spec.get("slides", [])
+
+    for idx, slide in enumerate(slides):
+        # Dark executive slide background
+        c.setFillColor(colors.HexColor("#0B0F19"))
+        c.rect(0, 0, page_width, page_height, stroke=0, fill=1)
+
+        title = slide.get("title", f"Slide {idx + 1}")
+        category = slide.get("category", "Executive Briefing")
+
+        # Category eyebrow
+        c.setFillColor(colors.HexColor("#3B82F6"))
+        c.setFont("Helvetica-Bold", 10)
+        c.drawString(48, page_height - 40, category.upper())
+
+        # Title
+        c.setFillColor(colors.HexColor("#F8FAFC"))
+        c.setFont("Helvetica-Bold", 18)
+        title_display = title[:90] + ("..." if len(title) > 90 else "")
+        c.drawString(48, page_height - 68, title_display)
+
+        # Subtitle / Key Takeaway
+        subtitle = slide.get("subtitle") or slide.get("key_message") or slide.get("takeaway") or ""
+        if subtitle:
+            c.setFillColor(colors.HexColor("#94A3B8"))
+            c.setFont("Helvetica", 11)
+            c.drawString(48, page_height - 88, subtitle[:120])
+
+        # Header divider rule
+        c.setStrokeColor(colors.HexColor("#1E293B"))
+        c.setLineWidth(1)
+        c.line(48, page_height - 100, page_width - 48, page_height - 100)
+
+        # Bullets
+        y = page_height - 132
+        bullets = slide.get("content", {}).get("bullets") or slide.get("bullet_points") or []
+        if isinstance(bullets, list) and bullets:
+            c.setFont("Helvetica", 11)
+            c.setFillColor(colors.HexColor("#E2E8F0"))
+            for b in bullets[:5]:
+                bullet_text = str(b).strip()
+                c.drawString(56, y, f"•  {bullet_text[:110]}")
+                y -= 24
+
+        # Metrics cards
+        metrics = slide.get("metrics", [])
+        if isinstance(metrics, list) and metrics:
+            card_x = 48
+            card_y = max(60, y - 60)
+            card_w = min(180, (page_width - 96 - (len(metrics) - 1) * 16) / max(1, len(metrics)))
+            for m in metrics[:4]:
+                c.setFillColor(colors.HexColor("#111827"))
+                c.setStrokeColor(colors.HexColor("#1F2937"))
+                c.roundRect(card_x, card_y, card_w, 54, 4, stroke=1, fill=1)
+
+                label = str(m.get("label", "Metric"))[:22]
+                val = str(m.get("value", "—"))[:18]
+                c.setFillColor(colors.HexColor("#94A3B8"))
+                c.setFont("Helvetica", 8)
+                c.drawString(card_x + 10, card_y + 36, label)
+                c.setFillColor(colors.HexColor("#F8FAFC"))
+                c.setFont("Helvetica-Bold", 14)
+                c.drawString(card_x + 10, card_y + 16, val)
+                card_x += card_w + 16
+
+        # Footer metadata
+        c.setFillColor(colors.HexColor("#64748B"))
+        c.setFont("Helvetica", 8)
+        c.drawString(48, 24, "HighView Executive Intelligence · Confidential")
+        c.drawRightString(page_width - 48, 24, f"{idx + 1} / {len(slides)}")
+
+        c.showPage()
+
+    c.save()
+    return pdf_path

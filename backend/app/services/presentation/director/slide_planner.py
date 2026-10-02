@@ -221,7 +221,7 @@ def _normalize_and_bound_slides(
 
         # Validate layout compatibility with slide sequence and visual_type
         if idx == 0:
-            layout = "title_cover"
+            layout = "title_hero"
         elif idx == 1:
             layout = "kpi_summary"
         elif visual_type in ("line_chart", "bar_chart", "donut_chart", "rel_chart", "talent_9box", "burnout_strain", "bradford_factor"):
@@ -322,7 +322,7 @@ def _build_fallback_slide_plans(
     templates = [
         # Slide 1: Executive Title Cover
         {
-            "layout": "title_cover",
+            "layout": "title_hero",
             "visual_type": "none",
             "headline": ctx.objective or f"{ctx.domain.title()} Executive Audit & Review",
             "subtitle": f"Empirical Ground Truth Across {ctx.total_records:,} Records ({ctx.reporting_period or 'Full Window'})",

@@ -58,6 +58,7 @@ class ReviewGateSignoffRequest(BaseModel):
     approved: bool = True
     user_name: str = "User"
     notes: str | None = None
+    expected_revision: int | None = None
 
 
 class ScopePreviewRequest(BaseModel):
@@ -393,6 +394,12 @@ def approve_review_gate(deck_id: str, gate_id: str, req: ReviewGateSignoffReques
     spec = json.loads(row["spec_json"])
     from ..services.presentation.review_gates import record_human_signoff, initialize_review_gates
     rg = spec.get("metadata", {}).get("review_gates") or initialize_review_gates()
+    stored_revision = rg.get("revision", 1)
+    if req.expected_revision is not None and req.expected_revision != stored_revision:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Revision mismatch: approval requested for revision {req.expected_revision}, but current deck revision is {stored_revision}."
+        )
     try:
         updated_rg = record_human_signoff(
             review_gates=rg,
@@ -414,7 +421,21 @@ def approve_review_gate(deck_id: str, gate_id: str, req: ReviewGateSignoffReques
 def update_presentation_deck(deck_id: str, deck_spec: dict[str, Any]):
     """Saves updated PresentationDeckSpec after user inline edits or theme changes, invalidating relevant review gates."""
     from ..services.presentation.review_gates import invalidate_review_gates_on_edit
-    deck_spec = invalidate_review_gates_on_edit(deck_spec, edited_scope="content")
+
+    # Retrieve current stored revision from database to guarantee monotonic revision increment
+    stored_rev = 0
+    with get_connection() as conn:
+        row = conn.execute("SELECT spec_json FROM presentation_decks WHERE id = ?", (deck_id,)).fetchone()
+        if row:
+            try:
+                stored_spec = json.loads(row["spec_json"])
+                stored_rev = stored_spec.get("metadata", {}).get("review_gates", {}).get("revision", 0)
+            except Exception:
+                pass
+
+    client_rev = deck_spec.get("metadata", {}).get("review_gates", {}).get("revision", 0)
+    base_rev = max(stored_rev, client_rev)
+    deck_spec = invalidate_review_gates_on_edit(deck_spec, edited_scope="content", base_revision=base_rev)
 
     title = deck_spec.get("metadata", {}).get("title") or deck_spec.get("slides", [{}])[0].get("title", "Presentation")
     dataset_id = deck_spec.get("metadata", {}).get("dataset_id")
@@ -458,8 +479,25 @@ def handle_regenerate_slide(req: RegenerateSlideRequest):
 @router.post("/export-pptx")
 def export_presentation_to_pptx(req: ExportPptxRequest):
     """Builds and returns an editable PowerPoint file with native charts from deck spec."""
+    deck_spec = req.deck_spec
+    rg = deck_spec.get("metadata", {}).get("review_gates")
+    if not rg:
+        from ..services.presentation.review_gates import evaluate_automated_gates
+        rg = evaluate_automated_gates(deck_spec)
+        deck_spec.setdefault("metadata", {})["review_gates"] = rg
+
+    failed_gates = [
+        f"{gid}: {g.get('automated', {}).get('details', 'Failed check')}"
+        for gid, g in rg.get("gates", {}).items()
+        if g.get("automated", {}).get("status") == "FAILED"
+    ]
+    if failed_gates:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Delivery blocked: Automated review gate check(s) failed: {'; '.join(failed_gates)}"
+        )
+
     try:
-        deck_spec = req.deck_spec
         pptx_path = export_spec_to_pptx(deck_spec)
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         title_raw = deck_spec.get("metadata", {}).get("title") or deck_spec.get("title") or "Executive_Presentation"
@@ -471,6 +509,8 @@ def export_presentation_to_pptx(req: ExportPptxRequest):
             media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
             headers={"Content-Disposition": f'attachment; filename="{filename}"'}
         )
+    except HTTPException:
+        raise
     except Exception as exc:
         logger.error(f"Export PPTX error: {exc}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to generate PowerPoint: {str(exc)}")
@@ -484,6 +524,26 @@ def download_deck_pptx(deck_id: str):
         row = conn.execute("SELECT spec_json FROM presentation_decks WHERE id = ?", (deck_id,)).fetchone()
     if row:
         deck_spec = json.loads(row["spec_json"])
+    elif not (config.EXPORTS_DIR / f"presentation_{deck_id}.pptx").exists():
+        raise HTTPException(status_code=404, detail="Presentation deck not found")
+
+    if deck_spec:
+        rg = deck_spec.get("metadata", {}).get("review_gates")
+        if not rg:
+            from ..services.presentation.review_gates import evaluate_automated_gates
+            rg = evaluate_automated_gates(deck_spec)
+            deck_spec.setdefault("metadata", {})["review_gates"] = rg
+
+        failed_gates = [
+            f"{gid}: {g.get('automated', {}).get('details', 'Failed check')}"
+            for gid, g in rg.get("gates", {}).items()
+            if g.get("automated", {}).get("status") == "FAILED"
+        ]
+        if failed_gates:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Delivery blocked: Automated review gate check(s) failed: {'; '.join(failed_gates)}"
+            )
 
     pptx_path = config.EXPORTS_DIR / f"presentation_{deck_id}.pptx"
     # Rebuild saved specs with current slide tokens; cached files may predate contrast repairs.
@@ -500,6 +560,52 @@ def download_deck_pptx(deck_id: str):
         path=str(pptx_path),
         filename=filename,
         media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+
+@router.get("/download/{deck_id}/pdf")
+def download_deck_pdf(deck_id: str):
+    """Exports or serves a PDF document for a stored deck."""
+    from ..services.report_generator import export_spec_to_pdf
+    deck_spec = None
+    with get_connection() as conn:
+        row = conn.execute("SELECT spec_json FROM presentation_decks WHERE id = ?", (deck_id,)).fetchone()
+    if row:
+        deck_spec = json.loads(row["spec_json"])
+    elif not (config.EXPORTS_DIR / f"presentation_{deck_id}.pdf").exists():
+        raise HTTPException(status_code=404, detail="Presentation deck not found")
+
+    if deck_spec:
+        rg = deck_spec.get("metadata", {}).get("review_gates")
+        if not rg:
+            from ..services.presentation.review_gates import evaluate_automated_gates
+            rg = evaluate_automated_gates(deck_spec)
+        failed_gates = [
+            f"{gid}: {g.get('automated', {}).get('details', 'Failed check')}"
+            for gid, g in rg.get("gates", {}).items()
+            if g.get("automated", {}).get("status") == "FAILED"
+        ]
+        if failed_gates:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Delivery blocked: Automated review gate check(s) failed: {'; '.join(failed_gates)}"
+            )
+
+    pdf_path = config.EXPORTS_DIR / f"presentation_{deck_id}.pdf"
+    if deck_spec:
+        pdf_path = export_spec_to_pdf(deck_spec)
+    elif not pdf_path.exists():
+        raise HTTPException(status_code=404, detail="Presentation PDF not found")
+
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    title_raw = (deck_spec.get("metadata", {}).get("title") if deck_spec else None) or f"presentation_{deck_id}"
+    clean_title = re.sub(r'[^a-zA-Z0-9_-]', '_', title_raw)[:40].strip('_') or "Presentation"
+    filename = f"{clean_title}_{timestamp}.pdf"
+    return FileResponse(
+        path=str(pdf_path),
+        filename=filename,
+        media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'}
     )
 

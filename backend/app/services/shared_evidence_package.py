@@ -92,9 +92,11 @@ def build_shared_evidence_package(conn, scope: dict[str, Any]) -> dict[str, Any]
 
     # 3. Pull visual dashboard visualizations
     workspace_visuals = []
+    prioritized_facts = []
     try:
         ws_dash = build_workspace_visual_dashboard(conn, sheet_id=None if len(included_sheets) > 1 else primary_sheet_id)
         workspace_visuals = ws_dash.get("visualizations", [])
+        prioritized_facts = ws_dash.get("prioritized_facts", [])
     except Exception as exc:
         logger.warning(f"Could not build workspace visual dashboard: {exc}")
 
@@ -118,16 +120,19 @@ def build_shared_evidence_package(conn, scope: dict[str, Any]) -> dict[str, Any]
     # 6. Run domain HR attendance & period analytics if applicable
     hr_analytics = None
     try:
-        from .hr_period_analytics import analyze_hr_attendance_sheet
         p_ctx = sheet_contexts[primary_sheet_id]
-        comp_sheet_ctx = next((ctx for sid, ctx in sheet_contexts.items() if sid != primary_sheet_id and 'leave' in ctx['sheet']['name'].lower()), None)
-        hr_analytics = analyze_hr_attendance_sheet(
-            records=p_ctx["records"],
-            columns=p_ctx["columns"],
-            sheet_name=p_ctx["sheet"]["name"],
-            comparison_sheet_records=comp_sheet_ctx["records"] if comp_sheet_ctx else None,
-            comparison_sheet_name=comp_sheet_ctx["sheet"]["name"] if comp_sheet_ctx else None
-        )
+        cols_lower = [str(c).lower() for c in p_ctx.get("columns", [])]
+        is_hr_domain = p_ctx.get("domain") == "hr" or any(any(k in c for k in ("attendance", "leave", "absent", "employee_id", "emp_id")) for c in cols_lower)
+        if is_hr_domain:
+            from .hr_period_analytics import analyze_hr_attendance_sheet
+            comp_sheet_ctx = next((ctx for sid, ctx in sheet_contexts.items() if sid != primary_sheet_id and 'leave' in ctx['sheet']['name'].lower()), None)
+            hr_analytics = analyze_hr_attendance_sheet(
+                records=p_ctx["records"],
+                columns=p_ctx["columns"],
+                sheet_name=p_ctx["sheet"]["name"],
+                comparison_sheet_records=comp_sheet_ctx["records"] if comp_sheet_ctx else None,
+                comparison_sheet_name=comp_sheet_ctx["sheet"]["name"] if comp_sheet_ctx else None
+            )
     except Exception as exc:
         logger.debug(f"HR period analytics evaluation skipped: {exc}")
 
@@ -157,6 +162,7 @@ def build_shared_evidence_package(conn, scope: dict[str, Any]) -> dict[str, Any]
         rel_story=rel_story,
         snapshot_hash=snapshot_hash,
         hr_analytics=hr_analytics,
+        prioritized_facts=prioritized_facts,
     )
 
     return {
@@ -167,6 +173,7 @@ def build_shared_evidence_package(conn, scope: dict[str, Any]) -> dict[str, Any]
         "primary_sheet_id": primary_sheet_id,
         "industrial_models": industrial_res,
         "workspace_visuals": workspace_visuals,
+        "prioritized_facts": prioritized_facts,
         "executive_story": exec_story,
         "relational_story": rel_story,
         "candidate_findings": candidate_findings,

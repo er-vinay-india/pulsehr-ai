@@ -15,6 +15,7 @@ from .director_models import (
     SlideCountMode,
     SlidePlan,
     VisualIntent,
+    PresentationBrief,
 )
 from .presentation_director import PresentationDirector, presentation_director
 from .plan_adapter import adapt_plan_to_deck_spec
@@ -41,6 +42,7 @@ __all__ = [
     "SlideCountMode",
     "SlidePlan",
     "VisualIntent",
+    "PresentationBrief",
     "PresentationDirector",
     "presentation_director",
     "adapt_plan_to_deck_spec",

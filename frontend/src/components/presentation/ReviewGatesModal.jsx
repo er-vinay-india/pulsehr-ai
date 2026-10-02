@@ -87,7 +87,8 @@ export default function ReviewGatesModal({
         gateId,
         approved,
         "Executive Reviewer",
-        note
+        note,
+        revision
       );
       if (updated?.review_gates) {
         setGatesData(updated.review_gates);
@@ -119,6 +120,13 @@ export default function ReviewGatesModal({
   const approvedHumanCount = Object.values(gates).filter(
     (g) => g?.human_approval?.status === "APPROVED"
   ).length;
+
+  const anyAutomatedFailed = Object.values(gates).some(
+    (g) => g?.automated?.status === "FAILED"
+  );
+  const allAutomatedPassed = gatesData?.summary?.all_automated_passed && Object.values(gates).every(
+    (g) => g?.automated?.status === "PASSED"
+  );
 
   return (
     <div
@@ -171,9 +179,19 @@ export default function ReviewGatesModal({
         <div className="review-gates-summary-banner">
           <div className="summary-col">
             <span className="summary-label">Automated Verification</span>
-            <span className="summary-val passed">
-              <CheckCircle2 size={14} /> Passed Programmatic Checks
-            </span>
+            {anyAutomatedFailed ? (
+              <span className="summary-val failed">
+                <AlertTriangle size={14} /> Automated Checks Failed
+              </span>
+            ) : allAutomatedPassed ? (
+              <span className="summary-val passed">
+                <CheckCircle2 size={14} /> Passed Programmatic Checks
+              </span>
+            ) : (
+              <span className="summary-val pending">
+                <Clock size={14} /> Review Required
+              </span>
+            )}
           </div>
           <div className="summary-col">
             <span className="summary-label">Human Executive Sign-off</span>

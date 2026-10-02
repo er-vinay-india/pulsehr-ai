@@ -488,13 +488,16 @@ export async function getPresentationReviewGates(deckId) {
   return res.json();
 }
 
-export async function approvePresentationReviewGate(deckId, gateId, approved = true, userName = "Executive Reviewer", notes = null) {
+export async function approvePresentationReviewGate(deckId, gateId, approved = true, userName = "Executive Reviewer", notes = null, expectedRevision = null) {
   const res = await fetch(`${API_BASE}/presentations/decks/${deckId}/review-gates/${gateId}/approve`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ approved, user_name: userName, notes })
+    body: JSON.stringify({ approved, user_name: userName, notes, expected_revision: expectedRevision })
   });
-  if (!res.ok) throw new Error("Failed to record review gate sign-off");
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Failed to record review gate sign-off");
+  }
   return res.json();
 }
 

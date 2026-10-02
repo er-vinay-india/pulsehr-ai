@@ -98,13 +98,22 @@ def plan_narrative(
     if max_retries < 0:
         return _fallback_narrative(default_arc, default_tone, default_pacing, ctx, default_sections)
 
+    brief_info = ""
+    if ctx.brief:
+        brief_info = f"""
+- Requested Decision / Action: {ctx.brief.decision_requested or 'None specified'}
+- Main Takeaway: {ctx.brief.main_takeaway or 'None specified'}
+- Presentation Time: {ctx.brief.presentation_time_minutes} minutes
+- Deliverable: {ctx.brief.deliverable}
+- Core Success Criterion: {ctx.brief.success_criterion}"""
+
     prompt = f"""You are the Executive Presentation Director. Plan the narrative strategy and thematic sections for this deck.
 
 ## Presentation Context:
 - Domain: {ctx.domain}
 - Objective: {ctx.objective}
 - Audience: {ctx.audience} (Seniority: {intent.audience_seniority.value})
-- Delivery Mode: {intent.delivery_mode.value}
+- Delivery Mode: {intent.delivery_mode.value}{brief_info}
 - Target Slide Count Constraint: mode={constraint.mode.value}, target={constraint.target}, min={constraint.min_slides}, max={constraint.max_slides}
 - Primary Empirical Findings: {len(ctx.current_evidence)} verified evidence items
 - Dataset: '{ctx.dataset_label}' ({ctx.total_records:,} records)
@@ -176,11 +185,16 @@ def _fallback_narrative(
     ctx: PresentationPlanningContext,
     default_sections: list[PresentationSection]
 ) -> NarrativeStrategy:
+    thesis = (
+        ctx.brief.main_takeaway
+        if (ctx.brief and ctx.brief.main_takeaway)
+        else f"Audited review of {ctx.total_records:,} records establishes {ctx.domain} baseline and identifies clear performance stabilization initiatives."
+    )
     return NarrativeStrategy(
         arc_type=default_arc,
         tone=default_tone,
         pacing=default_pacing,
-        executive_thesis=f"Audited review of {ctx.total_records:,} records establishes {ctx.domain} baseline and identifies clear performance stabilization initiatives.",
+        executive_thesis=thesis,
         sections=default_sections
     )
 

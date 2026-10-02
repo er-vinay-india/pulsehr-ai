@@ -46,13 +46,22 @@ def plan_intent(ctx: PresentationPlanningContext, max_retries: int = 1) -> Prese
     if max_retries < 0:
         return _fallback_intent(ctx, clean_questions, default_seniority, default_delivery)
 
+    brief_info = ""
+    if ctx.brief:
+        brief_info = f"""
+- Requested Decision / Action: {ctx.brief.decision_requested or 'None specified'}
+- Main Takeaway: {ctx.brief.main_takeaway or 'None specified'}
+- Presentation Time: {ctx.brief.presentation_time_minutes} minutes
+- Deliverable: {ctx.brief.deliverable}
+- Success Criterion: {ctx.brief.success_criterion}"""
+
     prompt = f"""You are the Executive Presentation Director. Analyze the presentation request and define the presentation intent.
 
 ## Input Context:
 - Domain: {ctx.domain}
 - Objective: {ctx.objective}
 - Target Audience: {ctx.audience}
-- Instructions: {ctx.instructions or 'Produce a rigorous, high-impact executive presentation.'}
+- Instructions: {ctx.instructions or 'Produce a rigorous, high-impact executive presentation.'}{brief_info}
 - Dataset: '{ctx.dataset_label}' ({ctx.total_records:,} records, {ctx.completeness_pct}% completeness)
 - Baseline Benchmark: {ctx.baseline_benchmark}
 - Observation Window: {ctx.reporting_period}
@@ -132,24 +141,38 @@ def _fallback_intent(
     default_seniority: AudienceSeniority,
     default_delivery: DeliveryMode
 ) -> PresentationIntent:
-    fallback_questions = clean_questions or [
+    brief = ctx.brief
+    fallback_questions = list(clean_questions) if clean_questions else [
         f"What does the {ctx.domain} empirical evidence reveal about operational throughput?",
         "Where are the key operational bottlenecks or productivity variances?",
         "What governance initiatives will stabilize and optimize performance?"
     ]
+    if brief and brief.decision_requested:
+        fallback_questions.append(f"How will leadership execute the decision to {brief.decision_requested}?")
+
+    takeaways = [
+        f"Ground truth established across {ctx.total_records:,} verified records ({ctx.completeness_pct}% data integrity).",
+        f"Baseline metric: {ctx.baseline_benchmark or 'Audited Mean'} with {ctx.dispersion_metric or 'observed spread'}.",
+        "Empirically grounded action plan formulated with clear owners and timeline."
+    ]
+    if brief and brief.main_takeaway:
+        takeaways.insert(0, brief.main_takeaway)
+
+    primary_goal = (
+        f"Enable leadership to decide or do '{brief.decision_requested}' based on {ctx.domain} evidence"
+        if (brief and brief.decision_requested)
+        else f"Inform leadership on {ctx.domain} findings and drive strategic alignment"
+    )
+
     return PresentationIntent(
         domain=ctx.domain or "Enterprise Operations",
         purpose=ctx.objective or "Executive Review",
-        primary_goal=f"Inform leadership on {ctx.domain} findings and drive strategic alignment",
+        primary_goal=primary_goal,
         target_audience=ctx.audience or "Executive Leadership",
         audience_seniority=default_seniority,
         technical_depth="balanced",
         delivery_mode=default_delivery,
-        key_takeaways=[
-            f"Ground truth established across {ctx.total_records:,} verified records ({ctx.completeness_pct}% data integrity).",
-            f"Baseline metric: {ctx.baseline_benchmark or 'Audited Mean'} with {ctx.dispersion_metric or 'observed spread'}.",
-            "Empirically grounded action plan formulated with clear owners and timeline."
-        ],
+        key_takeaways=takeaways,
         key_questions_to_answer=fallback_questions
     )
 

@@ -43,8 +43,8 @@ def build_headwinds_slides(
         ]
         s4_script = f"Turning to operational headwinds: {top_att.get('headline', '')}. {top_att.get('why_it_matters', '')}"
         s4_metrics = [
-            {"label": top_att.get("badge_label", "Priority"), "value": top_att.get("value", dispersion_metric_str), "subtext": top_att.get("comparison", "Action Required")},
-            {"label": "Benchmark Unit", "value": lead_cat, "subtext": "Current anchor"}
+            {"label": top_att.get("badge_label", "Priority"), "value": top_att.get("value", dispersion_metric_str), "subtext": top_att.get("comparison", "Action Required"), "evidence_id": "EVID-HEADWIND-01"},
+            {"label": "Benchmark Unit", "value": lead_cat, "subtext": "Current anchor", "evidence_id": "EVID-HEADWIND-01"}
         ]
     else:
         s4_title = f"{lead_cat} Outpaces Lower-Quartile Units by {dispersion_metric_str}{disp_suffix}"
@@ -63,8 +63,8 @@ def build_headwinds_slides(
         ]
         s4_script = f"Turning to operational headwinds: comparative benchmarks identify an {dispersion_metric_str} dispersion between top performer {lead_cat} and lower-quartile locations."
         s4_metrics = [
-            {"label": "Dispersion Ratio", "value": dispersion_metric_str, "subtext": "Leader vs laggard"},
-            {"label": "Top Performer", "value": lead_cat, "subtext": "Benchmark leader"}
+            {"label": "Dispersion Ratio", "value": dispersion_metric_str, "subtext": "Leader vs laggard", "evidence_id": "EVID-HEADWIND-01"},
+            {"label": "Top Performer", "value": lead_cat, "subtext": "Benchmark leader", "evidence_id": "EVID-HEADWIND-01"}
         ]
 
     s4_notes = format_briefing(

@@ -197,6 +197,8 @@ def evaluate_automated_gates(
     gate_3 = gates.get("gate_3_evidence", {})
     g3_human = gate_3.get("human_approval", {"status": "PENDING"})
     v_sum = verification_summary or meta.get("validation_summary") or {}
+    if not isinstance(v_sum, dict):
+        v_sum = meta.get("validation_summary") if isinstance(meta.get("validation_summary"), dict) else {}
     discrepancies = v_sum.get("discrepancies_flagged", 0)
     v_status = v_sum.get("status", "PENDING")
     
@@ -224,19 +226,23 @@ def evaluate_automated_gates(
     # 4. Visual Design & Density Gate
     gate_4 = gates.get("gate_4_visual", {})
     g4_human = gate_4.get("human_approval", {"status": "PENDING"})
-    q_audit = quality_audit or deck_spec.get("quality_audit") or {}
-    crit_issues = q_audit.get("critical_count", 0)
-    warn_issues = q_audit.get("warning_count", 0)
+    q_audit = quality_audit or deck_spec.get("quality_audit")
     
-    if crit_issues == 0 and warn_issues == 0:
-        g4_auto_status = "PASSED"
-        g4_details = "Spatial canvas budgets, text density, and chart alignments certified."
-    elif crit_issues == 0:
+    if not q_audit or not isinstance(q_audit, dict) or not ("critical_count" in q_audit or "passed" in q_audit or "issues" in q_audit):
         g4_auto_status = "REQUIRES_REVIEW"
-        g4_details = f"Visual layout passed with {warn_issues} non-critical layout warning(s)."
+        g4_details = "Visual layout audit not yet executed; spatial budgets and density pending review."
     else:
-        g4_auto_status = "FAILED"
-        g4_details = f"{crit_issues} critical layout overflow issue(s) detected."
+        crit_issues = q_audit.get("critical_count", 0)
+        warn_issues = q_audit.get("warning_count", 0)
+        if crit_issues == 0 and warn_issues == 0:
+            g4_auto_status = "PASSED"
+            g4_details = "Spatial canvas budgets, text density, and chart alignments certified."
+        elif crit_issues == 0:
+            g4_auto_status = "REQUIRES_REVIEW"
+            g4_details = f"Visual layout passed with {warn_issues} non-critical layout warning(s)."
+        else:
+            g4_auto_status = "FAILED"
+            g4_details = f"{crit_issues} critical layout overflow issue(s) detected."
         
     gate_4["status"] = g4_auto_status
     gate_4["automated"] = {
@@ -253,15 +259,39 @@ def evaluate_automated_gates(
     charts_without_titles = [s for s in slides if s.get("chart") and not (s["chart"].get("title") or s.get("title"))]
     slides_without_titles = [s for s in slides if not s.get("title")]
     
-    if not slides_without_titles and not charts_without_titles and deck_spec.get("pptx_filename"):
-        g5_auto_status = "PASSED"
-        g5_details = "Slide titles, chart series labels, reading order, and native PPTX verified."
-    elif not slides_without_titles:
-        g5_auto_status = "REQUIRES_REVIEW"
-        g5_details = "Slide accessibility verified. Manual PowerPoint Accessibility Checker inspection remains pending."
-    else:
+    deliverable = (brief or {}).get("deliverable") or deck_spec.get("metadata", {}).get("brief", {}).get("deliverable") or "pptx"
+    pptx_filename = deck_spec.get("pptx_filename")
+    pdf_filename = deck_spec.get("pdf_filename")
+
+    from ...core.config import EXPORTS_DIR
+    pptx_exists = False
+    if pptx_filename:
+        pptx_path = EXPORTS_DIR / pptx_filename
+        pptx_exists = pptx_path.exists() and pptx_path.stat().st_size > 0
+
+    pdf_exists = False
+    if pdf_filename:
+        pdf_path = EXPORTS_DIR / pdf_filename
+        pdf_exists = pdf_path.exists() and pdf_path.stat().st_size > 0
+
+    if slides_without_titles:
         g5_auto_status = "FAILED"
-        g5_details = "Missing slide titles or chart labels."
+        g5_details = "Missing slide titles or reading order context."
+    elif pptx_filename and not pptx_exists:
+        g5_auto_status = "FAILED"
+        g5_details = f"Exported presentation file '{pptx_filename}' not found on disk or is empty."
+    elif pdf_filename and not pdf_exists:
+        g5_auto_status = "FAILED"
+        g5_details = f"Exported presentation PDF '{pdf_filename}' not found on disk or is empty."
+    elif (deliverable in ("pptx", "both") and not pptx_exists) or (deliverable == "pdf" and not pdf_exists):
+        g5_auto_status = "REQUIRES_REVIEW"
+        g5_details = "Slide accessibility verified programmatically. Native export file pending."
+    elif not charts_without_titles:
+        g5_auto_status = "PASSED"
+        g5_details = "Slide titles, chart series labels, reading order, and native export verified programmatically. Manual PowerPoint Accessibility Checker inspection is recorded as pending human verification."
+    else:
+        g5_auto_status = "REQUIRES_REVIEW"
+        g5_details = "One or more charts missing explicit titles or contextual labels."
         
     gate_5["status"] = g5_auto_status
     gate_5["automated"] = {
@@ -302,6 +332,7 @@ def record_human_signoff(
         "approved_by": user_name,
         "approved_at": now,
         "notes": notes,
+        "revision": review_gates.get("revision", 1),
     }
     gates[gate_id] = target_gate
     review_gates["gates"] = gates
@@ -313,7 +344,8 @@ def record_human_signoff(
 
 def invalidate_review_gates_on_edit(
     deck_spec: dict[str, Any],
-    edited_scope: str = "content"  # "content" | "theme" | "layout" | "data"
+    edited_scope: str = "content",  # "content" | "theme" | "layout" | "data"
+    base_revision: int | None = None,
 ) -> dict[str, Any]:
     """Invalidates affected review gates and increments deck revision when edits occur."""
     meta = deck_spec.setdefault("metadata", {})
@@ -321,7 +353,7 @@ def invalidate_review_gates_on_edit(
     if not rg:
         rg = initialize_review_gates()
     
-    current_rev = rg.get("revision", 1)
+    current_rev = base_revision if base_revision is not None else rg.get("revision", 1)
     new_rev = current_rev + 1
     rg["revision"] = new_rev
     gates = rg.get("gates", {})

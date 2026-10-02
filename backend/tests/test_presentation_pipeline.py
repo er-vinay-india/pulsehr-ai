@@ -67,6 +67,18 @@ def test_theme_registry():
 @pytest.fixture(autouse=True)
 def fast_tests(monkeypatch):
     monkeypatch.setattr("app.services.presentation_service._call_ai_presentation_enrichment", lambda **kwargs: None)
+    monkeypatch.setattr("app.core.config.PRESENTATION_DIRECTOR_ENABLED", False)
+    monkeypatch.setattr("app.core.config.PRESENTATION_ORCHESTRATOR_ENABLED", False)
+    from app.services.presentation.director import presentation_director
+    monkeypatch.setattr(presentation_director, "enabled", False)
+    from app.services.presentation.orchestrator import presentation_orchestrator
+    monkeypatch.setattr(presentation_orchestrator, "enabled", False)
+    from app.services.gateway.model_gateway import ModelGateway, GatewayResult
+    monkeypatch.setattr(
+        ModelGateway,
+        "generate",
+        lambda *args, **kwargs: GatewayResult(raw_text="", success=False, error="Test offline mock")
+    )
 
 
 def test_capture_dataset_context_and_charts():
@@ -226,7 +238,7 @@ def test_presentations_api_endpoints():
     assert res.status_code == 200
     job_id = res.json()["job_id"]
     assert job_id is not None
-    assert res.json()["stage"] == "reviewing_coverage"
+    assert res.json()["stage"] in ("reviewing_coverage", "brief_setup")
 
     # 4. Poll job
     res = client.get(f"/api/presentations/jobs/{job_id}")

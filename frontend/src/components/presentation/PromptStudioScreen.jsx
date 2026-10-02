@@ -101,6 +101,10 @@ export default function PromptStudioScreen({
     custom_prompt: { audience: "Executive leadership", instructions: "", sourceScope: "single_sheet" },
   });
   const [brief, setBrief] = useState("");
+  const [decisionRequested, setDecisionRequested] = useState("");
+  const [mainTakeaway, setMainTakeaway] = useState("");
+  const [presentationTimeMinutes, setPresentationTimeMinutes] = useState(15);
+  const [deliverable, setDeliverable] = useState("pptx");
   const [animation, setAnimation] = useState("none");
   const [sourceMode, setSourceMode] = useState("dashboard_truth"); // "dashboard_truth" | "custom_prompt"
   const [customPrompt, setCustomPrompt] = useState("");
@@ -152,6 +156,10 @@ export default function PromptStudioScreen({
       sourceMode,
       audience,
       objective: sourceMode === "dashboard_truth" ? brief : "",
+      decisionRequested,
+      mainTakeaway,
+      presentationTimeMinutes: Number(presentationTimeMinutes) || 15,
+      deliverable,
       instructions,
       scopeType: sourceScope,
       customPrompt: sourceMode === "custom_prompt" ? customPrompt : null,
@@ -169,6 +177,10 @@ export default function PromptStudioScreen({
     sourceMode,
     audience,
     brief,
+    decisionRequested,
+    mainTakeaway,
+    presentationTimeMinutes,
+    deliverable,
     instructions,
     sourceScope,
     customPrompt,
@@ -694,6 +706,74 @@ export default function PromptStudioScreen({
                   </button>
                 );
               })}
+            </div>
+
+            {/* Executive Brief Specifications */}
+            <div className="pres-form-section brief-spec-section">
+              <div className="pres-form-group">
+                <label htmlFor="pres-main-takeaway-input" className="pres-field-label">
+                  <FileText size={14} className="field-icon" aria-hidden="true" />
+                  <span>Main Takeaway</span>
+                </label>
+                <input
+                  id="pres-main-takeaway-input"
+                  type="text"
+                  className="pres-field-control"
+                  value={mainTakeaway}
+                  onChange={(e) => setMainTakeaway(e.target.value)}
+                  placeholder="e.g. Voluntary attrition concentrated in Engineering; compensation adjustments needed"
+                />
+              </div>
+
+              <div className="pres-form-group" style={{ marginTop: "12px" }}>
+                <label htmlFor="pres-decision-requested-input" className="pres-field-label">
+                  <Sliders size={14} className="field-icon" aria-hidden="true" />
+                  <span>Decision or Action Requested</span>
+                </label>
+                <input
+                  id="pres-decision-requested-input"
+                  type="text"
+                  className="pres-field-control"
+                  value={decisionRequested}
+                  onChange={(e) => setDecisionRequested(e.target.value)}
+                  placeholder="e.g. Approve targeted $2.4M retention equity program for high-impact roles"
+                />
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginTop: "12px" }}>
+                <div className="pres-form-group">
+                  <label htmlFor="pres-time-budget-input" className="pres-field-label">
+                    <Clock size={14} className="field-icon" aria-hidden="true" />
+                    <span>Presentation Time Budget (Minutes)</span>
+                  </label>
+                  <input
+                    id="pres-time-budget-input"
+                    type="number"
+                    min="3"
+                    max="60"
+                    className="pres-field-control"
+                    value={presentationTimeMinutes}
+                    onChange={(e) => setPresentationTimeMinutes(Number(e.target.value) || 15)}
+                  />
+                </div>
+
+                <div className="pres-form-group">
+                  <label htmlFor="pres-deliverable-select" className="pres-field-label">
+                    <Database size={14} className="field-icon" aria-hidden="true" />
+                    <span>Deliverable Format</span>
+                  </label>
+                  <select
+                    id="pres-deliverable-select"
+                    className="pres-field-control"
+                    value={deliverable}
+                    onChange={(e) => setDeliverable(e.target.value)}
+                  >
+                    <option value="pptx">PowerPoint (.pptx)</option>
+                    <option value="pdf">Document PDF (.pdf)</option>
+                    <option value="both">Both (.pptx + .pdf)</option>
+                  </select>
+                </div>
+              </div>
             </div>
 
             {/* Additional Guidance & Instructions */}

@@ -32,8 +32,8 @@ def build_strengths_slides(
         ]
         s3_script = f"Focusing on operational strengths: {top_str.get('headline', '')}. {top_str.get('why_it_matters', '')}"
         s3_metrics = [
-            {"label": top_str.get("badge_label", "Strength"), "value": top_str.get("value", "Empirical Baseline"), "subtext": top_str.get("comparison", "Verified")},
-            {"label": "Data Integrity", "value": "100%", "subtext": "Complete records"}
+            {"label": top_str.get("badge_label", "Strength"), "value": top_str.get("value", "Empirical Baseline"), "subtext": top_str.get("comparison", "Verified"), "evidence_id": "EVID-STRENGTH-01"},
+            {"label": "Data Integrity", "value": "100%", "subtext": "Complete records", "evidence_id": "EVID-GOV-01"}
         ]
     else:
         s3_title = "Operational Strengths: Baseline Capacity Maintained"
@@ -49,8 +49,8 @@ def build_strengths_slides(
         ]
         s3_script = "Operational strengths: observations demonstrate baseline operating stability across all validated periods."
         s3_metrics = [
-            {"label": "Operating Status", "value": "Stable", "subtext": "At baseline mean"},
-            {"label": "Data Integrity", "value": "100%", "subtext": "Complete records"}
+            {"label": "Operating Status", "value": "Stable", "subtext": "At baseline mean", "evidence_id": "EVID-STRENGTH-01"},
+            {"label": "Data Integrity", "value": "100%", "subtext": "Complete records", "evidence_id": "EVID-GOV-01"}
         ]
 
     s3_notes = format_briefing(
@@ -95,8 +95,10 @@ def build_strengths_slides(
             f"[Interpretation] {second_str.get('why_it_matters', 'Demonstrates high operational velocity.')}"
         )
         s3b_script = f"Secondary strength analysis: {second_str.get('headline', '')}. {second_str.get('why_it_matters', '')}"
+        ev3b_id = second_str.get("id") or "EVID-STRENGTH-02"
+        ev3b = find_evidence(evidence_ledger, ev3b_id) or find_evidence(evidence_ledger, "EVID-STRENGTH-02") or ev3
         s3b_notes = format_briefing(
-            ev3,
+            ev3b,
             s3b_title,
             "Demonstrates secondary positive operational signals verified across non-null records.",
             "Visual card highlighting key operational strength findings.",
@@ -117,8 +119,8 @@ def build_strengths_slides(
                 "[Recommendation] Continue reinforcing operational playbooks across team members."
             ],
             "metrics": [
-                {"label": second_str.get("badge_label", "Strength"), "value": second_str.get("value", "Top Cohort"), "subtext": second_str.get("comparison", "Verified")},
-                {"label": "Benchmark Status", "value": "Leading", "subtext": "Upper Quartile"}
+                {"label": second_str.get("badge_label", "Strength"), "value": second_str.get("value", "Top Cohort"), "subtext": second_str.get("comparison", "Verified"), "evidence_id": ev3b_id},
+                {"label": "Benchmark Status", "value": "Leading", "subtext": "Upper Quartile", "evidence_id": ev3b_id}
             ],
             "chart": None,
             "table": None,
@@ -126,8 +128,8 @@ def build_strengths_slides(
             "narration_script": s3b_script,
             "reading_order": ["category", "title", "subtitle", "narrative", "metrics", "bullets", "footer"],
             "timing_metadata": calculate_timing(s3b_script),
-            "evidence_id": "EVID-STRENGTH-01",
-            "evidence_item": ev3,
+            "evidence_id": ev3b_id,
+            "evidence_item": ev3b,
             "evidence_sources": [source_summary],
             "is_partial_year": is_partial_year
         })

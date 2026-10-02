@@ -39,14 +39,18 @@ def generate_structured_speaker_notes(
     target_minutes: int | None = None,
     implication: str | None = None,
     transition: str | None = None,
+    evidence_ledger: list[dict[str, Any]] | None = None,
+    validation_summary: dict[str, Any] | None = None,
 ) -> str:
     """Generates structured speaker notes including:
     - What the audience should notice
     - Why it matters
-    - Supporting evidence and relevant limitations
-    - Time budget estimation
+    - Supporting evidence, actual slide sources, and limitations
+    - Time budget estimation with excess flag
     - Transition to the next slide
+    - Preserves existing author notes when present
     """
+    existing_notes = slide.get("speaker_notes")
     title = slide.get("title", "Current Slide")
     narrative = slide.get("narrative") or slide.get("key_message") or slide.get("takeaway") or ""
     metrics = slide.get("metrics") or []
@@ -57,17 +61,76 @@ def generate_structured_speaker_notes(
         notice_part += f" Key audited indicators: {metric_str}."
 
     why_part = f"WHY IT MATTERS: {implication or narrative or 'Provides essential operational context for executive decision-making.'}"
-    limitation_part = "SUPPORTING EVIDENCE: All metrics verified against the closed empirical ledger without synthetic imputation."
+
+    evidence_ids = list(slide.get("evidence_ids") or [])
+    if slide.get("evidence_id") and slide.get("evidence_id") not in evidence_ids:
+        evidence_ids.append(slide.get("evidence_id"))
+
+    matched_sources = set()
+    matched_limitations = []
+    if evidence_ledger:
+        for entry in evidence_ledger:
+            eid = entry.get("id") or entry.get("evidence_id")
+            if eid and (eid in evidence_ids or any(m.get("evidence_id") == eid for m in metrics)):
+                src = entry.get("source_dataset") or entry.get("source_sheet") or entry.get("source_label") or entry.get("provenance")
+                if src:
+                    matched_sources.add(str(src))
+                lim = entry.get("limitations") or entry.get("confidence_caveat")
+                if lim:
+                    matched_limitations.append(str(lim))
+
+    direct_source = slide.get("source_label") or slide.get("provenance") or slide.get("sheet_name")
+    if direct_source:
+        matched_sources.add(str(direct_source))
+    direct_lim = slide.get("limitations") or slide.get("data_limitations") or slide.get("caveats")
+    if direct_lim:
+        matched_limitations.append(str(direct_lim))
+
+    v_status = (validation_summary or {}).get("status")
+    v_discrepancies = (validation_summary or {}).get("discrepancies_flagged", 0)
+
+    if v_status == "PASSED" and v_discrepancies == 0 and (matched_sources or evidence_ids):
+        sources_str = ", ".join(sorted(matched_sources)) if matched_sources else "ground-truth dataset"
+        evidence_part = f"SUPPORTING EVIDENCE: Grounded in audited data ({sources_str})."
+    elif matched_sources:
+        sources_str = ", ".join(sorted(matched_sources))
+        evidence_part = f"SUPPORTING EVIDENCE: Derived from {sources_str}."
+    else:
+        evidence_part = "SUPPORTING EVIDENCE: Grounded in active workspace data."
+
+    if matched_limitations:
+        lim_str = "; ".join(matched_limitations[:2])
+        evidence_part += f" Limitations: {lim_str}."
+    elif v_discrepancies > 0:
+        evidence_part += f" Limitations: {v_discrepancies} claim discrepancy(ies) flagged against ledger."
 
     budget_part = ""
+    base_text = f"{notice_part} {why_part} {evidence_part}"
+    estimated_sec = max(15, int((len(base_text.split()) / 130.0) * 60))
+
     if target_minutes and total_slides and total_slides > 0:
-        budget_sec = int((target_minutes * 60) / total_slides)
-        budget_part = f"\n\nTIME BUDGET: Target allocation is ~{budget_sec}s for this slide within {target_minutes}-minute total presentation."
+        target_per_slide_sec = int((target_minutes * 60) / total_slides)
+        if estimated_sec > target_per_slide_sec:
+            budget_part = (
+                f"\n\nTIME BUDGET: ~{estimated_sec}s estimated speaking time "
+                f"(EXCEEDS target allocation of ~{target_per_slide_sec}s for a {target_minutes}-minute total presentation; delivery should be concise)."
+            )
+        else:
+            budget_part = (
+                f"\n\nTIME BUDGET: ~{estimated_sec}s estimated speaking time "
+                f"(within target allocation of ~{target_per_slide_sec}s for a {target_minutes}-minute presentation)."
+            )
 
     trans = transition or (f"Moving forward to '{next_slide_title}'." if next_slide_title else "Concluding executive diagnostic review.")
     transition_part = f"TRANSITION: {trans}"
 
-    return f"{notice_part}\n\n{why_part}\n\n{limitation_part}{budget_part}\n\n{transition_part}"
+    parts = [notice_part, why_part, evidence_part + budget_part, transition_part]
+
+    if existing_notes and isinstance(existing_notes, str) and existing_notes.strip():
+        if "WHAT TO NOTICE:" not in existing_notes:
+            parts.insert(0, f"EXISTING SPEAKER NOTES: {existing_notes.strip()}\n---")
+
+    return "\n\n".join(parts)
 
 
 _generate_structured_speaker_notes = generate_structured_speaker_notes
@@ -275,6 +338,12 @@ def execute_presentation_pipeline_async(
         if mgr.is_cancelled(job_id):
             return
 
+        from .deck_generator import materialize_slide_visuals
+        deck_spec["slides"] = materialize_slide_visuals(
+            deck_spec.get("slides", []),
+            theme_id=deck_spec.get("metadata", {}).get("theme_id", "executive_dark")
+        )
+
         # PHASE 7: Executive Tone & Language Polish (66% -> 76%)
         mgr.update_stage(
             job_id,
@@ -386,15 +455,23 @@ def execute_presentation_pipeline_async(
 
         total_speaking_duration_sec = 0
         slides_list = deck_spec.get("slides", [])
+        time_budget_min = scope.get("presentation_time_minutes") or 15
         for idx, slide in enumerate(slides_list):
             next_title = slides_list[idx + 1].get("title") if idx + 1 < len(slides_list) else None
-            structured_notes = _generate_structured_speaker_notes(slide, next_title)
+            structured_notes = _generate_structured_speaker_notes(
+                slide=slide,
+                next_slide_title=next_title,
+                slide_index=idx + 1,
+                total_slides=len(slides_list),
+                target_minutes=time_budget_min,
+                evidence_ledger=deck_spec.get("evidence_ledger", []),
+                validation_summary=deck_spec.get("metadata", {}).get("validation_summary")
+            )
             slide["speaker_notes"] = structured_notes
             slide_duration = _estimate_speaking_time_seconds(structured_notes)
             slide["estimated_speaking_duration_sec"] = slide_duration
             total_speaking_duration_sec += slide_duration
 
-        time_budget_min = scope.get("presentation_time_minutes") or 15
         deck_spec["metadata"]["total_estimated_speaking_duration_sec"] = total_speaking_duration_sec
         deck_spec["metadata"]["presentation_time_budget_sec"] = time_budget_min * 60
         deck_spec["metadata"]["timing_alignment"] = "within_budget" if total_speaking_duration_sec <= (time_budget_min * 60) else "exceeds_budget"
@@ -403,7 +480,7 @@ def execute_presentation_pipeline_async(
         mgr.update_stage(
             job_id,
             "export_qa",
-            "Phase 11: Auditing accessibility reading order and rendering native PPTX...",
+            "Phase 11: Auditing accessibility reading order and evaluating review gates...",
             96,
             extra={
                 "current_slide": 0,
@@ -415,12 +492,9 @@ def execute_presentation_pipeline_async(
         if mgr.is_cancelled(job_id):
             return
 
-        from ..report_generator import export_spec_to_pptx
-        pptx_path = export_spec_to_pptx(deck_spec)
-        deck_spec["pptx_filename"] = pptx_path.name
         deck_id = deck_spec["id"]
 
-        # Evaluate the Five Review Gates
+        # Evaluate the Five Review Gates before export
         brief_data = deck_spec.get("metadata", {}).get("brief") or {
             "objective": scope.get("objective", "Executive Leadership Review"),
             "audience": scope.get("audience", "C-Suite & Operations Leadership"),
@@ -435,11 +509,48 @@ def execute_presentation_pipeline_async(
         }
         review_gates = evaluate_automated_gates(
             deck_spec=deck_spec,
-            verification_summary=deck_spec["metadata"]["validation_summary"],
+            verification_summary=deck_spec["metadata"].get("validation_summary"),
+            quality_audit=deck_spec.get("quality_audit"),
+            brief=brief_data
+        )
+
+        # Check if automated gates failed prior to export
+        failed_gates = [
+            f"{gid}: {g.get('automated', {}).get('details', 'Failed check')}"
+            for gid, g in review_gates.get("gates", {}).items()
+            if g.get("automated", {}).get("status") == "FAILED"
+        ]
+        if failed_gates:
+            deck_spec["metadata"]["review_gates"] = review_gates
+            error_msg = f"Delivery blocked: Automated review gate check(s) failed: {'; '.join(failed_gates)}"
+            raise RuntimeError(error_msg)
+
+        deliverable_mode = brief_data.get("deliverable", "pptx").lower()
+        from ..report_generator import export_spec_to_pptx, export_spec_to_pdf
+        if deliverable_mode in ("pptx", "both"):
+            pptx_path = export_spec_to_pptx(deck_spec)
+            deck_spec["pptx_filename"] = pptx_path.name
+        if deliverable_mode in ("pdf", "both"):
+            pdf_path = export_spec_to_pdf(deck_spec)
+            deck_spec["pdf_filename"] = pdf_path.name
+
+        # Re-evaluate review gates after export to certify physical file integrity on disk
+        review_gates = evaluate_automated_gates(
+            deck_spec=deck_spec,
+            verification_summary=deck_spec["metadata"].get("validation_summary"),
             quality_audit=deck_spec.get("quality_audit"),
             brief=brief_data
         )
         deck_spec["metadata"]["review_gates"] = review_gates
+
+        failed_post_export = [
+            f"{gid}: {g.get('automated', {}).get('details', 'Failed check')}"
+            for gid, g in review_gates.get("gates", {}).items()
+            if g.get("automated", {}).get("status") == "FAILED"
+        ]
+        if failed_post_export:
+            error_msg = f"Delivery blocked: Technical export QA check failed: {'; '.join(failed_post_export)}"
+            raise RuntimeError(error_msg)
 
         # Persist presentation deck
         now = datetime.datetime.now(datetime.timezone.utc).isoformat()

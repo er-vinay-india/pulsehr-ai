@@ -32,13 +32,45 @@ from ...core import config
 logger = logging.getLogger(__name__)
 
 
+def materialize_slide_visuals(slides: list[dict[str, Any]], theme_id: str = "executive_dark") -> list[dict[str, Any]]:
+    """Phase 6: Visual Intelligence Engine materialization for slides and chart specifications."""
+    total_slide_count = len(slides)
+    try:
+        from .visual import VisualIntelligenceEngine
+        v_engine = VisualIntelligenceEngine()
+        for idx, s in enumerate(slides):
+            s["total_slides"] = total_slide_count
+            v_spec = v_engine.process_slide(
+                s,
+                theme_id=theme_id,
+                sequence_number=idx + 1,
+                total_slides=total_slide_count
+            )
+            s["visual_spec"] = v_spec.model_dump()
+            # If slide didn't have chart but visual spec selected one
+            if v_spec.chart_spec and not s.get("chart"):
+                s["chart"] = {
+                    "type": v_spec.chart_spec.family.value.lower(),
+                    "title": v_spec.chart_spec.title,
+                    "subtitle": v_spec.chart_spec.subtitle,
+                    "categories": v_spec.chart_spec.categories,
+                    "series": [{"name": ser.name, "values": ser.data} for ser in v_spec.chart_spec.series]
+                }
+    except Exception as exc:
+        logger.warning(f"Visual Intelligence materialization encountered issue, preserving base slides: {exc}")
+        for s in slides:
+            s["total_slides"] = total_slide_count
+    return slides
+
+
 def generate_presentation_deck_spec(
     scope: dict[str, Any],
     dataset_context: dict[str, Any],
     workspace_evidence: dict[str, Any] | None = None,
     on_slide_progress: Any = None,
     on_phase_progress: Any = None,
-    on_slide_start: Any = None
+    on_slide_start: Any = None,
+    materialize_visuals_now: bool = False
 ) -> dict[str, Any]:
     """Generates a complete, validated, evidence-driven PresentationDeckSpec.
 
@@ -141,7 +173,7 @@ def generate_presentation_deck_spec(
             "relationship_coverage_pct": 100.0 if total_records > 0 else 0.0,
             "included_sheets": included_sheets
         }
-        mean_val_str_calc = f"{mean_sales:,.2f}" if mean_sales else f"{total_records:,}"
+        mean_val_str_calc = f"${mean_sales:,.2f}" if (is_sales and mean_sales) else (f"{mean_sales:,.2f}" if mean_sales else f"{total_records:,}")
 
         # Data-driven dispersion and surge metrics from profiling
         disp_metric_str = "Dispersion Uncalculated"
@@ -176,6 +208,8 @@ def generate_presentation_deck_spec(
             dispersion_numeric_val=disp_num_val
         )
 
+    source_summary = f"{len(included_sheets)} dataset source(s)" if len(included_sheets) > 1 else target_sheet["original_name"]
+
     # Ingest Executive Overview Visual Dashboard & Prioritized Facts
     visual_dashboard = dataset_context.get("visual_dashboard") or {}
     prioritized_facts = visual_dashboard.get("prioritized_facts", [])
@@ -198,20 +232,40 @@ def generate_presentation_deck_spec(
 
     if strengths:
         ev3 = next((e for e in evidence_ledger if e.get("evidence_id") == "EVID-STRENGTH-01"), None)
-        if ev3 and (not ev3.get("metric_value") or ev3.get("metric_value") == "+7.8% Surge" or not workspace_evidence):
+        if ev3 and (not ev3.get("metric_value") or ev3.get("metric_value") in ("+7.8% Surge", "Single-Period Baseline") or not workspace_evidence):
             ev3["metric_name"] = strengths[0].get("badge_label", "Peak Operating Volume")
-            ev3["metric_value"] = " · ".join([s.get("value", "") for s in strengths if s.get("value")])
+            comp_str = f" ({strengths[0].get('comparison')})" if strengths[0].get("comparison") else ""
+            ev3["metric_value"] = f"{strengths[0].get('value', '')}{comp_str}"
+            from .claim_verifier import _extract_unit
+            ev3["unit"] = _extract_unit(strengths[0].get("value", ""))
             nums = re.findall(r'[\d,.]+', strengths[0].get("value", ""))
             if nums:
                 try:
                     ev3["numeric_value"] = float(nums[0].replace(",", ""))
                 except ValueError:
                     pass
+        if len(strengths) >= 2:
+            ev3b = next((e for e in evidence_ledger if e.get("evidence_id") in ("EVID-STRENGTH-02", strengths[1].get("id"))), None)
+            if not ev3b:
+                nums2 = re.findall(r'[\d,.]+', strengths[1].get("value", ""))
+                comp_str2 = f" ({strengths[1].get('comparison')})" if strengths[1].get("comparison") else ""
+                ev3b = {
+                    "evidence_id": strengths[1].get("id") or "EVID-STRENGTH-02",
+                    "title": strengths[1].get("headline", "Workforce Operational Leadership"),
+                    "metric_name": strengths[1].get("badge_label", "Strength"),
+                    "metric_value": f"{strengths[1].get('value', '')}{comp_str2}",
+                    "numeric_value": float(nums2[0].replace(",", "")) if nums2 else None,
+                    "unit": "pts",
+                    "source_sheets": [source_summary],
+                    "row_count": total_records
+                }
+                evidence_ledger.append(ev3b)
     if attentions:
         ev4 = next((e for e in evidence_ledger if e.get("evidence_id") == "EVID-HEADWIND-01"), None)
-        if ev4 and (not ev4.get("metric_value") or ev4.get("metric_value") == "8.11x Spread" or not workspace_evidence):
+        if ev4 and (not ev4.get("metric_value") or ev4.get("metric_value") in ("8.11x Spread", "Dispersion Not Observed") or not workspace_evidence):
             ev4["metric_name"] = attentions[0].get("badge_label", "Operational Review")
-            ev4["metric_value"] = " · ".join([a.get("value", "") for a in attentions if a.get("value")])
+            comp_str4 = f" ({attentions[0].get('comparison')})" if attentions[0].get("comparison") else ""
+            ev4["metric_value"] = f"{attentions[0].get('value', '')}{comp_str4}"
             nums = re.findall(r'[\d,.]+', attentions[0].get("value", ""))
             if nums:
                 try:
@@ -234,7 +288,7 @@ def generate_presentation_deck_spec(
         dispersion_metric_str = "Verified Benchmark"
 
     source_summary = f"{len(included_sheets)} dataset source(s)" if len(included_sheets) > 1 else target_sheet["original_name"]
-    mean_val_str = f"{mean_sales:,.2f}" if mean_sales else f"{total_records:,}"
+    mean_val_str = f"${mean_sales:,.2f}" if (is_sales and mean_sales) else (f"{mean_sales:,.2f}" if mean_sales else f"{total_records:,}")
 
     # Category concentration phrasing for executive summary (e.g. 187 of 232 records — 80.6%)
     cat_summary = ""
@@ -355,7 +409,6 @@ def generate_presentation_deck_spec(
             if on_slide_progress and callable(on_slide_progress):
                 try:
                     on_slide_progress(len(slides), target_count, s.get("title", f"Slide {len(slides)}"), s.get("category", ""), slide_dict=s)
-                    time.sleep(0.30)
                 except Exception:
                     pass
 
@@ -509,39 +562,11 @@ def generate_presentation_deck_spec(
     # Batch AI enrichment pass removed to prevent duplicate whole-deck pauses.
     # Executive tone and persona polish is now executed slide-by-slide in the dedicated 'enrichment' pipeline phase.
 
-    if on_phase_progress:
-        on_phase_progress("graphics", "Rendering slide graphics and chart specifications", 68)
-
-    # Final assembly & Phase 4 Visual Intelligence Materialization
     total_slide_count = len(slides)
-    try:
-        from .visual import VisualIntelligenceEngine
-        v_engine = VisualIntelligenceEngine()
-        for idx, s in enumerate(slides):
-            s["total_slides"] = total_slide_count
-            v_spec = v_engine.process_slide(
-                s,
-                theme_id=theme_id,
-                sequence_number=idx + 1,
-                total_slides=total_slide_count
-            )
-            s["visual_spec"] = v_spec.model_dump()
-            # If slide didn't have chart but visual spec selected one
-            if v_spec.chart_spec and not s.get("chart"):
-                s["chart"] = {
-                    "type": v_spec.chart_spec.family.value.lower(),
-                    "title": v_spec.chart_spec.title,
-                    "subtitle": v_spec.chart_spec.subtitle,
-                    "categories": v_spec.chart_spec.categories,
-                    "series": [{"name": ser.name, "values": ser.data} for ser in v_spec.chart_spec.series]
-                }
-    except Exception as exc:
-        logger.warning(f"Visual Intelligence materialization encountered issue, preserving base slides: {exc}")
-        for s in slides:
-            s["total_slides"] = total_slide_count
-
-    if on_phase_progress:
-        on_phase_progress("text", "Checking populated slide text and evidence coverage", 69)
+    for s in slides:
+        s["total_slides"] = total_slide_count
+    if materialize_visuals_now:
+        slides = materialize_slide_visuals(slides, theme_id)
 
     # Generate coverage manifest
     from ..shared_evidence_package import generate_coverage_manifest

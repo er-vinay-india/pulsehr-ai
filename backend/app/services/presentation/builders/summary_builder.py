@@ -139,9 +139,9 @@ def build_executive_summary_slide(
         "narrative": s1_narrative,
         "bullets": s1_bullets,
         "metrics": [
-            {"label": "Performance Benchmark", "value": mean_val_str, "subtext": "Central tendency"},
-            {"label": "Entity Dispersion", "value": dispersion_metric_str, "subtext": "Leader vs laggard spread"},
-            {"label": "Evaluated Population", "value": f"{total_eval_records:,}", "subtext": f"{completeness_pct}% verified coverage"}
+            {"label": "Performance Benchmark", "value": mean_val_str, "subtext": "Central tendency", "evidence_id": "EVID-KPI-01"},
+            {"label": "Entity Dispersion", "value": dispersion_metric_str, "subtext": "Leader vs laggard spread", "evidence_id": "EVID-HEADWIND-01"},
+            {"label": "Evaluated Population", "value": f"{total_eval_records:,}", "subtext": f"{completeness_pct}% verified coverage", "evidence_id": "EVID-EXEC-01"}
         ],
         "chart": None,
         "table": None,
@@ -206,10 +206,10 @@ def build_baseline_scope_slide(
         "narrative": s2_narrative,
         "bullets": s2_bullets,
         "metrics": [
-            {"label": "Records Analysed", "value": f"{total_eval_records:,}", "subtext": "Audited population"},
-            {"label": "Network Baseline Mean", "value": mean_val_str, "subtext": "Arithmetic mean benchmark"},
-            {"label": "Observation Window", "value": reporting_period_summary[:20], "subtext": "Chronological span"},
-            {"label": "Store Dispersion", "value": dispersion_metric_str, "subtext": "Leader vs laggard ratio"}
+            {"label": "Records Analysed", "value": f"{total_eval_records:,}", "subtext": "Audited population", "evidence_id": "EVID-EXEC-01"},
+            {"label": "Network Baseline Mean", "value": mean_val_str, "subtext": "Arithmetic mean benchmark", "evidence_id": "EVID-KPI-01"},
+            {"label": "Observation Window", "value": reporting_period_summary[:20], "subtext": "Chronological span", "evidence_id": "EVID-EXEC-01"},
+            {"label": "Store Dispersion", "value": dispersion_metric_str, "subtext": "Leader vs laggard ratio", "evidence_id": "EVID-HEADWIND-01"}
         ],
         "chart": None,
         "table": None,

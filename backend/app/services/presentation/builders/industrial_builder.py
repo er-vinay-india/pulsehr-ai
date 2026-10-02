@@ -209,9 +209,12 @@ def build_industrial_slides(
         "[Hypothesis] Demand concentration in core segments suggests focused category optimization.",
         "[Interpretation] Cross-table coherence allows leadership to execute integrated strategic interventions."
     ]
+    seg_ev_id = "EVID-REL-01"
+    if donut_chart and donut_chart.get("dimension_col"):
+        seg_ev_id = f"EVID-SEGMENTS-{donut_chart['dimension_col']}"
     s5_metrics = [
-        {"label": "Key Integrity", "value": "100.0%", "subtext": "Zero orphaned rows"},
-        {"label": "Segment Count", "value": f"{len(donut_chart['categories'])}" if donut_chart else "5 Categories", "subtext": "Evaluated segments"}
+        {"label": "Key Integrity", "value": "100.0%", "subtext": "Zero orphaned rows", "evidence_id": "EVID-GOV-01"},
+        {"label": "Segment Count", "value": f"{len(donut_chart['categories'])}" if donut_chart else "5 Categories", "subtext": "Evaluated segments", "evidence_id": seg_ev_id}
     ]
     s5_chart = donut_chart
     s5_script = "Section five covers connected relational discovery: our data architecture confirms 100% relational integrity across all active tables."

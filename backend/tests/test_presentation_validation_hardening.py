@@ -38,6 +38,22 @@ from app.services.presentation.validation import (
 )
 
 
+@pytest.fixture(autouse=True)
+def fast_tests(monkeypatch):
+    monkeypatch.setattr("app.core.config.PRESENTATION_DIRECTOR_ENABLED", False)
+    monkeypatch.setattr("app.core.config.PRESENTATION_ORCHESTRATOR_ENABLED", False)
+    from app.services.presentation.director import presentation_director
+    monkeypatch.setattr(presentation_director, "enabled", False)
+    from app.services.presentation.orchestrator import presentation_orchestrator
+    monkeypatch.setattr(presentation_orchestrator, "enabled", False)
+    from app.services.gateway.model_gateway import ModelGateway, GatewayResult
+    monkeypatch.setattr(
+        ModelGateway,
+        "generate",
+        lambda *args, **kwargs: GatewayResult(raw_text="", success=False, error="Test offline mock")
+    )
+
+
 def test_validation_models_and_taxonomy():
     """Validates FailureTaxonomy, DeckScorecard, and PresentationValidationResult schema."""
     assert len(FailureTaxonomy) >= 16

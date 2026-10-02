@@ -11,7 +11,13 @@ Validates:
 """
 
 import json
+from pathlib import Path
 import pytest
+from fastapi import HTTPException
+import pptx
+
+from app.core.config import EXPORTS_DIR
+from app.db.database import get_connection
 from app.services.presentation.review_gates import (
     initialize_review_gates,
     evaluate_automated_gates,
@@ -28,6 +34,23 @@ from app.services.presentation.pipeline_orchestrator import (
 )
 from app.services.presentation.orchestrator.tool_registry import tool_registry
 from app.services.presentation.observer_ai import SlideContextObserver
+from app.services.report_generator import export_spec_to_pptx, export_spec_to_pdf
+from app.routers.presentations import (
+    approve_review_gate,
+    update_presentation_deck,
+    export_presentation_to_pptx,
+    download_deck_pptx,
+    ReviewGateSignoffRequest,
+    ExportPptxRequest,
+)
+from app.services.presentation.director.intent_planner import plan_intent
+from app.services.presentation.director.narrative_planner import plan_narrative
+from app.services.presentation.director.director_models import (
+    PresentationPlanningContext,
+    PresentationBrief,
+    AudienceSeniority,
+    DeliveryMode,
+)
 
 
 def test_orchestrator_calculate_metric_no_synthetic_inputs():
@@ -263,3 +286,355 @@ def test_pipeline_orchestrator_phases_and_notes():
     assert "SUPPORTING EVIDENCE:" in notes
     assert "TIME BUDGET:" in notes
     assert "TRANSITION:" in notes
+
+
+def test_claim_verifier_reproduced_failures():
+    """Verify strict claim verifier catches all 5 reproduced failure cases."""
+    evidence = [
+        {"id": "EV-01", "metric_name": "Turnover Rate", "value": 18.5, "unit": "%"},
+        {"id": "EV-02", "metric_name": "Row Count", "value": 1250, "unit": "count"},
+    ]
+
+    # Case 1: Headline says 99%; metric correctly says 18.5%
+    deck_c1 = {
+        "slides": [{
+            "id": "s1",
+            "title": "Turnover soared to 99% across the workforce",
+            "metrics": [{"label": "Turnover Rate", "value": "18.5%", "evidence_id": "EV-01"}]
+        }]
+    }
+    sum_c1 = verify_presentation_claims(deck_c1, evidence)
+    assert sum_c1["discrepancies_flagged"] > 0
+    assert any("99" in str(d) for d in sum_c1["discrepancies"])
+
+    # Case 2: Turnover says 1,250%, matching the evidence row count (unit mismatch)
+    deck_c2 = {
+        "slides": [{
+            "id": "s2",
+            "title": "Turnover Rate Analysis",
+            "metrics": [{"label": "Turnover Rate", "value": "1,250%", "evidence_id": "EV-02"}]
+        }]
+    }
+    sum_c2 = verify_presentation_claims(deck_c2, evidence)
+    assert sum_c2["discrepancies_flagged"] > 0
+    assert any("1250" in str(d) or "unit" in str(d).lower() for d in sum_c2["discrepancies"])
+
+    # Case 3: -18.5% when evidence says +18.5% (negative sign loss)
+    deck_c3 = {
+        "slides": [{
+            "id": "s3",
+            "title": "Turnover dropped to -18.5%",
+            "metrics": [{"label": "Turnover Rate", "value": "-18.5%", "evidence_id": "EV-01"}]
+        }]
+    }
+    sum_c3 = verify_presentation_claims(deck_c3, evidence)
+    assert sum_c3["discrepancies_flagged"] > 0
+
+    # Case 4: "187 of 232 (12%)" - internal arithmetic contradiction (187/232 = 80.6% != 12%)
+    deck_c4 = {
+        "slides": [{
+            "id": "s4",
+            "title": "187 of 232 (12%) participants completed the cycle",
+            "metrics": [{"label": "Turnover Rate", "value": "18.5%", "evidence_id": "EV-01"}]
+        }]
+    }
+    sum_c4 = verify_presentation_claims(deck_c4, evidence)
+    assert sum_c4["discrepancies_flagged"] > 0
+    assert any("arithmetic" in str(d).lower() or "contradiction" in str(d).lower() or "187" in str(d) for d in sum_c4["discrepancies"])
+
+    # Case 5: Narrative and chart say 99%; metric says 18.5%
+    deck_c5 = {
+        "slides": [{
+            "id": "s5",
+            "title": "Engineering Retention",
+            "narrative": "Severe turnover observed at 99% across senior levels.",
+            "chart": {
+                "type": "bar",
+                "title": "Turnover Rates",
+                "categories": ["Engineering"],
+                "series": [{"name": "Rate", "values": [99.0]}]
+            },
+            "metrics": [{"label": "Turnover Rate", "value": "18.5%", "evidence_id": "EV-01"}]
+        }]
+    }
+    sum_c5 = verify_presentation_claims(deck_c5, evidence)
+    assert sum_c5["discrepancies_flagged"] > 0
+
+
+def test_chart_alt_text_applied_in_pptx():
+    """Verify exported PowerPoint charts have alt text title and description properly set on cNvPr."""
+    deck_spec = {
+        "id": "deck_alt_text_test",
+        "metadata": {"title": "Alt Text Verification Deck"},
+        "slides": [{
+            "id": "s_chart",
+            "title": "Departmental Attrition Comparison",
+            "layout": "chart_narrative",
+            "narrative": "Engineering shows the highest flight risk across departments.",
+            "chart": {
+                "type": "column",
+                "title": "Attrition by Department",
+                "subtitle": "Percentage of voluntary departures",
+                "categories": ["Engineering", "Sales", "Marketing"],
+                "series": [{"name": "Attrition Rate", "values": [24.5, 18.2, 12.0]}]
+            }
+        }]
+    }
+    pptx_path = export_spec_to_pptx(deck_spec)
+    assert pptx_path.exists()
+
+    prs = pptx.Presentation(str(pptx_path))
+    slide = prs.slides[0]
+    
+    found_chart_alt = False
+    for shape in slide.shapes:
+        elem = shape.element
+        for child in elem.iter():
+            if child.tag.endswith("cNvPr"):
+                title_val = child.attrib.get("title", "")
+                descr_val = child.attrib.get("descr", "")
+                if title_val or descr_val:
+                    found_chart_alt = True
+                    assert "Attrition by Department" in title_val or "Departmental" in descr_val or "Chart" in title_val or "Attrition" in descr_val
+                    break
+        if found_chart_alt:
+            break
+    assert found_chart_alt, "Chart cNvPr alt text title/descr was not applied in exported PPTX"
+
+
+def test_review_gates_accessibility_and_visual_safety():
+    """Verify Gate 4 requires visual audit and Gate 5 fails on nonexistent export file."""
+    brief_data = {
+        "objective": "Test Visual and Export Safety",
+        "audience": "Board of Directors",
+        "decision_requested": "Approve budget",
+        "is_inferred": False
+    }
+    deck_spec = {
+        "id": "deck_gate_safety",
+        "metadata": {
+            "objective": "Test Visual and Export Safety",
+            "audience": "Board of Directors",
+            "decision_requested": "Approve budget",
+            "validation_summary": {"status": "PASSED", "discrepancies_flagged": 0, "total_metrics_checked": 2}
+        },
+        "slides": [
+            {"id": "s1", "title": "Executive Summary", "layout": "title_hero"},
+            {
+                "id": "s2",
+                "title": "Operational Findings Across Units",
+                "layout": "chart_narrative",
+                "chart": {
+                    "type": "bar",
+                    "title": "Findings",
+                    "categories": ["Ops"],
+                    "series": [{"name": "Rate", "values": [12.0]}]
+                }
+            },
+            {"id": "s3", "title": "Strategic Roadmap", "layout": "comparison_split"}
+        ],
+        "pptx_filename": "nonexistent_file_99999.pptx"
+    }
+
+    # 1. Gate 4 with quality_audit=None MUST return REQUIRES_REVIEW (never falsely PASSED)
+    res_no_audit = evaluate_automated_gates(deck_spec, quality_audit=None, brief=brief_data)
+    assert res_no_audit["gates"]["gate_4_visual"]["automated"]["status"] == "REQUIRES_REVIEW"
+    assert "pending review" in res_no_audit["gates"]["gate_4_visual"]["automated"]["details"].lower() or "not yet executed" in res_no_audit["gates"]["gate_4_visual"]["automated"]["details"].lower()
+
+    # 2. Gate 5 with nonexistent PPTX file MUST return FAILED
+    assert res_no_audit["gates"]["gate_5_export_accessibility"]["automated"]["status"] == "FAILED"
+    assert "not found on disk" in res_no_audit["gates"]["gate_5_export_accessibility"]["automated"]["details"].lower()
+
+    # 3. Gate 4 with clean quality_audit returns PASSED
+    res_clean_audit = evaluate_automated_gates(
+        deck_spec,
+        quality_audit={"passed": True, "critical_count": 0, "warning_count": 0},
+        brief=brief_data
+    )
+    assert res_clean_audit["gates"]["gate_4_visual"]["automated"]["status"] == "PASSED"
+
+    # 4. Gate 5 with real file on disk returns PASSED
+    real_pptx = export_spec_to_pptx(deck_spec)
+    deck_spec["pptx_filename"] = real_pptx.name
+    res_real_export = evaluate_automated_gates(deck_spec, brief=brief_data)
+    assert res_real_export["gates"]["gate_5_export_accessibility"]["automated"]["status"] == "PASSED"
+    assert "pending human verification" in res_real_export["gates"]["gate_5_export_accessibility"]["automated"]["details"].lower()
+
+
+def test_failed_gates_block_delivery_in_pipeline_and_endpoints():
+    """Verify failed checks block delivery in export endpoints with HTTP 422."""
+    # Deck with failed evidence gate (discrepancy flagged)
+    failing_deck = {
+        "id": "deck_failing_delivery",
+        "metadata": {
+            "title": "Failing Deck",
+            "review_gates": {
+                "revision": 1,
+                "gates": {
+                    "gate_3_evidence": {
+                        "automated": {"status": "FAILED", "details": "2 discrepancies flagged"}
+                    }
+                }
+            }
+        },
+        "slides": [{"id": "s1", "title": "Slide 1"}]
+    }
+
+    # 1. /export-pptx must reject with HTTP 422
+    with pytest.raises(HTTPException) as exc_info:
+        export_presentation_to_pptx(ExportPptxRequest(deck_spec=failing_deck))
+    assert exc_info.value.status_code == 422
+    assert "Delivery blocked" in exc_info.value.detail
+
+    # 2. /download/{deck_id} must reject with HTTP 422 when stored deck has failed gate
+    with get_connection() as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO presentation_decks (id, title, spec_json, pptx_filename) VALUES (?, ?, ?, ?)",
+            ("deck_failing_delivery", "Failing Deck", json.dumps(failing_deck), "failing.pptx")
+        )
+        conn.commit()
+
+    with pytest.raises(HTTPException) as exc_info2:
+        download_deck_pptx("deck_failing_delivery")
+    assert exc_info2.value.status_code == 422
+    assert "Delivery blocked" in exc_info2.value.detail
+
+
+def test_revision_binding_and_monotonicity():
+    """Verify revision increments monotonically on save and approvals reject revision mismatches."""
+    deck_id = "deck_rev_test_99"
+    initial_spec = {
+        "id": deck_id,
+        "metadata": {
+            "title": "Revision Monotonicity Deck",
+            "review_gates": {
+                "revision": 1,
+                "gates": {
+                    "gate_1_brief": {
+                        "automated": {"status": "PASSED"},
+                        "human_approval": {"status": "PENDING"}
+                    }
+                }
+            }
+        },
+        "slides": [{"id": "s1", "title": "Slide 1"}]
+    }
+
+    with get_connection() as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO presentation_decks (id, title, spec_json) VALUES (?, ?, ?)",
+            (deck_id, "Revision Deck", json.dumps(initial_spec))
+        )
+        conn.commit()
+
+    # Save 1: from client with rev 1 -> stored becomes rev 2
+    update_presentation_deck(deck_id, initial_spec)
+    with get_connection() as conn:
+        row = conn.execute("SELECT spec_json FROM presentation_decks WHERE id = ?", (deck_id,)).fetchone()
+    spec_v2 = json.loads(row["spec_json"])
+    assert spec_v2["metadata"]["review_gates"]["revision"] == 2
+
+    # Save 2: another client with stale rev 1 saves -> stored becomes rev 3 (never duplicate 2!)
+    stale_spec = dict(initial_spec)
+    stale_spec["metadata"]["review_gates"]["revision"] = 1
+    update_presentation_deck(deck_id, stale_spec)
+    with get_connection() as conn:
+        row = conn.execute("SELECT spec_json FROM presentation_decks WHERE id = ?", (deck_id,)).fetchone()
+    spec_v3 = json.loads(row["spec_json"])
+    assert spec_v3["metadata"]["review_gates"]["revision"] == 3
+
+    # Approval test: approve with mismatched expected_revision (e.g. 1 instead of 3)
+    with pytest.raises(HTTPException) as exc_info:
+        approve_review_gate(
+            deck_id=deck_id,
+            gate_id="gate_1_brief",
+            req=ReviewGateSignoffRequest(approved=True, user_name="Executive", expected_revision=1)
+        )
+    assert exc_info.value.status_code == 409
+    assert "Revision mismatch" in exc_info.value.detail
+
+    # Approval test: approve with matching expected_revision 3 -> succeeds
+    res_ok = approve_review_gate(
+        deck_id=deck_id,
+        gate_id="gate_1_brief",
+        req=ReviewGateSignoffRequest(approved=True, user_name="Executive", expected_revision=3)
+    )
+    assert res_ok["gates"]["gate_1_brief"]["human_approval"]["status"] == "APPROVED"
+    assert res_ok["gates"]["gate_1_brief"]["human_approval"]["revision"] == 3
+
+
+def test_execution_order_and_zero_generator_sleeps():
+    """Verify zero artificial sleeps in deck_generator and clean visual materialization separation."""
+    gen_file = Path(__file__).resolve().parent.parent / "app" / "services" / "presentation" / "deck_generator.py"
+    content = gen_file.read_text()
+    assert "time.sleep" not in content, "Found time.sleep in deck_generator.py - must be eliminated"
+
+    # Verify materialize_slide_visuals is exported and callable
+    from app.services.presentation.deck_generator import materialize_slide_visuals
+    slides = [{"id": "s_mat", "title": "Materialization Slide", "category": "Analysis"}]
+    mat_slides = materialize_slide_visuals(slides, theme_id="executive_dark")
+    assert len(mat_slides) == 1
+    assert "visual_spec" in mat_slides[0]
+
+
+def test_capabilities_brief_pdf_and_speaker_notes():
+    """Verify brief consumption in planners, PDF generation, and structured speaker notes preservation."""
+    # 1. Brief consumption in intent and narrative planners
+    brief = PresentationBrief(
+        objective="Executive Turnover Strategy",
+        audience="Board of Directors",
+        decision_requested="Approve $3.2M retention budget",
+        main_takeaway="Engineering turnover reached critical peak of 24.5%",
+        presentation_time_minutes=25,
+        deliverable="both",
+        is_inferred=False
+    )
+    ctx = PresentationPlanningContext(
+        domain="Human Resources",
+        objective="Executive Turnover Strategy",
+        audience="Board of Directors",
+        total_records=2500,
+        brief=brief
+    )
+
+    intent = plan_intent(ctx, max_retries=-1)
+    assert any("retention" in t.lower() or "peak" in t.lower() for t in intent.key_takeaways) or "peak" in intent.primary_goal.lower()
+
+    narrative = plan_narrative(ctx, intent, [], max_retries=-1)
+    assert "critical peak" in narrative.executive_thesis.lower() or "retention" in narrative.executive_thesis.lower()
+
+    # 2. PDF generation
+    deck_spec = {
+        "id": "deck_pdf_test",
+        "metadata": {"title": "PDF Generation Test"},
+        "slides": [
+            {"id": "sp1", "title": "Executive Summary", "category": "Strategy", "content": {"bullets": ["Point A", "Point B"]}},
+            {"id": "sp2", "title": "Key Indicators", "category": "Metrics", "metrics": [{"label": "Rate", "value": "18.5%"}]}
+        ]
+    }
+    pdf_path = export_spec_to_pdf(deck_spec)
+    assert pdf_path.exists()
+    assert pdf_path.stat().st_size > 0
+    assert pdf_path.name.endswith(".pdf")
+
+    # 3. Speaker notes preservation & limitations
+    slide_with_notes = {
+        "id": "sn1",
+        "title": "Turnover Variance",
+        "speaker_notes": "Existing confidential author comment: examine Q4 bonus plan.",
+        "source_label": "HRIS_Export_2026.xlsx",
+        "limitations": "Self-reported exit interviews only."
+    }
+    notes = generate_structured_speaker_notes(
+        slide=slide_with_notes,
+        total_slides=10,
+        target_minutes=5,
+        evidence_ledger=[{"id": "EV-99", "source_dataset": "HRIS_Export_2026.xlsx", "limitations": "Self-reported exit interviews only."}]
+    )
+    # Must preserve existing notes
+    assert "Existing confidential author comment" in notes
+    # Must include actual sources and limitations
+    assert "HRIS_Export_2026.xlsx" in notes
+    assert "Self-reported exit interviews" in notes
+    # Must flag time budget excess when notes exceed per-slide allocation
+    assert "TIME BUDGET:" in notes
