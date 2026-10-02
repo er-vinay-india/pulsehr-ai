@@ -27,7 +27,8 @@ export function presentHRIDAYAnswer(raw, { streaming = false, delegates = [] } =
     }
   }
   const introText = text.replace(greeting, '');
-  const identities = delegates.flatMap(d => [d.name, d.primary_model]).filter(Boolean);
+  const identities = delegates.flatMap(d => [d.name, d.primary_model]).filter(Boolean)
+    .flatMap(name => [name, String(name).split('/').at(-1).replace(/[-_\d].*$/, '')]).filter(Boolean);
   const intro = /^(?:I am|I'm|I’m|my name is)\s/i;
   const possibleIntro = ["I am ", "I'm ", 'I’m ', 'my name is '];
   if (streaming && (possibleIntro.some(prefix => prefix.toLowerCase().startsWith(introText.toLowerCase()))
@@ -36,7 +37,9 @@ export function presentHRIDAYAnswer(raw, { streaming = false, delegates = [] } =
     const end = (streaming ? /[.!?](?=\s)/ : /[.!?](?=\s|$)/).exec(introText);
     if (streaming && !end) return '';
     const firstSentence = end ? introText.slice(0, end.index + 1) : introText;
-    if (/council|war room|model|HRIDAY/i.test(firstSentence) || identities.some(name => firstSentence.includes(name))) {
+    const identityDescription = firstSentence.replace(/\*\*|__/g, '').replace(intro, '');
+    const knownIdentity = identities.some(name => new RegExp('^' + escapeRegex(name) + '(?=\\b|[ -])', 'i').test(identityDescription));
+    if (/council|war room|model|HRIDAY/i.test(firstSentence) || knownIdentity) {
       const remainder = introText.slice(firstSentence.length).trimStart();
       const welcome = 'welcome to the war room';
       const partialWelcome = welcome.startsWith(remainder.toLowerCase()) || remainder.toLowerCase().startsWith(welcome);
@@ -70,7 +73,7 @@ export function inferHRIDAYTool(query) {
   if (/^[\d\s.+*/()\-]+$/.test(expression) && /\d/.test(expression)) {
     return { name: 'arithmetic', expression };
   }
-  if (/^(?:please )?(?:create|make|generate|build)(?: me)? (?:a |an |the )?(?:workforce |hr |executive )?(?:presentation|powerpoint|pptx|deck)(?: for (?:the )?workforce)?[.!]?$/.test(q)) {
+  if (/^(?:please )?(?:create|make|generate|build)(?: me)? (?:a |an |the )?(?:workforce |hr |executive )?(?:presentation|powerpoint|pptx?|deck)(?: for (?:the )?workforce)?[.!]?$/.test(q)) {
     return { name: 'presentation' };
   }
   // Match the backend's conservative calculation grammar without dropping filters.

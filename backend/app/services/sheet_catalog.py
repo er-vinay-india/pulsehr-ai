@@ -321,18 +321,50 @@ def insert_sheets(conn, dataset_id, prepared, display_name=None):
     from .rag_service import pack_vector
     for sheet in prepared:
         sheet_disp = display_name or sheet.get('display_name') or sheet['name']
-        sid = conn.execute('INSERT INTO sheets(dataset_id,name,display_name,columns_json,profile_json,row_count) VALUES (?,?,?,?,?,?)',
-                           (dataset_id, sheet['name'], sheet_disp, json.dumps(sheet['columns']), json.dumps(sheet['profiles']), len(sheet['records']))).lastrowid
-        for i, record in enumerate(sheet['records']):
-            conn.execute('INSERT INTO sheet_rows(sheet_id,row_index,data_json) VALUES (?,?,?)', (sid, i, json.dumps(record)))
-            conn.executemany('INSERT INTO sheet_cells VALUES (?,?,?,?)', [(sid, i, col, value_key(value)) for col, value in record.items() if value_key(value)])
-            metadata = {'dataset_id': dataset_id, 'sheet_id': sid, 'sheet_name': sheet['name'], 'row_index': i}
-            if i < len(sheet['vectors']):
-                metadata['embedding_model'] = config.OLLAMA_EMBED_MODEL
-            chunk_id = conn.execute('INSERT INTO tabular_chunks(dataset_id,sheet_name,row_index,chunk_text,metadata_json) VALUES (?,?,?,?,?)',
-                                    (dataset_id, sheet['name'], i, sheet['chunks'][i], json.dumps(metadata))).lastrowid
-            if i < len(sheet['vectors']):
-                conn.execute('INSERT INTO tabular_vectors(id,embedding) VALUES (?,?)', (chunk_id, pack_vector(sheet['vectors'][i])))
+        sid = conn.execute(
+            'INSERT INTO sheets(dataset_id,name,display_name,columns_json,profile_json,row_count) VALUES (?,?,?,?,?,?)',
+            (dataset_id, sheet['name'], sheet_disp, json.dumps(sheet['columns']), json.dumps(sheet['profiles']), len(sheet['records']))
+        ).lastrowid
+
+        records = sheet.get('records', [])
+        chunks = sheet.get('chunks', [])
+        vectors = sheet.get('vectors', [])
+        total_records = len(records)
+
+        # High-performance chunked batch insertion (1,000 rows per transaction chunk)
+        batch_size = 1000
+        for b_start in range(0, total_records, batch_size):
+            b_end = min(b_start + batch_size, total_records)
+
+            rows_batch = [
+                (sid, i, json.dumps(records[i]))
+                for i in range(b_start, b_end)
+            ]
+            conn.executemany('INSERT INTO sheet_rows(sheet_id,row_index,data_json) VALUES (?,?,?)', rows_batch)
+
+            cells_batch = [
+                (sid, i, col, value_key(val))
+                for i in range(b_start, b_end)
+                for col, val in records[i].items()
+                if value_key(val)
+            ]
+            if cells_batch:
+                conn.executemany('INSERT INTO sheet_cells(sheet_id,row_index,column_name,value_key) VALUES (?,?,?,?)', cells_batch)
+
+            for i in range(b_start, b_end):
+                chunk_txt = chunks[i] if i < len(chunks) else ""
+                metadata = {'dataset_id': dataset_id, 'sheet_id': sid, 'sheet_name': sheet['name'], 'row_index': i}
+                if i < len(vectors):
+                    metadata['embedding_model'] = config.OLLAMA_EMBED_MODEL
+                chunk_id = conn.execute(
+                    'INSERT INTO tabular_chunks(dataset_id,sheet_name,row_index,chunk_text,metadata_json) VALUES (?,?,?,?,?)',
+                    (dataset_id, sheet['name'], i, chunk_txt, json.dumps(metadata))
+                ).lastrowid
+                if i < len(vectors) and vectors[i]:
+                    conn.execute(
+                        'INSERT INTO tabular_vectors(id,embedding) VALUES (?,?)',
+                        (chunk_id, pack_vector(vectors[i]))
+                    )
 
 
 def prepare_existing_column_vectors():

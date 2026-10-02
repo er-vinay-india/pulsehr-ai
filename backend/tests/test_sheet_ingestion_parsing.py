@@ -90,3 +90,48 @@ def test_numeric_values_currencies_and_thousands():
     num_p, unit_p = numeric_values(s_pct, "attrition_rate")
     assert unit_p == "%"
     assert list(num_p) == [18.5, -5.2, 10.0]
+
+
+def test_insert_sheets_batching():
+    import sqlite3
+    import json
+    from app.services.sheet_catalog import insert_sheets
+
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    conn.executescript("""
+        CREATE TABLE dataset_uploads (id INTEGER PRIMARY KEY);
+        CREATE TABLE sheets (id INTEGER PRIMARY KEY AUTOINCREMENT, dataset_id INTEGER, name TEXT, display_name TEXT, columns_json TEXT, profile_json TEXT, row_count INTEGER);
+        CREATE TABLE sheet_rows (id INTEGER PRIMARY KEY AUTOINCREMENT, sheet_id INTEGER, row_index INTEGER, data_json TEXT);
+        CREATE TABLE sheet_cells (sheet_id INTEGER, row_index INTEGER, column_name TEXT, value_key TEXT);
+        CREATE TABLE tabular_chunks (id INTEGER PRIMARY KEY AUTOINCREMENT, dataset_id INTEGER, sheet_name TEXT, row_index INTEGER, chunk_text TEXT, metadata_json TEXT);
+        CREATE TABLE tabular_vectors (id INTEGER PRIMARY KEY, embedding BLOB);
+    """)
+
+    conn.execute("INSERT INTO dataset_uploads (id) VALUES (1)")
+    # Generate 1500 records to cross the 1000-row batch boundary
+    records = [{"id": f"ID_{i}", "val": i * 10, "tag": f"T_{i % 5}"} for i in range(1500)]
+    columns = ["id", "val", "tag"]
+    profiles = [{"column": c} for c in columns]
+    chunks = [f"Row {i}" for i in range(1500)]
+
+    prepared = [{
+        "name": "BigSheet",
+        "columns": columns,
+        "profiles": profiles,
+        "records": records,
+        "chunks": chunks,
+        "vectors": []
+    }]
+
+    insert_sheets(conn, dataset_id=1, prepared=prepared, display_name="Big Sheet")
+
+    row_count = conn.execute("SELECT COUNT(*) FROM sheet_rows").fetchone()[0]
+    assert row_count == 1500
+
+    cell_count = conn.execute("SELECT COUNT(*) FROM sheet_cells").fetchone()[0]
+    assert cell_count == 4500  # 1500 rows * 3 non-empty columns
+
+    chunk_count = conn.execute("SELECT COUNT(*) FROM tabular_chunks").fetchone()[0]
+    assert chunk_count == 1500
+

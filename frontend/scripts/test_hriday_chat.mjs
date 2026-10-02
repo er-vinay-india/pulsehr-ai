@@ -21,6 +21,7 @@ test('model identity and council banner never flash at any streaming boundary', 
       assert(!/Qwen|Elected|Quorum|Council|War Room|Chief Quantitative/i.test(displayed), displayed);
     }
   }
+  assert.equal(presentHRIDAYAnswer('Hi! I am qwen. How can I help?', { delegates }), 'Hi, I’m HRIDAY. How can I help?');
   assert.equal(presentHRIDAYAnswer(banner + evidence, { delegates }), evidence);
   assert.equal(presentHRIDAYAnswer(banner + greeting, { delegates }), 'Hi, I’m HRIDAY. How can I help?');
   assert.equal(presentHRIDAYAnswer('I am concerned about attendance. Please explain.'), 'I am concerned about attendance. Please explain.');
@@ -63,6 +64,7 @@ test('unexpected EOF exposes recoverable incomplete state', async () => {
 test('query tools preserve exact grammar and filters; artifact URLs stay local', () => {
   assert.deepEqual(inferHRIDAYTool('Calculate (12 + 8) / 4'), { name: 'arithmetic', expression: '(12 + 8) / 4' });
   assert.deepEqual(inferHRIDAYTool('Create a presentation'), { name: 'presentation' });
+  assert.deepEqual(inferHRIDAYTool('Create a PPT'), { name: 'presentation' });
   assert.deepEqual(inferHRIDAYTool('Average attendance by department'), { name: 'calculate', calculation: { operation: 'mean', column: 'attendance_rate', group_by: 'department' } });
   assert.equal(inferHRIDAYTool('Average attendance in July for Sales'), null); assert.equal(inferHRIDAYTool('Explain the presentation process'), null);
   assert.equal(presentArtifacts([{ url: '/api/reports/presentation/files/deck.pptx' }, { url: 'javascript:alert(1)' }]).length, 1);

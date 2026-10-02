@@ -55,7 +55,7 @@ export default function GlobalCopilotWidget({
   }, []);
   useEffect(() => {
     if (!visible) return;
-    if (!panel.current?.contains(document.activeElement)) returnFocus.current = document.activeElement;
+    if (!panel.current?.contains(document.activeElement) && document.activeElement !== document.body) returnFocus.current = document.activeElement;
     const frame = requestAnimationFrame(() => input.current?.focus());
     return () => cancelAnimationFrame(frame);
   }, [visible, viewport.mobile]);
@@ -75,7 +75,10 @@ export default function GlobalCopilotWidget({
   const show = () => { returnFocus.current = document.activeElement; setOpen(true); onToggle?.(true); };
   const close = () => {
     setOpen(false); onToggle?.(false); onClose?.();
-    requestAnimationFrame(() => { if (returnFocus.current?.isConnected) returnFocus.current.focus(); });
+    requestAnimationFrame(() => {
+      const target = returnFocus.current?.isConnected ? returnFocus.current : document.querySelector('.hriday-launcher');
+      target?.focus();
+    });
   };
   const keyDown = event => {
     if (event.key === 'Escape') { event.preventDefault(); close(); return; }

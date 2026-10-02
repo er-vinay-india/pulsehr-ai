@@ -1,6 +1,7 @@
 import csv
 import io
 import json
+import logging
 from pathlib import Path
 import threading
 from uuid import uuid4
@@ -14,6 +15,8 @@ from ..db.database import get_connection
 from ..services.sheet_catalog import read_sheets, prepare_sheets, insert_sheets, rebuild_relationships, prepare_existing_column_vectors
 from ..services.industrial_analytics import run_ingestion_industrial_pipeline
 from ..services.sheet_naming_pipeline import generate_sheet_display_name
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix='/api/upload', tags=['upload'])
 _upload_lock = threading.Lock()
@@ -47,54 +50,63 @@ def upload_file(
             naming = generate_sheet_display_name(original, first['columns'], first['records'])
             display_name = naming['display_name']
 
-            # Run Controlled Semantic Data Enrichment & Scientific Feature Discovery Pipeline
-            enrichment_summary = None
-            try:
-                import pandas as pd
-                from ..services.enrichment import ControlledEnrichmentPipeline
+            # Run Controlled Semantic Data Enrichment & Scientific Feature Discovery Pipeline across ALL sheets
+            all_enrichment_summaries = {}
+            primary_enrichment_summary = None
 
-                df_raw = pd.DataFrame(first['records'])
-                final_df, enriched_pkg = ControlledEnrichmentPipeline.enrich_dataset(
-                    df=df_raw,
-                    dataset_id=original
-                )
-                enriched_records = json.loads(final_df.to_json(orient="records"))
-                enriched_cols = list(final_df.columns)
+            for s_idx, sheet_data in enumerate(prepared):
+                try:
+                    import pandas as pd
+                    from ..services.enrichment import ControlledEnrichmentPipeline
 
-                # Preserve raw values for existing columns so leading zeroes ('001') are never lost
-                orig_cols_set = set(first['columns'])
-                new_cols = [c for c in enriched_cols if c not in orig_cols_set]
-                for idx_r, r in enumerate(first['records']):
-                    if idx_r < len(enriched_records):
-                        for c in new_cols:
-                            r[c] = enriched_records[idx_r].get(c)
-                first['columns'] = list(first['columns']) + new_cols
+                    df_raw = pd.DataFrame(sheet_data['records'])
+                    if len(df_raw) > 0:
+                        final_df, enriched_pkg = ControlledEnrichmentPipeline.enrich_dataset(
+                            df=df_raw,
+                            dataset_id=f"{original}_{sheet_data['name']}"
+                        )
+                        enriched_records = json.loads(final_df.to_json(orient="records"))
+                        enriched_cols = list(final_df.columns)
 
-                # Update profiles and hints for enriched columns while preserving existing column embeddings
-                old_vectors = {p['column']: (p.get('vector'), p.get('embedding_model')) for p in first['profiles']}
-                enriched_frames = {first['name']: pd.DataFrame(first['records']).astype(str)}
-                enriched_prep = prepare_sheets(enriched_frames, original, embed=False)
-                if enriched_prep:
-                    for p in enriched_prep[0]['profiles']:
-                        if p['column'] in old_vectors and old_vectors[p['column']][0]:
-                            p['vector'] = old_vectors[p['column']][0]
-                            p['embedding_model'] = old_vectors[p['column']][1]
-                    first['profiles'] = enriched_prep[0]['profiles']
-                    first['decision_hints'] = enriched_prep[0]['decision_hints']
+                        # Preserve raw values for existing columns so leading zeroes ('001') are never lost
+                        orig_cols_set = set(sheet_data['columns'])
+                        new_cols = [c for c in enriched_cols if c not in orig_cols_set]
+                        for idx_r, r in enumerate(sheet_data['records']):
+                            if idx_r < len(enriched_records):
+                                for c in new_cols:
+                                    r[c] = enriched_records[idx_r].get(c)
+                        sheet_data['columns'] = list(sheet_data['columns']) + new_cols
 
-                enrichment_summary = {
-                    "original_col_count": enriched_pkg.original_col_count,
-                    "enriched_col_count": enriched_pkg.enriched_col_count,
-                    "derived_features_count": len(enriched_pkg.derived_features),
-                    "derived_features": [f.model_dump() for f in enriched_pkg.derived_features],
-                    "semantic_groups": [g.model_dump() for g in enriched_pkg.semantic_groups],
-                    "analytical_tables_count": len(enriched_pkg.analytical_tables),
-                    "analytical_tables": [t.model_dump() for t in enriched_pkg.analytical_tables],
-                    "budget_summary": enriched_pkg.budget_summary
-                }
-            except Exception as e:
-                import logging
-                logging.getLogger(__name__).warning(f"Enrichment pipeline non-blocking warning: {e}")
+                        # Update profiles and hints for enriched columns while preserving existing column embeddings
+                        old_vectors = {p['column']: (p.get('vector'), p.get('embedding_model')) for p in sheet_data['profiles']}
+                        enriched_frames = {sheet_data['name']: pd.DataFrame(sheet_data['records']).astype(str)}
+                        enriched_prep = prepare_sheets(enriched_frames, original, embed=False)
+                        if enriched_prep:
+                            for p in enriched_prep[0]['profiles']:
+                                if p['column'] in old_vectors and old_vectors[p['column']][0]:
+                                    p['vector'] = old_vectors[p['column']][0]
+                                    p['embedding_model'] = old_vectors[p['column']][1]
+                            sheet_data['profiles'] = enriched_prep[0]['profiles']
+                            sheet_data['decision_hints'] = enriched_prep[0]['decision_hints']
+
+                        sheet_summary = {
+                            "sheet_name": sheet_data['name'],
+                            "original_col_count": enriched_pkg.original_col_count,
+                            "enriched_col_count": enriched_pkg.enriched_col_count,
+                            "derived_features_count": len(enriched_pkg.derived_features),
+                            "derived_features": [f.model_dump() for f in enriched_pkg.derived_features],
+                            "semantic_groups": [g.model_dump() for g in enriched_pkg.semantic_groups],
+                            "analytical_tables_count": len(enriched_pkg.analytical_tables),
+                            "analytical_tables": [t.model_dump() for t in enriched_pkg.analytical_tables],
+                            "budget_summary": enriched_pkg.budget_summary
+                        }
+                        all_enrichment_summaries[sheet_data['name']] = sheet_summary
+                        if s_idx == 0:
+                            primary_enrichment_summary = sheet_summary
+                except Exception as e:
+                    logger.warning(f"Enrichment pipeline non-blocking warning for sheet '{sheet_data['name']}': {e}")
+
+            enrichment_summary = primary_enrichment_summary
 
             conn = get_connection()
             with conn:
@@ -105,7 +117,10 @@ def upload_file(
                 for sid, profiles in column_updates:
                     conn.execute('UPDATE sheets SET profile_json=? WHERE id=?', (json.dumps(profiles), sid))
                 insert_sheets(conn, dataset_id, prepared, display_name=display_name)
-                if enrich_json_str:
+                # Persist per-sheet enrichment metadata across all tabs
+                for s_name, s_summary in all_enrichment_summaries.items():
+                    conn.execute('UPDATE sheets SET enrichment_json=? WHERE dataset_id=? AND name=?', (json.dumps(s_summary), dataset_id, s_name))
+                if enrich_json_str and not all_enrichment_summaries:
                     conn.execute('UPDATE sheets SET enrichment_json=? WHERE dataset_id=?', (enrich_json_str, dataset_id))
 
                 rebuild_relationships(conn)
@@ -113,37 +128,37 @@ def upload_file(
                 eda_res = run_eda_pipeline(conn=conn)
                 industrial_res = run_ingestion_industrial_pipeline(conn, dataset_id)
 
-                # Materialize synthesized analytical tables in derived_tables & derived_table_rows (runs after EDA)
-                if enrichment_summary and enrichment_summary.get("analytical_tables"):
-                    for atbl in enrichment_summary["analytical_tables"]:
-                        try:
-                            cur = conn.execute(
-                                """
-                                INSERT INTO derived_tables(name, display_name, description, source_sheets_json, join_keys_json, columns_json, row_count)
-                                VALUES (?, ?, ?, ?, ?, ?, ?)
-                                """,
-                                (
-                                    atbl["table_id"],
-                                    atbl["title"],
-                                    atbl["description"],
-                                    json.dumps([dataset_id]),
-                                    json.dumps({"type": "scientific_enrichment_rollup", "group_by": atbl.get("group_by_columns", [])}),
-                                    json.dumps(atbl["columns"]),
-                                    atbl["row_count"]
-                                )
-                            )
-                            dt_id = cur.lastrowid
-                            for r_idx, rec in enumerate(atbl.get("data_preview", [])):
-                                conn.execute(
+                # Materialize synthesized analytical tables across all sheets in derived_tables & derived_table_rows (runs after EDA)
+                for s_name, s_summary in all_enrichment_summaries.items():
+                    if s_summary.get("analytical_tables"):
+                        for atbl in s_summary["analytical_tables"]:
+                            try:
+                                cur = conn.execute(
                                     """
-                                    INSERT INTO derived_table_rows(derived_table_id, row_index, data_json)
-                                    VALUES (?, ?, ?)
+                                    INSERT INTO derived_tables(name, display_name, description, source_sheets_json, join_keys_json, columns_json, row_count)
+                                    VALUES (?, ?, ?, ?, ?, ?, ?)
                                     """,
-                                    (dt_id, r_idx, json.dumps(rec))
+                                    (
+                                        atbl["table_id"],
+                                        atbl["title"],
+                                        atbl["description"],
+                                        json.dumps([dataset_id]),
+                                        json.dumps({"type": "scientific_enrichment_rollup", "sheet": s_name, "group_by": atbl.get("group_by_columns", [])}),
+                                        json.dumps(atbl["columns"]),
+                                        atbl["row_count"]
+                                    )
                                 )
-                        except Exception as dt_err:
-                            import logging
-                            logging.getLogger(__name__).warning(f"Error persisting analytical table: {dt_err}")
+                                dt_id = cur.lastrowid
+                                for r_idx, rec in enumerate(atbl.get("data_preview", [])):
+                                    conn.execute(
+                                        """
+                                        INSERT INTO derived_table_rows(derived_table_id, row_index, data_json)
+                                        VALUES (?, ?, ?)
+                                        """,
+                                        (dt_id, r_idx, json.dumps(rec))
+                                    )
+                            except Exception as dt_err:
+                                logger.warning(f"Error persisting analytical table: {dt_err}")
                 linked = conn.execute("SELECT COUNT(*) FROM sheet_relationships WHERE status='linked' AND (left_sheet IN (SELECT id FROM sheets WHERE dataset_id=?) OR right_sheet IN (SELECT id FROM sheets WHERE dataset_id=?))", (dataset_id, dataset_id)).fetchone()[0]
 
                 # Canonical Input & Context Intelligence Ingestion
@@ -169,8 +184,7 @@ def upload_file(
                     conn.execute('UPDATE dataset_uploads SET analysis_context_json=? WHERE id=?', (ws_ctx_json, dataset_id))
                     conn.execute('UPDATE sheets SET analysis_context_json=? WHERE dataset_id=?', (ws_ctx_json, dataset_id))
                 except Exception as e:
-                    import logging
-                    logging.getLogger(__name__).warning(f"InputIntelligenceService ingestion warning: {e}")
+                    logger.warning(f"InputIntelligenceService ingestion warning: {e}")
 
                 # Legacy User Intent Compatibility (if present)
                 analysis_ctx_dict = ws_ctx_dict
@@ -194,8 +208,7 @@ def upload_file(
                         scope = {"scope_type": "workspace", "sheet_id": ds_id}
                         collect_workspace_evidence(warm_conn, scope)
                 except Exception as warm_err:
-                    import logging
-                    logging.getLogger(__name__).debug(f"Pre-warming presentation cache non-blocking notice: {warm_err}")
+                    logger.debug(f"Pre-warming presentation cache non-blocking notice: {warm_err}")
 
             threading.Thread(target=_prewarm_presentation_cache, args=(dataset_id,), daemon=True).start()
 
@@ -427,6 +440,7 @@ def bulk_delete_datasets(payload: BulkDeleteRequest):
 
 
 class DatasetAnalysisBriefRequest(BaseModel):
+    sheet_id: int | None = None
     user_objective: str = ""
     business_context: str | None = None
     questions_to_answer: list[str] = []
@@ -449,7 +463,10 @@ def submit_dataset_brief(dataset_id: int, req: DatasetAnalysisBriefRequest):
         if not row:
             raise HTTPException(404, 'Dataset not found')
 
-        sheet = conn.execute('SELECT * FROM sheets WHERE dataset_id=? ORDER BY id ASC LIMIT 1', (dataset_id,)).fetchone()
+        if req.sheet_id:
+            sheet = conn.execute('SELECT * FROM sheets WHERE dataset_id=? AND id=?', (dataset_id, req.sheet_id)).fetchone()
+        else:
+            sheet = conn.execute('SELECT * FROM sheets WHERE dataset_id=? ORDER BY id ASC LIMIT 1', (dataset_id,)).fetchone()
         if not sheet:
             raise HTTPException(404, 'No sheets found for dataset')
 
