@@ -634,6 +634,10 @@ def generate_presentation_deck_spec(
         "retrieved_context": workspace_evidence.get("retrieved_context", {"status": "empty", "results": [], "historical_decks": []}) if workspace_evidence else {"status": "empty", "results": [], "historical_decks": []}
     }
 
+    # Reorder presentation deck into canonical presentation sequence
+    from .presentation_reorderer import reorder_presentation_deck
+    deck_dict = reorder_presentation_deck(deck_dict)
+
     # Evaluate automated claim verification and review gates
     from .claim_verifier import verify_presentation_claims
     from .review_gates import evaluate_automated_gates

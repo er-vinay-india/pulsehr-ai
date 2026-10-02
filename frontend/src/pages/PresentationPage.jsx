@@ -67,6 +67,7 @@ export default function PresentationPage({
     handleDeleteSlide,
     handleDuplicateSlide,
     handleAddSlide,
+    handleReorderPresentation,
     handleSetSlideImage,
     handleSetTransition,
     handleRegenerateSlideSubmit,
@@ -312,6 +313,7 @@ export default function PresentationPage({
             speakerNotesOpen={speakerNotesOpen}
             setSpeakerNotesOpen={setSpeakerNotesOpen}
             onAddSlide={handleAddSlide}
+            onReorderPresentation={handleReorderPresentation}
             onMoveSlide={handleMoveSlide}
             onDuplicateSlide={handleDuplicateSlide}
             onDeleteSlide={handleDeleteSlide}

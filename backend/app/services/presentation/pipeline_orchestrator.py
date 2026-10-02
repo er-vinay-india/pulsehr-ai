@@ -437,6 +437,23 @@ def execute_presentation_pipeline_async(
                 slide["background_image"] = scope["background_image"]
                 slide["scrim_opacity"] = scope.get("scrim_opacity", 70)
 
+        # Canonical Presentation Reordering Pass
+        # Guarantees the Title Cover is Slide 1 and slides follow boardroom narrative order
+        from .presentation_reorderer import reorder_presentation_deck
+        deck_spec = reorder_presentation_deck(deck_spec)
+        total_slides = len(deck_spec.get("slides", []))
+        observer.slides = [
+            {
+                "order": idx + 1,
+                "title": s.get("title", f"Slide {idx + 1}"),
+                "category": s.get("category", "Analysis"),
+                "status": "complete",
+                "badge": "Ready"
+            }
+            for idx, s in enumerate(deck_spec.get("slides", []))
+        ]
+        observer.total_slides = total_slides
+
         # PHASE 10: Final Speaker Notes & Voiceover Timing (88% -> 94%)
         mgr.update_stage(
             job_id,

@@ -23,6 +23,7 @@ import {
   Film,
   Sliders,
   ShieldCheck,
+  ListOrdered,
 } from "lucide-react";
 import PresentationRevealDeck from "../PresentationRevealDeck.jsx";
 import { exportStandaloneHtmlPresentation } from "../../utils/standaloneHtmlExporter";
@@ -51,6 +52,7 @@ export default function DeckStudioView({
   speakerNotesOpen,
   setSpeakerNotesOpen,
   onAddSlide,
+  onReorderPresentation,
   onMoveSlide,
   onDuplicateSlide,
   onDeleteSlide,
@@ -318,6 +320,24 @@ export default function DeckStudioView({
               Add Slide: Append a new executive slide to current deck
             </span>
           </DeckControl>
+
+          {/* Reorder Presentation */}
+          {onReorderPresentation && (
+            <DeckControl className="symbolic-btn-wrap">
+              <button
+                type="button"
+                className="symbolic-action-btn"
+                onClick={onReorderPresentation}
+                aria-label="Reorder slides into canonical presentation sequence"
+              >
+                <ListOrdered size={14} />
+                <span className="btn-label-responsive">Reorder</span>
+              </button>
+              <span className="symbolic-tooltip">
+                Reorder Presentation: Position Title Cover at Slide 1 and sequence narrative
+              </span>
+            </DeckControl>
+          )}
 
           {/* Export Options */}
           {onExportPptx && (

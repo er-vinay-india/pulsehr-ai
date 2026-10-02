@@ -83,6 +83,11 @@ def export_spec_to_pptx(deck_spec: dict) -> Path:
     }
 
     slides = deck_spec.get("slides", [])
+    if any(s.get("layout") == "title_cover" or s.get("stable_slide_id") == "slide_title_cover" for s in slides[1:]):
+        from .presentation.presentation_reorderer import reorder_presentation_slides
+        deck_title = (deck_spec.get("metadata") or {}).get("title") or deck_spec.get("title", "")
+        slides = reorder_presentation_slides(slides, deck_title=deck_title)
+        deck_spec["slides"] = slides
     total_slides = len(slides)
     for idx, slide_data in enumerate(slides):
         slide = prs.slides.add_slide(prs.slide_layouts[6])
@@ -240,6 +245,11 @@ def export_spec_to_pdf(deck_spec: dict) -> Path:
 
     c = canvas.Canvas(str(pdf_path), pagesize=(page_width, page_height))
     slides = deck_spec.get("slides", [])
+    if any(s.get("layout") == "title_cover" or s.get("stable_slide_id") == "slide_title_cover" for s in slides[1:]):
+        from .presentation.presentation_reorderer import reorder_presentation_slides
+        deck_title = (deck_spec.get("metadata") or {}).get("title") or deck_spec.get("title", "")
+        slides = reorder_presentation_slides(slides, deck_title=deck_title)
+        deck_spec["slides"] = slides
 
     for idx, slide in enumerate(slides):
         # Dark executive slide background

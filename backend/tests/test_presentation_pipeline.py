@@ -1029,5 +1029,108 @@ def test_ten_stage_slide_by_slide_train_pipeline():
         assert job["current_slide"] == stage_idx + 1
 
 
+def test_presentation_reordering_engine_moves_cover_to_slide_1():
+    """Verifies that the canonical presentation reorderer ensures the Title Cover is Slide 1.
+
+    When an executive deck is assembled with a title cover at the end or out of order,
+    it must be stably reordered into standard boardroom narrative sequence:
+    Title Cover -> Executive Summary -> Baseline Scope -> Operational Strengths -> Headwinds
+    -> Category Distributions -> Diagnostics -> Boundaries -> Roadmap -> Governance/RACI
+    -> Executive Conclusion -> Audited Evidence Ledger.
+    """
+    from app.services.presentation.presentation_reorderer import (
+        reorder_presentation_slides,
+        reorder_presentation_deck,
+    )
+
+    unordered_slides = [
+        {"id": "s_exec", "title": "Executive Summary & Core Performance Findings", "layout": "title_hero", "category": "EXECUTIVE SUMMARY"},
+        {"id": "s_scope", "title": "Analysis Scope & Dataset Baseline Governance", "layout": "kpi_summary", "category": "GOVERNANCE"},
+        {"id": "s_strengths", "title": "Operational Volume Surge & Throughput Resilience", "layout": "chart_narrative", "category": "OPERATIONS"},
+        {"id": "s_headwinds", "title": "Operational Headwinds & Dispersion Analysis", "layout": "chart_narrative", "category": "OPERATIONS"},
+        {"id": "s_dist", "title": "Category Distribution & Concentration Drivers", "layout": "chart_narrative", "category": "ANALYTICS"},
+        {"id": "s_raci", "title": "Implementation Governance & RACI Responsibility Matrix", "layout": "table_detail", "category": "RACI"},
+        {"id": "s_conclusion", "title": "Executive Conclusions & Leadership Mandates", "layout": "comparison_split", "category": "STRATEGY"},
+        {"id": "s_ledger", "title": "Audited Evidence Ledger & Cryptographic Verification", "layout": "table_detail", "category": "EVIDENCE APPENDIX"},
+        # Title Cover placed at the end!
+        {"id": "s_title", "title": "Executive Operational Review & Strategic Performance Diagnostic", "layout": "title_cover", "category": "EXECUTIVE BRIEFING"},
+    ]
+
+    deck = {
+        "title": "Executive Operational Review & Strategic Performance Diagnostic",
+        "slides": unordered_slides,
+        "metadata": {"title": "Executive Operational Review & Strategic Performance Diagnostic"}
+    }
+
+    reordered_deck = reorder_presentation_deck(deck)
+    slides = reordered_deck["slides"]
+
+    assert len(slides) == 9
+    # Slide 1 MUST be the title cover
+    assert slides[0]["id"] == "s_title"
+    assert slides[0]["layout"] == "title_cover"
+    assert slides[0]["order"] == 1
+    assert slides[0]["total_slides"] == 9
+
+    # Slide 2 is Executive Summary
+    assert slides[1]["id"] == "s_exec"
+    assert slides[1]["order"] == 2
+
+    # Slide 3 is Scope
+    assert slides[2]["id"] == "s_scope"
+
+    # RACI is toward the end (before conclusion / ledger)
+    assert slides[6]["id"] == "s_raci"
+
+    # Conclusion is near the end
+    assert slides[7]["id"] == "s_conclusion"
+
+    # Evidence ledger is at the very end
+    assert slides[8]["id"] == "s_ledger"
+
+
+def test_export_pptx_and_pdf_canonical_reorder_guardrail():
+    """Verifies PPTX and PDF exporters normalize misplaced title covers before exporting."""
+    from app.services.report_generator import export_spec_to_pptx, export_spec_to_pdf
+
+    misplaced_deck = {
+        "id": "deck_test_misplaced",
+        "title": "Operations Performance Diagnostic",
+        "theme": {"id": "executive_dark", "bg_color": "#0F172A", "brand_color": "#3B82F6"},
+        "slides": [
+            {
+                "id": "s_middle",
+                "title": "Executive Performance Summary",
+                "layout": "kpi_summary",
+                "category": "OPERATIONS",
+                "bullets": ["Benchmark metric at 94.2%."],
+                "narrative": "Verified baseline throughput.",
+            },
+            {
+                "id": "s_cover",
+                "title": "Operations Performance Diagnostic",
+                "layout": "title_cover",
+                "category": "EXECUTIVE BRIEFING",
+                "subtitle": "Boardroom Operational Review",
+                "narrative": "Audit-grade assessment across verified records.",
+                "bullets": ["Evaluated population coverage."],
+            }
+        ]
+    }
+
+    pptx_path = export_spec_to_pptx(misplaced_deck)
+    assert pptx_path.exists()
+    prs = Presentation(str(pptx_path))
+    s1 = prs.slides[0]
+    s1_text = " ".join([shape.text_frame.text for shape in s1.shapes if shape.has_text_frame])
+    # Slide 1 in the PPTX must be the cover
+    assert "Operations Performance Diagnostic" in s1_text
+    assert "Slide 1 of 2" in s1_text
+
+    pdf_path = export_spec_to_pdf(misplaced_deck)
+    assert pdf_path.exists()
+
+
+
 
 

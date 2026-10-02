@@ -513,10 +513,69 @@ export function usePresentationWorkflow({
       evidence_sources: ["HighView Ground Truth Engine · Verified Provenance"]
     };
 
-    const newSlides = [...latest.slides, newSlide];
+    const newSlides = isTitle ? [newSlide, ...latest.slides] : [...latest.slides, newSlide];
+    newSlides.forEach((s, idx) => { s.order = idx + 1; s.total_slides = newSlides.length; });
     const updated = { ...latest, slides: newSlides };
     commitDeck(updated);
-    setActiveSlideIndex(newSlides.length - 1);
+    setActiveSlideIndex(isTitle ? 0 : newSlides.length - 1);
+  }, []);
+
+  const handleReorderPresentation = useCallback(() => {
+    const latest = deckRef.current;
+    if (!latest || !latest.slides || latest.slides.length <= 1) return;
+
+    const deckTitle = (latest.metadata?.title || latest.title || "").toLowerCase();
+
+    const classify = (s) => {
+      const title = (s.title || "").toLowerCase();
+      const cat = (s.category || "").toLowerCase();
+      const layout = (s.layout || "").toLowerCase();
+      const stableId = (s.stable_slide_id || "").toLowerCase();
+
+      const isConclusion = ["conclusion", "closing mandate", "leadership mandate", "next step"].some(w => title.includes(w));
+      const isRaci = ["raci", "sla", "responsibility", "ownership"].some(w => title.includes(w) || cat.includes(w));
+      const isLedger = ["ledger", "audit trail", "appendix"].some(w => title.includes(w) || cat.includes(w));
+      const isDataEvidence = title.includes("data evidence");
+
+      if (!isConclusion && !isRaci && !isLedger && !isDataEvidence) {
+        if (layout === "title_cover" || stableId === "slide_title_cover" || title.includes("title cover") || title.includes("executive title")) {
+          return 0;
+        }
+        if (deckTitle.length > 8 && (deckTitle.includes(title) || title.includes(deckTitle)) && !["scope", "baseline", "summary", "strength", "headwind"].some(w => title.includes(w))) {
+          return 0;
+        }
+      }
+
+      if (stableId === "slide_exec_overview" || title.includes("executive summary") || title.includes("core performance") || cat.includes("executive summary")) return 1;
+      if (stableId === "slide_macro_outcomes" || title.includes("scope") || title.includes("baseline") || title.includes("integrity")) return 2;
+      if (title.includes("strength") || cat.includes("strength") || title.includes("volume") || title.includes("peak") || title.includes("surge")) return 3;
+      if (title.includes("headwind") || cat.includes("headwind") || title.includes("dispersion") || title.includes("disparity") || title.includes("friction")) return 4;
+      if (title.includes("distribution") || title.includes("concentration") || title.includes("cohort")) return 5;
+      if (title.includes("diagnostic") || title.includes("9-box") || title.includes("talent") || title.includes("strain")) return 6;
+      if (title.includes("boundaries") || cat.includes("boundaries") || title.includes("open questions")) return 7;
+      if (title.includes("roadmap") || title.includes("action plan") || title.includes("initiative")) return 8;
+      if (isRaci) return 9;
+      if (isConclusion) return 10;
+      if (isLedger || isDataEvidence) return 11;
+      return 5.5;
+    };
+
+    const scored = latest.slides.map((s, idx) => ({ s, score: classify(s), origIdx: idx }));
+    scored.sort((a, b) => a.score - b.score || a.origIdx - b.origIdx);
+    const reordered = scored.map(item => ({ ...item.s }));
+
+    if (reordered.length > 0 && reordered[0].layout !== "image_story" && reordered[0].layout !== "title_hero") {
+      reordered[0].layout = "title_cover";
+    }
+
+    reordered.forEach((s, idx) => {
+      s.order = idx + 1;
+      s.total_slides = reordered.length;
+    });
+
+    const updated = { ...latest, slides: reordered };
+    commitDeck(updated);
+    setActiveSlideIndex(0);
   }, []);
 
   const handleSetSlideImage = useCallback(({ url, scrimOpacity = 70, applyToAll = false }) => {
@@ -705,6 +764,7 @@ export function usePresentationWorkflow({
     handleDeleteSlide,
     handleDuplicateSlide,
     handleAddSlide,
+    handleReorderPresentation,
     handleSetSlideImage,
     handleSetTransition,
     handleRegenerateSlideSubmit,
