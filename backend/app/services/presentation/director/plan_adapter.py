@@ -320,6 +320,7 @@ def adapt_plan_to_deck_spec(
             "reporting_period_summary": ctx.reporting_period,
             "industrial_models": ctx.industrial_models or {},
             "planning_intent": plan.intent.model_dump(),
+            "planning_validation": plan.planning_validation.model_dump(),
             "narrative_strategy": plan.narrative_strategy.model_dump(),
             "validation_summary": {
                 "status": "PENDING_VERIFICATION",

@@ -386,6 +386,7 @@ def generate_presentation_deck_spec(
 
     # Phase 2: Qwen Presentation Director (hierarchical bounded planning - primary path)
     slides: list[dict[str, Any]] = []
+    director_deck_spec = None
     if scope.get("enable_ai_planner", True) and not scope.get("force_legacy_builders", False):
         try:
             from .director import (
@@ -466,6 +467,8 @@ def generate_presentation_deck_spec(
                     on_slide_progress=on_slide_progress,
                     on_slide_start=on_slide_start
                 )
+            if director_deck_spec and not director_deck_spec.get("metadata", {}).get("planning_validation", {}).get("is_valid", False):
+                raise ValueError("Presentation plan lacks supported answers or claims.")
             if director_deck_spec and director_deck_spec.get("slides") and len(director_deck_spec["slides"]) >= 4:
                 slides = director_deck_spec["slides"]
                 logger.info(f"Presentation Orchestrator successfully generated {len(slides)} slides.")
@@ -474,6 +477,14 @@ def generate_presentation_deck_spec(
             slides = []
 
     if not slides:
+        from .grounded_review import build_grounded_review
+        deck = build_grounded_review(scope, dataset_context, workspace_evidence)
+        if materialize_visuals_now:
+            deck["slides"] = materialize_slide_visuals(deck["slides"], theme_id)
+        return deck
+
+    if not slides:
+        # Legacy builders remain encapsulated for historical deck compatibility.
         # Phase 2: High-fidelity deterministic builder pipeline (guaranteed fallback)
         target_count = int(scope.get("target_length") or 8)
 
@@ -686,6 +697,8 @@ def generate_presentation_deck_spec(
             "is_partial_year": is_partial_year,
             "reporting_period_summary": reporting_period_summary,
             "traceable_metrics": traceable_metrics,
+            "source_columns": columns,
+            "planning_validation": (director_deck_spec or {}).get("metadata", {}).get("planning_validation", {}) if scope.get("enable_ai_planner", True) and not scope.get("force_legacy_builders", False) else {},
             "brief": {
                 "objective": objective,
                 "audience": audience,
@@ -713,6 +726,13 @@ def generate_presentation_deck_spec(
         "coverage_manifest": coverage_manifest,
         "retrieved_context": workspace_evidence.get("retrieved_context", {"status": "empty", "results": [], "historical_decks": []}) if workspace_evidence else {"status": "empty", "results": [], "historical_decks": []}
     }
+
+    from .content_validation import semantic_issues
+    if semantic_issues(deck_dict, columns):
+        from .grounded_review import build_grounded_review
+        deck_dict = build_grounded_review(scope, dataset_context, workspace_evidence)
+    from .audience_content import polish_audience_content
+    deck_dict = polish_audience_content(deck_dict, bool(scope.get("content_preferences", {}).get("technical_appendix")))
 
     # Reorder presentation deck into canonical presentation sequence
     from .presentation_reorderer import reorder_presentation_deck

@@ -391,11 +391,12 @@ def execute_presentation_pipeline_async(
 
         # Spatial Overflow Guardian & Quality Auditor
         if deck_spec.get("metadata", {}).get("deck_style") != "decision_brief":
-            deck_spec = SpatialOverflowMonitor.audit_and_remedy_deck(deck_spec)
+            if not deck_spec.get("metadata", {}).get("content_contract"):
+                deck_spec = SpatialOverflowMonitor.audit_and_remedy_deck(deck_spec)
             audit_res = PresentationQualityAuditor.audit_deck_spec(deck_spec, deck_spec.get("evidence_ledger", []))
             deck_spec["quality_audit"] = audit_res
 
-            if audit_res.get("issues") and audit_res.get("can_repair", True):
+            if audit_res.get("issues") and audit_res.get("can_repair", True) and not deck_spec.get("metadata", {}).get("content_contract"):
                 deck_spec = PresentationQualityAuditor.execute_bounded_repair(deck_spec, audit_res)
                 audit_res_2 = PresentationQualityAuditor.audit_deck_spec(deck_spec, deck_spec.get("evidence_ledger", []))
                 deck_spec["quality_audit"] = audit_res_2

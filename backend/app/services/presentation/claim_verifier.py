@@ -268,6 +268,10 @@ def verify_presentation_claims(
         from .decision_deck import verify_decision_deck
         return verify_decision_deck(deck_spec, evidence_ledger)
 
+    if deck_spec.get("metadata", {}).get("content_contract"):
+        from .content_validation import verify_business_content
+        return verify_business_content(deck_spec)
+
     checked_items = []
     discrepancies = []
 
@@ -359,7 +363,6 @@ def verify_presentation_claims(
         ev_by_id["EVID-GOV-01"] = gov_ev
         ev_by_name["data completeness"] = gov_ev
         ev_by_name["completeness"] = gov_ev
-        ev_by_name["system resilience"] = gov_ev
 
     total_dataset_records = float(meta.get("total_records") or 0)
     if total_dataset_records > 0 and "EVID-EXEC-01" not in ev_by_id:
@@ -440,7 +443,8 @@ def verify_presentation_claims(
                     if "EVID-COMP-01" in ev_by_id or "data completeness" in ev_by_name:
                         cand = ev_by_id.get("EVID-COMP-01") or ev_by_name.get("data completeness")
                 if claim.get("location") == "metric_card":
-                    if _is_candidate_unit_compat(claimed_unit, cand):
+                    same_measure = lbl_clean == cand.get("metric_name", "").lower().replace("_", " ").replace("-", " ").strip() or ev_by_name.get(lbl_clean) is cand
+                    if same_measure and _is_candidate_unit_compat(claimed_unit, cand):
                         matched_ev = cand
                 elif claim.get("location") == "chart":
                     cat_lbl = claim.get("category_label", "").lower().strip()
@@ -492,7 +496,7 @@ def verify_presentation_claims(
 
             # If still not found by direct label, check standard domains (only for non-chart locations)
             if not matched_ev and claim.get("location") != "chart":
-                if ("completeness" in full_claim_text or "resilience" in full_claim_text or "integrity" in full_claim_text) and claimed_unit == "%":
+                if ("completeness" in full_claim_text) and claimed_unit == "%":
                     matched_ev = ev_by_id.get("EVID-COMP-01") or ev_by_name.get("data completeness") or ev_by_name.get("completeness") or ev_by_id.get("EVID-GOV-01")
                 elif any(k in full_claim_text for k in ("turnover", "attrition", "separation")):
                     matched_ev = ev_by_id.get("EV-01") or ev_by_name.get("turnover rate") or ev_by_id.get("EVID-STRENGTH-01") or ev_by_id.get("EVID-HEADWIND-01")
@@ -502,21 +506,6 @@ def verify_presentation_claims(
                     matched_ev = ev_by_id.get("EVID-KPI-01")
                 elif any(k in full_claim_text for k in ("dispersion ratio", "spread ratio", "observed dispersion", "entity dispersion", "store dispersion")):
                     matched_ev = ev_by_id.get("EVID-HEADWIND-01")
-
-            # Operational charts with no matching evidence metric represent visual data distributions, not audited KPI claims
-            if claim.get("location") == "chart" and not matched_ev:
-                checked_items.append({
-                    "slide": slide_title,
-                    "location": "chart",
-                    "metric": lbl,
-                    "claimed_value": raw_text,
-                    "claimed_num": claimed_num,
-                    "claimed_unit": claimed_unit,
-                    "expected_value": "Operational chart series",
-                    "passed": True,
-                    "status": "PASSED"
-                })
-                continue
 
             # If evidence is found, verify values
             if matched_ev:
@@ -624,82 +613,12 @@ def verify_presentation_claims(
                         "reason": "; ".join(reasons)
                     })
             else:
-                # Claim appears on slide without corresponding evidence in ledger
-                # If claim is in evidence ledger under another metric, check all ledger items
-                all_ledger_nums: list[tuple[float, str]] = []
-                for ev_item in evidence_ledger:
-                    if isinstance(ev_item, dict):
-                        e_u = ev_item.get("unit") or _extract_unit(str(ev_item.get("metric_value", "")))
-                        for k in ("numeric_value", "value"):
-                            if ev_item.get(k) is not None:
-                                try:
-                                    all_ledger_nums.append((float(ev_item[k]), e_u))
-                                except (ValueError, TypeError):
-                                    pass
-                        if ev_item.get("metric_value"):
-                            mv_text = str(ev_item["metric_value"])
-                            for m in re.finditer(r'([+\-]?\s*\d+(?:\.\d+)?)\s*(%|pts|records|x|\$)?', mv_text):
-                                try:
-                                    n_val = float(m.group(1).replace(" ", ""))
-                                    n_u = m.group(2) or e_u
-                                    all_ledger_nums.append((n_val, n_u))
-                                except ValueError:
-                                    pass
-                        if ev_item.get("row_count") is not None:
-                            try:
-                                all_ledger_nums.append((float(ev_item["row_count"]), "count"))
-                            except (ValueError, TypeError):
-                                pass
-
-                gt_meta = deck_spec.get("metadata", {}).get("ground_truth", {})
-                if isinstance(gt_meta, dict):
-                    for gt_k, gt_v in gt_meta.items():
-                        if isinstance(gt_v, (int, float)):
-                            all_ledger_nums.append((float(gt_v), _extract_unit(gt_k)))
-
-                # If claim number matches any ledger item with correct unit and sign, allow as general ledger match
-                ledger_match = False
-                for e_num, e_u in all_ledger_nums:
-                    if (claimed_num < 0 and e_num > 0) or (claimed_num > 0 and e_num < 0):
-                        continue
-                    diff = abs(claimed_num - e_num)
-                    rel_diff = (diff / abs(e_num)) if e_num != 0 else diff
-                    unit_ok = (claimed_unit == e_u or claimed_unit == "unit" or (claimed_unit in ("count", "unit") and e_u in ("count", "unit")))
-                    if (diff <= 0.1 or rel_diff <= 0.001) and unit_ok:
-                        ledger_match = True
-                        break
-
-                if ledger_match:
-                    checked_items.append({
-                        "slide": slide_title,
-                        "location": claim["location"],
-                        "metric": lbl,
-                        "claimed_value": raw_text,
-                        "expected_value": "Ground truth ledger value",
-                        "passed": True,
-                        "status": "PASSED"
-                    })
-                else:
-                    checked_items.append({
-                        "slide": slide_title,
-                        "location": claim["location"],
-                        "metric": lbl,
-                        "claimed_value": raw_text,
-                        "claimed_num": claimed_num,
-                        "claimed_unit": claimed_unit,
-                        "expected_value": "Verified evidence item",
-                        "difference_pct": 100.0,
-                        "passed": False,
-                        "status": "UNVERIFIED"
-                    })
-                    discrepancies.append({
-                        "slide": slide_title,
-                        "location": claim["location"],
-                        "metric": lbl,
-                        "claimed": raw_text,
-                        "expected": "Evidence in verified ledger",
-                        "reason": f"Claimed value {raw_text} ({claimed_num:g}{claimed_unit}) has no supporting ground-truth record in evidence ledger."
-                    })
+                # A coincidentally equal number in another metric is not evidence.
+                checked_items.append({"slide": slide_title, "location": claim["location"], "metric": lbl,
+                                      "claimed_value": raw_text, "passed": False, "status": "UNVERIFIED"})
+                discrepancies.append({"slide": slide_title, "location": claim["location"], "metric": lbl,
+                                      "claimed": raw_text, "expected": "Evidence for this measure",
+                                      "reason": "No supporting record for the claimed measure and unit."})
 
     total = max(len(checked_items), 1)
     passed_count = sum(1 for c in checked_items if c["passed"])

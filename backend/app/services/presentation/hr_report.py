@@ -97,7 +97,7 @@ def build_hr_report(scope: dict, ctx: dict, workspace: dict | None = None) -> di
     office = [values(r, att_col, "attendance_col") for r in records]
     leave = [values(r, leave_col, "leave_col") for r in records]
     slide("Office attendance review", "Review recorded office days, approved leave and the checks needed before making policy decisions.",
-          [policy_limit], [fact("Source rows", len(records), "rows")])
+          [policy_limit], [fact("Source rows", len(records), "rows", [1]*len(records), "sum")])
     if not safe_population:
         issues = []
         if duplicate_ids:
@@ -111,7 +111,7 @@ def build_hr_report(scope: dict, ctx: dict, workspace: dict | None = None) -> di
     else:
         measured = [v for v in office if v is not None]
         known_leave = [v for v in leave if v is not None]
-        summary = [fact("Employees", len(ids), "employees")]
+        summary = [fact("Employees", len(ids), "employees", [1]*len(ids), "sum")]
         if measured:
             summary += [fact("Recorded office days", sum(measured), "days", measured, "sum"),
                         fact("Median office days", median(measured), "days", measured, "median", len(measured))]
@@ -157,7 +157,7 @@ def build_hr_report(scope: dict, ctx: dict, workspace: dict | None = None) -> di
         if measured:
             bands = [("0–5", 0, 5), ("6–9", 5, 9), ("10–12", 9, 12), ("13–15", 12, 15), ("16–19", 15, 19), ("20+", 19, math.inf)]
             counts = [sum((v >= low if low == 0 else v > low) and v <= high for v in measured) for _, low, high in bands]
-            distribution_refs = [fact("Employees with " + b[0] + " office days", n, "employees", [n], "sum")["evidence_id"] for b, n in zip(bands, counts)]
+            distribution_refs = [fact("Employees by office-day band: " + b[0], n, "employees", [int((v >= b[1] if b[1] == 0 else v > b[1]) and v <= b[2]) for v in measured], "sum")["evidence_id"] for b, n in zip(bands, counts)]
             slide("How recorded office days are distributed", "The bands show recorded office days, without classifying employees as compliant or non-compliant.",
                   ["Missing or negative attendance is outside these bands and needs review."],
                   chart={"type": "bar", "title": "Employees by office-day band", "categories": [b[0] for b in bands],
@@ -210,7 +210,8 @@ def build_hr_report(scope: dict, ctx: dict, workspace: dict | None = None) -> di
     theme_id = scope.get("theme_id") or "executive_dark"
     for s in slides:
         s["total_slides"] = len(slides)
-    return {"id": "deck_"+uuid.uuid4().hex[:12], "spec_version": "2.0", "theme": THEMES.get(theme_id, THEMES["executive_dark"]),
+    from .content_validation import seal_business_content
+    return seal_business_content({"id": "deck_"+uuid.uuid4().hex[:12], "spec_version": "2.0", "theme": THEMES.get(theme_id, THEMES["executive_dark"]),
             "metadata": {"title": "Office attendance review", "theme_id": theme_id, "domain": "Workforce attendance",
                          "audience": scope.get("audience") or "HR managers", "objective": scope.get("objective") or "Attendance review",
                          "file_label": label, "total_records": len(records), "snapshot_hash": (workspace or {}).get("snapshot_hash") or ctx.get("snapshot_hash"),
@@ -219,4 +220,4 @@ def build_hr_report(scope: dict, ctx: dict, workspace: dict | None = None) -> di
                          "brief": {"objective": scope.get("objective") or "Attendance review"}},
             "slides": slides, "evidence_ledger": ledger,
             "coverage_manifest": {"items": [{"evidence_id": e["evidence_id"], "title": e["title"], "disposition": "main_deck"} for e in ledger]},
-            "retrieved_context": (workspace or {}).get("retrieved_context", {})}
+            "retrieved_context": (workspace or {}).get("retrieved_context", {})})

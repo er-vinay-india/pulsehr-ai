@@ -441,7 +441,9 @@ def test_stage_recovery_on_validation_failure():
     director = PresentationDirector(enabled=False, max_retries=1)
     plan = director.plan_presentation(ctx)
     assert plan.slide_count >= 4
-    assert plan.planning_validation.is_valid
+    # A structurally complete fallback is not an evidence-backed answer.
+    assert not plan.planning_validation.is_valid
+    assert plan.planning_validation.unanswered_user_questions
 
 
 # 19. Presentation Director fallback

@@ -71,7 +71,11 @@ def validate_plan(
         if words:
             matched_words = [w for w in words if w in combined_slide_text]
             # If less than 20% of keywords appear in any slide text, flag as potentially unanswered
-            if len(matched_words) == 0:
+            cited_ids = {eid for s in slides for eid in s.evidence_ids}
+            supporting = [e for e in ctx.current_evidence if e.get("evidence_id") in cited_ids and
+                          e.get("numeric_value") is not None and any(w in str(e.get("metric_name") or e.get("title") or "").lower() for w in words)]
+            stated_limit = any(phrase in combined_slide_text for phrase in ("cannot determine", "not supplied", "not recorded", "not available"))
+            if not matched_words or (not supporting and not stated_limit):
                 unanswered_questions.append(q)
 
     # 3. Evidence grounding check
@@ -94,7 +98,12 @@ def validate_plan(
     if unsupported_claims:
         recommendations.append("Bind ungrounded slides to specific items in the shared evidence ledger.")
 
-    is_valid = len(duplicate_concepts) == 0 and len(slides) >= 3
+    known_ids = {e.get("evidence_id") for e in ctx.current_evidence}
+    for s in slides:
+        unknown = set(s.evidence_ids) - known_ids
+        if unknown:
+            unsupported_claims.append(f"Slide {s.sequence_number} cites unknown evidence: {sorted(unknown)}.")
+    is_valid = not duplicate_concepts and not unsupported_claims and not unanswered_questions and len(slides) >= 3 and constraint.is_satisfied(len(slides))
 
     return PlanningValidationResult(
         is_valid=is_valid,

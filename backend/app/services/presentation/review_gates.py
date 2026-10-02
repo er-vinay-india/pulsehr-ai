@@ -174,7 +174,12 @@ def evaluate_automated_gates(
     has_headlines = len(slides) > 0 and all(bool(s.get("title")) for s in slides)
     short_titles = [s.get("title", "") for s in slides if len(s.get("title", "")) < 6]
     
-    if has_headlines and not short_titles and len(slides) >= 3:
+    from .content_validation import semantic_issues
+    business_issues = semantic_issues(deck_spec)
+    if business_issues:
+        g2_auto_status = "FAILED"
+        g2_details = "; ".join(business_issues)
+    elif has_headlines and not short_titles and len(slides) >= 3:
         g2_auto_status = "PASSED"
         g2_details = f"Storyline validated across {len(slides)} slides with supported conclusion and topic headlines."
     elif has_headlines:
