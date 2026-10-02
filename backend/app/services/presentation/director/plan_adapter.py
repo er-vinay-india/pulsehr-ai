@@ -195,7 +195,7 @@ def adapt_plan_to_deck_spec(
             slide_chart = bar_chart
             metrics = [
                 {"label": headwind_lbl, "value": headwind_val, "subtext": "Leader vs laggard", "evidence_id": "EVID-HEADWIND-01"},
-                {"label": "Data Completeness", "value": f"{ctx.completeness_pct}%", "subtext": "Audited Ground Truth", "evidence_id": "EVID-GOV-01"}
+                {"label": "Data Completeness", "value": f"{ctx.completeness_pct}%", "subtext": "Audited Ground Truth", "evidence_id": "EVID-COMP-01"}
             ]
         elif v_type == "donut_chart" or (layout == "chart_narrative" and donut_chart and idx == 4):
             slide_chart = donut_chart
@@ -228,7 +228,7 @@ def adapt_plan_to_deck_spec(
         if layout == "kpi_summary" and not metrics:
             metrics = [
                 {"label": "Audited Population", "value": f"{ctx.total_records:,}", "subtext": "Verified ground truth", "evidence_id": "EVID-EXEC-01"},
-                {"label": "Data Completeness", "value": f"{ctx.completeness_pct}%", "subtext": "Non-null record rate", "evidence_id": "EVID-GOV-01"},
+                {"label": "Data Completeness", "value": f"{ctx.completeness_pct}%", "subtext": "Non-null record rate", "evidence_id": "EVID-COMP-01"},
                 {"label": "Baseline Benchmark", "value": ctx.baseline_benchmark or "Established", "subtext": ctx.reporting_period or "Audited Window", "evidence_id": "EVID-KPI-01"},
                 {"label": "Observed Dispersion", "value": ctx.dispersion_metric or "Calculated", "subtext": "Spread ratio", "evidence_id": "EVID-HEADWIND-01"}
             ]
@@ -249,7 +249,7 @@ def adapt_plan_to_deck_spec(
                 if not metrics:
                     metrics = [
                         {"label": "Evaluated Population", "value": exec_val, "subtext": "Audited volume", "evidence_id": "EVID-EXEC-01"},
-                        {"label": "Data Completeness", "value": f"{ctx.completeness_pct}%", "subtext": "Audited Ground Truth", "evidence_id": "EVID-GOV-01"}
+                        {"label": "Data Completeness", "value": f"{ctx.completeness_pct}%", "subtext": "Audited Ground Truth", "evidence_id": "EVID-COMP-01"}
                     ]
             else:
                 layout = "comparison_split"

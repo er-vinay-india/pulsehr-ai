@@ -298,6 +298,73 @@ def generate_presentation_deck_spec(
             lead_c = top_c_dim["top_categories"][0]
             cat_summary = f" (Led by {lead_c['category']}: {lead_c['count']:,} of {total_eval_records:,} records — {lead_c['percentage']}%)"
 
+    # Ground-truth evidence ledger entries for Data Completeness and Category Share
+    has_comp_ev = any(e.get("evidence_id") in ("EVID-COMP-01", "EVID-GOV-02") or e.get("metric_name", "").lower() in ("data completeness", "completeness") for e in evidence_ledger)
+    if not has_comp_ev:
+        evidence_ledger.append({
+            "evidence_id": "EVID-COMP-01",
+            "finding_id": "FINDING-DATA-COMPLETENESS",
+            "title": "Audited Dataset Completeness & Record Integrity",
+            "finding_type": "measured_fact",
+            "source_sheets": [source_summary],
+            "row_count": total_eval_records,
+            "date_range": reporting_period_summary,
+            "is_partial_year": is_partial_year,
+            "metric_name": "Data Completeness",
+            "metric_value": f"{completeness_pct:.1f}%",
+            "numeric_value": float(completeness_pct),
+            "unit": "%",
+            "calculation_methodology": "Ratio of valid non-null cells across evaluated matrix rows.",
+            "what_it_establishes": f"Confirms {completeness_pct:.1f}% data completeness across evaluated columns.",
+            "what_it_does_not_establish": "Does not impute missing values without explicit instructions."
+        })
+
+    if cat_summary and profiled_data.get("ranked_categorical"):
+        top_c_dim = profiled_data["ranked_categorical"][0]
+        if top_c_dim.get("top_categories"):
+            lead_c = top_c_dim["top_categories"][0]
+            has_cat_ev = any(e.get("evidence_id") == "EVID-CAT-01" or str(e.get("numeric_value")) == str(lead_c.get("percentage")) for e in evidence_ledger)
+            if not has_cat_ev:
+                evidence_ledger.append({
+                    "evidence_id": "EVID-CAT-01",
+                    "finding_id": "FINDING-CATEGORY-CONCENTRATION",
+                    "title": f"Category Concentration: {lead_c['category']}",
+                    "finding_type": "measured_fact",
+                    "source_sheets": [source_summary],
+                    "row_count": lead_c["count"],
+                    "date_range": reporting_period_summary,
+                    "is_partial_year": is_partial_year,
+                    "metric_name": "Leading Category Share",
+                    "metric_value": f"{lead_c['percentage']}%",
+                    "numeric_value": float(lead_c["percentage"]),
+                    "unit": "%",
+                    "calculation_methodology": "Leading category row count divided by total records.",
+                    "what_it_establishes": f"Isolates volume concentration in {lead_c['category']}.",
+                    "what_it_does_not_establish": "Does not establish causal concentration."
+                })
+
+    if donut_chart and donut_chart.get("categories"):
+        seg_count = len(donut_chart["categories"])
+        has_seg_ev = any(e.get("evidence_id") == "EVID-SEGMENTS-01" or e.get("metric_name", "").lower() == "segment count" for e in evidence_ledger)
+        if not has_seg_ev:
+            evidence_ledger.append({
+                "evidence_id": "EVID-SEGMENTS-01",
+                "finding_id": "FINDING-SEGMENT-COUNT",
+                "title": "Evaluated Segment Count",
+                "finding_type": "measured_fact",
+                "source_sheets": [source_summary],
+                "row_count": total_eval_records,
+                "date_range": reporting_period_summary,
+                "is_partial_year": is_partial_year,
+                "metric_name": "Segment Count",
+                "metric_value": f"{seg_count} Categories",
+                "numeric_value": float(seg_count),
+                "unit": "count",
+                "calculation_methodology": "Distinct category segments evaluated in distribution visual.",
+                "what_it_establishes": f"Confirms {seg_count} distinct operational categories.",
+                "what_it_does_not_establish": "Does not establish sub-segment micro-variances."
+            })
+
     if bar_chart and bar_chart.get("categories"):
         lead_cat = str(bar_chart["categories"][0])
     elif profiled_data.get("ranked_categorical") and profiled_data["ranked_categorical"][0].get("leading_category"):
@@ -601,6 +668,7 @@ def generate_presentation_deck_spec(
             "standard_report_name": persona_report_title,
             "file_label": file_label,
             "total_records": total_eval_records,
+            "completeness_pct": completeness_pct,
             "snapshot_hash": snapshot_hash,
             "created_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
             "is_partial_year": is_partial_year,

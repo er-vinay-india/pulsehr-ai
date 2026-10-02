@@ -86,6 +86,11 @@ def _extract_slide_claims(slide: dict[str, Any], slide_idx: int) -> list[dict[st
     for m in slide.get("metrics") or []:
         lbl = m.get("label", "")
         val_str = str(m.get("value", ""))
+        lbl_lower = lbl.lower().strip()
+        # Skip purely descriptive non-numerical metadata cards (e.g. date ranges, reporting periods, named entities)
+        if any(w in lbl_lower for w in ("reporting period", "observation window", "date range", "observation period", "top performer", "leading entity", "lead entity", "core category")):
+            if not any(u in val_str for u in ("%", "$", "€", "£", "pts")) and not re.search(r'\b\d+(?:\.\d+)?x\b', val_str):
+                continue
         num = _extract_number_with_sign(val_str)
         if num is not None:
             unit = _extract_unit(f"{lbl} {val_str}")
@@ -325,6 +330,23 @@ def verify_presentation_claims(
         }
         ev_by_name["at-risk share"] = ev_by_id["MODEL-STRAIN-02"]
 
+    c_pct_val = meta.get("completeness_pct")
+    if c_pct_val is not None:
+        try:
+            c_pct = float(c_pct_val)
+            comp_ev = {
+                "evidence_id": "EVID-COMP-01",
+                "metric_name": "Data Completeness",
+                "numeric_value": c_pct,
+                "metric_value": f"{c_pct:.1f}%",
+                "unit": "%"
+            }
+            ev_by_id["EVID-COMP-01"] = comp_ev
+            ev_by_name["data completeness"] = comp_ev
+            ev_by_name["completeness"] = comp_ev
+        except (ValueError, TypeError):
+            pass
+
     if "EVID-GOV-01" not in ev_by_id:
         c_pct = float(meta.get("completeness_pct") or 100.0)
         gov_ev = {
@@ -413,6 +435,10 @@ def verify_presentation_claims(
             matched_ev = None
             if claim.get("evidence_id") and claim["evidence_id"] in ev_by_id:
                 cand = ev_by_id[claim["evidence_id"]]
+                lbl_lower = lbl.lower()
+                if claim.get("evidence_id") == "EVID-GOV-01" and ("completeness" in lbl_lower or "completeness" in claim.get("full_claim", "").lower()):
+                    if "EVID-COMP-01" in ev_by_id or "data completeness" in ev_by_name:
+                        cand = ev_by_id.get("EVID-COMP-01") or ev_by_name.get("data completeness")
                 if claim.get("location") == "metric_card":
                     if _is_candidate_unit_compat(claimed_unit, cand):
                         matched_ev = cand
@@ -467,7 +493,7 @@ def verify_presentation_claims(
             # If still not found by direct label, check standard domains (only for non-chart locations)
             if not matched_ev and claim.get("location") != "chart":
                 if ("completeness" in full_claim_text or "resilience" in full_claim_text or "integrity" in full_claim_text) and claimed_unit == "%":
-                    matched_ev = ev_by_id.get("EVID-GOV-01") or ev_by_name.get("data completeness") or ev_by_name.get("completeness")
+                    matched_ev = ev_by_id.get("EVID-COMP-01") or ev_by_name.get("data completeness") or ev_by_name.get("completeness") or ev_by_id.get("EVID-GOV-01")
                 elif any(k in full_claim_text for k in ("turnover", "attrition", "separation")):
                     matched_ev = ev_by_id.get("EV-01") or ev_by_name.get("turnover rate") or ev_by_id.get("EVID-STRENGTH-01") or ev_by_id.get("EVID-HEADWIND-01")
                 elif any(k in full_claim_text for k in ("population", "evaluated records", "audited population", "evaluated staff", "total records")) and claimed_unit in ("count", "unit"):

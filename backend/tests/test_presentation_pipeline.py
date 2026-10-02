@@ -1131,6 +1131,66 @@ def test_export_pptx_and_pdf_canonical_reorder_guardrail():
     assert pdf_path.exists()
 
 
+def test_partial_completeness_reconciles_against_evidence_ledger():
+    """Verifies that datasets with non-100% data completeness reconcile without gate_3 discrepancies."""
+    from app.services.presentation.claim_verifier import verify_presentation_claims
+    from app.services.presentation.review_gates import evaluate_automated_gates
+
+    deck = {
+        "id": "deck_partial_comp",
+        "title": "Workforce Operational Audit",
+        "metadata": {
+            "title": "Workforce Operational Audit",
+            "completeness_pct": 97.4,
+            "total_records": 259,
+            "brief": {"objective": "Audit", "decision_requested": "Align"}
+        },
+        "slides": [
+            {
+                "id": "s1",
+                "title": "Workforce Operational Audit",
+                "layout": "title_hero",
+                "narrative": "Empirical analysis across 259 records with 97.4% data completeness.",
+                "metrics": [
+                    {"label": "Data Completeness", "value": "97.4%", "evidence_id": "EVID-COMP-01"},
+                    {"label": "Audited Population", "value": "259", "evidence_id": "EVID-EXEC-01"}
+                ]
+            }
+        ],
+        "evidence_ledger": [
+            {
+                "evidence_id": "EVID-EXEC-01",
+                "metric_name": "Total Records",
+                "numeric_value": 259.0,
+                "metric_value": "259 Records",
+                "unit": "count"
+            },
+            {
+                "evidence_id": "EVID-COMP-01",
+                "metric_name": "Data Completeness",
+                "numeric_value": 97.4,
+                "metric_value": "97.4%",
+                "unit": "%"
+            },
+            {
+                "evidence_id": "EVID-GOV-01",
+                "metric_name": "Audit Verification",
+                "numeric_value": 100.0,
+                "metric_value": "100.0% Audited",
+                "unit": "%"
+            }
+        ]
+    }
+
+    v_sum = verify_presentation_claims(deck, deck["evidence_ledger"])
+    assert v_sum["status"] == "PASSED"
+    assert v_sum["discrepancies_flagged"] == 0
+
+    gates = evaluate_automated_gates(deck, verification_summary=v_sum, brief=deck["metadata"]["brief"])
+    assert gates["gates"]["gate_3_evidence"]["automated"]["status"] == "PASSED"
+
+
+
 
 
 
