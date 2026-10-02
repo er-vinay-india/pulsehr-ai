@@ -173,6 +173,7 @@ def test_legacy_sync_identity_and_retry(monkeypatch):
     result = ai_copilot.query_copilot('hi', selected_model='deepseek-r1:7b')
     assert result['answer'] == "Hi! I'm HRIDAY." and result['runtime_model'] == 'deepseek-r1:7b'
     assert len(payloads) == 2 and 'CORRECTIVE' in payloads[1]['system']
+    assert payloads[0]['think'] is False
     assert 'Verified domain context' in payloads[0]['prompt'] and 'Pulse Analytics Copilot' not in payloads[0]['prompt']
 
 def test_legacy_stream_safe_corrective_reset(monkeypatch):
@@ -242,3 +243,23 @@ def test_public_identity_endpoint_and_generic_boundary(monkeypatch):
     events = parse_sse(e for e in result.text.split('\n\n') if e)
     assert 'unavailable' in ''.join(d['token'] for k, d in events if k == 'token')
     assert next(d for k, d in events if k == 'done')['runtime_model'] is None
+
+
+def test_unfinished_reasoning_never_becomes_a_public_response(monkeypatch):
+    from app.services.gateway.model_gateway import clean_cot_reasoning
+    assert clean_cot_reasoning('<think>I am DeepSeek. Internal reasoning without a final answer') == ''
+    assert ai_copilot.clean_cot_reasoning('<think>I am DeepSeek.') == ''
+    prepare_legacy(monkeypatch, ['<think>I am DeepSeek.'])
+    events = parse_sse(ai_copilot.stream_copilot_generator('hi', selected_model='deepseek-r1:7b'))
+    answer = ''.join(d['token'] for k, d in events if k == 'token')
+    assert '<think>' not in answer and 'DeepSeek' not in answer
+    assert next(d for k, d in events if k == 'done')['runtime_model'] is None
+
+
+def test_unasked_runtime_intro_retries_but_explicit_disclosure_is_preserved():
+    text = "I'm HRIDAY, and this response is powered by qwen3.5:9b."
+    assert identity.identity_leak(text, 'qwen3.5:9b', query='hi')
+    assert not identity.identity_leak(text, 'qwen3.5:9b', query='Which model powers you?')
+    calls = []
+    result = identity.guarded_completion(lambda system: calls.append(system) or (text if len(calls) == 1 else 'Hello! How can I help?'), query='hi', runtime_model='qwen3.5:9b')
+    assert result.text == 'Hello! How can I help?' and result.identity_retry_count == 1

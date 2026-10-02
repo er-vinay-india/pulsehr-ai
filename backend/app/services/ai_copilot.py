@@ -9,7 +9,7 @@ from .hybrid_retrieval import hybrid_search
 from .copilot_tools import ToolRequest, infer_tool, execute_tool
 from .display_formatters import format_display_label, sanitize_llm_text
 from .gateway.assistant_identity import (
-    guarded_completion, identity_answer, identity_system_prompt, IdentityStreamGuard,
+    guarded_completion, identity_answer, identity_intent, identity_system_prompt, IdentityStreamGuard,
     IdentityResult, public_identity, safe_identity_fallback, finalize_identity_response,
 )
 
@@ -100,7 +100,7 @@ def get_available_models() -> list[dict]:
 
 def clean_cot_reasoning(text: str) -> str:
     """Strips internal <think>...</think> reasoning blocks from DeepSeek-R1 responses."""
-    cleaned = re.sub(r'<think>[\s\S]*?</think>', '', text, flags=re.IGNORECASE)
+    cleaned = re.sub(r'<think>[\s\S]*?(?:</think>|$)', '', text, flags=re.IGNORECASE)
     return cleaned.strip()
 
 
@@ -288,6 +288,7 @@ def query_copilot(
                     f"{config.OLLAMA_BASE_URL}/api/generate",
                     json={'model': target_model, 'prompt': prompt, 'system': system,
                           'stream': False,
+                          **({'think': False} if identity_intent(user_query) else {}),
                           'options': {'temperature': 0.15, 'num_predict': 1024, 'num_ctx': 8192}}
                 )
                 response.raise_for_status()
@@ -297,7 +298,7 @@ def query_copilot(
     except (httpx.HTTPError, ValueError, TypeError):
         pass
     llm_ms = (time.perf_counter() - t_llm0) * 1000
-    model_manager.record_execution(target_model, llm_ms, bool(answer))
+    model_manager.record_execution(target_model, llm_ms, bool(answer) and not identity_result.response_blocked)
 
     if not answer:
         answer = ("The language model is currently unavailable or timed out. Here are relevant source records found in your sheets:\n\n" +
@@ -459,7 +460,7 @@ def stream_copilot_generator(
     t_llm0 = time.perf_counter()
     explicit_identity = identity_answer(user_query) is not None
     for attempt in range(config.ASSISTANT_MAX_IDENTITY_RETRIES + 1):
-        guard = IdentityStreamGuard(target_model)
+        guard = IdentityStreamGuard(target_model, user_query)
         received = False
         reasoning = _ReasoningStreamFilter()
         try:
@@ -541,6 +542,7 @@ def stream_copilot_generator(
     if column_mapping:
         full_answer = sanitize_llm_text(full_answer, column_mapping)
 
+    full_answer = identity_answer(user_query, identity_result.runtime_model) or full_answer
     identity_result.log()
     done_payload = {
         'query': user_query,

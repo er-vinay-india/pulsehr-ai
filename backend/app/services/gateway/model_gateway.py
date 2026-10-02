@@ -58,7 +58,7 @@ class GatewayResult(Generic[T]):
 
 def clean_cot_reasoning(text: str) -> str:
     """Strips <think>...</think> chain-of-thought blocks emitted by DeepSeek-R1 reasoning models."""
-    cleaned = re.sub(r'<think>[\s\S]*?</think>', '', text, flags=re.IGNORECASE)
+    cleaned = re.sub(r'<think>[\s\S]*?(?:</think>|$)', '', text, flags=re.IGNORECASE)
     return cleaned.strip()
 
 
