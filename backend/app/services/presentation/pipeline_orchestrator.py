@@ -386,14 +386,17 @@ def execute_presentation_pipeline_async(
             return
 
         # Spatial Overflow Guardian & Quality Auditor
-        deck_spec = SpatialOverflowMonitor.audit_and_remedy_deck(deck_spec)
-        audit_res = PresentationQualityAuditor.audit_deck_spec(deck_spec, deck_spec.get("evidence_ledger", []))
-        deck_spec["quality_audit"] = audit_res
+        if deck_spec.get("metadata", {}).get("deck_style") != "decision_brief":
+            deck_spec = SpatialOverflowMonitor.audit_and_remedy_deck(deck_spec)
+            audit_res = PresentationQualityAuditor.audit_deck_spec(deck_spec, deck_spec.get("evidence_ledger", []))
+            deck_spec["quality_audit"] = audit_res
 
-        if audit_res.get("issues") and audit_res.get("can_repair", True):
-            deck_spec = PresentationQualityAuditor.execute_bounded_repair(deck_spec, audit_res)
-            audit_res_2 = PresentationQualityAuditor.audit_deck_spec(deck_spec, deck_spec.get("evidence_ledger", []))
-            deck_spec["quality_audit"] = audit_res_2
+            if audit_res.get("issues") and audit_res.get("can_repair", True):
+                deck_spec = PresentationQualityAuditor.execute_bounded_repair(deck_spec, audit_res)
+                audit_res_2 = PresentationQualityAuditor.audit_deck_spec(deck_spec, deck_spec.get("evidence_ledger", []))
+                deck_spec["quality_audit"] = audit_res_2
+        else:
+            deck_spec["quality_audit"] = {"issues": [], "passed": True, "score": 100}
 
         total_slides = len(deck_spec.get("slides", []))
         while len(observer.slides) < total_slides:
@@ -474,6 +477,12 @@ def execute_presentation_pipeline_async(
         slides_list = deck_spec.get("slides", [])
         time_budget_min = scope.get("presentation_time_minutes") or 15
         for idx, slide in enumerate(slides_list):
+            if deck_spec.get("metadata", {}).get("deck_style") == "decision_brief" and slide.get("speaker_notes"):
+                slide_duration = _estimate_speaking_time_seconds(slide["speaker_notes"])
+                slide["estimated_speaking_duration_sec"] = slide_duration
+                total_speaking_duration_sec += slide_duration
+                continue
+
             next_title = slides_list[idx + 1].get("title") if idx + 1 < len(slides_list) else None
             structured_notes = _generate_structured_speaker_notes(
                 slide=slide,

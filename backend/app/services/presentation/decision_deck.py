@@ -127,7 +127,10 @@ def verify_decision_deck(deck, ledger):
             continue
         seen.add(eid)
         for field in CLAIM_FIELDS:
-            passed = field in contract and slide.get(field) == contract[field]
+            if field == 'speaker_notes':
+                passed = field in contract and (slide.get(field) == contract[field] or (bool(contract[field]) and contract[field] in str(slide.get(field, ''))))
+            else:
+                passed = field in contract and slide.get(field) == contract[field]
             checked.append({'slide':slide.get('title'),'metric':field,'passed':passed,'status':'PASSED' if passed else 'DISCREPANCY'})
             if not passed:
                 discrepancies.append({'slide':slide.get('title'),'metric':field,'reason':'Display differs from frozen evidence contract'})

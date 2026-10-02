@@ -51,8 +51,17 @@
   table { color: var(--color-text-primary); }
   th { background: var(--color-bg-subtle); color: var(--color-text-primary); }
 }
-.hriday-working { display: inline-flex; align-items: center; gap: 10px; min-height: 32px; color: var(--color-text-secondary); }
-.hriday-status-dot { width: 7px; height: 7px; flex: none; border-radius: 50%; background: var(--color-brand-secondary); }
+.hriday-working { display: flex; align-items: center; gap: 12px; min-height: 44px; color: var(--color-text-secondary); }
+.hriday-activity-mark { position: relative; display: inline-flex; align-items: center; justify-content: center; flex: none; width: 36px; height: 36px; color: var(--color-brand-secondary); }
+.hriday-activity-orbit { position: absolute; inset: 0; border: 2px solid var(--color-border); border-top-color: var(--color-brand-secondary); border-right-color: var(--color-brand-secondary); border-radius: 50%; animation: hriday-orbit 2.4s linear infinite; }
+.hriday-activity-icon { display: inline-flex; animation: hriday-signal 400ms ease-out; }
+.hriday-activity-text { min-width: 0; animation: hriday-activity-enter 200ms ease-out; }
+@keyframes hriday-orbit { to { transform: rotate(360deg); } }
+@keyframes hriday-signal { 0% { transform: scale(0.8); } 55% { transform: scale(1.12); } 100% { transform: scale(1); } }
+@keyframes hriday-activity-enter { from { transform: translateY(3px); } to { transform: translateY(0); } }
+@media (prefers-reduced-motion: reduce) {
+  .hriday-activity-orbit, .hriday-activity-icon, .hriday-activity-text { animation: none; }
+}
 .hriday-recovery { margin: 12px 0 0; color: var(--color-text-secondary); }
 .hriday-recovery p { margin: 0; }
 .hriday-answer-actions { display: flex; flex-wrap: wrap; gap: 2px; margin-top: 8px; }
@@ -105,7 +114,8 @@
 @media (forced-colors: active) {
   .hriday-input-row, .hriday-panel, .hriday-tooltip { border-color: CanvasText; }
   .hriday-icon-button { color: ButtonText; }
-  .hriday-status-dot { background: CanvasText; }
+  .hriday-activity-orbit { border-color: CanvasText; }
+  .hriday-activity-mark { color: CanvasText; }
 }
 
 .btn-header-hriday {

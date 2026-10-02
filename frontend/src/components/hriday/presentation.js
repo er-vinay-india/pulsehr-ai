@@ -58,15 +58,6 @@ export function presentHRIDAYAnswer(raw, { streaming = false, delegates = [] } =
   return text.trim();
 }
 
-export function presentHRIDAYStatus(event = {}) {
-  if (event.phase === 1) return 'Working through your question…';
-  if (event.phase === 2) return 'Checking the response…';
-  if (event.phase === 'retrieval') return 'Finding relevant information…';
-  if (event.phase === 'planning') return 'Reviewing your question…';
-  if (event.phase === 'tool') return 'Working on your request…';
-  return 'Preparing your answer…';
-}
-
 export function inferHRIDAYTool(query) {
   const q = query.trim().toLowerCase().replace(/\?$/, '');
   const expression = q.replace(/^(calculate|what is|compute)\s+/, '');

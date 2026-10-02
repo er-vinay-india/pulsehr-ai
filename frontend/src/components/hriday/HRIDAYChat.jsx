@@ -5,9 +5,10 @@ import MarkdownView from '../MarkdownView.jsx';
 import { useHRIDAY } from './HRIDAYProvider.jsx';
 import { presentArtifacts } from './presentation.js';
 import IconButton from './IconButton.jsx';
+import HRIDAYActivity from './HRIDAYActivity.jsx';
 
 export default function HRIDAYChat({ scope = {}, onClose, expanded = false, onExpand, inputRef, mobile = false, fullPage = false }) {
-  const { conversation, messages, draft, loading, status, announcement } = useHRIDAY();
+  const { conversation, messages, draft, loading, activity, announcement } = useHRIDAY();
   const localInput = useRef(null);
   const textarea = inputRef || localInput;
   const transcript = useRef(null);
@@ -47,7 +48,7 @@ export default function HRIDAYChat({ scope = {}, onClose, expanded = false, onEx
   };
   return <div className={`hriday-chat${fullPage ? ' hriday-chat--page' : ''}`}>
     <header className="hriday-chat-header">
-      <div className="hriday-identity"><span className="hriday-original-heart" aria-hidden="true"><AnimatedAcousticOrb compact /></span><h2>HRIDAY</h2></div>
+      <div className="hriday-identity"><span className="hriday-original-heart" aria-hidden="true"><AnimatedAcousticOrb compact isPlaying={loading} /></span><h2>HRIDAY</h2></div>
       <div className="hriday-header-actions">
         <IconButton label="New conversation" onClick={newChat}><SquarePen size={18} aria-hidden="true" /></IconButton>
         {onExpand && !mobile && <IconButton label={expanded ? 'Compact chat' : 'Expand chat'} onClick={onExpand}>
@@ -67,7 +68,7 @@ export default function HRIDAYChat({ scope = {}, onClose, expanded = false, onEx
         <div className="hriday-message-author">{message.role === 'user' ? 'You' : 'HRIDAY'}</div>
         {message.role === 'user' ? <div className="hriday-user-bubble">{message.content}</div> : <>
           {message.content && <MarkdownView content={message.content} className="hriday-answer" />}
-          {message.phase === 'loading' && <div className="hriday-working"><span aria-hidden="true" className="hriday-status-dot" />{status}</div>}
+          {message.phase === 'loading' && <HRIDAYActivity activity={activity} />}
           {message.phase === 'stopped' && <p className="hriday-recovery">{message.content ? 'Response stopped. This answer is incomplete.' : 'Stopped. You can ask again or change your question.'}</p>}
           {message.phase === 'error' && <div className="hriday-recovery">
             <p>{message.content ? 'This answer is incomplete. I couldn’t finish it. Your question is saved.' : 'I couldn’t finish that. Your question is saved.'}</p>

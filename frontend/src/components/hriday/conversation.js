@@ -1,4 +1,5 @@
-import { inferHRIDAYTool, presentHRIDAYAnswer, presentHRIDAYStatus } from './presentation.js';
+import { inferHRIDAYTool, presentHRIDAYAnswer } from './presentation.js';
+import { initialHRIDAYActivity, advanceHRIDAYActivity } from './activity.js';
 
 export class HRIDAYConversation {
   constructor(transport) {
@@ -8,7 +9,7 @@ export class HRIDAYConversation {
     this.sequence = 0;
     this.request = null;
     this.priorContext = null;
-    this.state = { messages: [], draft: '', loading: false, status: 'Preparing your answer…', announcement: '' };
+    this.state = { messages: [], draft: '', loading: false, status: '', activity: null, announcement: '' };
   }
   subscribe = listener => { this.listeners.add(listener); return () => this.listeners.delete(listener); };
   getSnapshot = () => this.state;
@@ -28,7 +29,7 @@ export class HRIDAYConversation {
     if (!text || this.request) return;
     const controller = new AbortController();
     const id = retryId || `hriday-${++this.sequence}`;
-    const request = { id, controller, rawAnswer: '', delegates: [], terminal: false };
+    const request = { id, controller, rawAnswer: '', delegates: [], terminal: false, activity: initialHRIDAYActivity() };
     const requestDetails = { query: text, scope: { ...scope }, tool };
     this.request = request;
     const diagnostic = { events: [], result: null, request: requestDetails };
@@ -37,30 +38,39 @@ export class HRIDAYConversation {
     const messages = retryId
       ? this.state.messages.map(message => message.id === id ? assistant : message)
       : [...this.state.messages, { id: `${id}-user`, role: 'user', content: text }, assistant];
-    this.publish({ messages, draft: retryId ? this.state.draft : '', loading: true, status: 'Preparing your answer…', announcement: 'HRIDAY is preparing your answer.' });
+    this.publish({ messages, draft: retryId ? this.state.draft : '', loading: true, status: request.activity.text, activity: request.activity, announcement: request.activity.text });
 
     const current = () => this.request === request && !controller.signal.aborted && !request.terminal;
-    const record = event => { if (current()) diagnostic.events.push(event); };
+    const activityEvent = event => {
+      if (!current()) return;
+      const next = advanceHRIDAYActivity(request.activity, event, tool);
+      if (next === request.activity) return;
+      const changedText = next.text !== request.activity.text;
+      request.activity = next;
+      this.publish({ activity: next, status: next.text, ...(changedText ? { announcement: next.text } : {}) });
+    };
+    const record = event => {
+      if (!current()) return;
+      diagnostic.events.push(event);
+      if (event.type === 'candidate_answer') activityEvent(event);
+    };
     const finishError = error => {
       if (!current()) return;
       diagnostic.error = error;
       request.terminal = true;
       this.request = null;
-      this.updateMessage(id, { phase: 'error' }, { loading: false, announcement: 'HRIDAY couldn’t finish. Your question is saved.' });
+      this.updateMessage(id, { phase: 'error' }, { loading: false, activity: null, announcement: 'HRIDAY couldn’t finish. Your question is saved.' });
     };
     try {
       await this.transport(text, null, tool, scope.datasetId ?? null, scope.sheetId ?? null, {
         onEvent: record,
-        onWarRoomInit: data => { if (current()) request.delegates = data.delegates || []; },
-        onDelegatePerspective: data => { if (current()) diagnostic.perspectives = { ...diagnostic.perspectives, [data.delegate_id]: data }; },
-        onDelegateVote: data => { if (current()) diagnostic.votes = { ...diagnostic.votes, [data.delegate_id]: data }; },
-        onStatus: data => {
-          if (!current()) return;
-          const status = presentHRIDAYStatus(data);
-          this.publish({ status, announcement: status });
-        },
+        onWarRoomInit: data => { if (current()) { request.delegates = data.delegates || []; activityEvent({ type: 'war_room_init', data }); } },
+        onDelegatePerspective: data => { if (current()) { diagnostic.perspectives = { ...diagnostic.perspectives, [data.delegate_id]: data }; activityEvent({ type: 'delegate_perspective', data }); } },
+        onDelegateVote: data => { if (current()) { diagnostic.votes = { ...diagnostic.votes, [data.delegate_id]: data }; activityEvent({ type: 'delegate_vote', data }); } },
+        onStatus: data => activityEvent({ type: 'status', data }),
         onToken: token => {
           if (!current()) return;
+          if (!request.rawAnswer) activityEvent({ type: 'token', data: { token } });
           request.rawAnswer += token || '';
           const content = presentHRIDAYAnswer(request.rawAnswer, { streaming: true, delegates: request.delegates });
           this.updateMessage(id, { content, phase: content ? 'streaming' : 'loading' });
@@ -73,7 +83,7 @@ export class HRIDAYConversation {
           request.terminal = true;
           this.request = null;
           this.updateMessage(id, { content, phase: content ? 'complete' : 'error', artifacts: data.artifacts || [] },
-            { loading: false, announcement: content ? 'HRIDAY’s response is ready.' : 'HRIDAY couldn’t finish. Your question is saved.' });
+            { loading: false, activity: null, announcement: content ? 'HRIDAY’s response is ready.' : 'HRIDAY couldn’t finish. Your question is saved.' });
         },
         onError: finishError,
       }, controller.signal, this.priorContext, scope.snapshotId ?? null, scope.page ?? null, 60.0);
@@ -87,14 +97,14 @@ export class HRIDAYConversation {
     request.terminal = true;
     request.controller.abort();
     this.request = null;
-    this.updateMessage(request.id, { phase: 'stopped' }, { loading: false, announcement: 'Response stopped.' });
+    this.updateMessage(request.id, { phase: 'stopped' }, { loading: false, activity: null, announcement: 'Response stopped.' });
   };
   retry = message => this.send(message.request.query, { ...message.request, retryId: message.id });
   newChat = () => {
     this.stop();
     this.priorContext = null;
     this.diagnostics.clear();
-    this.publish({ messages: [], draft: '', loading: false, announcement: 'New conversation with HRIDAY.' });
+    this.publish({ messages: [], draft: '', loading: false, activity: null, status: '', announcement: 'New conversation with HRIDAY.' });
   };
   feedback = (id, feedback) => this.updateMessage(id, { feedback }, { announcement: feedback === 'helpful' ? 'Marked helpful.' : 'Marked as needing improvement.' });
 }

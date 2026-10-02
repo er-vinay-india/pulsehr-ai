@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import * as sass from 'sass';
 import { HRIDAYConversation } from '../src/components/hriday/conversation.js';
 import { presentHRIDAYAnswer, inferHRIDAYTool, presentArtifacts } from '../src/components/hriday/presentation.js';
+import { initialHRIDAYActivity, advanceHRIDAYActivity } from '../src/components/hriday/activity.js';
 import { streamCopilotQuery } from '../src/api/client.js';
 const delegates = [{ id: 'qwen', name: 'Qwen3.5', primary_model: 'qwen3.5', role_title: 'Chief Quantitative & Data Analytics Director' }];
 const banner = '### 🏆 Elected Council Replier: **Qwen3.5**\n*Chief Quantitative & Data Analytics Director* — *Elected with 3/5 Council Votes (60% Quorum)*\n\n';
@@ -90,4 +91,55 @@ test('chat references defined central theme tokens and has no independent palett
   assert(!/#[\da-f]{3,8}\b|rgba?\(|hsla?\(/i.test(source));
   for (const [, token] of source.matchAll(/var\((--[\w-]+)/g)) if (!token.startsWith('--hriday-viewport-')) assert(tokens.includes(token + ':'), 'Unknown token: ' + token);
   const view = readFileSync(new URL('../src/components/hriday/HRIDAYChat.jsx', import.meta.url), 'utf8'); assert(!/Hruday|localStorage|ThemeToggle/.test(view));
+});
+
+test('loader follows real step signals, deduplicates mirrored candidates, hides model and voting details', () => {
+  let activity = initialHRIDAYActivity();
+  const received = [];
+  const deliver = event => { activity = advanceHRIDAYActivity(activity, event); received.push(activity.text); };
+  deliver({ type: 'war_room_init', data: { delegates: [1, 2, 3, 4, 5] } });
+  for (let step = 1; step <= 5; step++) {
+    deliver({ type: 'status', data: { phase: 1, step_index: step, step_count: 5, message: 'Qwen proposes an answer' } });
+    assert.equal(activity.stepIndex, step);
+    deliver({ type: 'candidate_answer', data: { delegate_id: 'private-' + step, candidate_answer: 'Raw private answer' } });
+    const beforeMirror = activity;
+    deliver({ type: 'delegate_perspective', data: { delegate_id: 'private-' + step, perspective: 'Raw private answer' } });
+    assert.equal(activity, beforeMirror);
+  }
+  assert.equal(activity.approachIds.length, 5);
+  deliver({ type: 'status', data: { phase: 2 } }); assert.equal(activity.text, 'Comparing possible answers…');
+  for (let step = 1; step <= 5; step++) deliver({ type: 'delegate_vote', data: { delegate_id: 'private-' + step, vote: 'GPT-OSS wins' } });
+  assert.equal(activity.text, 'The reviews are complete…');
+  deliver({ type: 'status', data: { phase: 3 } }); assert.equal(activity.stage, 'composing');
+  deliver({ type: 'token', data: { token: 'Answer' } }); assert.equal(activity.stage, 'writing');
+  assert(received.includes('Considering another approach…'));
+  assert(received.includes('Considering another angle…'));
+  assert(!/Qwen|GPT|Council|private-|vote|quorum|5/.test(received.join(' ')));
+});
+test('unknown, duplicate and out-of-order activity cannot invent progress or rewind delivery', () => {
+  let activity = initialHRIDAYActivity();
+  const status = { type: 'status', data: { phase: 1, message: 'Phase 1: [2/5] Internal model' } };
+  activity = advanceHRIDAYActivity(activity, status); assert.equal(activity.text, 'Considering another approach…');
+  assert.equal(advanceHRIDAYActivity(activity, status), activity);
+  assert.equal(advanceHRIDAYActivity(activity, { type: 'status', data: { phase: 'unknown', message: 'Invented progress' } }), activity);
+  activity = advanceHRIDAYActivity(activity, { type: 'token', data: { token: 'Answer' } });
+  assert.equal(advanceHRIDAYActivity(activity, status), activity);
+  assert.equal(advanceHRIDAYActivity(activity, { type: 'candidate_answer', data: { delegate_id: 'late', candidate_answer: 'Late' } }), activity);
+});
+test('loader changes with tool and retrieval signals; stop and completion clear activity and ignore late signals', async () => {
+  let activity = initialHRIDAYActivity();
+  activity = advanceHRIDAYActivity(activity, { type: 'status', data: { phase: 'retrieval' } }); assert.equal(activity.stage, 'retrieving');
+  const toolEvent = { type: 'status', data: { phase: 'tool' } };
+  assert.equal(advanceHRIDAYActivity(activity, toolEvent, { name: 'arithmetic' }).text, 'Working through the calculation…');
+  assert.equal(advanceHRIDAYActivity(activity, toolEvent, { name: 'presentation' }).text, 'Building your presentation…');
+  const { c, calls } = harness(); const first = c.send('Explain');
+  const initial = c.state.activity; c.setDraft('Draft while working'); assert.equal(c.state.activity, initial);
+  calls[0].cb.onStatus({ phase: 1, step_index: 1, step_count: 5 });
+  calls[0].cb.onEvent({ type: 'candidate_answer', data: { delegate_id: 'one', candidate_answer: 'Internal' } });
+  assert.equal(c.state.status, 'An initial response is ready…');
+  c.stop(); assert.equal(c.state.activity, null);
+  calls[0].cb.onStatus({ phase: 2 }); calls[0].cb.onDelegateVote({ delegate_id: 'late' }); assert.equal(c.state.activity, null);
+  calls[0].resolve(); await first;
+  const second = c.send('Next'); calls[1].cb.onDone({ answer: 'Complete' }); assert.equal(c.state.activity, null);
+  calls[1].resolve(); await second;
 });
