@@ -18,6 +18,7 @@ import pandas as pd
 
 from ...core import config
 from ..gateway.assistant_identity import guarded_completion, identity_answer, identity_intent, public_identity
+from ..decision_intelligence import numbers, identity
 
 logger = logging.getLogger(__name__)
 
@@ -153,20 +154,56 @@ def _extract_dataset_summary(df: pd.DataFrame | None, sheet_name: str | None) ->
         f"Key Columns: {sample_cols}."
     ]
 
-    # Quick numeric summary
-    num_df = df.select_dtypes(include=["number"])
-    if not num_df.empty:
-        top_num = num_df.columns[0]
-        mean_val = num_df[top_num].mean()
-        summary_lines.append(f"Primary Numerical Column: '{top_num}' (Mean: {mean_val:,.2f}).")
+    working_df = df.copy()
+    numeric_cols = []
+    categorical_cols = []
+    for col in cols:
+        if col.startswith("interact_") or identity(col):
+            continue
+        s = df[col]
+        clean_num = numbers(s) if hasattr(s, "astype") else pd.to_numeric(s, errors="coerce")
+        if clean_num.notna().sum() >= max(3, len(df) * 0.6):
+            working_df[col] = clean_num
+            numeric_cols.append(col)
+        elif s.dropna().nunique() <= 200:
+            categorical_cols.append(col)
 
-    # Quick categorical summary
-    cat_df = df.select_dtypes(include=["object", "category"])
-    if not cat_df.empty:
-        top_cat = cat_df.columns[0]
-        top_val = df[top_cat].value_counts().head(1)
-        if not top_val.empty:
-            summary_lines.append(f"Leading Category in '{top_cat}': '{top_val.index[0]}' ({top_val.iloc[0]} occurrences).")
+    # 1. Categorical breakdown & extremes (e.g. Make, Department, Store)
+    for cat_col in categorical_cols[:2]:
+        vc = working_df[cat_col].dropna().value_counts()
+        if not vc.empty:
+            breakdown_items = [f"{k} ({v})" for k, v in vc.head(6).items()]
+            summary_lines.append(f"Distribution of '{cat_col}': {', '.join(breakdown_items)}.")
+            if len(vc) > 1:
+                top_k, top_v = vc.index[0], vc.iloc[0]
+                bot_k, bot_v = vc.index[-1], vc.iloc[-1]
+                summary_lines.append(
+                    f"'{cat_col}' Extremes: Top volume is '{top_k}' ({top_v} units); "
+                    f"Lowest/Bottom volume is '{bot_k}' ({bot_v} units)."
+                )
+
+    # 2. Key numeric metric summaries
+    for num_col in numeric_cols[:3]:
+        s = working_df[num_col].dropna()
+        if not s.empty:
+            summary_lines.append(
+                f"Metric '{num_col}': Mean = {s.mean():,.2f}, Min = {s.min():,.2f}, Max = {s.max():,.2f}."
+            )
+
+    # 3. Cross-tabulation / Grouped averages (e.g. Price by Make, Odometer by Make)
+    if categorical_cols and numeric_cols:
+        pri_cat = categorical_cols[0]
+        for num_c in numeric_cols[:2]:
+            try:
+                g_means = working_df.groupby(pri_cat)[num_c].mean().dropna().sort_values(ascending=False)
+                if len(g_means) > 1:
+                    high_g = f"{g_means.index[0]} ({g_means.iloc[0]:,.2f})"
+                    low_g = f"{g_means.index[-1]} ({g_means.iloc[-1]:,.2f})"
+                    summary_lines.append(
+                        f"Average '{num_c}' by '{pri_cat}': Highest is {high_g}; Lowest is {low_g}."
+                    )
+            except Exception:
+                pass
 
     return "\n".join(summary_lines)
 
@@ -185,7 +222,8 @@ class UnionWarRoomEngine:
         df: pd.DataFrame | None = None,
         sheet_name: str | None = None,
         context: Any = None,
-        timeout_seconds: float = WAR_ROOM_TOTAL_TIMEOUT_SECONDS
+        timeout_seconds: float = WAR_ROOM_TOTAL_TIMEOUT_SECONDS,
+        prior_context: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Runs the complete candidate generation, council voting, and replier election synchronously."""
         t_start = time.perf_counter()
@@ -197,7 +235,8 @@ class UnionWarRoomEngine:
             user_query=user_query,
             dataset_summary=dataset_summary,
             timeout_per_model=14.0,
-            runtime_results=runtime_results
+            runtime_results=runtime_results,
+            prior_context=prior_context,
         )
 
         elapsed = time.perf_counter() - t_start
@@ -278,6 +317,25 @@ class UnionWarRoomEngine:
                 "vote_rationale": b_info.get("rationale", "")
             })
 
+        updated_history = []
+        if prior_context and isinstance(prior_context.get("history"), list):
+            updated_history = list(prior_context["history"])[-4:]
+        updated_history.append({"role": "user", "content": user_query})
+        updated_history.append({"role": "assistant", "content": winner_raw_answer[:400]})
+
+        computed_ds_id = None
+        computed_sh_id = None
+        if isinstance(context, dict):
+            computed_ds_id = context.get("dataset_id")
+            computed_sh_id = context.get("sheet_id")
+        elif context is not None:
+            computed_ds_id = getattr(context, "dataset_id", None)
+            computed_sh_id = getattr(context, "sheet_id", None)
+        if not computed_ds_id and prior_context:
+            computed_ds_id = prior_context.get("dataset_id")
+        if not computed_sh_id and prior_context:
+            computed_sh_id = prior_context.get("sheet_id")
+
         return {
             "query": user_query,
             "answer": winner_raw_answer,
@@ -285,6 +343,14 @@ class UnionWarRoomEngine:
             "assistant_identity": public_identity(),
             "runtime_model": runtime_result.get("runtime_model"),
             "identity_diagnostics": runtime_result,
+            "prior_context": {
+                **(prior_context or {}),
+                "last_query": user_query,
+                "last_answer": winner_raw_answer[:400],
+                "history": updated_history,
+                "dataset_id": computed_ds_id,
+                "sheet_id": computed_sh_id,
+            },
             "elected_replier": {
                 "id": elected_delegate.id,
                 "name": elected_delegate.name,
@@ -357,15 +423,33 @@ class UnionWarRoomEngine:
         user_query: str,
         dataset_summary: str,
         timeout_per_model: float = 14.0,
-        runtime_results: dict[str, dict] | None = None
+        runtime_results: dict[str, dict] | None = None,
+        prior_context: dict[str, Any] | None = None,
     ) -> str:
         """Fetches the proposed complete answer from a single council delegate."""
+        history_context = ""
+        if prior_context:
+            hist_items = prior_context.get("history") or []
+            if isinstance(hist_items, list) and hist_items:
+                conv_lines = []
+                for h in hist_items[-4:]:
+                    r = "User" if h.get("role") == "user" else "HRIDAY"
+                    c = str(h.get("content", ""))[:250].strip()
+                    if c:
+                        conv_lines.append(f"{r}: {c}")
+                if conv_lines:
+                    history_context = "\nCONVERSATION CONTEXT:\n" + "\n".join(conv_lines) + "\n"
+            elif prior_context.get("last_query"):
+                l_q = prior_context.get("last_query")
+                l_a = str(prior_context.get("last_answer", ""))[:250]
+                history_context = f"\nCONVERSATION CONTEXT:\nUser: {l_q}\nHRIDAY: {l_a}\n"
+
         prompt = f"""Apply the analytical perspective of {d.role_title}; this is task expertise, not your assistant identity.
 Your domain specialty: {d.domain_specialty}.
 
 DATASET CONTEXT:
 {dataset_summary}
-
+{history_context}
 USER INQUIRY:
 "{user_query}"
 
@@ -373,7 +457,8 @@ INSTRUCTIONS:
 1. GREETINGS & INTRODUCTIONS: If the user says hello or greets (e.g. 'hi', 'hello', 'hey'): give a concise, natural welcome using the assistant identity in your system instructions and state how you can help.
 2. IRRELEVANT / OUT-OF-SCOPE INQUIRIES: If the user asks about external topics outside enterprise/data scope (e.g. weather forecast, recipes, sports, pop culture): politely decline, clarifying that you specialize in enterprise analytics and operational datasets.
 3. DATA & REPORT QUESTIONS: Give direct, concrete, authoritative answers grounded in the dataset context. If no dataset is attached and a report is requested, clearly let the user know they need to upload or select a dataset first.
-4. TONE & STYLE: Speak naturally and authentically in your own distinct perspective. Avoid formulaic filler phrases like 'From a causal logic standpoint' or mechanical boilerplate.
+4. CONVERSATION CONTINUITY: If CONVERSATION CONTEXT is provided and the user query is a follow-up or refinement (e.g. 'overall', 'which one is worst', 'why', 'what about that'), preserve context and directly address the preceding discussion rather than restarting from scratch.
+5. TONE & STYLE: Speak naturally and authentically in your own distinct perspective. Avoid formulaic filler phrases like 'From a causal logic standpoint' or mechanical boilerplate.
 Draft your proposed complete answer in 2 to 4 clear, high-signal sentences."""
 
         res = ''
@@ -408,7 +493,8 @@ Draft your proposed complete answer in 2 to 4 clear, high-signal sentences."""
         user_query: str,
         dataset_summary: str,
         timeout_per_model: float = 14.0,
-        runtime_results: dict[str, dict] | None = None
+        runtime_results: dict[str, dict] | None = None,
+        prior_context: dict[str, Any] | None = None,
     ) -> dict[str, str]:
         """Gathers complete proposed answers from each council delegate sequentially to avoid VRAM thrashing."""
         candidate_answers: dict[str, str] = {}
@@ -419,7 +505,8 @@ Draft your proposed complete answer in 2 to 4 clear, high-signal sentences."""
                     user_query=user_query,
                     dataset_summary=dataset_summary,
                     timeout_per_model=timeout_per_model,
-                    runtime_results=runtime_results
+                    runtime_results=runtime_results,
+                    prior_context=prior_context,
                 )
             except Exception as exc:
                 logger.warning(f"Candidate answer task failed for {d.name}: {exc}")
@@ -540,7 +627,8 @@ RATIONALE: <Your single-sentence reason for choosing this replier, under 25 word
         df: pd.DataFrame | None = None,
         sheet_name: str | None = None,
         context: Any = None,
-        timeout_seconds: float = WAR_ROOM_TOTAL_TIMEOUT_SECONDS
+        timeout_seconds: float = WAR_ROOM_TOTAL_TIMEOUT_SECONDS,
+        prior_context: dict[str, Any] | None = None,
     ) -> Generator[str, None, None]:
         """Server-Sent Events generator streaming live candidate answers, voting ballots, and the elected replier's response."""
         t_start = time.perf_counter()
@@ -579,7 +667,8 @@ RATIONALE: <Your single-sentence reason for choosing this replier, under 25 word
                 user_query=user_query,
                 dataset_summary=dataset_summary,
                 timeout_per_model=14.0,
-                runtime_results=runtime_results
+                runtime_results=runtime_results,
+                prior_context=prior_context,
             )
             candidate_answers[d.id] = ans
             yield f"event: candidate_answer\ndata: {json.dumps({'delegate_id': d.id, 'name': d.name, 'role_title': d.role_title, 'candidate_answer': ans, 'perspective': ans})}\n\n"
@@ -679,6 +768,25 @@ RATIONALE: <Your single-sentence reason for choosing this replier, under 25 word
                 "vote_rationale": b_info.get("rationale", "")
             })
 
+        updated_history = []
+        if prior_context and isinstance(prior_context.get("history"), list):
+            updated_history = list(prior_context["history"])[-4:]
+        updated_history.append({"role": "user", "content": user_query})
+        updated_history.append({"role": "assistant", "content": winner_raw_answer[:400]})
+
+        computed_ds_id = None
+        computed_sh_id = None
+        if isinstance(context, dict):
+            computed_ds_id = context.get("dataset_id")
+            computed_sh_id = context.get("sheet_id")
+        elif context is not None:
+            computed_ds_id = getattr(context, "dataset_id", None)
+            computed_sh_id = getattr(context, "sheet_id", None)
+        if not computed_ds_id and prior_context:
+            computed_ds_id = prior_context.get("dataset_id")
+        if not computed_sh_id and prior_context:
+            computed_sh_id = prior_context.get("sheet_id")
+
         done_payload = {
             "query": user_query,
             "answer": winner_raw_answer,
@@ -686,6 +794,14 @@ RATIONALE: <Your single-sentence reason for choosing this replier, under 25 word
             "assistant_identity": public_identity(),
             "runtime_model": runtime_result.get("runtime_model"),
             "identity_diagnostics": runtime_result,
+            "prior_context": {
+                **(prior_context or {}),
+                "last_query": user_query,
+                "last_answer": winner_raw_answer[:400],
+                "history": updated_history,
+                "dataset_id": computed_ds_id,
+                "sheet_id": computed_sh_id,
+            },
             "elected_replier": {
                 "id": elected_delegate.id,
                 "name": elected_delegate.name,

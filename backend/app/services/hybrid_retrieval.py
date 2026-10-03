@@ -16,17 +16,31 @@ def tokenize(text: str) -> list[str]:
     return [word for word in re.findall(r"\w+(?:-\w+)*", text.casefold()) if word not in STOP_WORDS]
 
 
-def keyword_search(query: str, top_k: int = 10) -> list[dict]:
+def keyword_search(
+    query: str,
+    top_k: int = 10,
+    dataset_id: int | None = None,
+    sheet_id: int | None = None,
+    entity_grain: str | None = None
+) -> list[dict]:
     tokens = tokenize(query)
     if not tokens or top_k <= 0:
         return []
     conn = get_connection()
     try:
-        rows = conn.execute('''
-            SELECT c.*, COALESCE(d.original_name, d.filename, 'Workforce DB') AS source_file
-            FROM tabular_chunks c LEFT JOIN dataset_uploads d ON d.id = c.dataset_id
-            ORDER BY c.id
-        ''').fetchall()
+        if dataset_id is not None:
+            rows = conn.execute('''
+                SELECT c.*, COALESCE(d.original_name, d.filename, 'Workforce DB') AS source_file
+                FROM tabular_chunks c LEFT JOIN dataset_uploads d ON d.id = c.dataset_id
+                WHERE c.dataset_id = ?
+                ORDER BY c.id
+            ''', (dataset_id,)).fetchall()
+        else:
+            rows = conn.execute('''
+                SELECT c.*, COALESCE(d.original_name, d.filename, 'Workforce DB') AS source_file
+                FROM tabular_chunks c LEFT JOIN dataset_uploads d ON d.id = c.dataset_id
+                ORDER BY c.id
+            ''').fetchall()
     finally:
         conn.close()
     corpus = [tokenize(f"{r['chunk_text']} {r['sheet_name']} {r['source_file']}") for r in rows]
@@ -38,26 +52,46 @@ def keyword_search(query: str, top_k: int = 10) -> list[dict]:
     candidates = [i for i, words in enumerate(corpus) if anchors.intersection(words)]
     candidates.sort(key=lambda i: (-float(scores[i]), rows[i]['id']))
     results = []
-    for i in candidates[:top_k]:
+    for i in candidates:
         row = rows[i]
         try:
             meta = json.loads(row['metadata_json'] or '{}')
         except (ValueError, TypeError):
             meta = {}
-        results.append(dict(chunk_id=row['id'], text=row['chunk_text'],
+        if sheet_id is not None and meta.get("sheet_id") is not None and meta.get("sheet_id") != sheet_id:
+            continue
+        c_text = row['chunk_text'] or ""
+        if entity_grain == "employee":
+            is_pure_dept = ("department summary" in c_text.lower() or "department average" in c_text.lower()) and not any(k in c_text.lower() for k in ("id:", "employee", "staff"))
+            if is_pure_dept:
+                continue
+        results.append(dict(chunk_id=row['id'], text=c_text,
                             sheet_name=row['sheet_name'], source_file=row['source_file'],
                             row_index=row['row_index'], metadata=meta,
                             keyword_score=float(scores[i]), relevance_score=0.0))
+        if len(results) >= top_k:
+            break
     return results
 
 
-def hybrid_search(query: str, top_k: int = 7) -> list[dict]:
+def hybrid_search(
+    query: str,
+    top_k: int = 7,
+    dataset_id: int | None = None,
+    sheet_id: int | None = None,
+    entity_grain: str | None = None
+) -> list[dict]:
     if top_k <= 0 or not tokenize(query):
         return []
-    lexical = keyword_search(query, top_k * 3)
+    lexical = keyword_search(query, top_k * 3, dataset_id=dataset_id, sheet_id=sheet_id, entity_grain=entity_grain)
     try:
-        semantic = [item for item in semantic_search(query, top_k * 3)
-                    if item['relevance_score'] >= 0.55]
+        if dataset_id is not None or sheet_id is not None or entity_grain is not None:
+            raw_semantic = semantic_search(
+                query, top_k * 3, dataset_id=dataset_id, sheet_id=sheet_id, entity_grain=entity_grain
+            )
+        else:
+            raw_semantic = semantic_search(query, top_k * 3)
+        semantic = [item for item in raw_semantic if item['relevance_score'] >= 0.55]
     except Exception:
         logger.warning('Semantic retrieval unavailable; using keyword retrieval', exc_info=True)
         semantic = []

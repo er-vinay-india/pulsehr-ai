@@ -1,3 +1,4 @@
+import re
 import hashlib
 import json
 import logging
@@ -11,6 +12,7 @@ from pydantic import BaseModel, Field
 from ..db.database import get_connection
 from ..services.gateway.assistant_identity import public_identity, finalize_identity_response
 from ..services.copilot_tools import ToolRequest, CalculationRequest, load_frame
+from ..services.copilot_query_planner import plan_analytical_query, execute_analytical_plan
 from ..services.ai_copilot import query_copilot, get_available_models, stream_copilot_generator
 from ..services.data_engine.semantic_classifier import SemanticClassifier
 from ..services.copilot.generic_copilot_engine import GenericCopilotEngine
@@ -39,20 +41,30 @@ class CopilotQueryRequest(BaseModel):
 def _load_active_sheet_dataframe(sheet_id: int | None = None, dataset_id: int | None = None) -> tuple[pd.DataFrame | None, str | None, AnalysisContext | None, int | None]:
     """Loads active or requested tabular sheet as DataFrame and associated AnalysisContext from database."""
     with get_connection() as conn:
+        du_cols = {r[1] for r in conn.execute('PRAGMA table_info(dataset_uploads)').fetchall()}
+        d_ctx_sel = 'd.analysis_context_json as d_ctx' if 'analysis_context_json' in du_cols else 'NULL as d_ctx'
         sheet = None
         if sheet_id is not None:
-            sheet = conn.execute(
-                'SELECT s.*, d.original_name, d.analysis_context_json as d_ctx FROM sheets s JOIN dataset_uploads d ON d.id=s.dataset_id WHERE s.id=?',
-                (sheet_id,)
-            ).fetchone()
+            if dataset_id is not None:
+                sheet = conn.execute(
+                    f'SELECT s.*, d.original_name, {d_ctx_sel} FROM sheets s JOIN dataset_uploads d ON d.id=s.dataset_id WHERE s.id=? AND s.dataset_id=?',
+                    (sheet_id, dataset_id)
+                ).fetchone()
+                if not sheet:
+                    return None, None, None, None
+            else:
+                sheet = conn.execute(
+                    f'SELECT s.*, d.original_name, {d_ctx_sel} FROM sheets s JOIN dataset_uploads d ON d.id=s.dataset_id WHERE s.id=?',
+                    (sheet_id,)
+                ).fetchone()
         elif dataset_id is not None:
             sheet = conn.execute(
-                'SELECT s.*, d.original_name, d.analysis_context_json as d_ctx FROM sheets s JOIN dataset_uploads d ON d.id=s.dataset_id WHERE s.dataset_id=? ORDER BY s.id ASC LIMIT 1',
+                f'SELECT s.*, d.original_name, {d_ctx_sel} FROM sheets s JOIN dataset_uploads d ON d.id=s.dataset_id WHERE s.dataset_id=? ORDER BY s.id ASC LIMIT 1',
                 (dataset_id,)
             ).fetchone()
         else:
             sheet = conn.execute(
-                'SELECT s.*, d.original_name, d.analysis_context_json as d_ctx FROM sheets s JOIN dataset_uploads d ON d.id=s.dataset_id ORDER BY s.id DESC LIMIT 1'
+                f'SELECT s.*, d.original_name, {d_ctx_sel} FROM sheets s JOIN dataset_uploads d ON d.id=s.dataset_id ORDER BY s.id DESC LIMIT 1'
             ).fetchone()
 
         if sheet:
@@ -79,14 +91,25 @@ def _answer_from_shared_findings(query: str, sheet_id: int, dataset_name: str) -
     t_start = time.perf_counter()
     q_low = query.lower().strip()
 
-    # Detect target metrics and directions
-    is_leave = any(w in q_low for w in ["leave", "approved leave", "pto", "vacation", "absence", "sick"])
+    # Guard: Employee-level questions, threshold filters, or calculation requests
+    # must NEVER be intercepted by department findings.
+    is_employee_query = bool(re.search(r'\b(who|whom|employee|employees|person|people|staff|worker|workers|emp|id)\b', q_low))
+    has_calc_request = bool(re.search(r'\b(calculate|compute|less than|<|more than|>|at least)\b', q_low))
+    if (is_employee_query or has_calc_request) and not any(phrase in q_low for phrase in ["how many employees", "total employees", "most employees"]):
+        return None
+
+    # Detect target metrics and directions with token/word boundaries
+    is_leave = bool(re.search(r'\b(leave|leaves|approved leave|pto|vacation|absence|sick)\b', q_low))
     is_headcount = any(phrase in q_low for phrase in ["headcount", "how many employees", "total employees", "employee count", "staff count", "most employees", "largest team", "biggest department", "fewest employees"])
-    is_attendance = any(w in q_low for w in ["attendance", "present", "presence", "attended"]) and not is_leave
-    is_highest = any(w in q_low for w in ["highest", "best", "top", "most", "max", "maximum", "leader", "leading"])
-    is_lowest = any(w in q_low for w in ["lowest", "worst", "bottom", "least", "min", "minimum", "deficit", "lagging", "friction"])
+    is_attendance = bool(re.search(r'\b(attendance|present|presence|attended)\b', q_low)) and not is_leave
+    is_highest = bool(re.search(r'\b(highest|best|top|most|max|maximum|leader|leading)\b', q_low))
+    is_lowest = bool(re.search(r'\b(lowest|worst|bottom|least|min|minimum|deficit|lagging|friction)\b', q_low))
+    is_explicit_dept = any(phrase in q_low for phrase in ["department", "dept", "team", "unit", "division"])
     is_general_dept = any(phrase in q_low for phrase in ["which department", "which team", "which unit", "what department"]) and not (is_highest or is_lowest or is_leave or is_attendance or is_headcount)
-    is_top_points = any(phrase in q_low for phrase in ["top 3", "top three", "top points", "top findings", "key findings", "summary", "overview"])
+    
+    pts_match = re.search(r'\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+(?:key\s+points?|key\s+findings?|points?|findings?|facts?|takeaways?)\b', q_low)
+    num_words = {'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5, 'six': 6, 'seven': 7, 'eight': 8, 'nine': 9, 'ten': 10}
+    is_top_points = bool(pts_match) or any(phrase in q_low for phrase in ["top 3", "top three", "top points", "top findings", "key findings", "summary", "overview", "key points"])
     is_reconciliation = any(phrase in q_low for phrase in ["reconciliation", "ledger", "matched", "cross source", "cross-source"])
 
     if not (is_top_points or is_highest or is_lowest or is_general_dept or is_headcount or is_leave or is_attendance or is_reconciliation):
@@ -101,12 +124,17 @@ def _answer_from_shared_findings(query: str, sheet_id: int, dataset_name: str) -
         if not findings:
             return None
 
-        # 1. Top 3 verified findings overview
+        # 1. Top points / verified findings overview ("5 key points", "top 3", etc.)
         if is_top_points:
-            top_3 = findings[:3]
-            lines = [f"### Top 3 Verified Findings for {dataset_name}\n"]
+            req_count = 3
+            if pts_match:
+                tok = pts_match.group(1).lower()
+                req_count = int(tok) if tok.isdigit() else num_words.get(tok, 3)
+            selected_findings = findings[:min(req_count, len(findings))]
+            heading_lbl = f"Top {len(selected_findings)}" if len(selected_findings) == req_count else f"Available {len(selected_findings)}"
+            lines = [f"### {heading_lbl} Verified Findings for {dataset_name}\n"]
             citations = []
-            for i, f in enumerate(top_3, 1):
+            for i, f in enumerate(selected_findings, 1):
                 lines.append(f"{i}. **{f.short_business_title}** ({f.formatted_value}): {f.evidence_bound_observation}")
                 lines.append(f"   - *Action*: {f.one_next_check_or_action}")
                 citations.append({
@@ -129,7 +157,7 @@ def _answer_from_shared_findings(query: str, sheet_id: int, dataset_name: str) -
                 "related_rows": len(findings),
                 "timings": {"total_ms": max(0.1, duration_ms), "llm_calls": 0, "is_deterministic": True},
                 "engine": "shared_findings",
-                "metadata": {"source": "shared_findings_store", "sheet_id": sheet_id},
+                "metadata": {"source": "shared_findings_store", "sheet_id": sheet_id, "requested_count": req_count},
             }
 
         # 2. Approved Leave Query (Lowest or Highest)
@@ -199,7 +227,7 @@ def _answer_from_shared_findings(query: str, sheet_id: int, dataset_name: str) -
             }
 
         # 4. Highest Attendance Department Query
-        if is_highest or ("highest attendance" in q_low or "most attendance" in q_low):
+        if ((is_highest and is_explicit_dept) or ("highest attendance" in q_low or "most attendance" in q_low)) and not is_leave:
             if resp.quinary_element and resp.quinary_element.items:
                 items_sorted = sorted(resp.quinary_element.items, key=lambda x: x.primary_value, reverse=True)
                 top_unit = items_sorted[0]
@@ -232,7 +260,7 @@ def _answer_from_shared_findings(query: str, sheet_id: int, dataset_name: str) -
                 }
 
         # 5. Lowest Attendance Department Query
-        if is_lowest or ("lowest attendance" in q_low or "least attendance" in q_low or is_general_dept):
+        if ((is_lowest and is_explicit_dept) or ("lowest attendance" in q_low or "least attendance" in q_low or is_general_dept)) and not is_leave:
             if resp.quinary_element and resp.quinary_element.items:
                 items_sorted = sorted(resp.quinary_element.items, key=lambda x: x.primary_value)
                 bot_unit = items_sorted[0]
@@ -421,16 +449,149 @@ def ask_generic_copilot(req: CopilotQueryRequest):
     return finalize_identity_response(_execute_generic_copilot(req, df, name or "Uploaded Dataset", context=ctx), req.query)
 
 
+def classify_analytical_intent(
+    query: str,
+    prior_context: dict | None = None,
+    tool: ToolRequest | None = None,
+    dataset_id: int | None = None,
+    sheet_id: int | None = None
+) -> Literal["ANALYTICAL_CALCULATION", "FOLLOW_UP_REFINEMENT", "FACT_RETRIEVAL", "GENERAL_CHAT"]:
+    """Classifies user query intent before engine dispatch to prevent department shortcuts or war room bypass."""
+    if tool is not None:
+        return "ANALYTICAL_CALCULATION"
+
+    q_low = query.strip().lower()
+
+    # 1. FOLLOW_UP_REFINEMENT
+    # Identifier refinements: 'i need employee id', 'give me employee id', 'show id', 'emp id'
+    is_id_refinement = bool(re.search(r'\b(?:i\s+need|give\s+me|show\s+me|show)?\s*(?:employee\s+id|emp\s+id|id)\b', q_low)) and not bool(re.search(r'\b(?:who|which|calculate|tell|explain)\b', q_low))
+    # Department column refinement: 'show department also', 'add department'
+    is_dept_field_refinement = bool(re.search(r'\b(?:show\s+department\s+also|add\s+department|include\s+department|with\s+department|department\s+also|department\s+too|department\s+as\s+well)\b', q_low))
+    # Limit refinement: 'only top 3', 'show bottom 3', 'limit to 5'
+    pts_keyword = bool(re.search(r'\b(?:key\s+points?|key\s+findings?|points?|findings?|facts?|takeaways?)\b', q_low))
+    is_limit_refinement = bool(re.search(r'\b(?:only\s+)?(?:top|bottom|worst|best)?\s*(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\b', q_low)) and (
+        'only' in q_low or (bool(prior_context and (prior_context.get('last_ranking') or prior_context.get('metric'))) and not pts_keyword)
+    )
+    # Why refinement
+    is_why_refinement = q_low.strip('?!. ') in ('why', 'why is that', 'why did that happen', 'explain why') and bool(prior_context)
+
+    if is_id_refinement or is_dept_field_refinement or is_limit_refinement or is_why_refinement:
+        return "FOLLOW_UP_REFINEMENT"
+
+    # 2. Conceptual / Explanatory questions -> GENERAL_CHAT
+    # e.g., 'what is attendance compliance?', 'what is bradford factor?', 'what is simpson paradox'
+    is_concept_query = bool(re.match(r'^(?:what\s+is|what\s+are|define|explain|meaning\s+of)\s+([a-z\s]+)\??$', q_low))
+    if is_concept_query:
+        if not any(k in q_low for k in ('the attendance of', 'the headcount', 'total', 'average', 'mean', 'minimum', 'maximum')):
+            return "GENERAL_CHAT"
+
+    # Greetings / chit-chat -> GENERAL_CHAT
+    if q_low in ('hello', 'hi', 'hey', 'good morning', 'good afternoon', 'good evening', 'thanks', 'thank you'):
+        return "GENERAL_CHAT"
+
+    # 3. FACT_RETRIEVAL
+    # Overview / Key points / facts
+    pts_match = re.search(r'\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+(?:key\s+points?|key\s+findings?|points?|findings?|facts?|takeaways?)\b', q_low)
+    is_top_points = bool(pts_match) or any(phrase in q_low for phrase in ['top findings', 'key findings', 'summary of findings', 'overview of findings', 'key points', 'verified findings', 'reconciliation'])
+    if is_top_points:
+        return "FACT_RETRIEVAL"
+
+    # 4. ANALYTICAL_CALCULATION
+    has_calc_keyword = bool(re.search(r'\b(?:calculate|compute|sum|count|average|mean|median|formula|headcount|how many)\b', q_low))
+    has_threshold = bool(re.search(r'\b(?:less\s+than|<|under|fewer\s+than|more\s+than|>|at\s+least|greater\s+than)\s*\d+', q_low))
+    is_person = bool(re.search(r'\b(?:who|whom|employee|employees|person|people|staff|worker|workers|emp|id)\b', q_low))
+    has_att_signal = bool(re.search(r'\b(?:coming|come|came|attendance|attended|present|absent|leave|leaves|regularly|regular)\b', q_low))
+
+    if has_calc_keyword or has_threshold or (is_person and has_att_signal):
+        return "ANALYTICAL_CALCULATION"
+
+    is_dept = bool(re.search(r'\b(?:department|dept|team|unit|division|store)\b', q_low))
+    is_ranking = bool(re.search(r'\b(?:lowest|highest|best|worst|least|most|bottom|top|rank|ranking|breakdown)\b', q_low))
+    if (is_dept or is_ranking) and has_att_signal:
+        return "ANALYTICAL_CALCULATION"
+
+    # Fallback probe
+    try:
+        probe_plan = plan_analytical_query(query, dataset_id=dataset_id, sheet_id=sheet_id, prior_context=prior_context)
+        if probe_plan and probe_plan.intent in ('ranking', 'breakdown', 'threshold_filter', 'correlation_causation', 'ambiguity_clarification'):
+            return "ANALYTICAL_CALCULATION"
+    except Exception:
+        pass
+
+    return "GENERAL_CHAT"
+
+
 @router.post("/query")
 def ask_copilot(req: CopilotQueryRequest):
     """
     SHARED route:
+    - Resolves request intent (ANALYTICAL_CALCULATION, FOLLOW_UP_REFINEMENT, FACT_RETRIEVAL, GENERAL_CHAT).
+    - Executes analytical plans deterministically before shortcuts or engine defaults.
     - If engine == 'generic': routes strictly through GenericCopilotEngine.
     - If engine == 'legacy': routes to legacy query_copilot.
-    - If engine == 'auto': deterministically checks for legacy HR terms vs active tabular sheet.
     """
     df, name, ctx, sid = _load_active_sheet_dataframe(req.sheet_id, req.dataset_id)
-    if sid is not None:
+    target_sheet_id = req.sheet_id or sid
+
+    intent_type = classify_analytical_intent(
+        req.query,
+        prior_context=req.prior_context,
+        tool=req.tool,
+        dataset_id=req.dataset_id,
+        sheet_id=target_sheet_id
+    )
+
+    # 1. Executable analytical calculations and follow-up refinements take top priority
+    if intent_type in ("ANALYTICAL_CALCULATION", "FOLLOW_UP_REFINEMENT"):
+        plan = plan_analytical_query(
+            req.query,
+            dataset_id=req.dataset_id,
+            sheet_id=target_sheet_id,
+            prior_context=req.prior_context
+        )
+        if plan:
+            t_plan_start = time.perf_counter()
+            plan_res = execute_analytical_plan(plan)
+
+            # Grain consistency validation
+            if plan.entity_grain == 'employee' and plan_res.get('evidence', {}).get('result_grain') != 'employee':
+                raise ValueError("Grain mismatch: Expected employee-level evidence but received department aggregate.")
+
+            duration_ms = (time.perf_counter() - t_plan_start) * 1000
+            res = {
+                "query": req.query,
+                "answer": plan_res["answer"],
+                "model_used": "Verified analytical query planner",
+                "tool_used": "analytical_plan",
+                "status": plan_res.get("status", "success"),
+                "evidence": plan_res.get("evidence"),
+                "calculation": plan_res.get("raw_analysis"),
+                "prior_context": plan_res.get("prior_context"),
+                "artifacts": [],
+                "citations": plan_res.get("citations", []),
+                "exact_matches": [],
+                "suggested_questions": plan_res.get("suggested_questions", [
+                    "What is the attendance breakdown by department?",
+                    "Which department has the lowest attendance in July?",
+                    "Show weekly attendance drilldown"
+                ]),
+                "visual_charts": [],
+                "related_rows": plan_res.get("evidence", {}).get("coverage", {}).get("used_rows", len(df) if df is not None else 0),
+                "timings": {
+                    "total_ms": round(duration_ms, 1),
+                    "tool_ms": round(duration_ms, 1),
+                    "is_deterministic": True
+                },
+                "engine": "analytical_planner",
+                "metadata": {
+                    "query_plan": plan_res.get("query_plan"),
+                    "snapshot_hash": plan_res.get("evidence", {}).get("snapshot_hash")
+                }
+            }
+            return finalize_identity_response(res, req.query)
+
+    # 2. Fact retrieval via shared findings store
+    if intent_type == "FACT_RETRIEVAL" and sid is not None:
         direct_ans = _answer_from_shared_findings(req.query, sid, name or "Uploaded Dataset")
         if direct_ans is not None:
             return finalize_identity_response(direct_ans, req.query)
@@ -461,10 +622,89 @@ def ask_copilot(req: CopilotQueryRequest):
 def ask_copilot_stream(req: CopilotQueryRequest):
     """
     SHARED route: Streams token chunks and status updates as Server-Sent Events.
-    Uses GenericCopilotEngine if targeting generic tabular data, otherwise legacy stream generator.
+    Prioritizes server-side analytical classification and validated execution over client defaults.
     """
     df, name, ctx, sid = _load_active_sheet_dataframe(req.sheet_id, req.dataset_id)
-    if sid is not None:
+    target_sheet_id = req.sheet_id or sid
+
+    intent_type = classify_analytical_intent(
+        req.query,
+        prior_context=req.prior_context,
+        tool=req.tool,
+        dataset_id=req.dataset_id,
+        sheet_id=target_sheet_id
+    )
+
+    # 1. Executable analytical calculations and follow-up refinements take top priority
+    if intent_type in ("ANALYTICAL_CALCULATION", "FOLLOW_UP_REFINEMENT"):
+        plan = plan_analytical_query(
+            req.query,
+            dataset_id=req.dataset_id,
+            sheet_id=target_sheet_id,
+            prior_context=req.prior_context
+        )
+        if plan:
+            def _analytical_stream():
+                t_stream_start = time.perf_counter()
+                grain_desc = "employee-level" if plan.entity_grain == "employee" else "department-level"
+                yield f"event: status\ndata: {json.dumps({'phase': 'planning', 'message': f'Resolving analytical query plan ({grain_desc})…', 'step': 'planning'})}\n\n"
+
+                yield f"event: status\ndata: {json.dumps({'phase': 'tool', 'message': f'Executing deterministic {plan.entity_grain} calculation…', 'step': 'executing'})}\n\n"
+                plan_res = execute_analytical_plan(plan)
+
+                # Grain consistency validation
+                if plan.entity_grain == 'employee' and plan_res.get('evidence', {}).get('result_grain') != 'employee':
+                    raise ValueError("Grain mismatch: Expected employee-level evidence but received department aggregate.")
+
+                yield f"event: status\ndata: {json.dumps({'phase': 'validating', 'message': 'Validating evidence against active dataset…', 'step': 'validating'})}\n\n"
+
+                duration_ms = (time.perf_counter() - t_stream_start) * 1000
+                res = {
+                    "query": req.query,
+                    "answer": plan_res["answer"],
+                    "model_used": "Verified analytical query planner",
+                    "tool_used": "analytical_plan",
+                    "status": plan_res.get("status", "success"),
+                    "evidence": plan_res.get("evidence"),
+                    "calculation": plan_res.get("raw_analysis"),
+                    "prior_context": plan_res.get("prior_context"),
+                    "artifacts": [],
+                    "citations": plan_res.get("citations", []),
+                    "exact_matches": [],
+                    "suggested_questions": plan_res.get("suggested_questions", [
+                        "What is the attendance breakdown by department?",
+                        "Which department has the lowest attendance in July?",
+                        "Show weekly attendance drilldown"
+                    ]),
+                    "visual_charts": [],
+                    "related_rows": plan_res.get("evidence", {}).get("coverage", {}).get("used_rows", len(df) if df is not None else 0),
+                    "timings": {
+                        "total_ms": round(duration_ms, 1),
+                        "tool_ms": round(duration_ms, 1),
+                        "is_deterministic": True
+                    },
+                    "engine": "analytical_planner",
+                    "metadata": {
+                        "query_plan": plan_res.get("query_plan"),
+                        "snapshot_hash": plan_res.get("evidence", {}).get("snapshot_hash")
+                    }
+                }
+                res = finalize_identity_response(res, req.query)
+
+                words = res["answer"].split(" ")
+                for i in range(0, len(words), 4):
+                    chunk = " ".join(words[i:i+4]) + " "
+                    yield f"event: token\ndata: {json.dumps({'token': chunk})}\n\n"
+                yield f"event: done\ndata: {json.dumps(res)}\n\n"
+
+            return StreamingResponse(
+                _analytical_stream(),
+                media_type="text/event-stream",
+                headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"}
+            )
+
+    # 2. Fact retrieval via shared findings store
+    if intent_type == "FACT_RETRIEVAL" and sid is not None:
         direct_ans = _answer_from_shared_findings(req.query, sid, name or "Uploaded Dataset")
         if direct_ans is not None:
             direct_ans = finalize_identity_response(direct_ans, req.query)
@@ -482,6 +722,7 @@ def ask_copilot_stream(req: CopilotQueryRequest):
                 headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"}
             )
 
+    # 3. War room deliberation for general strategic chat
     if req.engine == "war_room" or (req.engine == "auto" and not req.tool):
         return StreamingResponse(
             UnionWarRoomEngine.stream_war_room_deliberation(
@@ -489,7 +730,8 @@ def ask_copilot_stream(req: CopilotQueryRequest):
                 df=df,
                 sheet_name=name,
                 context=ctx,
-                timeout_seconds=req.timeout_seconds or 60.0
+                timeout_seconds=req.timeout_seconds or 60.0,
+                prior_context=req.prior_context
             ),
             media_type="text/event-stream",
             headers={
@@ -566,7 +808,8 @@ def ask_union_war_room(req: CopilotQueryRequest):
         df=df,
         sheet_name=name,
         context=ctx,
-        timeout_seconds=req.timeout_seconds or 60.0
+        timeout_seconds=req.timeout_seconds or 60.0,
+        prior_context=req.prior_context
     )
 
 
@@ -580,7 +823,8 @@ def stream_union_war_room(req: CopilotQueryRequest):
             df=df,
             sheet_name=name,
             context=ctx,
-            timeout_seconds=req.timeout_seconds or 60.0
+            timeout_seconds=req.timeout_seconds or 60.0,
+            prior_context=req.prior_context
         ),
         media_type="text/event-stream",
         headers={

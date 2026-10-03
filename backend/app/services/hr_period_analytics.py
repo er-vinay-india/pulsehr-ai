@@ -37,8 +37,13 @@ MONTH_ORDER = {
 def parse_period_column(col_name: str, known_year: int | None = None) -> tuple[int, int, str, int | None, int] | None:
     """Extracts start_day, end_day, month, year, length_days from a period header."""
     s = col_name.strip().lower()
+    # Reject engineered or composite interaction columns
+    if s.startswith(('interact_', 'interact_mean_', 'interact_ratio_')) or '+' in s or '_over_' in s or '/' in s:
+        return None
+    # Strip optional wrapping like 'leaves(...)' or 'attendance(...)'
+    inner = re.sub(r'^(?:leaves|leave|attendance|attended)\s*\((.*?)\)$', r'\1', s)
     # Match patterns like '1st to 5th july', '6th to 12th july', '27th-31st july', '1st to 5th july 2026'
-    m = re.search(r'(\d+)(?:st|nd|rd|th)?\s*(?:to|-)\s*(\d+)(?:st|nd|rd|th)?\s+([a-z]+)(?:\s+(\d{4}))?', s)
+    m = re.search(r'(\d+)(?:st|nd|rd|th)?\s*(?:to|-)\s*(\d+)(?:st|nd|rd|th)?\s+([a-z]+)(?:\s+(\d{4}))?', inner)
     if m:
         start_d = int(m.group(1))
         end_d = int(m.group(2))

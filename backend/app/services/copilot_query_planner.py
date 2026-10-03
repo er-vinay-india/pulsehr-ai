@@ -43,7 +43,7 @@ from .decision_intelligence import (
     period_header,
     value,
 )
-from .hr_period_analytics import analyze_hr_attendance_sheet, parse_period_column
+from .hr_period_analytics import analyze_hr_attendance_sheet, parse_period_column, extract_normalized_periods, find_column_by_role
 
 QueryIntent = Literal[
     'ranking',
@@ -55,7 +55,8 @@ QueryIntent = Literal[
     'summary_concerns',
     'summary_actions',
     'followup_why',
-    'ranking_followup'
+    'ranking_followup',
+    'threshold_filter'
 ]
 SortDirection = Literal['lowest', 'highest', 'all']
 
@@ -65,8 +66,13 @@ MONTH_NAMES = (
 )
 
 
-@dataclass
-class AnalyticalQueryPlan:
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class AnalyticalQueryPlan(BaseModel):
+    """Pydantic model representing a validated analytical execution plan."""
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="allow")
+
     intent: QueryIntent
     metric: str | None = None  # Resolved column name or standard metric key
     secondary_metric: str | None = None  # For correlation/causation questions
@@ -81,9 +87,14 @@ class AnalyticalQueryPlan:
     snapshot_id: str | None = None
     prior_context: dict[str, Any] | None = None
     explanation: str = ''
-    available_metrics: list[str] = field(default_factory=list)
-    available_dimensions: list[str] = field(default_factory=list)
+    available_metrics: list[str] = Field(default_factory=list)
+    available_dimensions: list[str] = Field(default_factory=list)
     clarification_question: str | None = None
+    entity_grain: Literal['department', 'employee'] = 'department'
+    identifier_col: str | None = None
+    additional_fields: list[str] = Field(default_factory=list)
+    threshold_operator: str | None = None
+    threshold_value: float | None = None
 
 
 def resolve_metric_direction(metric_name: str | None, cols: list[str] | None = None, rows: list[dict] | None = None) -> str:
@@ -152,13 +163,13 @@ def _resolve_candidate_sheets(
         return rows
     elif dataset_id:
         rows = conn.execute(
-            "SELECT s.*, d.original_name FROM sheets s JOIN dataset_uploads d ON d.id=s.dataset_id WHERE s.dataset_id=? ORDER BY s.id ASC",
+            "SELECT s.*, d.original_name FROM sheets s JOIN dataset_uploads d ON d.id=s.dataset_id WHERE s.dataset_id=? ORDER BY s.row_count DESC, s.id ASC",
             (dataset_id,)
         ).fetchall()
         return rows
     else:
         rows = conn.execute(
-            "SELECT s.*, d.original_name FROM sheets s JOIN dataset_uploads d ON d.id=s.dataset_id ORDER BY s.id ASC"
+            "SELECT s.*, d.original_name FROM sheets s JOIN dataset_uploads d ON d.id=s.dataset_id ORDER BY s.row_count DESC, s.id ASC"
         ).fetchall()
         return rows
 
@@ -172,19 +183,106 @@ def _inspect_sheet_schema(sheet_record) -> tuple[list[str], list[str], list[str]
     date_cols = []
     has_wide_periods = any(period_header(c) for c in cols)
 
+    profile_map = {}
+    try:
+        if "profile_json" in sheet_record.keys() and sheet_record["profile_json"]:
+            p_list = json.loads(sheet_record["profile_json"])
+            if isinstance(p_list, list):
+                profile_map = {item.get("column"): item for item in p_list if isinstance(item, dict) and "column" in item}
+    except Exception:
+        profile_map = {}
+
+    dim_pattern = re.compile(
+        r'department|dept|team|division|region|channel|campaign|category|status|product|store|location|severity|priority|system|'
+        r'make|model|brand|car|vehicle|type|segment|color|colour|role|group|class|gender|country|city|state',
+        re.I
+    )
+
     for c in cols:
         if identity(c):
             continue
         c_norm = c.lower()
+        p_item = profile_map.get(c, {})
+        is_numeric = bool(p_item.get("numeric"))
+        has_cats = bool(p_item.get("category_labels"))
+        distinct_count = p_item.get("distinct", 0)
+
         if re.search(r'\b(date|timestamp|datetime|week|month|year|day)\b', c_norm):
             date_cols.append(c)
-        elif re.search(r'department|dept|team|division|region|channel|campaign|category|status|product|store|location|severity|priority|system', c_norm):
+        elif not c.startswith("interact_") and (dim_pattern.search(c_norm) or (has_cats and not is_numeric and 1 < distinct_count <= 250)):
             dimensions.append(c)
         elif not period_header(c):
             measures.append(c)
 
-    # If domain is People Operations and attendance/leave keywords appear, ensure HR aliases are represented
     return measures, dimensions, date_cols, has_wide_periods, domain
+
+
+def plan_with_council_qwen(
+    query: str,
+    all_measures: list[str],
+    all_dimensions: list[str],
+    dataset_id: int | None = None,
+    sheet_id: int | None = None,
+    prior_context: dict[str, Any] | None = None
+) -> AnalyticalQueryPlan | None:
+    """Uses Qwen 3.5 via ModelGateway with CouncilPlan Pydantic schema when heuristics fall through."""
+    if not all_measures and not all_dimensions and dataset_id is None and sheet_id is None:
+        return None
+    try:
+        from .gateway.model_gateway import ModelGateway
+        from ..core.models_config import ModelRole
+        from .copilot.council_contracts import CouncilPlan, TaskType
+
+        measures_str = ", ".join(all_measures[:12]) if all_measures else "None"
+        dimensions_str = ", ".join(all_dimensions[:6]) if all_dimensions else "None"
+
+        prompt = f"""You are the Qwen 3.5 Analytical Query Planner on the Executive AI Council.
+Analyze the user's natural language question and extract a strictly typed CouncilPlan.
+
+Available measures: {measures_str}
+Available grouping dimensions: {dimensions_str}
+Prior context: {prior_context or 'None'}
+
+User Question: "{query}"
+
+Rules:
+1. If the user asks about people, staff, workers, individuals (e.g. 'worst employee', 'who came less', 'who slacked off'), entity_grain MUST be 'employee'.
+2. If the user asks about teams, departments, units, entity_grain MUST be 'department'.
+3. Metric should be one of the available measures or a recognized standard (e.g. 'Attendance', 'Approved Leaves', 'Sales').
+4. Return ONLY valid JSON matching the CouncilPlan schema.
+"""
+        res = ModelGateway.generate(
+            role=ModelRole.ANALYST,
+            prompt=prompt,
+            response_schema=CouncilPlan,
+            step_name="qwen_council_plan_extraction",
+            temperature_override=0.0,
+            max_retries=1
+        )
+        if res.parsed:
+            cp: CouncilPlan = res.parsed
+            if cp.task_type in (TaskType.CONCEPTUAL_EXPLANATION, TaskType.GENERAL_CHAT):
+                return None
+            grain = cp.entity_grain.value if cp.entity_grain.value in ("employee", "department") else "department"
+            return AnalyticalQueryPlan(
+                intent=cp.operation.value if cp.operation else "ranking",
+                metric=cp.metric,
+                secondary_metric=cp.secondary_metric,
+                entity_dimension="Department" if grain == "department" else "Employee",
+                direction=cp.direction,
+                ranking_limit=cp.ranking_limit,
+                additional_fields=cp.additional_fields,
+                threshold_operator=cp.threshold_operator,
+                threshold_value=cp.threshold_value,
+                entity_grain=grain,
+                dataset_id=dataset_id,
+                sheet_id=sheet_id,
+                prior_context=prior_context,
+                explanation=cp.explanation or f"Qwen 3.5 extracted CouncilPlan: {cp.operation} on {cp.metric} at {grain} grain."
+            )
+    except Exception:
+        pass
+    return None
 
 
 def plan_analytical_query(
@@ -286,28 +384,203 @@ def plan_analytical_query(
             explanation="Extracts proposed next steps and actions supported by verified findings."
         )
 
-    # Check Ranking follow-up ("show the bottom three", "show the top 5", "show bottom 3")
-    ranking_followup_match = re.search(r'\b(?:show\s+(?:the\s+)?)?(top|bottom|worst|best)\s*(\d+|three|two|four|five)?\b', q)
-    if ranking_followup_match and active_prior and active_prior.get('metric'):
-        dir_word = ranking_followup_match.group(1)
-        cnt_word = ranking_followup_match.group(2)
-        count = int(cnt_word) if cnt_word and cnt_word.isdigit() else (num_map.get(cnt_word, 3) if cnt_word else 3)
-        metric = active_prior.get('metric')
-        m_dir = resolve_metric_direction(metric)
-        if dir_word in ('bottom', 'worst'):
-            direction = 'highest' if m_dir == 'higher_is_worse' else 'lowest'
+    # Extract requested time window / month early
+    time_window = None
+    for m in MONTH_NAMES:
+        if re.search(rf'\b{m}\b', q):
+            time_window = m.title()
+            break
+
+    # 1. Follow-up for Employee ID ("i need employee id", "give me employee id", "show id")
+    is_id_followup = any(p in q for p in (
+        'employee id', 'show id', 'need id', 'need employee id', 'give me id',
+        'give me employee id', 'emp id', 'i need id', 'show emp id'
+    ))
+    if is_id_followup and not any(k in q for k in ('who is', 'coming', 'calculate and')):
+        if active_prior and (active_prior.get('last_ranking') or active_prior.get('metric') or active_prior.get('last_intent')):
+            return AnalyticalQueryPlan(
+                intent='ranking',
+                metric=active_prior.get('metric', 'attendance'),
+                entity_grain='employee',
+                identifier_col='ID',
+                direction=active_prior.get('direction', 'lowest'),
+                time_window=active_prior.get('time_window'),
+                ranking_limit=active_prior.get('ranking_limit', 10),
+                additional_fields=list(active_prior.get('additional_fields', [])),
+                threshold_operator=active_prior.get('threshold_operator'),
+                threshold_value=active_prior.get('threshold_value'),
+                prior_context=active_prior,
+                dataset_id=dataset_id,
+                sheet_id=sheet_id,
+                explanation="Refines previous ranking to employee ID grain."
+            )
         else:
-            direction = 'lowest' if m_dir == 'higher_is_worse' else 'highest'
+            return AnalyticalQueryPlan(
+                intent='ambiguity_clarification',
+                clarification_question="Please specify which metric or evaluation you would like employee IDs for (for example: attendance ranking or approved leaves).",
+                dataset_id=dataset_id,
+                sheet_id=sheet_id,
+                prior_context=active_prior,
+                explanation="Identifier requested without prior analytical question; prompts for clarification."
+            )
+
+    # 2. Follow-up for adding department to employee ranking ("show department also", "add department")
+    is_dept_field_followup = any(p in q for p in (
+        'show department also', 'add department', 'with department', 'include department',
+        'department also', 'show department as well', 'and department', 'department too'
+    ))
+    if is_dept_field_followup and active_prior and (active_prior.get('metric') or active_prior.get('last_ranking')):
+        add_fields = list(active_prior.get('additional_fields', []))
+        if 'Department' not in add_fields:
+            add_fields.append('Department')
         return AnalyticalQueryPlan(
             intent='ranking',
-            metric=metric,
-            entity_dimension=active_prior.get('dimension') or 'Department',
-            direction=direction,
-            ranking_limit=count,
+            metric=active_prior.get('metric', 'attendance'),
+            entity_grain=active_prior.get('entity_grain', 'employee'),
+            identifier_col=active_prior.get('identifier_col', 'ID'),
+            direction=active_prior.get('direction', 'lowest'),
+            time_window=active_prior.get('time_window'),
+            ranking_limit=active_prior.get('ranking_limit', 10),
+            additional_fields=add_fields,
+            threshold_operator=active_prior.get('threshold_operator'),
+            threshold_value=active_prior.get('threshold_value'),
             prior_context=active_prior,
             dataset_id=dataset_id,
             sheet_id=sheet_id,
-            explanation=f"Followup ranking query for {count} {dir_word} performers on {metric}."
+            explanation="Adds Department descriptive field while preserving employee grain."
+        )
+
+    # 3. Limit refinement ("only top 3", "top 3", "show bottom 3", "only 3", "limit to 5")
+    limit_match = re.search(r'\b(?:only\s+)?(?:show\s+(?:the\s+)?)?(top|bottom|worst|best)?\s*(\d+|three|two|four|five|six|seven|eight|nine|ten)\b', q)
+    if limit_match and active_prior and (active_prior.get('metric') or active_prior.get('last_ranking')):
+        dir_word = limit_match.group(1)
+        cnt_token = limit_match.group(2)
+        if cnt_token or 'only' in q:
+            count = int(cnt_token) if cnt_token and cnt_token.isdigit() else (num_map.get(cnt_token, 3) if cnt_token else 3)
+            prior_dir = active_prior.get('direction', 'lowest')
+            metric = active_prior.get('metric', 'attendance')
+            m_dir = resolve_metric_direction(metric)
+            if 'only' in q or dir_word == 'top':
+                direction = prior_dir
+            elif dir_word in ('bottom', 'worst'):
+                direction = 'highest' if m_dir == 'higher_is_worse' else 'lowest'
+            elif dir_word in ('best', 'highest'):
+                direction = 'lowest' if m_dir == 'higher_is_worse' else 'highest'
+            else:
+                direction = prior_dir
+
+            return AnalyticalQueryPlan(
+                intent='ranking',
+                metric=metric,
+                entity_grain=active_prior.get('entity_grain', 'employee'),
+                entity_dimension=active_prior.get('dimension') or 'Department',
+                identifier_col=active_prior.get('identifier_col', 'ID'),
+                direction=direction,
+                ranking_limit=count,
+                time_window=active_prior.get('time_window'),
+                additional_fields=list(active_prior.get('additional_fields', [])),
+                threshold_operator=active_prior.get('threshold_operator'),
+                threshold_value=active_prior.get('threshold_value'),
+                prior_context=active_prior,
+                dataset_id=dataset_id,
+                sheet_id=sheet_id,
+                explanation=f"Followup ranking query limiting to {count} while preserving context."
+            )
+
+    # 4. Threshold queries ("who came less than 10 days?", "less than 10 days")
+    thresh_match = re.search(r'\b(?:who\s+came\s+|who\s+attended\s+|who\s+has\s+)?(?:less than|<|under|fewer than|more than|>|at least|greater than)\s*(\d+(?:\.\d+)?)\s*(?:days?|times?)?\b', q)
+    if thresh_match:
+        val = float(thresh_match.group(1))
+        op = '<' if any(k in q for k in ('less than', '<', 'under', 'fewer than')) else '>='
+        return AnalyticalQueryPlan(
+            intent='threshold_filter',
+            metric='attendance',
+            entity_grain='employee',
+            identifier_col='ID',
+            direction='lowest',
+            time_window=time_window,
+            ranking_limit=50,
+            threshold_operator=op,
+            threshold_value=val,
+            prior_context=active_prior,
+            dataset_id=dataset_id,
+            sheet_id=sheet_id,
+            explanation=f"Filters employees with attendance {op} {val} days."
+        )
+
+    # 5. Low/infrequent attendance employee queries ("who is not coming regularly", "worst employee details", "how much he absent")
+    is_person_grain = bool(re.search(r'\b(who|whom|employee|employees|person|people|staff|worker|workers)\b', q))
+    has_id_signal = bool(re.search(r'\b(employee id|emp id|id)\b', q))
+    has_details_signal = any(k in q for k in ('detail', 'details', 'department', 'dept', 'absent', 'absence', 'how much', 'which department'))
+
+    is_low_att_phrase = any(phrase in q for phrase in (
+        'not coming regularly', 'coming very less', 'came very less', 'came least',
+        'least attendance', 'lowest attendance', 'not regular', 'irregular attendance',
+        'attended least', 'attended lowest', 'who is not coming', 'who came least', 'who is coming very less',
+        'worst employee', 'worst staff', 'worst worker', 'poorest attendance', 'underperforming employee',
+        'most absent', 'highest absent', 'how much he absent', 'how much she absent', 'how much they absent',
+        'absent most', 'most absence', 'highest absence', 'absenteeism'
+    )) or bool(re.search(r'\bwho\b.*\b(?:not coming|coming less|came less|least|lowest|absent|worst)\b', q)) \
+       or (is_person_grain and any(w in q for w in ('worst', 'lowest', 'least', 'bottom', 'absent', 'absence', 'poorest', 'lagging')) and not any(k in q for k in ('how many employees', 'total employees', 'by department', 'in each department')))
+
+    if is_low_att_phrase and is_person_grain:
+        limit = 10
+        word_num_map = {'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5, 'six': 6, 'seven': 7, 'eight': 8, 'nine': 9, 'ten': 10}
+        limit_m = re.search(r'\b(?:top|bottom|worst|least|first)\s*(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\b', q)
+        if not limit_m:
+            limit_m = re.search(r'\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s*(?:employees?|people|staff|workers?|person)\b', q)
+        if not limit_m:
+            limit_m = re.search(r'\b(?:which|show|give|limit to|only)\s*(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\b', q)
+        if limit_m:
+            tok = limit_m.group(1).lower()
+            limit = int(tok) if tok.isdigit() else word_num_map.get(tok, 10)
+        add_fields = list(active_prior.get('additional_fields', [])) if active_prior else []
+        if has_details_signal and 'Department' not in add_fields:
+            add_fields.append('Department')
+        return AnalyticalQueryPlan(
+            intent='ranking',
+            metric='attendance',
+            entity_grain='employee',
+            identifier_col='ID' if has_id_signal else None,
+            direction='lowest',
+            time_window=time_window,
+            ranking_limit=limit,
+            additional_fields=add_fields,
+            prior_context=active_prior,
+            dataset_id=dataset_id,
+            sheet_id=sheet_id,
+            explanation="Evaluates full population across employees to identify lowest recorded attendance and absence details."
+        )
+
+    # 6. High attendance employee queries
+    is_high_att_phrase = any(phrase in q for phrase in (
+        'coming most', 'came most', 'highest attendance', 'most attendance',
+        'best attendance', 'attended most', 'attended highest', 'best employee',
+        'top employee', 'highest performing employee'
+    )) or bool(re.search(r'\bwho\b.*\b(?:most attendance|highest attendance|came most|best)\b', q)) \
+       or (is_person_grain and any(w in q for w in ('best', 'highest', 'most', 'top', 'peak', 'premier', 'leading')) and not any(k in q for k in ('how many employees', 'total employees', 'by department', 'in each department')))
+
+    if is_high_att_phrase and is_person_grain:
+        limit = 10
+        limit_m = re.search(r'\b(?:top|best|first)\s*(\d+)\b', q)
+        if limit_m:
+            limit = int(limit_m.group(1))
+        add_fields = list(active_prior.get('additional_fields', [])) if active_prior else []
+        if has_details_signal and 'Department' not in add_fields:
+            add_fields.append('Department')
+        return AnalyticalQueryPlan(
+            intent='ranking',
+            metric='attendance',
+            entity_grain='employee',
+            identifier_col='ID' if has_id_signal else None,
+            direction='highest',
+            time_window=time_window,
+            ranking_limit=limit,
+            additional_fields=add_fields,
+            prior_context=active_prior,
+            dataset_id=dataset_id,
+            sheet_id=sheet_id,
+            explanation="Evaluates full population across employees to identify highest recorded attendance."
         )
 
     # Inspect candidate sheets schema in DB if available
@@ -394,13 +667,14 @@ def plan_analytical_query(
             )
 
     # 2. RESOLVE GROUPING DIMENSION
-    entity_dimension = 'Department'
+    entity_dimension = None
     if all_dimensions:
         for dim in all_dimensions:
             d_norm = dim.lower()
             if d_norm in q or (d_norm == 'department' and any(k in q for k in ('dept', 'department'))) or \
                (d_norm == 'store' and 'store' in q) or (d_norm == 'team' and 'team' in q) or \
-               (d_norm == 'severity' and 'severity' in q):
+               (d_norm == 'severity' and 'severity' in q) or \
+               (d_norm in ('make', 'car', 'model', 'brand', 'vehicle') and any(k in q for k in ('car', 'cars', 'make', 'brand', 'model', 'vehicle', 'vehicles'))):
                 entity_dimension = dim
                 break
         else:
@@ -413,6 +687,14 @@ def plan_analytical_query(
                 entity_dimension = 'Team'
             elif any(k in q for k in ('by division', 'which division')):
                 entity_dimension = 'Division'
+            elif any(k in q for k in ('car', 'cars', 'vehicle', 'vehicles', 'automobile')):
+                car_dim = next((d for d in all_dimensions if d.lower() in ('make', 'model', 'brand', 'car', 'vehicle')), None)
+                entity_dimension = car_dim or all_dimensions[0]
+            elif any(k in q for k in ('dept', 'department', 'by department', 'which department')):
+                dept_dim = next((d for d in all_dimensions if 'dept' in d.lower()), None)
+                entity_dimension = dept_dim or 'Department'
+            elif detected_domain == "People operations" and any('dept' in d.lower() for d in all_dimensions):
+                entity_dimension = next(d for d in all_dimensions if 'dept' in d.lower())
             else:
                 entity_dimension = all_dimensions[0]
     else:
@@ -424,6 +706,12 @@ def plan_analytical_query(
             entity_dimension = 'Division'
         elif 'severity' in q:
             entity_dimension = 'Severity'
+        elif any(k in q for k in ('car', 'cars', 'vehicle', 'make')):
+            entity_dimension = 'Make'
+        elif any(k in q for k in ('dept', 'department')) or detected_domain == "People operations":
+            entity_dimension = 'Department'
+        else:
+            entity_dimension = 'Department'
 
     # 3. RESOLVE METRIC ACROSS DOMAINS
     metric = None
@@ -468,6 +756,16 @@ def plan_analytical_query(
                                         'by store', 'across stores', 'by severity', 'breakdown by'))
 
     if not (is_worst or is_best or is_breakdown) and not (active_prior and active_prior.get('metric')):
+        council_res = plan_with_council_qwen(
+            query=q,
+            all_measures=all_measures,
+            all_dimensions=all_dimensions,
+            dataset_id=dataset_id,
+            sheet_id=sheet_id,
+            prior_context=active_prior
+        )
+        if council_res:
+            return council_res
         return None
 
     # Context inheritance: If metric is absent, check prior context
@@ -475,36 +773,74 @@ def plan_analytical_query(
         if active_prior and active_prior.get('metric'):
             metric = active_prior['metric']
         elif is_worst or is_best:
-            # Ambiguous worst/best query with no metric in query or prior context:
-            # DO NOT guess attendance! DO NOT invent a synthetic composite score!
-            # Ask ONE focused clarification question presenting available metrics.
-            disp_dim = entity_dimension.lower()
-            avail = [m for m in all_measures if not identity(m)][:5]
-            if not avail and has_wide_periods:
-                avail = ['Attendance', 'Approved Leaves']
-            elif not avail:
-                avail = ['Attendance', 'Approved Leaves']
+            # Only trigger ambiguity clarification if user explicitly asked about an entity/dimension grain
+            # (e.g. 'which department is worst?', 'which store is worst?', 'which team is worst?').
+            # Do NOT hijack general domain questions (like 'which car is worst performing') where Council deliberation is expected!
+            is_explicit_dim_query = False
+            if any(k in q for k in ('department', 'dept', 'team', 'division', 'store', 'severity')):
+                is_explicit_dim_query = True
+            elif entity_dimension and entity_dimension.lower() in q:
+                is_explicit_dim_query = True
 
-            label_dir = "worst" if is_worst else "best"
-            measures_str = ", ".join(f"**{m}**" for m in avail)
-            clarification = (
-                f"To identify the {label_dir}-performing **{disp_dim}**, please specify which metric you would like to evaluate "
-                f"(for example: {measures_str}). Different metrics represent different operational dimensions, "
-                f"so HighView (powered by HRIDAY) does not assume a default metric or combine measures into an unverified composite score."
-            )
-            return AnalyticalQueryPlan(
-                intent='ambiguity_clarification',
-                metric=None,
-                entity_dimension=entity_dimension,
-                direction='lowest' if is_worst else 'highest',
+            if is_explicit_dim_query and all_measures:
+                if any(k in q for k in ('dept', 'department')):
+                    disp_dim = 'department'
+                elif 'store' in q:
+                    disp_dim = 'store'
+                elif 'team' in q:
+                    disp_dim = 'team'
+                elif 'severity' in q:
+                    disp_dim = 'severity'
+                else:
+                    disp_dim = entity_dimension.lower() if entity_dimension else 'department'
+                avail = [m for m in all_measures if not identity(m)][:5]
+                if not avail and has_wide_periods:
+                    avail = ['Attendance', 'Approved Leaves']
+                elif not avail:
+                    avail = ['Attendance', 'Approved Leaves']
+
+                label_dir = "worst" if is_worst else "best"
+                measures_str = ", ".join(f"**{m}**" for m in avail)
+                clarification = (
+                    f"To identify the {label_dir}-performing **{disp_dim}**, please specify which metric you would like to evaluate "
+                    f"(for example: {measures_str}). Different metrics represent different operational dimensions, "
+                    f"so HighView (powered by HRIDAY) does not assume a default metric or combine measures into an unverified composite score."
+                )
+                return AnalyticalQueryPlan(
+                    intent='ambiguity_clarification',
+                    metric=None,
+                    entity_dimension=entity_dimension or 'Department',
+                    direction='lowest' if is_worst else 'highest',
+                    dataset_id=dataset_id,
+                    sheet_id=sheet_id,
+                    prior_context=active_prior,
+                    explanation="Ambiguous performance query without metric specification; prompts for clarification.",
+                    available_metrics=avail,
+                    clarification_question=clarification
+                )
+            else:
+                council_res = plan_with_council_qwen(
+                    query=q,
+                    all_measures=all_measures,
+                    all_dimensions=all_dimensions,
+                    dataset_id=dataset_id,
+                    sheet_id=sheet_id,
+                    prior_context=active_prior
+                )
+                if council_res:
+                    return council_res
+                return None
+        else:
+            council_res = plan_with_council_qwen(
+                query=q,
+                all_measures=all_measures,
+                all_dimensions=all_dimensions,
                 dataset_id=dataset_id,
                 sheet_id=sheet_id,
-                prior_context=active_prior,
-                explanation="Ambiguous performance query without metric specification; prompts for clarification.",
-                available_metrics=avail,
-                clarification_question=clarification
+                prior_context=active_prior
             )
-        else:
+            if council_res:
+                return council_res
             return None
 
     # Determine direction / intent respecting metric direction of concern
@@ -605,6 +941,11 @@ def execute_analytical_plan(plan: AnalyticalQueryPlan, conn=None) -> dict[str, A
         def score_sheet(s_record):
             score = 0
             cols = [c.lower() for c in json.loads(s_record["columns_json"] or "[]")]
+            if plan.entity_grain == 'employee':
+                if any(k in c for k in ('id', 'employee', 'name') for c in cols):
+                    score += 150
+                if any('attendance' in c or 'attended' in c for c in cols):
+                    score += 120
             dim = (plan.entity_dimension or "department").lower()
             if any(dim in c for c in cols):
                 score += 100
@@ -649,7 +990,14 @@ def execute_analytical_plan(plan: AnalyticalQueryPlan, conn=None) -> dict[str, A
         is_hr_attendance_metric = plan.metric in ('attendance', 'leaves', 'final_attendance', 'headcount')
         has_attendance_cols = any(re.search(r'attendance|attended|leave|absent', c, re.I) for c in cols)
         if (has_wide_periods or has_attendance_cols) and is_hr_attendance_metric:
-            return _execute_hr_period_attendance_query(plan, sheet, cols, rows, conn, snapshot_hash)
+            if plan.entity_grain == 'employee':
+                res = _execute_employee_attendance_query(plan, sheet, cols, rows, conn, snapshot_hash)
+            else:
+                res = _execute_hr_period_attendance_query(plan, sheet, cols, rows, conn, snapshot_hash)
+            # Enforce grain consistency validation
+            if plan.entity_grain == 'employee' and res.get('evidence', {}).get('result_grain') == 'department':
+                raise ValueError("Grain mismatch: Expected employee-level evidence but received department aggregate.")
+            return res
 
         # 8. GENERAL TABULAR ANALYTICAL EXECUTION (Sales, IT, Marketing, General HR)
         return _execute_general_tabular_query(plan, sheet, cols, rows, brief, snapshot_hash)
@@ -1439,6 +1787,7 @@ def _execute_hr_period_attendance_query(
             "source_ids": [sheet["id"]],
             "snapshot_hash": snapshot_hash,
             "metric_definition": metric_display_name,
+            "result_grain": "department",
             "period": period_lbl,
             "filters": {"dimension": plan.entity_dimension},
             "calculation_method": "Full-population aggregation with calendar constraint cross-validation and dense ranking for ties.",
@@ -1458,6 +1807,396 @@ def _execute_hr_period_attendance_query(
                 "text": f"Evaluated all {res['total_evaluated_records']} records ({distinct_emp} distinct employees) across {len(depts)} departments.",
                 "type": "deterministic_full_population"
             }
+        ]
+    }
+
+
+def _execute_employee_attendance_query(
+    plan: AnalyticalQueryPlan,
+    sheet: sqlite3.Row,
+    cols: list[str],
+    rows: list[dict[str, Any]],
+    conn,
+    snapshot_hash: str
+) -> dict[str, Any]:
+    """Executes deterministic employee-level attendance analytics and rankings."""
+    df = pd.DataFrame(rows, columns=cols)
+    total_records = len(df)
+
+    # 1. Identify primary columns
+    id_col = None
+    for c in cols:
+        c_clean = c.strip().lower().replace(' ', '').replace('_', '')
+        if c_clean in ('id', 'employeeid', 'empid', 'staffid'):
+            id_col = c
+            break
+    if not id_col:
+        for c in cols:
+            if 'id' in c.strip().lower() and not any(k in c.lower() for k in ('valid', 'guid', 'mid', 'paid')):
+                id_col = c
+                break
+
+    name_col = None
+    for c in cols:
+        c_clean = c.strip().lower().replace(' ', '').replace('_', '')
+        if c_clean in ('fullname', 'employeename', 'name', 'staffname'):
+            name_col = c
+            break
+
+    dept_col = None
+    for c in cols:
+        if 'department' in c.strip().lower() or 'dept' in c.strip().lower():
+            dept_col = c
+            break
+
+    # If no identifier column exists, return specific limitation
+    target_id_col = id_col or name_col
+    if not target_id_col:
+        return {
+            "status": "identifier_missing",
+            "query_plan": {
+                "intent": plan.intent,
+                "metric": plan.metric,
+                "entity_grain": "employee",
+                "source_sheet": sheet["name"],
+                "dataset_id": sheet["dataset_id"],
+                "sheet_id": sheet["id"]
+            },
+            "answer": (
+                f"### Employee Identifier Not Available\n\n"
+                f"Sheet **{sheet['name']}** does not contain an identifiable Employee ID or Name column. "
+                "Employee-level calculations require an explicit entity identifier."
+            ),
+            "evidence": {
+                "source_ids": [sheet["id"]],
+                "snapshot_hash": snapshot_hash,
+                "status": "identifier_missing",
+                "result_grain": "employee",
+                "caveats": ["No usable employee identifier column found."]
+            },
+            "citations": []
+        }
+
+    # Preserve string ID representation to prevent dropping leading zeros
+    if id_col and id_col in df.columns:
+        df[id_col] = df[id_col].astype(str).str.strip()
+
+    # 2. Extract periods and resolve attendance measure
+    clean_cols = [c for c in cols if not (c.startswith(('interact_', 'interact_mean', 'interact_ratio')) or '+' in c or '_over_' in c or '/' in c)]
+    periods = extract_normalized_periods(clean_cols)
+
+    # Validate requested period if specified
+    if plan.time_window:
+        req_clean = plan.time_window.strip().lower()
+        req_month = next((m for m in MONTH_NAMES if m in req_clean), req_clean)
+        req_year_m = re.search(r'\b(20\d\d)\b', req_clean)
+        req_year = int(req_year_m.group(1)) if req_year_m else None
+
+        avail_periods = []
+        for p in periods:
+            if req_month not in p.month.lower() and p.month.lower() not in req_clean:
+                continue
+            if req_year is not None and p.year is not None and p.year != req_year:
+                continue
+            avail_periods.append(p)
+        if not avail_periods:
+            avail_months = {p.month for p in periods}
+            avail_str = ", ".join(sorted(avail_months)) if avail_months else "None"
+            return {
+                "status": "period_unavailable",
+                "query_plan": {
+                    "intent": plan.intent,
+                    "metric": plan.metric,
+                    "entity_grain": "employee",
+                    "time_window": plan.time_window,
+                    "source_sheet": sheet["name"],
+                    "dataset_id": sheet["dataset_id"],
+                    "sheet_id": sheet["id"]
+                },
+                "answer": (
+                    f"### Period Unavailable: {plan.time_window}\n\n"
+                    f"The analysis cannot be performed for **{plan.time_window}** because no records for that period exist in the dataset. "
+                    f"Available period(s): **{avail_str}**."
+                ),
+                "evidence": {
+                    "source_ids": [sheet["id"]],
+                    "snapshot_hash": snapshot_hash,
+                    "status": "period_unavailable",
+                    "result_grain": "employee",
+                    "requested_period": plan.time_window,
+                    "available_periods": list(avail_months),
+                    "caveats": ["No period substitution allowed."]
+                },
+                "citations": []
+            }
+        periods = avail_periods
+
+    # Calculate attendance
+    tot_att_col = find_column_by_role(df, ('total attendance', 'total attended', 'monthly attendance'))
+    att_cols = [p.attendance_col for p in periods if p.attendance_col and p.attendance_col in df.columns]
+
+    if att_cols:
+        for ac in att_cols:
+            df[f'__num_{ac}'] = pd.to_numeric(df[ac], errors='coerce')
+        df['__calc_att'] = df[[f'__num_{ac}' for ac in att_cols]].sum(axis=1, min_count=1)
+    elif tot_att_col:
+        df['__calc_att'] = pd.to_numeric(df[tot_att_col], errors='coerce')
+    else:
+        att_cand = next((c for c in cols if 'attendance' in c.lower() and not c.startswith(('interact', 'leave'))), None)
+        if att_cand:
+            df['__calc_att'] = pd.to_numeric(df[att_cand], errors='coerce')
+        else:
+            return {
+                "status": "metric_missing",
+                "query_plan": {
+                    "intent": plan.intent,
+                    "metric": plan.metric,
+                    "entity_grain": "employee",
+                    "source_sheet": sheet["name"],
+                    "dataset_id": sheet["dataset_id"],
+                    "sheet_id": sheet["id"]
+                },
+                "answer": (
+                    f"### Attendance Metric Not Found\n\n"
+                    f"Sheet **{sheet['name']}** does not contain verified attendance columns."
+                ),
+                "evidence": {
+                    "source_ids": [sheet["id"]],
+                    "snapshot_hash": snapshot_hash,
+                    "status": "metric_missing",
+                    "result_grain": "employee",
+                    "caveats": ["No attendance metric found."]
+                },
+                "citations": []
+            }
+
+    if tot_att_col and tot_att_col in df.columns:
+        df['__tot_num'] = pd.to_numeric(df[tot_att_col], errors='coerce')
+        df['__att_days'] = df['__tot_num'].combine_first(df['__calc_att'])
+    else:
+        df['__att_days'] = df['__calc_att']
+
+    # Calculate approved leaves / absence if present
+    tot_leave_col = next((c for c in cols if (any(k == c.strip().lower() or k == c.strip().lower().replace('_', ' ') for k in ('approved leaves', 'approved leave', 'total approved leaves', 'total leaves', 'total leave')) or (any(k in c.strip().lower() for k in ('approved leave', 'approved leaves', 'total leave', 'total leaves')) and not parse_period_column(c)))), None)
+    leave_cols = [p.leave_col for p in periods if p.leave_col and p.leave_col in df.columns]
+
+    if leave_cols:
+        for lc in leave_cols:
+            df[f'__num_{lc}'] = pd.to_numeric(df[lc], errors='coerce')
+        df['__calc_leaves'] = df[[f'__num_{lc}' for lc in leave_cols]].sum(axis=1, min_count=1)
+    elif tot_leave_col:
+        df['__calc_leaves'] = pd.to_numeric(df[tot_leave_col], errors='coerce')
+    else:
+        leave_cand = next((c for c in cols if ('leave' in c.lower() or 'absent' in c.lower()) and not c.startswith(('interact', 'attendance'))), None)
+        if leave_cand:
+            df['__calc_leaves'] = pd.to_numeric(df[leave_cand], errors='coerce')
+        else:
+            df['__calc_leaves'] = pd.Series([None] * len(df), dtype=float)
+
+    if plan.time_window and leave_cols:
+        df['__leave_days'] = df['__calc_leaves']
+    elif tot_leave_col and tot_leave_col in df.columns:
+        df['__tot_leave_num'] = pd.to_numeric(df[tot_leave_col], errors='coerce')
+        df['__leave_days'] = df['__tot_leave_num'].combine_first(df['__calc_leaves'])
+    else:
+        df['__leave_days'] = df['__calc_leaves']
+
+    # Filter out records without usable identifiers
+    valid_id_mask = df[target_id_col].notna() & (df[target_id_col].astype(str).str.strip() != '') & (df[target_id_col].astype(str).str.strip() != 'nan')
+    df_eval = df[valid_id_mask].copy()
+
+    # Deduplicate employee records if duplicates exist
+    if id_col:
+        df_eval = df_eval.drop_duplicates(subset=[id_col], keep='first')
+
+    # Exclude non-numeric attendance cells from calculation (do not treat NaN as 0)
+    missing_count = int(df_eval['__att_days'].isna().sum())
+    valid_df = df_eval.dropna(subset=['__att_days']).copy()
+    eligible_count = len(valid_df)
+    has_leave_data = bool(valid_df['__leave_days'].notna().any())
+
+    # 3. Apply threshold filtering if specified
+    if plan.threshold_operator and plan.threshold_value is not None:
+        op = plan.threshold_operator
+        val = plan.threshold_value
+        if op == '<':
+            valid_df = valid_df[valid_df['__att_days'] < val]
+        elif op == '<=':
+            valid_df = valid_df[valid_df['__att_days'] <= val]
+        elif op == '>':
+            valid_df = valid_df[valid_df['__att_days'] > val]
+        elif op == '>=':
+            valid_df = valid_df[valid_df['__att_days'] >= val]
+        elif op == '==':
+            valid_df = valid_df[valid_df['__att_days'] == val]
+
+    # 4. Deterministic sorting and dense ranking
+    reverse_sort = (plan.direction == 'highest')
+    sort_cols = ['__att_days']
+    ascending_flags = [not reverse_sort]
+    if id_col:
+        sort_cols.append(id_col)
+        ascending_flags.append(True)
+
+    valid_df = valid_df.sort_values(by=sort_cols, ascending=ascending_flags)
+    records_list = valid_df.to_dict('records')
+
+    dense_ranked = []
+    curr_rank = 1
+    for idx, r in enumerate(records_list):
+        if idx > 0 and abs(r['__att_days'] - records_list[idx - 1]['__att_days']) > 0.001:
+            curr_rank += 1
+        r_copy = dict(r)
+        r_copy['dense_rank'] = curr_rank
+        dense_ranked.append(r_copy)
+
+    # Slice according to ranking limit
+    limit = min(plan.ranking_limit or 10, len(dense_ranked))
+    sliced = dense_ranked[:limit]
+
+    # 5. Format markdown output
+    period_str = f" ({plan.time_window})" if plan.time_window else (f" ({periods[0].month})" if periods else "")
+    show_dept = 'Department' in plan.additional_fields and dept_col is not None
+
+    lines = []
+    if plan.threshold_operator and plan.threshold_value is not None:
+        lines.append(f"### Employees with Attendance {plan.threshold_operator} {plan.threshold_value:.0f} Days{period_str}\n")
+        lines.append(f"Evaluated across **{eligible_count} distinct employees** ({len(valid_df)} employees matched threshold).\n")
+    elif plan.direction == 'lowest':
+        lines.append(f"### Lowest Recorded Attendance Employees{period_str}\n")
+        lines.append(f"Evaluated across **{eligible_count} distinct employees** under validated full-population evaluation.\n")
+    else:
+        lines.append(f"### Highest Recorded Attendance Employees{period_str}\n")
+        lines.append(f"Evaluated across **{eligible_count} distinct employees** under validated full-population evaluation.\n")
+
+    if not sliced:
+        lines.append("No employees matched the specified criteria.")
+    else:
+        # Build Markdown table
+        headers = ["Rank", "Employee ID"]
+        if name_col and name_col != id_col:
+            headers.append("Full Name")
+        if show_dept:
+            headers.append("Department")
+        headers.append("Recorded Attendance")
+        if has_leave_data:
+            headers.append("Approved Leaves")
+
+        lines.append("| " + " | ".join(headers) + " |")
+        lines.append("|" + "|".join(["---"] * len(headers)) + "|")
+
+        for r in sliced:
+            emp_id = _sanitize_untrusted_text(str(r.get(id_col, 'N/A')))
+            row_items = [f"#{r['dense_rank']}", f"**{emp_id}**"]
+            if name_col and name_col != id_col:
+                emp_name = _sanitize_untrusted_text(str(r.get(name_col, '')))
+                row_items.append(emp_name)
+            if show_dept:
+                d_val = _sanitize_untrusted_text(str(r.get(dept_col, 'N/A')))
+                row_items.append(d_val)
+            att_val = f"{r['__att_days']:.0f} days" if r['__att_days'] == int(r['__att_days']) else f"{r['__att_days']:.2f} days"
+            row_items.append(att_val)
+            if has_leave_data:
+                lv = r.get('__leave_days')
+                if pd.isna(lv):
+                    leave_val = "N/A"
+                else:
+                    leave_val = f"{lv:.0f} days" if lv == int(lv) else f"{lv:.2f} days"
+                row_items.append(leave_val)
+            lines.append("| " + " | ".join(row_items) + " |")
+
+    lines.append("\n> **Data Governance Limitations**:")
+    lines.append("> 1. **Denominators**: Scheduled workday denominators unavailable in source workbook; calculations report validated attended days without fabricated absence percentages.")
+    lines.append(f"> 2. **Coverage**: {eligible_count} valid employee records evaluated; {missing_count} missing records excluded.")
+    if has_leave_data:
+        lines.append("> 3. **Absence Records**: Approved leaves represent formal recorded leave days in source data; unrecorded absences cannot be inferred without scheduled workdays.")
+
+    answer_text = "\n".join(lines)
+
+    # Format updated prior context
+    updated_context = {
+        "dataset_id": sheet["dataset_id"],
+        "sheet_id": sheet["id"],
+        "snapshot_hash": snapshot_hash,
+        "last_intent": plan.intent,
+        "entity_grain": "employee",
+        "identifier_col": id_col or target_id_col,
+        "metric": "attendance",
+        "direction": plan.direction,
+        "ranking_limit": plan.ranking_limit or 10,
+        "time_window": plan.time_window,
+        "additional_fields": plan.additional_fields,
+        "threshold_operator": plan.threshold_operator,
+        "threshold_value": plan.threshold_value,
+        "last_ranking": [{
+            "id": str(r.get(id_col, '')),
+            "rank": r["dense_rank"],
+            "attendance": float(r["__att_days"]),
+            **({"approved_leaves": float(r["__leave_days"])} if has_leave_data and pd.notna(r.get("__leave_days")) else {}),
+            **({"department": str(r.get(dept_col, ''))} if show_dept else {})
+        } for r in sliced]
+    }
+
+    return {
+        "status": "success",
+        "query_plan": {
+            "intent": plan.intent,
+            "metric": "attendance",
+            "direction": plan.direction,
+            "entity_grain": "employee",
+            "identifier_col": id_col or target_id_col,
+            "time_window": plan.time_window,
+            "ranking_limit": plan.ranking_limit,
+            "additional_fields": plan.additional_fields,
+            "threshold_operator": plan.threshold_operator,
+            "threshold_value": plan.threshold_value,
+            "source_sheet": sheet["name"],
+            "dataset_id": sheet["dataset_id"],
+            "sheet_id": sheet["id"]
+        },
+        "answer": answer_text,
+        "evidence": {
+            "source_ids": [sheet["id"]],
+            "snapshot_hash": snapshot_hash,
+            "metric_definition": "Recorded attendance days",
+            "result_grain": "employee",
+            "calculation_method": "Full-population sum of period attendance and total attendance per employee record.",
+            "coverage": {
+                "total_records": total_records,
+                "distinct_employees": eligible_count,
+                "missing_records": missing_count,
+                "displayed_rows": len(sliced)
+            },
+            "caveats": [
+                "Scheduled workday denominators unavailable; calculations report validated attended days.",
+                "Dense ranking preserves ties; identifier tiebreaker used for deterministic ordering."
+            ]
+        },
+        "raw_analysis": {
+            "entity_grain": "employee",
+            "metric": "attendance",
+            "direction": plan.direction,
+            "rows": [{
+                "id": str(r.get(id_col, '')),
+                "rank": r["dense_rank"],
+                "attendance": float(r["__att_days"]),
+                **({"approved_leaves": float(r["__leave_days"])} if has_leave_data and pd.notna(r.get("__leave_days")) else {}),
+                **({"department": str(r.get(dept_col, ''))} if show_dept else {})
+            } for r in sliced]
+        },
+        "prior_context": updated_context,
+        "citations": [
+            {
+                "source": f"{sheet['original_name']} / {sheet['name']}",
+                "text": f"Evaluated {eligible_count} distinct employees across source records.",
+                "type": "deterministic_employee_evaluation"
+            }
+        ],
+        "suggested_questions": [
+            "i need employee id",
+            "only top 3",
+            "show department also",
+            "who came less than 10 days?"
         ]
     }
 
