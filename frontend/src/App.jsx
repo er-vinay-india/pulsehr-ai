@@ -83,6 +83,8 @@ export default function App() {
     }
     window.location.hash = tab;
     setActiveTab(tab);
+    // Re-tapping the current navigation item should return to the page start too.
+    if (tab === activeTab) window.scrollTo({ top: 0, behavior: "auto" });
   };
 
   const handleUploadStart = () => {

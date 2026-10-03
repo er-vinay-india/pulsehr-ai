@@ -1,4 +1,5 @@
 /* Responsive containment; keep scrolling inside panels rather than clipping controls. */
+.explorer-mode-short { display: none; }
 .copilot-drawer-panel {
   height: 100dvh;
   max-height: 100dvh;
@@ -36,10 +37,44 @@
   .presentation-modal-backdrop .pres-config-footer { padding-bottom: max(12px, env(safe-area-inset-bottom)); }
 }
 @media (max-width: 760px) {
+  // Clip horizontal overflow without creating ancestors that break sticky headers.
+  html, body, #root { overflow-x: clip; }
+  .app { min-height: 100dvh; }
+  .app-main {
+    padding: 16px max(clamp(12px, 4vw, 16px), env(safe-area-inset-left)) 24px max(clamp(12px, 4vw, 16px), env(safe-area-inset-right)) !important;
+  }
+  .app-header { padding-top: max(8px, env(safe-area-inset-top)); }
+  .app-header .header-inner { grid-template-columns: minmax(0, 1fr) auto; }
+  .app-footer .footer-inner { padding: 0; }
+  // The assistant is available in the persistent header; keep phone content clear.
+  .global-copilot-launcher.hriday-launcher { display: none; }
+  .page-top-header { gap: 12px; }
+  .page-top-header .page-title-row { gap: 12px; }
+  .explorer-page-header .view-mode-pill-toggle {
+    width: 100%; flex-wrap: nowrap; gap: 4px;
+    .toggle-btn { flex: 1; min-width: 0; padding-inline: 8px; }
+    .explorer-mode-long { display: none; }
+    .explorer-mode-short { display: inline; }
+  }
+  .pres-prompt-studio.pres-minimal-studio {
+    padding: 0;
+    .pres-studio-hero { margin-bottom: 16px; }
+    .pres-studio-hero .pres-stepper-nav {
+      flex-direction: row; align-items: stretch; padding: 4px; gap: 4px;
+      .pres-step-tab { flex-direction: column; gap: 4px; padding: 8px 4px; }
+      .step-meta .step-label { white-space: normal; text-align: center; font-size: 11px; line-height: 1.3; }
+      .step-label-icon { display: none; }
+    }
+    .step-card-title { scroll-margin-top: 12px; }
+  }
   .explorer-compact-toolbar {
     .compact-select-wrap, .compact-search-wrap { min-width: 0; max-width: 100%; }
     select, input { min-width: 0; width: 100%; min-height: 44px; }
     .explorer-toolbar-right > button, .explorer-toolbar-right > a { min-height: 44px !important; }
+  }
+  .workspace-workbooks-menu {
+    left: 0; right: auto !important; max-width: calc(100vw - 64px);
+    .btn-icon-subtle { min-width: 44px; min-height: 44px; align-items: center; justify-content: center; }
   }
   .datatable-toolbar > div { min-width: 0; max-width: 100%; flex-wrap: wrap; }
   .col-picker-popover { left: 0; right: auto !important; max-width: calc(100vw - 64px); }

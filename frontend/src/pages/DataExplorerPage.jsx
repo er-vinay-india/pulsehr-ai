@@ -370,7 +370,8 @@ export default function DataExplorerPage() {
               className={`toggle-btn ${viewMode === 'table' ? 'active' : ''}`}
               onClick={() => setViewMode('table')}
             >
-              📋 Data Table
+              <span className="explorer-mode-long">📋 Data Table</span>
+              <span className="explorer-mode-short">Data Table</span>
             </button>
             <button
               type="button"
@@ -379,7 +380,8 @@ export default function DataExplorerPage() {
               className={`toggle-btn ${viewMode === 'eda' ? 'active' : ''}`}
               onClick={() => setViewMode('eda')}
             >
-              🔬 Exploratory Data Analysis & Predictive Analytics
+              <span className="explorer-mode-long">🔬 Exploratory Data Analysis & Predictive Analytics</span>
+              <span className="explorer-mode-short">Insights & Trends</span>
             </button>
           </div>
         </div>
@@ -616,6 +618,8 @@ export default function DataExplorerPage() {
                 type="button"
                 className="btn-secondary"
                 onClick={() => setShowWorkspaceDrawer((prev) => !prev)}
+                aria-expanded={showWorkspaceDrawer}
+                aria-controls="workspace-workbooks-menu"
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -635,13 +639,15 @@ export default function DataExplorerPage() {
               {/* Compact Workspace Dropdown Menu */}
               {showWorkspaceDrawer && (
                 <div
+                  id="workspace-workbooks-menu"
+                  className="workspace-workbooks-menu"
                   style={{
                     position: 'absolute',
                     top: 'calc(100% + 6px)',
                     right: 0,
                     zIndex: 100,
                     width: '320px',
-                    background: '#1c1815',
+                    background: 'var(--color-bg-surface)',
                     border: '1px solid var(--border)',
                     borderRadius: '10px',
                     padding: '0.75rem',
@@ -650,7 +656,7 @@ export default function DataExplorerPage() {
                   }}
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', paddingBottom: '6px', borderBottom: '1px solid var(--border-subtle)' }}>
-                    <strong style={{ color: '#fff9f2', fontSize: '0.8rem' }}>Workspace Workbooks</strong>
+                    <strong style={{ color: 'var(--fg-primary)', fontSize: '0.8rem' }}>Workspace Workbooks</strong>
                     <span style={{ fontSize: '0.72rem', color: 'var(--fg-muted)' }}>{datasets.length} file(s)</span>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '200px', overflowY: 'auto' }}>
@@ -669,7 +675,7 @@ export default function DataExplorerPage() {
                         }}
                       >
                         <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          <div style={{ fontWeight: 600, color: '#fff9f2', fontSize: '0.8rem' }}>{d.original_name}</div>
+                          <div style={{ fontWeight: 600, color: 'var(--fg-primary)', fontSize: '0.8rem' }}>{d.original_name}</div>
                           <div style={{ fontSize: '0.72rem', color: 'var(--fg-muted)' }}>{d.row_count} rows · {d.sheet_count} sheet(s)</div>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>

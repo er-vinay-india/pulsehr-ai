@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import {
   Sparkles,
   Layers,
@@ -95,6 +95,19 @@ export default function PromptStudioScreen({
 }) {
   // 3-Step Guided Form: 1 = Source & Topic, 2 = Narrative Depth, 3 = Theme & Polish
   const [currentStep, setCurrentStep] = useState(1);
+  const stepContainerRef = useRef(null);
+  const previousStepRef = useRef(currentStep);
+
+  useEffect(() => {
+    if (previousStepRef.current === currentStep) return;
+    previousStepRef.current = currentStep;
+    const frame = requestAnimationFrame(() => {
+      const heading = stepContainerRef.current?.querySelector("h2");
+      heading?.focus({ preventScroll: true });
+      heading?.scrollIntoView({ block: "start", behavior: "auto" });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [currentStep]);
 
   const [pathDrafts, setPathDrafts] = useState({
     dashboard_truth: { audience: "Executive leadership", instructions: "", sourceScope: "single_sheet" },
@@ -271,7 +284,7 @@ export default function PromptStudioScreen({
       )}
 
       {/* STEP CONTAINER */}
-      <div className="pres-step-container">
+      <div className="pres-step-container" ref={stepContainerRef}>
         {/* =========================================================================
             STEP 1: SOURCE & TOPIC
             ========================================================================= */}
@@ -279,7 +292,7 @@ export default function PromptStudioScreen({
           <section className="pres-minimal-card" aria-labelledby="step1-heading">
             <div className="step-card-header">
               <span className="step-badge-indicator">Step 1 of 3</span>
-              <h2 id="step1-heading" className="step-card-title">
+              <h2 id="step1-heading" className="step-card-title" tabIndex={-1}>
                 What would you like to present?
               </h2>
               <p className="step-card-subtitle">
@@ -635,7 +648,7 @@ export default function PromptStudioScreen({
           <section className="pres-minimal-card" aria-labelledby="step2-heading">
             <div className="step-card-header">
               <span className="step-badge-indicator">Step 2 of 3</span>
-              <h2 id="step2-heading" className="step-card-title">
+              <h2 id="step2-heading" className="step-card-title" tabIndex={-1}>
                 Choose narrative pacing and depth
               </h2>
               <p className="step-card-subtitle">
@@ -840,7 +853,7 @@ export default function PromptStudioScreen({
           <section className="pres-minimal-card" aria-labelledby="step3-heading">
             <div className="step-card-header">
               <span className="step-badge-indicator">Step 3 of 3</span>
-              <h2 id="step3-heading" className="step-card-title">
+              <h2 id="step3-heading" className="step-card-title" tabIndex={-1}>
                 Visual palette and presentation style
               </h2>
               <p className="step-card-subtitle">
