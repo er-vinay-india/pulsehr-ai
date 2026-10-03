@@ -106,7 +106,11 @@
   .hriday-transcript { padding: 20px 16px; }
   .hriday-composer { padding-left: 12px; padding-right: 12px; }
   .hriday-chat--page { height: calc(100dvh - 160px); min-height: 360px; }
-  .global-copilot-launcher.hriday-launcher { right: 12px; bottom: max(12px, env(safe-area-inset-bottom)); }
+  .global-copilot-launcher.hriday-launcher { right: max(12px, env(safe-area-inset-right)); }
+}
+// The bottom navigation remains visible up to the mobile shell breakpoint.
+@media (max-width: 760px) {
+  .global-copilot-launcher.hriday-launcher { bottom: calc(80px + env(safe-area-inset-bottom)); }
 }
 @media (max-height: 480px) and (min-width: 601px) {
   .hriday-panel { bottom: 12px; height: calc(100dvh - 24px); }

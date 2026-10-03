@@ -2267,7 +2267,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
 
             {/* Bar Chart & Rollup Table Grid */}
             {activeCohortBreakdown && (
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", gap: "1.25rem", alignItems: "start" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 340px), 1fr))", gap: "1.25rem", alignItems: "start" }}>
                 {/* Cohort Comparison Bar Chart */}
                 <div style={{ background: "var(--color-bg-elevated)", border: "1px solid var(--border-subtle)", borderRadius: "8px", padding: "1rem" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>

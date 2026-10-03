@@ -387,9 +387,10 @@ export default function DataExplorerPage() {
         {/* Unified Command & Filter Toolbar */}
         <div className="explorer-compact-toolbar page-command-bar">
         {/* Left Controls: Sheet, Derived View, Table Version, Search */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', flexWrap: 'wrap', flex: 1, minWidth: 0 }}>
+        <div className="explorer-toolbar-left" style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', flexWrap: 'wrap', flex: 1, minWidth: 0 }}>
           {/* Sheet Selector */}
           <div
+            className="compact-select-wrap"
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -436,6 +437,7 @@ export default function DataExplorerPage() {
           {/* Derived Views Dropdown (if present) */}
           {derivedTables.length > 0 && (
             <div
+              className="compact-select-wrap"
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -567,6 +569,7 @@ export default function DataExplorerPage() {
 
               {/* Table Search Input */}
               <div
+                className="compact-search-wrap"
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -605,7 +608,7 @@ export default function DataExplorerPage() {
         </div>
 
         {/* Right Actions: Minimal Workspace Overview, Download, Minimal Delete */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
+        <div className="explorer-toolbar-right" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0, flexWrap: 'wrap' }}>
           {/* Minimal Workspace Files Indicator / Popover Toggle */}
           {datasets.length > 0 && (
             <div style={{ position: 'relative' }}>

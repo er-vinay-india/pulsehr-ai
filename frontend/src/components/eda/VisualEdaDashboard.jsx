@@ -980,7 +980,7 @@ export default function VisualEdaDashboard({
               </div>
 
               {availableMetrics.length > 0 && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div className="eda-metric-control" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <label htmlFor="eda-metric-select" style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary, #334155)', fontWeight: 600 }}>Select Metric:</label>
                   <select
                     id="eda-metric-select"

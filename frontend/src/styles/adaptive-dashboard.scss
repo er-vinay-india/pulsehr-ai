@@ -4373,7 +4373,7 @@
     align-items: flex-start;
     gap: 14px;
     flex: 1;
-    min-width: 300px;
+    min-width: min(100%, 300px);
   }
 
   &__icon {

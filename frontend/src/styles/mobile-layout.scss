@@ -35,6 +35,23 @@
   .copilot-drawer-panel .calculation-fields select { min-width: 0; max-width: 100%; }
   .presentation-modal-backdrop .pres-config-footer { padding-bottom: max(12px, env(safe-area-inset-bottom)); }
 }
+@media (max-width: 760px) {
+  .explorer-compact-toolbar {
+    .compact-select-wrap, .compact-search-wrap { min-width: 0; max-width: 100%; }
+    select, input { min-width: 0; width: 100%; min-height: 44px; }
+    .explorer-toolbar-right > button, .explorer-toolbar-right > a { min-height: 44px !important; }
+  }
+  .datatable-toolbar > div { min-width: 0; max-width: 100%; flex-wrap: wrap; }
+  .col-picker-popover { left: 0; right: auto !important; max-width: calc(100vw - 64px); }
+  .eda-metric-control { min-width: 0; max-width: 100%; flex-wrap: wrap; }
+  .eda-metric-control select { min-width: 0; max-width: 100%; min-height: 44px; }
+  .upload-modal-overlay { padding: 12px; }
+  .upload-modal-panel { max-height: calc(100dvh - 24px); }
+  .upload-modal-header { flex-shrink: 0; padding: 12px; gap: 8px; }
+  .upload-modal-title-group { gap: 8px; }
+  .upload-modal-close-btn { flex-shrink: 0; min-width: 44px; min-height: 44px; }
+  .upload-modal-body { min-height: 0; max-height: none; padding: 16px; overscroll-behavior: contain; }
+}
 @media (max-height: 500px) {
   .copilot-drawer-panel .copilot-suggestions-strip { display: none; }
   .copilot-drawer-panel .copilot-tools-container { max-height: 25dvh; }

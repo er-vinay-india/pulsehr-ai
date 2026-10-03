@@ -311,7 +311,7 @@ label { min-width: 0; }
 @media (max-width: 760px) {
   html { scroll-padding-top: 90px; }
   .app-header { padding: 12px 16px; background: var(--nav-bg, #ffffff); border-bottom: 1px solid var(--nav-border, #e2e8f0); }
-  .app-header .header-inner { gap: 12px; }
+  .app-header .header-inner { gap: 8px; padding: 0; grid-template-columns: minmax(0, 1fr) auto; }
   .app-header .brand-group {
     gap: 10px;
     .brand-logo-wrap {
@@ -348,8 +348,10 @@ label { min-width: 0; }
     }
   }
   .app-header .header-actions button { width: 44px; height: 44px; min-width: 44px; min-height: 44px; padding: 10px; }
-  .app-header .header-actions button span { display: none; }
+  .app-header .header-actions button > span { display: none; }
   .app-header .header-actions .btn-theme-toggle .theme-toggle-icon-wrap { display: flex !important; }
+  .app-header .header-actions .btn-header-hriday { justify-content: center; gap: 0; padding: 0; }
+  .app-header .header-actions .hriday-header-heart { display: inline-flex; width: 40px; }
   .app-header .tabs-nav-segmented {
     position: fixed; top: auto; bottom: 0; left: 0; right: 0; width: 100%; z-index: 60;
     display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0;
