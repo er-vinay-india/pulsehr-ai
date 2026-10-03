@@ -29,6 +29,8 @@ import {
   Sparkles
 } from 'lucide-react';
 import VisualEdaDashboard from '../components/eda/VisualEdaDashboard';
+import Select from '../components/common/Select';
+import Popover from '../components/common/Popover';
 
 export default function DataExplorerPage() {
   const [catalog, setCatalog] = useState({ sheets: [], relationships: [] });
@@ -422,97 +424,59 @@ export default function DataExplorerPage() {
         {/* Left Controls: Sheet, Derived View, Table Version, Search */}
         <div className="explorer-toolbar-left" style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', flexWrap: 'wrap', flex: 1, minWidth: 0 }}>
           {/* Sheet Selector */}
-          <div
-            className="compact-select-wrap"
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-              background: 'var(--surface-inset)',
-              border: '1px solid var(--border-subtle)',
-              borderRadius: '8px',
-              padding: '0 8px',
-              minHeight: '38px'
+          <Select
+            value={selected}
+            disabled={!!selectedDerivedId}
+            aria-label="Select spreadsheet sheet"
+            placeholder="Select a sheet..."
+            icon={<FileSpreadsheet size={16} color="var(--brand-400)" />}
+            options={[
+              { value: "", label: "Select a sheet..." },
+              ...catalog.sheets.map((s) => ({
+                value: s.id,
+                label: `${s.display_name || s.original_name}${s.name && s.name !== 'Sheet1' ? ` · ${s.name}` : ''} (${s.row_count} rows)`
+              }))
+            ]}
+            onChange={(e) => {
+              setSelected(e.target.value);
+              setSelectedDerivedId('');
+              setRelation('');
+              setPage(1);
+              setSearch('');
             }}
-          >
-            <FileSpreadsheet size={16} color="var(--brand-400)" style={{ flexShrink: 0 }} />
-            <select
-              value={selected}
-              disabled={!!selectedDerivedId}
-              aria-label="Select spreadsheet sheet"
-              onChange={(e) => {
-                setSelected(e.target.value);
-                setSelectedDerivedId('');
-                setRelation('');
-                setPage(1);
-                setSearch('');
-              }}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                color: 'var(--fg-primary)',
-                fontSize: '0.85rem',
-                minHeight: '36px',
-                padding: '0 4px',
-                cursor: 'pointer'
-              }}
-            >
-              <option value="">Select a sheet...</option>
-              {catalog.sheets.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.display_name || s.original_name}{' '}
-                  {s.name && s.name !== 'Sheet1' ? `· ${s.name}` : ''} ({s.row_count} rows)
-                </option>
-              ))}
-            </select>
-          </div>
+            triggerStyle={{
+              minWidth: '220px',
+              maxWidth: '380px'
+            }}
+          />
 
           {/* Derived Views Dropdown (if present) */}
           {derivedTables.length > 0 && (
-            <div
-              className="compact-select-wrap"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                background: 'var(--surface-inset)',
-                border: '1px solid var(--border-subtle)',
-                borderRadius: '8px',
-                padding: '0 8px',
-                minHeight: '38px'
-              }}
-            >
-              <GitMerge size={14} color="#ffb089" style={{ flexShrink: 0 }} />
-              <select
-                value={selectedDerivedId}
-                aria-label="Select derived table or relational join"
-                onChange={(e) => {
-                  setSelectedDerivedId(e.target.value);
-                  setRelation('');
-                  setPage(1);
-                }}
-                style={{
-                  background: 'transparent',
-                  border: 'none',
-                  color: 'var(--fg-primary)',
-                  fontSize: '0.82rem',
-                  minHeight: '36px',
-                  padding: '0 4px',
-                  cursor: 'pointer'
-                }}
-              >
-                <option value="">Single Sheet</option>
-                {derivedTables.map((dt) => {
+            <Select
+              value={selectedDerivedId}
+              aria-label="Select derived table or relational join"
+              placeholder="Single Sheet"
+              icon={<GitMerge size={14} color="#ffb089" />}
+              options={[
+                { value: "", label: "Single Sheet" },
+                ...derivedTables.map((dt) => {
                   const isRollup = dt.join_keys?.type === 'scientific_enrichment_rollup';
-                  return (
-                    <option key={dt.id} value={dt.id}>
-                      {isRollup ? '📊 ' : '🔗 '}
-                      {dt.display_name} ({dt.row_count} rows)
-                    </option>
-                  );
-                })}
-              </select>
-            </div>
+                  return {
+                    value: dt.id,
+                    label: `${isRollup ? '📊 ' : '🔗 '}${dt.display_name} (${dt.row_count} rows)`
+                  };
+                })
+              ]}
+              onChange={(e) => {
+                setSelectedDerivedId(e.target.value);
+                setRelation('');
+                setPage(1);
+              }}
+              triggerStyle={{
+                minWidth: '180px',
+                maxWidth: '300px'
+              }}
+            />
           )}
 
           {/* Scientific Enrichment Toggle Button */}
@@ -642,116 +606,104 @@ export default function DataExplorerPage() {
 
         {/* Right Actions: Minimal Workspace Overview, Download, Minimal Delete */}
         <div className="explorer-toolbar-right" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0, flexWrap: 'wrap' }}>
-          {/* Minimal Workspace Files Indicator / Popover Toggle */}
+          {/* Minimal Workspace Files Indicator / Radix Popover */}
           {datasets.length > 0 && (
-            <div style={{ position: 'relative' }}>
-              <button
-                type="button"
-                className="btn-secondary"
-                onClick={() => setShowWorkspaceDrawer((prev) => !prev)}
-                aria-expanded={showWorkspaceDrawer}
-                aria-controls="workspace-workbooks-menu"
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '5px',
-                  padding: '0.35rem 0.65rem',
-                  fontSize: '0.78rem',
-                  minHeight: '34px',
-                  borderRadius: '8px'
-                }}
-                title="View workbooks currently in workspace"
-              >
-                <Layers size={13} color="var(--brand-400)" />
-                <span>Manage {datasets.length} workbook{datasets.length > 1 ? 's' : ''}</span>
-                <ChevronDown size={12} style={{ transform: showWorkspaceDrawer ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
-              </button>
-
-              {/* Compact Workspace Dropdown Menu */}
-              {showWorkspaceDrawer && (
-                <div
-                  id="workspace-workbooks-menu"
-                  className="workspace-workbooks-menu"
+            <Popover
+              open={showWorkspaceDrawer}
+              onOpenChange={setShowWorkspaceDrawer}
+              trigger={
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  aria-expanded={showWorkspaceDrawer}
+                  aria-controls="workspace-workbooks-menu"
                   style={{
-                    position: 'absolute',
-                    top: 'calc(100% + 6px)',
-                    right: 0,
-                    zIndex: 100,
-                    width: '320px',
-                    background: 'var(--color-bg-surface)',
-                    border: '1px solid var(--border)',
-                    borderRadius: '10px',
-                    padding: '0.75rem',
-                    boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
-                    fontSize: '0.82rem'
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '5px',
+                    padding: '0.35rem 0.65rem',
+                    fontSize: '0.78rem',
+                    minHeight: '38px',
+                    borderRadius: '8px'
                   }}
+                  title="View workbooks currently in workspace"
                 >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', paddingBottom: '6px', borderBottom: '1px solid var(--border-subtle)' }}>
-                    <strong style={{ color: 'var(--fg-primary)', fontSize: '0.8rem' }}>Manage workbooks</strong>
-                    <span style={{ fontSize: '0.72rem', color: 'var(--fg-muted)' }}>{datasets.length} file(s)</span>
-                  </div>
-                  <label className="workbook-select-all">
-                    <input type="checkbox" aria-label="Select all workbooks" disabled={deleting}
-                      checked={datasets.length > 0 && selectedWorkbookIds.length === datasets.length}
-                      onChange={e => setSelectedWorkbookIds(e.target.checked ? datasets.map(d => d.id) : [])} />
-                    Select all workbooks
-                  </label>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '200px', overflowY: 'auto' }}>
-                    {datasets.map((d) => (
-                      <div
-                        key={d.id}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          gap: '8px',
-                          padding: '6px 8px',
-                          borderRadius: '6px',
-                          background: d.id === selectedSheet?.dataset_id ? 'rgba(255, 176, 137, 0.08)' : 'transparent',
-                          border: d.id === selectedSheet?.dataset_id ? '1px solid rgba(255, 176, 137, 0.25)' : '1px solid transparent'
-                        }}
-                      >
-                        <input id={`workbook-select-${d.id}`} type="checkbox" aria-label={`Select ${d.original_name}`} disabled={deleting}
-                          checked={selectedWorkbookIds.includes(d.id)}
-                          onChange={e => setSelectedWorkbookIds(ids => e.target.checked ? [...ids, d.id] : ids.filter(id => id !== d.id))} />
-                        <label htmlFor={`workbook-select-${d.id}`} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, cursor: 'pointer' }}>
-                          <div style={{ fontWeight: 600, color: 'var(--fg-primary)', fontSize: '0.8rem' }}>{d.original_name}</div>
-                          <div style={{ fontSize: '0.72rem', color: 'var(--fg-muted)' }}>{d.row_count} rows · {d.sheet_count} sheet(s)</div>
-                        </label>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
-                          <a
-                            href={getDatasetDownloadUrl(d.id)}
-                            download={d.original_name}
-                            className="btn-icon-subtle"
-                            title="Download workbook"
-                            style={{ color: 'var(--fg-secondary)', padding: '4px', display: 'flex' }}
-                          >
-                            <Download size={13} />
-                          </a>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setShowWorkspaceDrawer(false);
-                              handlePromptSingleDelete(d);
-                            }}
-                            className="btn-icon-subtle"
-                            title="Delete this workbook"
-                            style={{ color: 'var(--rose-tier)', padding: '4px', display: 'flex', background: 'none', border: 'none', cursor: 'pointer' }}
-                          >
-                            <Trash2 size={13} />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="workbook-selection-footer">
-                    <span aria-live="polite">{selectedWorkbookIds.length} selected</span>
-                    <button type="button" className="btn-danger-confirm" disabled={!selectedWorkbookIds.length || deleting}
-                      onClick={handlePromptBulkDelete}>Delete selected ({selectedWorkbookIds.length})</button>
-                  </div>
+                  <Layers size={13} color="var(--brand-400)" />
+                  <span>Manage {datasets.length} workbook{datasets.length > 1 ? 's' : ''}</span>
+                  <ChevronDown size={12} style={{ transform: showWorkspaceDrawer ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+                </button>
+              }
+            >
+              <div
+                id="workspace-workbooks-menu"
+                className="workspace-workbooks-menu"
+                style={{ width: '320px', fontSize: '0.82rem' }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', paddingBottom: '6px', borderBottom: '1px solid var(--border-subtle)' }}>
+                  <strong style={{ color: 'var(--fg-primary)', fontSize: '0.8rem' }}>Manage workbooks</strong>
+                  <span style={{ fontSize: '0.72rem', color: 'var(--fg-muted)' }}>{datasets.length} file(s)</span>
                 </div>
-              )}
-            </div>
+                <label className="workbook-select-all">
+                  <input type="checkbox" aria-label="Select all workbooks" disabled={deleting}
+                    checked={datasets.length > 0 && selectedWorkbookIds.length === datasets.length}
+                    onChange={e => setSelectedWorkbookIds(e.target.checked ? datasets.map(d => d.id) : [])} />
+                  Select all workbooks
+                </label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '200px', overflowY: 'auto' }}>
+                  {datasets.map((d) => (
+                    <div
+                      key={d.id}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '8px',
+                        padding: '6px 8px',
+                        borderRadius: '6px',
+                        background: d.id === selectedSheet?.dataset_id ? 'rgba(255, 176, 137, 0.08)' : 'transparent',
+                        border: d.id === selectedSheet?.dataset_id ? '1px solid rgba(255, 176, 137, 0.25)' : '1px solid transparent'
+                      }}
+                    >
+                      <input id={`workbook-select-${d.id}`} type="checkbox" aria-label={`Select ${d.original_name}`} disabled={deleting}
+                        checked={selectedWorkbookIds.includes(d.id)}
+                        onChange={e => setSelectedWorkbookIds(ids => e.target.checked ? [...ids, d.id] : ids.filter(id => id !== d.id))} />
+                      <label htmlFor={`workbook-select-${d.id}`} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, cursor: 'pointer' }}>
+                        <div style={{ fontWeight: 600, color: 'var(--fg-primary)', fontSize: '0.8rem' }}>{d.original_name}</div>
+                        <div style={{ fontSize: '0.72rem', color: 'var(--fg-muted)' }}>{d.row_count} rows · {d.sheet_count} sheet(s)</div>
+                      </label>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
+                        <a
+                          href={getDatasetDownloadUrl(d.id)}
+                          download={d.original_name}
+                          className="btn-icon-subtle"
+                          title="Download workbook"
+                          style={{ color: 'var(--fg-secondary)', padding: '4px', display: 'flex' }}
+                        >
+                          <Download size={13} />
+                        </a>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowWorkspaceDrawer(false);
+                            handlePromptSingleDelete(d);
+                          }}
+                          className="btn-icon-subtle"
+                          title="Delete this workbook"
+                          style={{ color: 'var(--rose-tier)', padding: '4px', display: 'flex', background: 'none', border: 'none', cursor: 'pointer' }}
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="workbook-selection-footer">
+                  <span aria-live="polite">{selectedWorkbookIds.length} selected</span>
+                  <button type="button" className="btn-danger-confirm" disabled={!selectedWorkbookIds.length || deleting}
+                    onClick={handlePromptBulkDelete}>Delete selected ({selectedWorkbookIds.length})</button>
+                </div>
+              </div>
+            </Popover>
           )}
 
           {/* Download Active Workbook */}

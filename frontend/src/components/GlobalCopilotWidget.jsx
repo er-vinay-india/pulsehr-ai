@@ -6,7 +6,7 @@ import HRIDAYChat from './hriday/HRIDAYChat.jsx';
 
 export function useChatViewport() {
   const read = () => ({
-    mobile: window.matchMedia('(max-width: 600px)').matches,
+    mobile: window.matchMedia('(max-width: 760px)').matches,
     height: window.visualViewport?.height || window.innerHeight,
     top: window.visualViewport?.offsetTop || 0,
   });

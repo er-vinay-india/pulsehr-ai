@@ -1,6 +1,7 @@
 import React from "react";
 import { Search, X, Columns, Download } from "lucide-react";
 import ColumnVisibilityPicker from "./ColumnVisibilityPicker";
+import Popover from "../common/Popover";
 
 export default function DataTableToolbar({
   localFilter,
@@ -60,27 +61,30 @@ export default function DataTableToolbar({
 
       {/* Right: Actions (Column Selector, Export CSV) */}
       <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", flexWrap: "wrap" }}>
-        <div style={{ position: "relative" }} ref={colPickerRef}>
-          <button
-            className="btn-secondary"
-            onClick={() => setColPickerOpen(prev => !prev)}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "6px",
-              fontSize: "0.78rem",
-              padding: "0.4rem 0.75rem",
-              background: colPickerOpen ? "rgba(224, 86, 36, 0.15)" : undefined,
-              borderColor: colPickerOpen ? "var(--brand-400)" : undefined
-            }}
-            title="Select which columns to display"
-          >
-            <Columns size={14} color="var(--brand-400)" />
-            <span>Columns ({visibleColumns.size}/{columns.length})</span>
-          </button>
-
+        <Popover
+          open={colPickerOpen}
+          onOpenChange={setColPickerOpen}
+          trigger={
+            <button
+              type="button"
+              className="btn-secondary"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "6px",
+                fontSize: "0.78rem",
+                padding: "0.4rem 0.75rem",
+                background: colPickerOpen ? "rgba(224, 86, 36, 0.15)" : undefined,
+                borderColor: colPickerOpen ? "var(--brand-400)" : undefined
+              }}
+              title="Select which columns to display"
+            >
+              <Columns size={14} color="var(--brand-400)" />
+              <span>Columns ({visibleColumns.size}/{columns.length})</span>
+            </button>
+          }
+        >
           <ColumnVisibilityPicker
-            isOpen={colPickerOpen}
             columns={columns}
             visibleColumns={visibleColumns}
             colSearchQuery={colSearchQuery}
@@ -90,7 +94,7 @@ export default function DataTableToolbar({
             onSelectFirstN={onSelectFirstN}
             onDeselectAllExceptFirst={onDeselectAllExceptFirst}
           />
-        </div>
+        </Popover>
 
         <button
           className="btn-secondary"

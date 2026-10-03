@@ -1,6 +1,7 @@
 import { useSlideLayout } from './slides/ResolvedSlideContent.jsx';
 import { exportPresentationPdf } from '../../api/client.js';
 import DeckControl from './DeckControl.jsx';
+import Select from '../common/Select.jsx';
 import React, { useState } from "react";
 import {
   Palette,
@@ -156,14 +157,20 @@ export default function DeckStudioView({
       {/* STUDIO SUB-TOOLBAR */}
       <fieldset className="studio-sub-toolbar pres-editor-fieldset" disabled={isBusy}>
         <div className="mobile-studio-navigation">
-          <label className="mobile-slide-jump">
-            <span>Go to slide</span>
-            <select value={activeSlideIndex} onChange={e => setActiveSlideIndex(Number(e.target.value))}>
-              {deckSpec.slides.map((slide, index) => (
-                <option key={slide.id || index} value={index}>{index + 1}. {slide.title || "Untitled slide"}</option>
-              ))}
-            </select>
-          </label>
+          <div className="mobile-slide-jump" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ fontSize: '0.78rem', color: 'var(--color-text-secondary)', whiteSpace: 'nowrap' }}>Go to slide</span>
+            <Select
+              size="sm"
+              value={String(activeSlideIndex)}
+              onChange={e => setActiveSlideIndex(Number(e.target.value))}
+              aria-label="Go to slide"
+              options={deckSpec.slides.map((slide, index) => ({
+                value: String(index),
+                label: `${index + 1}. ${slide.title || "Untitled slide"}`
+              }))}
+              triggerStyle={{ minWidth: '150px', maxWidth: '240px' }}
+            />
+          </div>
           <button type="button" className="btn-secondary mobile-slide-options-toggle"
             aria-expanded={isSlideOptionsOpen} aria-controls="deck-slide-options"
             onClick={() => setIsSlideOptionsOpen(open => !open)}>
@@ -178,66 +185,69 @@ export default function DeckStudioView({
 
           <DeckControl className="symbolic-btn-wrap">
             <div className="theme-quick-dropdown">
-              <Palette size={14} />
-              <select
-                className="select-theme-inline"
+              <Palette size={14} style={{ flexShrink: 0, color: 'var(--color-brand-secondary)' }} />
+              <Select
+                size="sm"
                 value={deckSpec.theme?.id || deckSpec.metadata?.theme_id || "executive_dark"}
                 onChange={(e) => onSwitchTheme(e.target.value)}
                 aria-label="Switch Theme"
-              >
-                {themes.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
-                  </option>
-                ))}
-              </select>
+                options={themes.map((t) => ({
+                  value: t.id,
+                  label: t.name
+                }))}
+                triggerStyle={{ border: 'none', background: 'transparent', padding: '0 4px', minHeight: '30px' }}
+              />
             </div>
             <span className="symbolic-tooltip">Visual Theme Palette</span>
           </DeckControl>
 
           <DeckControl className="symbolic-btn-wrap">
             <div className="theme-quick-dropdown">
-              <Film size={14} />
-              <select
-                className="select-theme-inline"
+              <Film size={14} style={{ flexShrink: 0, color: 'var(--color-brand-secondary)' }} />
+              <Select
+                size="sm"
                 value={currentSlide.transition || deckSpec.metadata?.transition || "none"}
                 onChange={(e) => {
                   const val = e.target.value;
                   onUpdateSlide(activeSlideIndex, { ...currentSlide, transition: val });
                 }}
                 aria-label="Slide Transition"
-              >
-                <option value="none">Transition: None</option>
-                <option value="fade">Transition: Fade</option>
-                <option value="slide">Transition: Slide</option>
-                <option value="scale">Transition: Scale</option>
-                <option value="reveal">Transition: Reveal</option>
-              </select>
+                options={[
+                  { value: "none", label: "Transition: None" },
+                  { value: "fade", label: "Transition: Fade" },
+                  { value: "slide", label: "Transition: Slide" },
+                  { value: "scale", label: "Transition: Scale" },
+                  { value: "reveal", label: "Transition: Reveal" }
+                ]}
+                triggerStyle={{ border: 'none', background: 'transparent', padding: '0 4px', minHeight: '30px' }}
+              />
             </div>
             <span className="symbolic-tooltip">Slide Transition Effect</span>
           </DeckControl>
 
           <DeckControl className="symbolic-btn-wrap">
             <div className="theme-quick-dropdown">
-              <Sliders size={14} />
-              <select
-                className="select-theme-inline"
+              <Sliders size={14} style={{ flexShrink: 0, color: 'var(--color-brand-secondary)' }} />
+              <Select
+                size="sm"
                 value={currentSlide.layout || "chart_narrative"}
                 onChange={(e) => {
                   const val = e.target.value;
                   onUpdateSlide(activeSlideIndex, { ...currentSlide, layout: val });
                 }}
                 aria-label="Slide Layout"
-              >
-                <option value="chart_narrative">Layout: Chart & Insights</option>
-                <option value="full_chart_takeaway">Layout: Hero Chart</option>
-                <option value="two_charts">Layout: Dual Charts</option>
-                <option value="comparison_split">Layout: Strategic Split</option>
-                <option value="title_hero">Layout: Executive Hero</option>
-                <option value="image_story">Layout: Visual Image Story</option>
-                <option value="table_detail">Layout: Evidence Table</option>
-                <option value="title_cover">Layout: Title Cover</option>
-              </select>
+                options={[
+                  { value: "chart_narrative", label: "Layout: Chart & Insights" },
+                  { value: "full_chart_takeaway", label: "Layout: Hero Chart" },
+                  { value: "two_charts", label: "Layout: Dual Charts" },
+                  { value: "comparison_split", label: "Layout: Strategic Split" },
+                  { value: "title_hero", label: "Layout: Executive Hero" },
+                  { value: "image_story", label: "Layout: Visual Image Story" },
+                  { value: "table_detail", label: "Layout: Evidence Table" },
+                  { value: "title_cover", label: "Layout: Title Cover" }
+                ]}
+                triggerStyle={{ border: 'none', background: 'transparent', padding: '0 4px', minHeight: '30px' }}
+              />
             </div>
             <span className="symbolic-tooltip">Slide Layout Variant</span>
           </DeckControl>

@@ -1,6 +1,7 @@
 .hriday-panel {
   position: fixed; z-index: 1500; right: 24px; bottom: max(24px, env(safe-area-inset-bottom));
-  width: min(480px, calc(100vw - 48px)); height: min(680px, calc(100dvh - 120px));
+  width: min(480px, calc(100vw - 48px)); height: min(680px, calc(100dvh - 160px));
+  max-height: calc(100dvh - 160px);
   border: 1px solid var(--color-border-strong); border-radius: 20px; box-shadow: var(--shadow-lg);
   background: var(--color-bg-surface); color: var(--color-text-primary);
   &--expanded { width: min(780px, calc(100vw - 48px)); }
@@ -100,20 +101,16 @@
 .hriday-backdrop { position: fixed; z-index: 1490; inset: 0; background: var(--overlay-backdrop); }
 .hriday-header-heart { display: inline-flex; width: 40px; height: 28px; align-items: center; }
 .hriday-header-heart canvas { width: 44px !important; height: 28px !important; }
-@media (max-width: 600px) {
+@media (max-width: 760px) {
   .hriday-panel, .hriday-panel--expanded { top: var(--hriday-viewport-top, 0px); bottom: auto; right: 0; width: 100%; height: var(--hriday-viewport-height, 100dvh); max-height: none; border: 0; border-radius: 0; }
   .hriday-chat-header { padding: max(8px, env(safe-area-inset-top)) 12px 8px; }
   .hriday-transcript { padding: 20px 16px; }
   .hriday-composer { padding-left: 12px; padding-right: 12px; }
   .hriday-chat--page { height: calc(100dvh - 160px); min-height: 360px; }
-  .global-copilot-launcher.hriday-launcher { right: max(12px, env(safe-area-inset-right)); }
+  .global-copilot-launcher.hriday-launcher { display: none; }
 }
-// The bottom navigation remains visible up to the mobile shell breakpoint.
-@media (max-width: 760px) {
-  .global-copilot-launcher.hriday-launcher { bottom: calc(80px + env(safe-area-inset-bottom)); }
-}
-@media (max-height: 480px) and (min-width: 601px) {
-  .hriday-panel { bottom: 12px; height: calc(100dvh - 24px); }
+@media (max-height: 480px) and (min-width: 761px) {
+  .hriday-panel { bottom: 12px; height: calc(100dvh - 24px); max-height: calc(100dvh - 24px); }
 }
 @media (forced-colors: active) {
   .hriday-input-row, .hriday-panel, .hriday-tooltip { border-color: CanvasText; }

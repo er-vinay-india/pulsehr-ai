@@ -21,6 +21,7 @@ import {
   Sliders,
 } from "lucide-react";
 import SlideImagePickerModal from "./SlideImagePickerModal.jsx";
+import Select from "../common/Select.jsx";
 
 const DEFAULT_THEMES = [
   { id: "executive_dark", name: "Executive Obsidian", bg_color: "#08111F", card_bg: "#0F1B2D", card_border: "#26384D", accent_color: "#5EEAD4", brand_color: "#60A5FA" },
@@ -450,20 +451,22 @@ export default function PromptStudioScreen({
                       <Database size={14} className="field-icon" aria-hidden="true" />
                       <span>Source Dataset</span>
                     </label>
-                    <select
+                    <Select
                       id="pres-sheet-select"
                       className="pres-field-control"
                       value={selectedSheetId || ""}
                       onChange={(e) => onSelectSheet(e.target.value)}
-                    >
-                      {!sheets.length && <option value="">No uploaded datasets</option>}
-                      {sheets.map((sheet) => (
-                        <option key={sheet.id} value={sheet.id}>
-                          {sheet.name || sheet.sheet_name || sheet.title || `Sheet ${sheet.id}`}{" "}
-                          {sheet.dataset_name ? `— ${sheet.dataset_name}` : `(ID ${sheet.id})`}
-                        </option>
-                      ))}
-                    </select>
+                      placeholder={sheets.length ? "Select source dataset…" : "No uploaded datasets"}
+                      options={
+                        !sheets.length
+                          ? [{ value: "", label: "No uploaded datasets" }]
+                          : sheets.map((sheet) => ({
+                              value: sheet.id,
+                              label: `${sheet.name || sheet.sheet_name || sheet.title || `Sheet ${sheet.id}`} ${sheet.dataset_name ? `— ${sheet.dataset_name}` : `(ID ${sheet.id})`}`
+                            }))
+                      }
+                      fullWidth
+                    />
                     <span className="pres-field-hint">
                       Extracts baseline facts and disparity models directly from this sheet.
                     </span>
@@ -499,15 +502,17 @@ export default function PromptStudioScreen({
                       <Layers size={14} className="field-icon" aria-hidden="true" />
                       <span>Evidence Coverage</span>
                     </label>
-                    <select
+                    <Select
                       id="pres-scope-select"
                       className="pres-field-control"
                       value={sourceScope}
                       onChange={(e) => setSourceScope(e.target.value)}
-                    >
-                      <option value="single_sheet">Active sheet only</option>
-                      <option value="workspace">All eligible workspace sheets (Cross-synthesis)</option>
-                    </select>
+                      options={[
+                        { value: "single_sheet", label: "Active sheet only" },
+                        { value: "workspace", label: "All eligible workspace sheets (Cross-synthesis)" }
+                      ]}
+                      fullWidth
+                    />
                     <span className="pres-field-hint">
                       Defines whether multi-sheet cross-reconciliation synthesis is enabled.
                     </span>
@@ -775,16 +780,18 @@ export default function PromptStudioScreen({
                     <Database size={14} className="field-icon" aria-hidden="true" />
                     <span>Deliverable Format</span>
                   </label>
-                  <select
+                  <Select
                     id="pres-deliverable-select"
                     className="pres-field-control"
                     value={deliverable}
                     onChange={(e) => setDeliverable(e.target.value)}
-                  >
-                    <option value="pptx">PowerPoint (.pptx)</option>
-                    <option value="pdf">Document PDF (.pdf)</option>
-                    <option value="both">Both (.pptx + .pdf)</option>
-                  </select>
+                    options={[
+                      { value: "pptx", label: "PowerPoint (.pptx)" },
+                      { value: "pdf", label: "Document PDF (.pdf)" },
+                      { value: "both", label: "Both (.pptx + .pdf)" }
+                    ]}
+                    fullWidth
+                  />
                 </div>
               </div>
             </div>

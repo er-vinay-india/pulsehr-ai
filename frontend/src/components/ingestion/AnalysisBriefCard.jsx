@@ -13,6 +13,7 @@ import {
   Trash2
 } from "lucide-react";
 import { submitDatasetBrief, getDatasetBrief } from "../../api/client";
+import Select from "../common/Select.jsx";
 
 export default function AnalysisBriefCard({ uploadResult }) {
   if (!uploadResult || !uploadResult.dataset_id) return null;
@@ -233,44 +234,35 @@ export default function AnalysisBriefCard({ uploadResult }) {
 
                 {rules.map((rule, idx) => (
                   <div key={idx} style={{ display: "flex", gap: "6px", alignItems: "center", marginBottom: "6px" }}>
-                    <select
-                      value={rule.metric_name}
-                      onChange={(e) => handleRuleChange(idx, "metric_name", e.target.value)}
-                      style={{
-                        background: "#181412",
-                        color: "var(--fg-primary)",
-                        border: "1px solid var(--border-subtle)",
-                        borderRadius: "4px",
-                        padding: "4px 8px",
-                        fontSize: "0.8rem",
-                        flex: 2
-                      }}
-                    >
-                      <option value="">Select column...</option>
-                      {availableCols.map((c) => (
-                        <option key={c} value={c}>{c}</option>
-                      ))}
-                    </select>
+                    <div style={{ flex: 2 }}>
+                      <Select
+                        size="sm"
+                        value={rule.metric_name}
+                        onChange={(e) => handleRuleChange(idx, "metric_name", e.target.value)}
+                        placeholder="Select column..."
+                        options={[
+                          { value: "", label: "Select column..." },
+                          ...availableCols.map((c) => ({ value: c, label: c }))
+                        ]}
+                        fullWidth
+                      />
+                    </div>
 
-                    <select
-                      value={rule.operator}
-                      onChange={(e) => handleRuleChange(idx, "operator", e.target.value)}
-                      style={{
-                        background: "#181412",
-                        color: "var(--fg-primary)",
-                        border: "1px solid var(--border-subtle)",
-                        borderRadius: "4px",
-                        padding: "4px 8px",
-                        fontSize: "0.8rem",
-                        flex: 1
-                      }}
-                    >
-                      <option value=">=">&gt;= (Min)</option>
-                      <option value="<=">&lt;= (Max)</option>
-                      <option value="==">== (Exact)</option>
-                      <option value=">">&gt; (Greater)</option>
-                      <option value="<">&lt; (Less)</option>
-                    </select>
+                    <div style={{ flex: 1 }}>
+                      <Select
+                        size="sm"
+                        value={rule.operator}
+                        onChange={(e) => handleRuleChange(idx, "operator", e.target.value)}
+                        options={[
+                          { value: ">=", label: ">= (Min)" },
+                          { value: "<=", label: "<= (Max)" },
+                          { value: "==", label: "== (Exact)" },
+                          { value: ">", label: "> (Greater)" },
+                          { value: "<", label: "< (Less)" }
+                        ]}
+                        fullWidth
+                      />
+                    </div>
 
                     <input
                       type="text"

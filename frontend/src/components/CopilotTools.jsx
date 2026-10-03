@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { listDatasets, getCalculationColumns, getSheets } from '../api/client';
+import Select from './common/Select.jsx';
 
 export default function CopilotTools({ loading, onRun }) {
   const [open, setOpen] = useState(false);
@@ -88,7 +89,7 @@ export default function CopilotTools({ loading, onRun }) {
           <div className="calculation-fields">
             <label style={{ color: 'var(--fg-secondary, #d7c5b5)', fontWeight: 600 }}>
               Source
-              <select
+              <Select
                 aria-label="Select data source"
                 value={dataset}
                 onChange={e => {
@@ -97,35 +98,36 @@ export default function CopilotTools({ loading, onRun }) {
                   setSheet(chosen?.sheets?.length === 1 ? chosen.sheets[0].name : '');
                   setRelationship('');
                 }}
-              >
-                <option value="">Choose a source</option>
-                {datasets.map(d => (
-                  <option key={d.id} value={d.id}>
-                    {d.original_name || d.filename}
-                  </option>
-                ))}
-              </select>
+                placeholder="Choose a source"
+                options={[
+                  { value: "", label: "Choose a source" },
+                  ...datasets.map(d => ({ value: d.id, label: d.original_name || d.filename }))
+                ]}
+                fullWidth
+              />
             </label>
             {dataset && (
               <label style={{ color: 'var(--fg-secondary, #d7c5b5)', fontWeight: 600 }}>
                 Sheet
-                <select
+                <Select
                   aria-label="Select sheet"
                   value={sheet}
                   onChange={e => setSheet(e.target.value)}
-                >
-                  <option value="">Choose a sheet</option>
-                  {(datasets.find(d => String(d.id) === dataset)?.sheets || []).map(s => (
-                    <option key={s.id} value={s.name}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
+                  placeholder="Choose a sheet"
+                  options={[
+                    { value: "", label: "Choose a sheet" },
+                    ...(datasets.find(d => String(d.id) === dataset)?.sheets || []).map(s => ({
+                      value: s.name,
+                      label: s.name
+                    }))
+                  ]}
+                  fullWidth
+                />
               </label>
             )}
             <label style={{ color: 'var(--fg-secondary, #d7c5b5)', fontWeight: 600 }}>
               Or connected view
-              <select
+              <Select
                 aria-label="Select connected view"
                 value={relationship}
                 onChange={e => {
@@ -133,58 +135,70 @@ export default function CopilotTools({ loading, onRun }) {
                   setDataset('');
                   setSheet('');
                 }}
-              >
-                <option value="">No join</option>
-                {relationships.map(r => (
-                  <option key={r.id} value={r.id}>
-                    {r.left_file} [{r.left_column}] ↔ {r.right_file} [{r.right_column}]
-                  </option>
-                ))}
-              </select>
+                placeholder="No join"
+                options={[
+                  { value: "", label: "No join" },
+                  ...relationships.map(r => ({
+                    value: r.id,
+                    label: `${r.left_file} [${r.left_column}] ↔ ${r.right_file} [${r.right_column}]`
+                  }))
+                ]}
+                fullWidth
+              />
             </label>
             <label style={{ color: 'var(--fg-secondary, #d7c5b5)', fontWeight: 600 }}>
               Operation
-              <select
+              <Select
                 aria-label="Select operation"
                 value={operation}
                 onChange={e => setOperation(e.target.value)}
-              >
-                {['count', 'sum', 'mean', 'min', 'max', 'median'].map(o => (
-                  <option key={o}>{o}</option>
-                ))}
-              </select>
+                options={['count', 'sum', 'mean', 'min', 'max', 'median'].map(o => ({ value: o, label: o }))}
+                fullWidth
+              />
             </label>
             {operation !== 'count' && (
               <label style={{ color: 'var(--fg-secondary, #d7c5b5)', fontWeight: 600 }}>
                 Column
-                <select
+                <Select
                   aria-label="Select column"
                   value={column}
                   onChange={e => setColumn(e.target.value)}
-                >
-                  {fields('Choose column')}
-                </select>
+                  placeholder="Choose column"
+                  options={[
+                    { value: "", label: "Choose column" },
+                    ...columns.map(c => ({ value: c, label: c }))
+                  ]}
+                  fullWidth
+                />
               </label>
             )}
             <label style={{ color: 'var(--fg-secondary, #d7c5b5)', fontWeight: 600 }}>
               Group by
-              <select
+              <Select
                 aria-label="Group by column"
                 value={group}
                 onChange={e => setGroup(e.target.value)}
-              >
-                {fields('All rows')}
-              </select>
+                placeholder="All rows"
+                options={[
+                  { value: "", label: "All rows" },
+                  ...columns.map(c => ({ value: c, label: c }))
+                ]}
+                fullWidth
+              />
             </label>
             <label style={{ color: 'var(--fg-secondary, #d7c5b5)', fontWeight: 600 }}>
               Filter column
-              <select
+              <Select
                 aria-label="Filter column"
                 value={filterColumn}
                 onChange={e => setFilterColumn(e.target.value)}
-              >
-                {fields('No filter')}
-              </select>
+                placeholder="No filter"
+                options={[
+                  { value: "", label: "No filter" },
+                  ...columns.map(c => ({ value: c, label: c }))
+                ]}
+                fullWidth
+              />
             </label>
             {filterColumn && (
               <label style={{ color: 'var(--fg-secondary, #d7c5b5)', fontWeight: 600 }}>

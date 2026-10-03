@@ -19,6 +19,7 @@ import {
 import ReactECharts from '../charts/SafeReactECharts';
 import { useTheme } from '../../context/ThemeContext';
 import { getThemeTokens } from '../../theme/tokens';
+import Select from '../common/Select.jsx';
 
 export default function VisualEdaDashboard({
   edaReport,
@@ -982,26 +983,14 @@ export default function VisualEdaDashboard({
               {availableMetrics.length > 0 && (
                 <div className="eda-metric-control" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <label htmlFor="eda-metric-select" style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary, #334155)', fontWeight: 600 }}>Select Metric:</label>
-                  <select
+                  <Select
+                    size="sm"
                     id="eda-metric-select"
                     aria-label="Select metric for distribution analysis"
                     value={currentMetric}
                     onChange={(e) => setSelectedMetric(e.target.value)}
-                    style={{
-                      background: 'var(--surface-inset)',
-                      border: '1px solid var(--border-subtle)',
-                      borderRadius: '6px',
-                      color: 'var(--fg-primary)',
-                      padding: '0.35rem 0.65rem',
-                      fontSize: '0.8rem'
-                    }}
-                  >
-                    {availableMetrics.map((m) => (
-                      <option key={m} value={m}>
-                        {m}
-                      </option>
-                    ))}
-                  </select>
+                    options={availableMetrics.map((m) => ({ value: m, label: m }))}
+                  />
                 </div>
               )}
             </div>
@@ -1131,26 +1120,17 @@ export default function VisualEdaDashboard({
               {predictiveModeling.linear_models?.length > 1 && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <label htmlFor="eda-linear-model-select" style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary, #334155)', fontWeight: 600 }}>Select Model:</label>
-                  <select
+                  <Select
+                    size="sm"
                     id="eda-linear-model-select"
                     aria-label="Select linear regression model"
-                    value={selectedLinearIndex}
+                    value={String(selectedLinearIndex)}
                     onChange={(e) => setSelectedLinearIndex(Number(e.target.value))}
-                    style={{
-                      background: 'var(--surface-inset)',
-                      border: '1px solid var(--border-subtle)',
-                      borderRadius: '6px',
-                      color: 'var(--fg-primary)',
-                      padding: '0.35rem 0.65rem',
-                      fontSize: '0.8rem'
-                    }}
-                  >
-                    {predictiveModeling.linear_models.map((lm, idx) => (
-                      <option key={idx} value={idx}>
-                        {lm.x_variable} → {lm.y_variable} (R² = {lm.r_squared})
-                      </option>
-                    ))}
-                  </select>
+                    options={predictiveModeling.linear_models.map((lm, idx) => ({
+                      value: String(idx),
+                      label: `${lm.x_variable} → ${lm.y_variable} (R² = ${lm.r_squared})`
+                    }))}
+                  />
                 </div>
               )}
             </div>

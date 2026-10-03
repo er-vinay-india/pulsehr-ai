@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowRight, Info, X, Presentation, Layers, Sparkles, TrendingUp, BarChart2, Table } from "lucide-react";
+import { ArrowRight, Info, X, Presentation, Layers, Sparkles, TrendingUp, BarChart2, Table, FileSpreadsheet, UploadCloud } from "lucide-react";
+import Select from "../components/common/Select";
 import SafeReactECharts from "../components/charts/SafeReactECharts";
 import ExecutiveBriefingCard from "../components/adaptive/ExecutiveBriefingCard";
 import ExceptionWatchCard from "../components/adaptive/ExceptionWatchCard";
@@ -1355,22 +1356,22 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
         <div className="adaptive-scope-bar page-command-bar">
           <div className="scope-control-group">
             <label htmlFor="source-selector">Source</label>
-            <select
+            <Select
               id="source-selector"
               value={selectedSheetId}
               onChange={(e) => handleSourceSelect(e.target.value)}
               disabled={sourcesLoading}
               aria-label="Selected data source"
-            >
-              {sources.length === 0 && !sourcesLoading && (
-                <option value="">No uploaded datasets</option>
-              )}
-              {sources.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name} ({s.row_count} records) — {s.display_name || "Dataset"}
-                </option>
-              ))}
-            </select>
+              placeholder={sourcesLoading ? "Loading sources…" : "Select source…"}
+              options={
+                sources.length === 0 && !sourcesLoading
+                  ? [{ value: "", label: "No uploaded datasets" }]
+                  : sources.map((s) => ({
+                      value: s.id,
+                      label: `${s.name} (${s.row_count} records) — ${s.display_name || "Dataset"}`,
+                    }))
+              }
+            />
           </div>
 
           {formattedReportingRange && (
@@ -1437,6 +1438,26 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
             <div className="calc-placeholder-number">Calculating…</div>
             <div className="calc-placeholder-context">Verifying records & calculation</div>
           </div>
+        )}
+
+        {/* Empty State: No uploaded datasets */}
+        {!sourcesLoading && !calculating && sources.length === 0 && (
+          <section className="adaptive-empty-state" aria-labelledby="adaptive-empty-title">
+            <div className="adaptive-empty-icon">
+              <FileSpreadsheet size={32} />
+            </div>
+            <h2 id="adaptive-empty-title">No workbooks yet</h2>
+            <p>Upload a CSV or Excel workbook to generate executive intelligence, KPI summaries, and automated presentation decks.</p>
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={() => { window.location.hash = "upload"; }}
+            >
+              <UploadCloud size={16} />
+              <span>Upload spreadsheet</span>
+            </button>
+            <span className="adaptive-empty-hint">CSV, XLS and XLSX supported</span>
+          </section>
         )}
 
         {/* Authoritative Scope Line (WP1) */}

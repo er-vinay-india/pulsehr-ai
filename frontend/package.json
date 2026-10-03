@@ -16,6 +16,8 @@
     "pretest:slides": "node scripts/generate_slide_tokens.mjs"
   },
   "dependencies": {
+    "@radix-ui/react-popover": "^1.1.23",
+    "@radix-ui/react-select": "^2.3.7",
     "echarts": "^6.1.0",
     "echarts-for-react": "^3.0.6",
     "katex": "^0.18.7",

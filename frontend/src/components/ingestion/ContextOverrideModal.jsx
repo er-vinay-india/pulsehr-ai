@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { X, Check, AlertTriangle, Sliders, Database, Layers, HelpCircle, Save } from "lucide-react";
 import { patchWorkspaceContext } from "../../api/client";
+import Select from "../common/Select.jsx";
 
 const DOMAIN_OPTIONS = [
   "Workforce Operations",
@@ -151,25 +152,12 @@ export default function ContextOverrideModal({
               <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 600, color: "var(--fg-secondary, #CBD5E1)", marginBottom: "4px" }}>
                 Domain Context
               </label>
-              <select
+              <Select
                 value={domain}
                 onChange={(e) => setDomain(e.target.value)}
-                style={{
-                  width: "100%",
-                  padding: "0.45rem 0.75rem",
-                  fontSize: "0.85rem",
-                  background: "var(--surface-secondary, rgba(15,23,42,0.8))",
-                  color: "var(--fg-primary, #F8FAFC)",
-                  border: "1px solid var(--border-subtle, rgba(255,255,255,0.12))",
-                  borderRadius: "6px"
-                }}
-              >
-                {DOMAIN_OPTIONS.map((d) => (
-                  <option key={d} value={d}>
-                    {d}
-                  </option>
-                ))}
-              </select>
+                options={DOMAIN_OPTIONS.map((d) => ({ value: d, label: d }))}
+                fullWidth
+              />
             </div>
 
             {/* User Goal / Objective */}
@@ -201,25 +189,15 @@ export default function ContextOverrideModal({
                 <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 600, color: "var(--fg-secondary, #CBD5E1)", marginBottom: "4px" }}>
                   Primary Analytical Dataset
                 </label>
-                <select
+                <Select
                   value={primaryDatasetId}
                   onChange={(e) => setPrimaryDatasetId(e.target.value)}
-                  style={{
-                    width: "100%",
-                    padding: "0.45rem 0.75rem",
-                    fontSize: "0.85rem",
-                    background: "var(--surface-secondary, rgba(15,23,42,0.8))",
-                    color: "var(--fg-primary, #F8FAFC)",
-                    border: "1px solid var(--border-subtle, rgba(255,255,255,0.12))",
-                    borderRadius: "6px"
-                  }}
-                >
-                  {datasets.map((ds) => (
-                    <option key={ds.dataset_id} value={ds.dataset_id}>
-                      {ds.name} ({ds.row_count} rows)
-                    </option>
-                  ))}
-                </select>
+                  options={datasets.map((ds) => ({
+                    value: ds.dataset_id,
+                    label: `${ds.name} (${ds.row_count} rows)`
+                  }))}
+                  fullWidth
+                />
               </div>
             )}
 
@@ -255,24 +233,13 @@ export default function ContextOverrideModal({
                             {col.name}
                           </td>
                           <td style={{ padding: "4px 10px" }}>
-                            <select
+                            <Select
+                              size="sm"
                               value={columnRoles[col.name] || col.semantic_role || "METRIC"}
                               onChange={(e) => handleRoleChange(col.name, e.target.value)}
-                              style={{
-                                padding: "2px 6px",
-                                fontSize: "0.72rem",
-                                background: "rgba(0,0,0,0.3)",
-                                color: "var(--fg-primary, #F8FAFC)",
-                                border: "1px solid rgba(255,255,255,0.1)",
-                                borderRadius: "4px"
-                              }}
-                            >
-                              {COLUMN_ROLE_OPTIONS.map((r) => (
-                                <option key={r} value={r}>
-                                  {r}
-                                </option>
-                              ))}
-                            </select>
+                              options={COLUMN_ROLE_OPTIONS.map((r) => ({ value: r, label: r }))}
+                              triggerStyle={{ minHeight: "28px", padding: "2px 8px", fontSize: "0.72rem" }}
+                            />
                           </td>
                           <td style={{ padding: "6px 10px", color: col.is_sensitive ? "var(--amber-tier, #F59E0B)" : "var(--fg-muted, #94A3B8)" }}>
                             {col.is_sensitive ? "Yes" : "No"}
