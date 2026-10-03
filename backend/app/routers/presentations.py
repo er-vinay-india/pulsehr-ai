@@ -29,6 +29,16 @@ from ..services.presentation.image_provider import search_free_images
 router = APIRouter(prefix="/api/presentations", tags=["presentations"])
 
 
+@router.post("/layout-preview")
+def preview_slide_layout(slide: dict[str, Any]):
+    """Resolve one slide locally using the same geometry as PPTX/PDF exports."""
+    from ..services.presentation.slide_layout import resolve_slide, SlideLayoutError
+    try:
+        return {"plan": resolve_slide(slide)}
+    except SlideLayoutError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
 class GeneratePresentationRequest(BaseModel):
     deck_style: Literal["standard", "decision_brief"] = "standard"
     objective: str | None = "Executive Leadership Review"
@@ -482,11 +492,9 @@ def handle_regenerate_slide(req: RegenerateSlideRequest):
 def export_presentation_to_pptx(req: ExportPptxRequest):
     """Builds and returns an editable PowerPoint file with native charts from deck spec."""
     deck_spec = req.deck_spec
-    rg = deck_spec.get("metadata", {}).get("review_gates")
-    if not rg:
-        from ..services.presentation.review_gates import evaluate_automated_gates
-        rg = evaluate_automated_gates(deck_spec)
-        deck_spec.setdefault("metadata", {})["review_gates"] = rg
+    from ..services.presentation.review_gates import evaluate_automated_gates
+    rg = evaluate_automated_gates(deck_spec)
+    deck_spec.setdefault("metadata", {})["review_gates"] = rg
 
     failed_gates = [
         f"{gid}: {g.get('automated', {}).get('details', 'Failed check')}"
@@ -513,9 +521,30 @@ def export_presentation_to_pptx(req: ExportPptxRequest):
         )
     except HTTPException:
         raise
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     except Exception as exc:
         logger.error(f"Export PPTX error: {exc}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to generate PowerPoint: {str(exc)}")
+
+
+@router.post("/export-pdf")
+def export_presentation_to_pdf(req: ExportPptxRequest):
+    """Export the current editor spec, including edits not yet saved to a deck."""
+    from ..services.presentation.review_gates import evaluate_automated_gates
+    from ..services.report_generator import export_spec_to_pdf
+    deck = req.deck_spec
+    review = evaluate_automated_gates(deck)
+    failures = [g.get('automated', {}).get('details', 'Failed check') for g in review.get('gates', {}).values()
+                if g.get('automated', {}).get('status') == 'FAILED']
+    if failures:
+        raise HTTPException(status_code=422, detail='Delivery blocked: ' + '; '.join(failures))
+    try:
+        path = export_spec_to_pdf(deck)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    title = re.sub(r'[^a-zA-Z0-9_-]', '_', deck.get('metadata', {}).get('title') or deck.get('title') or 'Presentation')[:40]
+    return FileResponse(path=str(path), filename=f'{title}.pdf', media_type='application/pdf')
 
 
 @router.get("/download/{deck_id}")
@@ -530,11 +559,9 @@ def download_deck_pptx(deck_id: str):
         raise HTTPException(status_code=404, detail="Presentation deck not found")
 
     if deck_spec:
-        rg = deck_spec.get("metadata", {}).get("review_gates")
-        if not rg:
-            from ..services.presentation.review_gates import evaluate_automated_gates
-            rg = evaluate_automated_gates(deck_spec)
-            deck_spec.setdefault("metadata", {})["review_gates"] = rg
+        from ..services.presentation.review_gates import evaluate_automated_gates
+        rg = evaluate_automated_gates(deck_spec)
+        deck_spec.setdefault("metadata", {})["review_gates"] = rg
 
         failed_gates = [
             f"{gid}: {g.get('automated', {}).get('details', 'Failed check')}"
@@ -550,7 +577,10 @@ def download_deck_pptx(deck_id: str):
     pptx_path = config.EXPORTS_DIR / f"presentation_{deck_id}.pptx"
     # Rebuild saved specs with current slide tokens; cached files may predate contrast repairs.
     if deck_spec:
-        pptx_path = export_spec_to_pptx(deck_spec)
+        try:
+            pptx_path = export_spec_to_pptx(deck_spec)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
     elif not pptx_path.exists():
         raise HTTPException(status_code=404, detail="Presentation deck not found")
 
@@ -579,10 +609,8 @@ def download_deck_pdf(deck_id: str):
         raise HTTPException(status_code=404, detail="Presentation deck not found")
 
     if deck_spec:
-        rg = deck_spec.get("metadata", {}).get("review_gates")
-        if not rg:
-            from ..services.presentation.review_gates import evaluate_automated_gates
-            rg = evaluate_automated_gates(deck_spec)
+        from ..services.presentation.review_gates import evaluate_automated_gates
+        rg = evaluate_automated_gates(deck_spec)
         failed_gates = [
             f"{gid}: {g.get('automated', {}).get('details', 'Failed check')}"
             for gid, g in rg.get("gates", {}).items()
@@ -596,7 +624,10 @@ def download_deck_pdf(deck_id: str):
 
     pdf_path = config.EXPORTS_DIR / f"presentation_{deck_id}.pdf"
     if deck_spec:
-        pdf_path = export_spec_to_pdf(deck_spec)
+        try:
+            pdf_path = export_spec_to_pdf(deck_spec)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
     elif not pdf_path.exists():
         raise HTTPException(status_code=404, detail="Presentation PDF not found")
 

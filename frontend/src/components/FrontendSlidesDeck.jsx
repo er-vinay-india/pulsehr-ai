@@ -278,6 +278,7 @@ export default function FrontendSlidesDeck({
           {currentSlide && (
             <PresentationSlideContent
               slide={currentSlide}
+              reflow
               theme={theme}
               slideIndex={activeSlideIndex + 1}
               totalSlides={slides.length}

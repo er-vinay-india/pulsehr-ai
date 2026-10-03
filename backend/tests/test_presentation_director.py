@@ -613,6 +613,9 @@ def test_export_pptx_and_quality_audit_compatibility():
     assert audit_res.get("critical_count", 0) == 0
 
     # Native PPTX export
-    pptx_path = export_spec_to_pptx(deck_spec)
+    # Raw fallback plans are not evidence-approved deliverables.
+    with pytest.raises(ValueError, match='evidence refresh'):
+        export_spec_to_pptx(deck_spec)
+    pptx_path = export_spec_to_pptx(deck_spec, diagnostic_layout_only=True)
     assert Path(pptx_path).exists()
     assert Path(pptx_path).stat().st_size > 1000

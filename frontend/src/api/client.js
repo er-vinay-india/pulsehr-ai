@@ -558,14 +558,22 @@ export async function regenerateSlide(deckSpec, slideId, prompt) {
 }
 
 export async function exportPresentationPptx(deckSpec) {
-  const res = await fetch(`${API_BASE}/presentations/export-pptx`, {
+  return exportPresentationFile(deckSpec, 'pptx');
+}
+
+export async function exportPresentationPdf(deckSpec) {
+  return exportPresentationFile(deckSpec, 'pdf');
+}
+
+async function exportPresentationFile(deckSpec, format) {
+  const res = await fetch(`${API_BASE}/presentations/export-${format}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ deck_spec: deckSpec })
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || "Failed to export PowerPoint");
+    throw new Error(err.detail || `Failed to export ${format.toUpperCase()}`);
   }
   const blob = await res.blob();
   const now = new Date();
@@ -573,7 +581,7 @@ export async function exportPresentationPptx(deckSpec) {
   const ts = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
   const rawTitle = deckSpec.metadata?.title || deckSpec.title || "Executive_Presentation";
   const cleanTitle = rawTitle.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 40).replace(/^_+|_+$/g, "") || "Presentation";
-  const filename = `${cleanTitle}_${ts}.pptx`;
+  const filename = `${cleanTitle}_${ts}.${format}`;
   const url = window.URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;

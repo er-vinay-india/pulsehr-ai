@@ -47,6 +47,15 @@ def semantic_issues(deck, source_columns=None):
     slides = deck.get('slides') or []
     expected = deck.get('metadata', {}).get('content_contract_digests')
     notes = deck.get('metadata', {}).get('content_contract_notes')
+    for index, slide in enumerate(slides):
+        match = re.search(r'\((\d+)\s*/\s*(\d+)\)\s*$', str(slide.get('title') or ''))
+        if match:
+            part, total = map(int, match.groups())
+            base = str(slide['title'])[:match.start()].strip()
+            start = index-part+1
+            titles = [str(s.get('title') or '') for s in slides[max(0, start):start+total]]
+            if not 1 <= part <= total or start < 0 or len(titles) != total or any(not re.fullmatch(re.escape(base)+r'\s*\('+str(i)+r'\s*/\s*'+str(total)+r'\)', title) for i, title in enumerate(titles, 1)):
+                issues.append(f"Continuation title has missing or mismatched parts on '{slide.get('title')}'.")
     if notes is not None and notes != [hashlib.sha256(str(s.get('speaker_notes') or '').encode()).hexdigest() for s in slides]:
         issues.append('Presenter notes changed after content verification.')
     if expected is not None and expected != [content_digest(s) for s in slides]:
@@ -82,6 +91,8 @@ def semantic_issues(deck, source_columns=None):
             if len(values) != len(refs) or any(ref not in ledger or not math.isclose(float(v), float(ledger[ref]['numeric_value']), rel_tol=.001, abs_tol=.01) for v, ref in zip(values, refs)):
                 issues.append(f"Chart values disagree with their evidence on '{s.get('title')}'.")
     source_columns = source_columns if source_columns is not None else deck.get("metadata", {}).get("source_columns")
+    if source_columns is None and deck.get('metadata', {}).get('traceable_metrics'):
+        source_columns = [m.get('source_column', '') for m in deck['metadata']['traceable_metrics']]
     if source_columns is not None and expected is None:
         fields = ' '.join(str(c).lower() for c in source_columns)
         assertions = ' '.join(str(s.get(k) or '') for s in slides for k in ('title', 'narrative', 'bullets')).lower()
@@ -102,10 +113,28 @@ def semantic_issues(deck, source_columns=None):
                 issues.append(f"Causal assertion lacks supporting analysis on '{s.get('title')}'.")
             if re.search(r'\b(?:forecast|projected|prediction|expected return)\b', text) and not any(e.get('finding_type') == 'forecast' and e.get('assumptions') for e in facts):
                 issues.append(f"Forecast lacks a model and assumptions on '{s.get('title')}'.")
+            chart = s.get('chart') or {}
+            if str(chart.get('chart_type') or chart.get('type')).lower() in {'pie', 'donut', 'doughnut'}:
+                values = [v for series in chart.get('series', []) for v in series.get('values', []) if isinstance(v, (int, float))]
+                if chart.get('unit') == '%' and any(v > 100 for v in values):
+                    issues.append(f"Composition counts are labelled as percentages on '{s.get('title')}'.")
+                if values and 'majority' in text and max(values) <= sum(values)/2:
+                    issues.append(f"No category has a majority on '{s.get('title')}'.")
     planning = deck.get('metadata', {}).get('planning_validation') or {}
     if planning and not planning.get('is_valid', False):
         issues.extend(planning.get('unsupported_claims') or ['Presentation plan is not grounded.'])
     return list(dict.fromkeys(issues))
+
+
+def validate_legacy_export(deck):
+    """Previously cached audit results cannot certify an older generated deck."""
+    metadata = deck.get('metadata', {})
+    if metadata.get('content_contract') or metadata.get('deck_style') == 'decision_brief':
+        return
+    if metadata.get('traceable_metrics') or metadata.get('validation_summary'):
+        issues = semantic_issues(deck)
+        if issues:
+            raise ValueError('This older presentation needs an evidence refresh before export: ' + '; '.join(issues[:3]))
 
 
 def verify_business_content(deck):

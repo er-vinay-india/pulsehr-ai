@@ -1,0 +1,255 @@
+{
+  "canvas_inches": [
+    13.33299978127734,
+    7.5
+  ],
+  "measurement_note": "Object allocation only; wrapping, plot interiors and clipping require visual review.",
+  "slides": [
+    {
+      "export_slide": 1,
+      "source_slide": 1,
+      "title": "Multi store performance, footfall & unit sales executive review",
+      "layout": "title_hero",
+      "explicit_text_font_sizes_pt": [
+        8.5,
+        10.0,
+        11.0,
+        14.0,
+        22.0
+      ],
+      "charts": [],
+      "tables": [],
+      "source_table_data_rows": 0,
+      "missing_native_table": false,
+      "outside_canvas_objects": []
+    },
+    {
+      "export_slide": 2,
+      "source_slide": 2,
+      "title": "Audited baseline scope & integrity verification",
+      "layout": "kpi_summary",
+      "explicit_text_font_sizes_pt": [
+        8.5,
+        9.0,
+        10.0,
+        11.0,
+        13.0,
+        22.0
+      ],
+      "charts": [],
+      "tables": [],
+      "source_table_data_rows": 0,
+      "missing_native_table": false,
+      "outside_canvas_objects": []
+    },
+    {
+      "export_slide": 3,
+      "source_slide": 3,
+      "title": "Operational volume surge & throughput resilience",
+      "layout": "chart_narrative",
+      "explicit_text_font_sizes_pt": [
+        8.5,
+        9.0,
+        10.0,
+        11.0,
+        12.0,
+        22.0
+      ],
+      "charts": [
+        {
+          "x": 5.8,
+          "y": 1.8,
+          "width": 6.7,
+          "height": 4.8,
+          "canvas_area_pct": 32.2,
+          "common_body_area_pct": 57.3,
+          "series_values": [
+            [
+              53995555.0,
+              37898972.0,
+              26825101.0,
+              12354080.0
+            ]
+          ]
+        }
+      ],
+      "tables": [],
+      "source_table_data_rows": 0,
+      "missing_native_table": false,
+      "outside_canvas_objects": []
+    },
+    {
+      "export_slide": 4,
+      "source_slide": 4,
+      "title": "Entity performance dispersion & headwind analysis",
+      "layout": "chart_narrative",
+      "explicit_text_font_sizes_pt": [
+        8.5,
+        9.0,
+        10.0,
+        11.0,
+        12.0,
+        22.0
+      ],
+      "charts": [
+        {
+          "x": 5.8,
+          "y": 1.8,
+          "width": 6.7,
+          "height": 4.8,
+          "canvas_area_pct": 32.2,
+          "common_body_area_pct": 57.3,
+          "series_values": [
+            [
+              53995555.0,
+              37898972.0,
+              26825101.0,
+              12354080.0
+            ]
+          ]
+        }
+      ],
+      "tables": [],
+      "source_table_data_rows": 0,
+      "missing_native_table": false,
+      "outside_canvas_objects": []
+    },
+    {
+      "export_slide": 5,
+      "source_slide": 5,
+      "title": "Category distribution & concentration drivers",
+      "layout": "chart_narrative",
+      "explicit_text_font_sizes_pt": [
+        8.5,
+        9.0,
+        10.0,
+        11.0,
+        12.0,
+        22.0
+      ],
+      "charts": [
+        {
+          "x": 5.8,
+          "y": 1.8,
+          "width": 6.7,
+          "height": 4.8,
+          "canvas_area_pct": 32.2,
+          "common_body_area_pct": 57.3,
+          "series_values": [
+            [
+              407.0,
+              321.0,
+              99.0,
+              94.0,
+              79.0
+            ]
+          ]
+        }
+      ],
+      "tables": [],
+      "source_table_data_rows": 0,
+      "missing_native_table": false,
+      "outside_canvas_objects": []
+    },
+    {
+      "export_slide": 6,
+      "source_slide": 6,
+      "title": "Analytical diagnostics & capacity distribution",
+      "layout": "comparison_split",
+      "explicit_text_font_sizes_pt": [
+        8.5,
+        10.0,
+        11.0,
+        13.0,
+        22.0
+      ],
+      "charts": [],
+      "tables": [],
+      "source_table_data_rows": 6,
+      "missing_native_table": true,
+      "outside_canvas_objects": []
+    },
+    {
+      "export_slide": 7,
+      "source_slide": 7,
+      "title": "Strategic roadmap: performance stabilization initiatives",
+      "layout": "action_plan",
+      "explicit_text_font_sizes_pt": [
+        8.5,
+        9.0,
+        9.5,
+        10.0,
+        11.0,
+        13.0,
+        22.0
+      ],
+      "charts": [],
+      "tables": [],
+      "source_table_data_rows": 0,
+      "missing_native_table": false,
+      "outside_canvas_objects": []
+    },
+    {
+      "export_slide": 8,
+      "source_slide": 8,
+      "title": "Execution governance & SLA responsibility matrix",
+      "layout": "table_detail",
+      "explicit_text_font_sizes_pt": [
+        8.5,
+        10.0,
+        12.0,
+        22.0
+      ],
+      "charts": [],
+      "tables": [
+        {
+          "x": 0.8,
+          "y": 2.6,
+          "width": 11.7,
+          "height": 3.5,
+          "data_rows": 6,
+          "columns": 5
+        }
+      ],
+      "source_table_data_rows": 6,
+      "missing_native_table": false,
+      "outside_canvas_objects": []
+    },
+    {
+      "export_slide": 9,
+      "source_slide": 9,
+      "title": "Audited evidence ledger: cryptographic verification (1/2)",
+      "layout": "table_detail",
+      "explicit_text_font_sizes_pt": [
+        8.5,
+        10.0,
+        12.0,
+        22.0
+      ],
+      "charts": [],
+      "tables": [
+        {
+          "x": 0.8,
+          "y": 2.6,
+          "width": 11.7,
+          "height": 3.5,
+          "data_rows": 6,
+          "columns": 5
+        }
+      ],
+      "source_table_data_rows": 6,
+      "missing_native_table": false,
+      "outside_canvas_objects": []
+    }
+  ],
+  "source_deck_id": "deck_e467ac80193f",
+  "source_sha256": "a76681d18314826e82287f212e8397d2e45cee851fd208a1557fe987a49f8473",
+  "diagnostic_only": true,
+  "generation_called": false,
+  "database_written": false,
+  "selected_slide": null,
+  "layout_override": null,
+  "content_contract": null,
+  "pptx": "/private/tmp/highview-slide-space-review/audit/presentation_layout_review_8fa8b0241bd6.pptx",
+  "frozen_source": "/private/tmp/highview-slide-space-review/audit/layout_review_8fa8b0241bd6_source.json"
+}

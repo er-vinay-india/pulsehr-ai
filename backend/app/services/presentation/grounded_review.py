@@ -54,7 +54,7 @@ def build_grounded_review(scope, ctx, workspace=None):
         nums = [_number(v) for v in raw]
         if all(n is not None for n in nums):
             # A generic numeric field has its recorded unit; do not infer currency or days.
-            unit = 'recorded units'
+            unit = 'km' if '(km)' in key else 'recorded units'
             m = fact('Average '+str(column), mean(nums), unit, nums, 'mean')
             ledger[-1]['denominator'] = len(nums)
             chart = None
@@ -100,7 +100,7 @@ def build_grounded_review(scope, ctx, workspace=None):
             'theme': THEMES.get(theme_id, THEMES['executive_dark']), 'slides': slides, 'evidence_ledger': ledger,
             'metadata': {'title': slides[0]['title'], 'theme_id': theme_id, 'domain': ctx.get('domain') or 'Business review',
                          'objective': scope.get('objective') or 'Recorded results review', 'audience': scope.get('audience') or 'Business managers',
-                         'content_contract': 'recorded_results_v1', 'total_records': len(records), 'file_label': label,
+                         'content_contract': 'recorded_results_v1', 'source_columns': columns, 'total_records': len(records), 'file_label': label,
                          'reporting_period_summary': period, 'snapshot_hash': (workspace or {}).get('snapshot_hash') or ctx.get('snapshot_hash'),
                          'created_at': datetime.datetime.now(datetime.timezone.utc).isoformat(), 'brief': dict(scope)},
             'coverage_manifest': {'items': [{'evidence_id': e['evidence_id'], 'title': e['title'], 'disposition': 'main_deck'} for e in ledger]}})

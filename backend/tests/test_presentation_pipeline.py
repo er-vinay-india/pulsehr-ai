@@ -775,10 +775,10 @@ def test_new_presentation_layouts_pptx_export():
 
     # Slide 1: action_plan - check shapes and text
     s1 = prs.slides[0]
-    s1_text = " ".join([shape.text_frame.text for shape in s1.shapes if shape.has_text_frame])
+    s1_text = " ".join([shape.text_frame.text for shape in s1.shapes if shape.has_text_frame] + [cell.text for shape in s1.shapes if shape.has_table for row in shape.table.rows for cell in row.cells])
     assert "Shift Schedule Optimization" in s1_text
     assert "Unassigned - Operational Lead" in s1_text
-    assert "HIGH PRIORITY" in s1_text
+    assert "Priority: HIGH" in s1.notes_slide.notes_text_frame.text
     assert "Slide 1 of 3" in s1_text
 
     # Slide 2: two_charts - check 2 native chart shapes
@@ -1096,7 +1096,7 @@ def test_export_pptx_and_pdf_canonical_reorder_guardrail():
     assert pptx_path.exists()
     prs = Presentation(str(pptx_path))
     s1 = prs.slides[0]
-    s1_text = " ".join([shape.text_frame.text for shape in s1.shapes if shape.has_text_frame])
+    s1_text = " ".join([shape.text_frame.text for shape in s1.shapes if shape.has_text_frame] + [cell.text for shape in s1.shapes if shape.has_table for row in shape.table.rows for cell in row.cells])
     # Slide 1 in the PPTX must be the cover
     assert "Operations Performance Diagnostic" in s1_text
     assert "Slide 1 of 2" in s1_text

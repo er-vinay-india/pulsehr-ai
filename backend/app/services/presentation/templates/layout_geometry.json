@@ -1,0 +1,8 @@
+{
+  "version": "readable_slides_v1",
+  "canvas": {"width": 960, "height": 540, "margin": 48, "body_bottom": 486, "footer_y": 510},
+  "type": {"title": 30, "cover": 38, "body": 18, "table": 16, "label": 16, "value": 32, "caption": 14, "source": 11, "line_height": 1.22},
+  "spacing": {"section": 16, "paragraph": 10, "cell": 8},
+  "table_columns": {"3": [0.38, 0.26, 0.36], "5": [0.18, 0.30, 0.17, 0.21, 0.14]},
+  "supported_layouts": ["title_cover", "title_hero", "kpi_summary", "chart_narrative", "full_chart_takeaway", "two_charts", "comparison_split", "methodology_panel", "table_detail", "action_plan", "initiative_detail"]
+}

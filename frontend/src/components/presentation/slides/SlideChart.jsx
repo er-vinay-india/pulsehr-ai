@@ -34,35 +34,37 @@ export default function SlideChart({ chart, chartData, theme }) {
 
   const type = (actualChart.type || actualChart.chart_type || 'column').toLowerCase();
   const pie = ['pie', 'donut'].includes(type);
+  const format = value => Math.abs(Number(value)) >= 1e6 ? `${(Number(value)/1e6).toFixed(1)}M` : Number(value).toLocaleString(undefined, { maximumFractionDigits: 2 });
+  const option = pie ? {
+    title: { text: chartLabel, left: 'center', textStyle: { fontSize: 18 } },
+    legend: { show: false }, tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+    series: [{ type: 'pie', name: actualChart.series[0].name || '',
+      radius: type === 'donut' ? ['35%', '58%'] : '58%', center: ['50%', '54%'],
+      label: { show: true, fontSize: 14, formatter: '{b}\n{c} ({d}%)' },
+      labelLine: { show: true }, itemStyle: { borderWidth: 2 },
+      data: actualChart.categories.map((label, i) => ({ name: String(label), value: actualChart.series[0].values?.[i] ?? actualChart.series[0].data?.[i] })) }],
+  } : cartesian(actualChart.categories,
+    actualChart.series.map(s => ({ name: s.name, type: type === 'line' ? 'line' : 'bar',
+      data: actualChart.categories.map((_, i) => numeric(s.values?.[i] ?? s.data?.[i])),
+      label: { show: true, fontSize: 14, position: ['bar', 'horizontal_bar'].includes(type) ? 'right' : 'top', formatter: p => format(p.value) } })),
+    ['bar', 'horizontal_bar'].includes(type), actualChart.unit, isDark);
+  if (!pie) {
+    option.title = { text: chartLabel, left: 'center', textStyle: { fontSize: 18 } };
+    option.legend = { ...option.legend, show: actualChart.series.length > 1, top: 26 };
+    option.grid = { left: 30, right: 55, top: actualChart.series.length > 1 ? 65 : 48, bottom: 28, containLabel: true };
+    for (const name of ['xAxis', 'yAxis']) {
+      const axis = option[name];
+      if (axis && !Array.isArray(axis)) axis.axisLabel = { ...axis.axisLabel, fontSize: 14, ...(axis.type === 'value' ? { formatter: format } : {}) };
+    }
+  }
 
   return (
     <div
       role="img"
       aria-label={`${chartLabel} (${type} chart)`}
-      style={{ width: '100%', minWidth: 0, height: '100%', minHeight: '260px' }}
+      style={{ width: '100%', minWidth: 0, height: '100%', minHeight: '230px' }}
     >
-      {pie ? (
-        <SafeReactECharts presentationTheme={theme}
-          style={{height:'100%',minHeight:'260px',width:'100%'}}
-          option={{legend:{type:'scroll',bottom:0}, tooltip:{trigger:'item'},series:[{type:'pie',name:actualChart.series[0].name || '',radius:type==='donut'?['45%','68%']:'68%',center:['50%','44%'],label:{show:false},itemStyle:{borderWidth:2},data:actualChart.categories.map((label,i)=>({name:String(label),value:actualChart.series[0].values?.[i] ?? actualChart.series[0].data?.[i]}))}]}}
-        />
-      ) : (
-        <SafeReactECharts
-          presentationTheme={theme}
-          option={cartesian(
-            actualChart.categories,
-            actualChart.series.map(s => ({
-              name: s.name,
-              type: type === 'line' ? 'line' : 'bar',
-              data: actualChart.categories.map((_, i) => numeric(s.values?.[i] ?? s.data?.[i]))
-            })),
-            ['bar', 'horizontal_bar'].includes(type),
-            actualChart.unit,
-            isDark
-          )}
-          style={{ height: '100%', minHeight: '260px', width: '100%' }}
-        />
-      )}
+      <SafeReactECharts presentationTheme={theme} option={option} style={{ height: '100%', minHeight: '230px', width: '100%' }} />
       {actualChart.aggregation_disclosure && (
         <p className="chart-aggregation-note" style={{ fontSize: '11px', marginTop: '4px' }}>
           {actualChart.aggregation_disclosure}

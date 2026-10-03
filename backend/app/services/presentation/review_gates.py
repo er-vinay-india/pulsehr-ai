@@ -249,6 +249,25 @@ def evaluate_automated_gates(
             g4_auto_status = "FAILED"
             g4_details = f"{crit_issues} critical layout overflow issue(s) detected."
         
+    from .slide_layout import resolve_slide, SlideLayoutError, GEOMETRY
+    layout_errors, unresolved = [], 0
+    for index, slide in enumerate(slides, 1):
+        try:
+            plan = resolve_slide(slide)
+            if plan is None:
+                unresolved += 1
+            elif any(b['x'] < 0 or b['y'] < 0 or b['x'] + b['width'] > plan['width'] + .1 or
+                     b['y'] + b['height'] > plan['height'] + .1 for page in plan['pages'] for b in page):
+                layout_errors.append(f'Slide {index}: content exceeds the resolved canvas.')
+        except SlideLayoutError as exc:
+            layout_errors.append(f'Slide {index}: {exc}')
+    if layout_errors:
+        g4_auto_status, g4_details = 'FAILED', '; '.join(layout_errors)
+    elif unresolved and g4_auto_status != 'FAILED':
+        g4_auto_status, g4_details = 'REQUIRES_REVIEW', 'Specialized layouts require a rendered visual review.'
+    else:
+        g4_details += ' Readable canvas bounds resolved; final rendered appearance requires visual review.'
+        deck_spec.setdefault('metadata', {})['rendering_contract'] = GEOMETRY['version']
     gate_4["status"] = g4_auto_status
     gate_4["automated"] = {
         "status": g4_auto_status,

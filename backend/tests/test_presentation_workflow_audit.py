@@ -454,7 +454,11 @@ def test_review_gates_accessibility_and_visual_safety():
     assert res_clean_audit["gates"]["gate_4_visual"]["automated"]["status"] == "PASSED"
 
     # 4. Gate 5 with real file on disk returns PASSED
-    real_pptx = export_spec_to_pptx(deck_spec)
+    # This structural fixture has unbound legacy claims: cached gates cannot
+    # certify a normal export. Explicit diagnostic mode still tests native shapes.
+    with pytest.raises(ValueError, match="evidence refresh"):
+        export_spec_to_pptx(deck_spec)
+    real_pptx = export_spec_to_pptx(deck_spec, diagnostic_layout_only=True)
     deck_spec["pptx_filename"] = real_pptx.name
     res_real_export = evaluate_automated_gates(deck_spec, brief=brief_data)
     assert res_real_export["gates"]["gate_5_export_accessibility"]["automated"]["status"] == "PASSED"

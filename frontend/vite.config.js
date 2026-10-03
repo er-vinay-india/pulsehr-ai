@@ -2,16 +2,16 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { generateThemeTokens, themeSource } from './scripts/generate_theme_tokens.mjs'
 
-import { generateSlideTokens, slideThemeSource } from './scripts/generate_slide_tokens.mjs'
+import { generateSlideTokens, slideThemeSource, slideGeometrySource } from './scripts/generate_slide_tokens.mjs'
 
 export default defineConfig({
   plugins: [
     {
       name: 'shared-theme-tokens',
-      configureServer(server) { server.watcher.add(slideThemeSource); },
+      configureServer(server) { server.watcher.add([slideThemeSource, slideGeometrySource]); },
       async buildStart() { await generateThemeTokens(); await generateSlideTokens(); },
       async handleHotUpdate({ file }) {
-        if (file === slideThemeSource) await generateSlideTokens();
+        if (file === slideThemeSource || file === slideGeometrySource) await generateSlideTokens();
         if (file === themeSource) await generateThemeTokens();
       }
     },

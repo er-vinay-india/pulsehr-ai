@@ -62,7 +62,10 @@ def _number(value):
     return 'No data' if value is None else f'{value:,.6g}'
 
 
-def export_spec_to_pptx(deck_spec: dict) -> Path:
+def export_spec_to_pptx(deck_spec: dict, *, diagnostic_layout_only: bool = False) -> Path:
+    if not diagnostic_layout_only:
+        from .presentation.content_validation import validate_legacy_export
+        validate_legacy_export(deck_spec)
     if deck_spec.get("metadata", {}).get("deck_style") == "decision_brief":
         from .presentation.decision_deck import verify_decision_deck
         if verify_decision_deck(deck_spec, deck_spec.get("evidence_ledger", []))["status"] != "PASSED":
@@ -93,7 +96,20 @@ def export_spec_to_pptx(deck_spec: dict) -> Path:
         slides = reorder_presentation_slides(slides, deck_title=deck_title)
         deck_spec["slides"] = slides
     total_slides = len(slides)
+    from .presentation.slide_layout import resolve_slide, presenter_notes, SlideLayoutError
+    from .pptx.resolved_layout import render_resolved_slide
+    prepared = []
     for idx, slide_data in enumerate(slides):
+        try:
+            resolved = resolve_slide(slide_data)
+        except SlideLayoutError as exc:
+            raise ChartExportError(f"Slide {idx + 1}: {exc}") from exc
+        if resolved:
+            for part, page_blocks in enumerate(resolved['pages'], 1):
+                prepared.append((idx, slide_data, {**resolved, 'blocks': page_blocks, 'part': part, 'parts': len(resolved['pages'])}))
+        else:
+            prepared.append((idx, slide_data, None))
+    for idx, slide_data, plan in prepared:
         slide = prs.slides.add_slide(prs.slide_layouts[6])
         set_slide_background(slide, colors["bg"])
         try:
@@ -101,35 +117,38 @@ def export_spec_to_pptx(deck_spec: dict) -> Path:
             add_photo_background(slide, slide_data, prs.slide_width, prs.slide_height, theme)
         except Exception as photo_err:
             logger.warning(f"Could not apply slide photo background: {photo_err}")
-        layout = slide_data.get("layout", "chart_narrative")
-        if layout == "title_cover":
-            _render_title_cover_slide(slide, slide_data, colors)
+        if plan:
+            render_resolved_slide(slide, plan, theme, colors, idx + 1, total_slides)
         else:
-            add_header(
-                slide,
-                slide_data.get("title", ""),
-                slide_data.get("category", "EXECUTIVE REVIEW"),
-                brand_color=colors["brand"],
-                title_color=colors["primary"]
-            )
-            if layout == "title_hero":
-                _render_title_hero_slide(slide, slide_data, colors)
-            elif layout == "kpi_summary":
-                _render_kpi_summary_slide(slide, slide_data, colors)
-            elif layout == "chart_narrative":
-                _render_chart_narrative_slide(slide, slide_data, colors, theme_palette=theme.get("chart_palette"))
-            elif layout == "full_chart_takeaway":
-                _render_full_chart_takeaway_slide(slide, slide_data, colors, theme_palette=theme.get("chart_palette"))
-            elif layout == "two_charts":
-                _render_two_charts_slide(slide, slide_data, colors, theme_palette=theme.get("chart_palette"))
-            elif layout in ("action_plan", "initiative_detail"):
-                _render_action_plan_slide(slide, slide_data, colors)
-            elif layout in ("comparison_split", "methodology_panel"):
-                _render_comparison_split_slide(slide, slide_data, colors)
-            elif layout == "table_detail":
-                _render_table_detail_slide(slide, slide_data, colors)
+            layout = slide_data.get("layout", "chart_narrative")
+            if layout == "title_cover":
+                _render_title_cover_slide(slide, slide_data, colors)
             else:
-                _render_generic_slide(slide, slide_data, colors)
+                add_header(
+                    slide,
+                    slide_data.get("title", ""),
+                    slide_data.get("category", "EXECUTIVE REVIEW"),
+                    brand_color=colors["brand"],
+                    title_color=colors["primary"]
+                )
+                if layout == "title_hero":
+                    _render_title_hero_slide(slide, slide_data, colors)
+                elif layout == "kpi_summary":
+                    _render_kpi_summary_slide(slide, slide_data, colors)
+                elif layout == "chart_narrative":
+                    _render_chart_narrative_slide(slide, slide_data, colors, theme_palette=theme.get("chart_palette"))
+                elif layout == "full_chart_takeaway":
+                    _render_full_chart_takeaway_slide(slide, slide_data, colors, theme_palette=theme.get("chart_palette"))
+                elif layout == "two_charts":
+                    _render_two_charts_slide(slide, slide_data, colors, theme_palette=theme.get("chart_palette"))
+                elif layout in ("action_plan", "initiative_detail"):
+                    _render_action_plan_slide(slide, slide_data, colors)
+                elif layout in ("comparison_split", "methodology_panel"):
+                    _render_comparison_split_slide(slide, slide_data, colors)
+                elif layout == "table_detail":
+                    _render_table_detail_slide(slide, slide_data, colors)
+                else:
+                    _render_generic_slide(slide, slide_data, colors)
 
         from pptx.oxml.xmlchemy import OxmlElement
         for shape in slide.shapes:
@@ -171,13 +190,15 @@ def export_spec_to_pptx(deck_spec: dict) -> Path:
             except Exception:
                 pass
 
-        _render_footer(slide, slide_data, colors, slide_num=idx + 1, total_slides=total_slides)
+        if not plan:
+            _render_footer(slide, slide_data, colors, slide_num=idx + 1, total_slides=total_slides)
 
-        if slide_data.get("speaker_notes"):
+        resolved_notes = presenter_notes(slide_data, plan)
+        if resolved_notes:
             try:
                 notes_slide = slide.notes_slide
                 tf = notes_slide.notes_text_frame
-                tf.text = str(slide_data["speaker_notes"])
+                tf.text = resolved_notes
             except Exception:
                 pass
 
@@ -234,7 +255,10 @@ def generate_html_executive_report() -> str:
     return '<!doctype html><html><head><title>HighView Executive Report</title><style>body{font-family:Arial;padding:32px}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ccc;padding:8px;text-align:left}</style></head><body><h1>HighView · Clarity From Every Sheet. · Powered by HRIDAY</h1><p>' + escape(data['note']) + '</p>' + (''.join(sections) or '<p>No sheets uploaded.</p>') + '</body></html>'
 
 
-def export_spec_to_pdf(deck_spec: dict) -> Path:
+def export_spec_to_pdf(deck_spec: dict, *, diagnostic_layout_only: bool = False) -> Path:
+    if not diagnostic_layout_only:
+        from .presentation.content_validation import validate_legacy_export
+        validate_legacy_export(deck_spec)
     """Export the full business report with centralized slide colors."""
     if deck_spec.get("metadata", {}).get("deck_style") == "decision_brief":
         from .presentation.decision_deck import verify_decision_deck

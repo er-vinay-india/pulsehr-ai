@@ -666,6 +666,9 @@ def test_native_pptx_export_from_orchestrator_produced_deck(tmp_path):
         evidence_ledger=ctx.current_evidence
     )
 
-    pptx_path = export_spec_to_pptx(deck_spec)
+    # Raw fallback plans are not evidence-approved deliverables.
+    with pytest.raises(ValueError, match='evidence refresh'):
+        export_spec_to_pptx(deck_spec)
+    pptx_path = export_spec_to_pptx(deck_spec, diagnostic_layout_only=True)
     assert Path(pptx_path).exists()
     assert Path(pptx_path).stat().st_size > 1000

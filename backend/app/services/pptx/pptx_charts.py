@@ -77,25 +77,32 @@ def _add_native_chart_shape(slide, chart_info: dict, x, y, cx, cy, colors: dict,
                 value = int(element.get('val'))
                 if value < 0:
                     element.set('val', str(value % (2**32)))
-        chart.has_legend = True
-        chart.legend.position = XL_LEGEND_POSITION.TOP
-        chart.legend.include_in_layout = False
+        chart.has_legend = len(series_list) > 1
+        if chart.has_legend:
+            chart.legend.position = XL_LEGEND_POSITION.TOP
+            chart.legend.include_in_layout = False
         chart.font.color.rgb = colors["secondary"]
-        chart.font.size = Pt(11)
+        chart.font.size = Pt(14)
         chart.has_title = True
         chart.chart_title.text_frame.text = chart_info.get('title') or series_list[0].get('name') or 'Recorded values'
         for paragraph in chart.chart_title.text_frame.paragraphs:
             paragraph.font.color.rgb = colors['primary']
-            paragraph.font.size = Pt(12)
+            paragraph.font.size = Pt(18)
         chart.plots[0].has_data_labels = True
         chart.plots[0].data_labels.font.color.rgb = colors['primary']
-        chart.plots[0].data_labels.font.size = Pt(10)
+        chart.plots[0].data_labels.font.size = Pt(14)
         count_unit = chart_info.get('unit') in {'rows', 'count', 'employees', 'personnel'}
-        number_format = '0' if count_unit else '0.00'
+        largest = max(abs(v) for series in series_list for v in series['values'])
+        number_format = '0.0,,"M"' if largest >= 1_000_000 else ('0' if count_unit else '0.00')
         chart.plots[0].data_labels.number_format = number_format
         chart.plots[0].data_labels.position = XL_DATA_LABEL_POSITION.ABOVE if xl_type == XL_CHART_TYPE.LINE else XL_DATA_LABEL_POSITION.OUTSIDE_END
-        chart.legend.font.color.rgb = colors["secondary"]
-        chart.legend.font.size = Pt(11)
+        if xl_type in (XL_CHART_TYPE.PIE, XL_CHART_TYPE.DOUGHNUT):
+            chart.plots[0].data_labels.show_category_name = True
+            chart.plots[0].data_labels.show_percentage = True
+            chart.plots[0].data_labels.show_value = True
+        if chart.has_legend:
+            chart.legend.font.color.rgb = colors["secondary"]
+            chart.legend.font.size = Pt(14)
         # Explicit fills prevent Office's default white chart area in dark decks.
         for element in (chart._chartSpace, chart._chartSpace.plotArea):
             sp_pr = OxmlElement("c:spPr")
@@ -107,15 +114,17 @@ def _add_native_chart_shape(slide, chart_info: dict, x, y, cx, cy, colors: dict,
             else:
                 element.insert_element_before(sp_pr, "c:extLst")
         if xl_type not in (XL_CHART_TYPE.PIE, XL_CHART_TYPE.DOUGHNUT):
+            if xl_type == XL_CHART_TYPE.BAR_CLUSTERED:
+                chart.category_axis.reverse_order = True
             for axis in (chart.category_axis, chart.value_axis):
                 axis.tick_labels.font.color.rgb = colors["secondary"]
-                axis.tick_labels.font.size = Pt(11)
+                axis.tick_labels.font.size = Pt(14)
                 axis.tick_labels.number_format = number_format
                 axis.tick_labels.number_format_is_linked = False
                 axis.format.line.color.rgb = colors["card_border"]
                 if axis.has_major_gridlines:
                     axis.major_gridlines.format.line.color.rgb = colors["card_border"]
-            if count_unit:
+            if count_unit and largest <= 10:
                 chart.value_axis.major_unit = 1
 
 
@@ -167,7 +176,7 @@ def _render_native_9box_matrix(slide, t9: dict, x, y, cx, cy, colors: dict):
     tf.margin_top = Inches(0.15)
     p_head = tf.paragraphs[0]
     p_head.text = "McKinsey / GE 9-Box Strategic Talent & Risk Distribution"
-    p_head.font.size = Pt(11)
+    p_head.font.size = Pt(14)
     p_head.font.bold = True
     p_head.font.color.rgb = colors["accent"]
 
@@ -230,7 +239,7 @@ def _render_native_9box_matrix(slide, t9: dict, x, y, cx, cy, colors: dict):
                 title = title.split("(")[0].strip()
             bp = bcell.text_frame.paragraphs[0]
             bp.text = f"{cnt} Staff"
-            bp.font.size = Pt(11)
+            bp.font.size = Pt(14)
             bp.font.bold = True
             bp.font.color.rgb = colors["primary"] if cnt > 0 else colors["secondary"]
 

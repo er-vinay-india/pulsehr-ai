@@ -1,3 +1,5 @@
+import ResolvedSlideContent from './presentation/slides/ResolvedSlideContent.jsx';
+import { SLIDE_LAYOUT_GEOMETRY } from '../theme/slideLayout.generated.js';
 import { getSlideTheme, slideCssVariables } from '../theme/slideTokens.js';
 import { slideBackground } from "../utils/slideBackground";
 import React, { useState } from "react";
@@ -15,6 +17,7 @@ export default function PresentationSlideContent({
   slideIndex,
   totalSlides,
   isEditable = false,
+  reflow = false,
   onUpdate = () => {},
   onViewEvidence = () => {}
 }) {
@@ -129,6 +132,11 @@ export default function PresentationSlideContent({
       </div>
     );
   };
+
+  if (SLIDE_LAYOUT_GEOMETRY.supported_layouts.includes(layout) && !slide.image_url && !slide.talent_9box_data && !slide.burnout_strain_data) {
+    return <ResolvedSlideContent slide={slide} theme={theme} slideIndex={slideIndex || slide.order || 1}
+      totalSlides={totalSlides || slide.total_slides || 1} reflow={reflow} isEditable={isEditable} onUpdate={onUpdate} />;
+  }
 
   if (layout === "visual_intelligence" || layout === "process_flow" || (!slide.layout && slide?.visual_spec)) {
     return (

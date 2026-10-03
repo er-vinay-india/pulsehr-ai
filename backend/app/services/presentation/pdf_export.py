@@ -11,8 +11,24 @@ from .visual.design_tokens import slide_theme_preset
 
 
 def export_pdf(deck, output: Path):
-    theme = slide_theme_preset(deck.get('metadata', {}).get('theme_id') or deck.get('theme'))
+    from .slide_layout import resolve_slide
+    from .resolved_pdf import export_resolved_pdf
     canvas = Canvas(str(output), pagesize=(960, 540))
+    canvas.setTitle(deck.get('metadata', {}).get('title') or 'HighView presentation')
+    slides = deck.get('slides') or []
+    for index, slide in enumerate(slides):
+        # A specialized slide must not send every ordinary table/chart back
+        # through the older geometry adapter.
+        adapter = export_resolved_pdf if resolve_slide(slide) else _export_legacy_pdf
+        adapter({**deck, 'slides': [slide]}, output, canvas=canvas, page_offset=index, total=len(slides))
+    canvas.save()
+    return output
+
+
+def _export_legacy_pdf(deck, output: Path, *, canvas=None, page_offset=0, total=None):
+    theme = slide_theme_preset(deck.get('metadata', {}).get('theme_id') or deck.get('theme'))
+    owns_canvas = canvas is None
+    canvas = canvas or Canvas(str(output), pagesize=(960, 540))
     canvas.setTitle(deck.get('metadata', {}).get('title') or 'HighView presentation')
 
     def text(value, x, top, width, size=13, color='primary_text', bold=False):
@@ -99,7 +115,8 @@ def export_pdf(deck, output: Path):
         text(slide.get('source_label') or 'HighView', 40, 30, 800, 9, 'secondary_text')
         canvas.setFillColor(HexColor(theme['secondary_text']))
         canvas.setFont('Helvetica', 9)
-        canvas.drawRightString(920, 19, f'{index} / {len(slides)}')
+        canvas.drawRightString(920, 19, f'{index+page_offset} / {total or len(slides)}')
         canvas.showPage()
-    canvas.save()
+    if owns_canvas:
+        canvas.save()
     return output

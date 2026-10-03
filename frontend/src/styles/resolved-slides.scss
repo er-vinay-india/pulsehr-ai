@@ -1,0 +1,32 @@
+.resolved-slide-view { width: 100%; height: 100%; position: relative; }
+.resolved-slide {
+  width: 100%; aspect-ratio: 16 / 9; position: relative; overflow: hidden;
+  font-family: var(--font-body); box-sizing: border-box;
+  .resolved-slide-canvas { position: relative; transform-origin: top left; }
+  .resolved-chart { min-width: 0; }
+  .resolved-chart .minimal-chart { height: 100%; }
+  .resolved-chart .chart-aggregation-note { display: none; }
+  .resolved-table-wrap { overflow: visible; }
+  table { width: 100%; table-layout: fixed; border-collapse: collapse; line-height: 1.22; }
+  th, td { padding: 8px; vertical-align: top; overflow-wrap: anywhere; white-space: pre-wrap; border: 1px solid var(--card-border); background: var(--card-bg); }
+  th { color: var(--brand-color); text-align: left; }
+  .resolved-page-number { text-align: right; color: var(--text-secondary); }
+  .resolved-text-editor { padding: 0; border: 1px solid var(--card-border); background: var(--card-bg); resize: none; font-family: inherit; }
+}
+.resolved-layout-message { padding: 32px; color: var(--hv-text-primary); background: var(--hv-bg-surface); }
+.resolved-table-pages {
+  position: relative; display: flex; justify-content: flex-end; align-items: center; gap: 10px;
+  font-size: 14px; color: var(--hv-text-primary); background: var(--hv-bg-surface); padding: 6px;
+  button { min-height: 36px; color: inherit; background: var(--hv-bg-surface); border: 1px solid var(--hv-border-strong); border-radius: 4px; }
+  button:focus-visible { outline: 2px solid var(--hv-text-primary); outline-offset: 2px; }
+}
+.resolved-chart-data { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+.resolved-slide-reflow {
+  aspect-ratio: auto; overflow: visible; padding: 20px;
+  .resolved-slide-canvas { display: flex; flex-direction: column; gap: 16px; }
+  .resolved-chart { height: 340px; }
+  .resolved-table-wrap { overflow-x: auto; }
+  table { min-width: 600px; }
+  .resolved-page-number { text-align: left; }
+}
+.mobile-presentation-reflow .resolved-table-pages { position: relative; justify-content: flex-end; }

@@ -1,3 +1,5 @@
+import { useSlideLayout } from './slides/ResolvedSlideContent.jsx';
+import { exportPresentationPdf } from '../../api/client.js';
 import DeckControl from './DeckControl.jsx';
 import React, { useState } from "react";
 import {
@@ -67,6 +69,8 @@ export default function DeckStudioView({
   onApplyImage
 }) {
   const [isSlideOptionsOpen, setIsSlideOptionsOpen] = useState(false);
+  const [pdfExporting, setPdfExporting] = useState(false);
+  const [pdfError, setPdfError] = useState('');
   const [isImagePickerOpen, setIsImagePickerOpen] = useState(false);
   const [isReviewGatesOpen, setIsReviewGatesOpen] = useState(false);
   const [isPresenterMode, setIsPresenterMode] = useState(false);
@@ -91,6 +95,7 @@ export default function DeckStudioView({
 
   const evidenceLocked = false; // Factual boundary: Editorial content freely editable; metrics tracked with USER_OVERRIDE
   const currentSlide = deckSpec.slides[activeSlideIndex] || deckSpec.slides[0];
+  const { plan: currentLayout } = useSlideLayout(currentSlide);
 
   // Handle Copilot Slide Curation
   const handleApplyCopilotCuration = async (promptText) => {
@@ -138,8 +143,12 @@ export default function DeckStudioView({
     setPreviousSlideSnapshot(null);
   }, [currentSlide?.id]);
 
-  const handlePrintPdf = () => {
-    exportStandaloneHtmlPresentation(deckSpec, selectedThemeId, true);
+  const handlePrintPdf = async () => {
+    setPdfExporting(true);
+    setPdfError('');
+    try { await exportPresentationPdf(deckSpec); }
+    catch (error) { setPdfError(error.message); }
+    finally { setPdfExporting(false); }
   };
 
   return (
@@ -363,17 +372,21 @@ export default function DeckStudioView({
               type="button"
               className="symbolic-action-btn"
               onClick={handlePrintPdf}
+              disabled={pdfExporting}
+              aria-busy={pdfExporting}
               aria-label="Export PDF"
             >
               <Printer size={14} />
               <span className="btn-label-responsive">PDF</span>
             </button>
             <span className="symbolic-tooltip">
-              Export PDF: Print or save presentation as PDF document
+              Export PDF with the same readable slide layout
             </span>
           </DeckControl>
         </div>
       </fieldset>
+
+      {pdfError && <p role="alert" className="resolved-layout-message">PDF export failed: {pdfError}</p>}
 
       <fieldset className="studio-main-grid pres-editor-fieldset" disabled={isBusy}>
         {/* LEFT: SLIDE THUMBNAIL RAIL */}
@@ -595,6 +608,10 @@ export default function DeckStudioView({
                 }}
                 placeholder="Add talking points and executive narrative remarks..."
               />
+              {currentLayout?.supporting_notes?.length > 0 && <details className="notes-supporting-detail">
+                <summary>Supporting detail included in export notes</summary>
+                {currentLayout.supporting_notes.map((note, index) => <p key={index}>{note}</p>)}
+              </details>}
             </div>
           )}
         </div>
