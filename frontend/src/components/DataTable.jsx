@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
-import { X } from "lucide-react";
+import { X, FileSpreadsheet, SearchX } from "lucide-react";
 import { formatDisplayLabel } from "../utils/displayFormatters";
 import DataTableToolbar from "./datatable/DataTableToolbar";
 import DataTableGrid from "./datatable/DataTableGrid";
@@ -173,6 +173,18 @@ export default function DataTable({
   };
 
   const displayedCols = columns.filter(c => visibleColumns.has(c));
+
+  if (!loading && processedRows.length === 0) {
+    const filtered = Boolean(localFilter.trim() || searchQuery.trim());
+    return <section className="explorer-empty-state explorer-empty-state--compact" aria-label="Empty records">
+      <div className="explorer-empty-icon">{filtered ? <SearchX size={26} /> : <FileSpreadsheet size={26} />}</div>
+      <h3>{filtered ? 'No matching records' : 'No records in this sheet'}</h3>
+      <p>{filtered ? 'Try a different search or clear your filters to see more records.' : 'This sheet has no rows to display. Upload a workbook that includes records to get started.'}</p>
+      {filtered ? <button type="button" className="btn-secondary" onClick={() => { setLocalFilter(''); onSearchChange?.(''); }}>Clear filters</button>
+        : serverPage > 1 ? <button type="button" className="btn-secondary" onClick={() => onPageChange(1)}>Go to first page</button>
+        : <button type="button" className="btn-primary" onClick={() => { window.location.hash = 'upload'; }}>Upload spreadsheet</button>}
+    </section>;
+  }
 
   return (
     <div className="datatable-wrapper card-panel" style={{ marginTop: "1rem", padding: "1.25rem", width: "100%" }}>

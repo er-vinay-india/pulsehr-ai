@@ -5,6 +5,7 @@ import threading
 from typing import Any
 
 from ...db.database import get_connection
+from ..data_lifecycle import data_lifecycle_lock
 from .claim_verifier import verify_presentation_claims
 from .job_manager import PresentationJobManager, job_manager
 from .scope_detector import collect_workspace_evidence, preview_presentation_scope
@@ -13,6 +14,16 @@ from .spatial_overflow_monitor import SpatialOverflowMonitor
 from .review_gates import initialize_review_gates, evaluate_automated_gates
 
 logger = logging.getLogger(__name__)
+
+def _index_persisted_deck(deck_spec):
+    # Deletion and indexing cannot pass each other and resurrect removed memories.
+    with data_lifecycle_lock:
+        with get_connection() as conn:
+            if not conn.execute('SELECT 1 FROM presentation_decks WHERE id=?', (deck_spec['id'],)).fetchone():
+                return
+        from .memory import memory_indexer
+        memory_indexer.index_presentation_deck(deck_spec)
+
 
 PIPELINE_PHASES = [
     {"index": 0, "key": "brief_setup", "name": "Objective, audience, decision, and constraints"},
@@ -556,62 +567,64 @@ def execute_presentation_pipeline_async(
             error_msg = f"Delivery blocked: Automated review gate check(s) failed: {'; '.join(failed_gates)}"
             raise RuntimeError(error_msg)
 
-        deliverable_mode = brief_data.get("deliverable", "pptx").lower()
-        from ..report_generator import export_spec_to_pptx, export_spec_to_pdf
-        pptx_path = None
-        if deliverable_mode in ("pptx", "both"):
-            pptx_path = export_spec_to_pptx(deck_spec)
-            deck_spec["pptx_filename"] = pptx_path.name
-        if deliverable_mode in ("pdf", "both"):
-            pdf_path = export_spec_to_pdf(deck_spec)
-            deck_spec["pdf_filename"] = pdf_path.name
+        with data_lifecycle_lock:
+            if mgr.is_cancelled(job_id) or not mgr.get_job(job_id):
+                return
+            deliverable_mode = brief_data.get("deliverable", "pptx").lower()
+            from ..report_generator import export_spec_to_pptx, export_spec_to_pdf
+            pptx_path = None
+            if deliverable_mode in ("pptx", "both"):
+                pptx_path = export_spec_to_pptx(deck_spec)
+                deck_spec["pptx_filename"] = pptx_path.name
+            if deliverable_mode in ("pdf", "both"):
+                pdf_path = export_spec_to_pdf(deck_spec)
+                deck_spec["pdf_filename"] = pdf_path.name
 
-        # Re-evaluate review gates after export to certify physical file integrity on disk
-        review_gates = evaluate_automated_gates(
-            deck_spec=deck_spec,
-            verification_summary=deck_spec["metadata"].get("validation_summary"),
-            quality_audit=deck_spec.get("quality_audit"),
-            brief=brief_data
-        )
-        deck_spec["metadata"]["review_gates"] = review_gates
+            # Re-evaluate review gates after export to certify physical file integrity on disk
+            review_gates = evaluate_automated_gates(
+                deck_spec=deck_spec,
+                verification_summary=deck_spec["metadata"].get("validation_summary"),
+                quality_audit=deck_spec.get("quality_audit"),
+                brief=brief_data
+            )
+            deck_spec["metadata"]["review_gates"] = review_gates
 
-        failed_post_export = [
-            f"{gid}: {g.get('automated', {}).get('details', 'Failed check')}"
-            for gid, g in review_gates.get("gates", {}).items()
-            if g.get("automated", {}).get("status") == "FAILED"
-        ]
-        if failed_post_export:
-            error_msg = f"Delivery blocked: Technical export QA check failed: {'; '.join(failed_post_export)}"
-            raise RuntimeError(error_msg)
+            failed_post_export = [
+                f"{gid}: {g.get('automated', {}).get('details', 'Failed check')}"
+                for gid, g in review_gates.get("gates", {}).items()
+                if g.get("automated", {}).get("status") == "FAILED"
+            ]
+            if failed_post_export:
+                error_msg = f"Delivery blocked: Technical export QA check failed: {'; '.join(failed_post_export)}"
+                raise RuntimeError(error_msg)
 
-        # Persist presentation deck
-        now = datetime.datetime.now(datetime.timezone.utc).isoformat()
-        try:
-            with get_connection() as conn:
-                conn.execute(
-                    "INSERT INTO presentation_decks (id, title, dataset_id, sheet_id, theme_id, spec_json, pptx_filename, created_at, updated_at) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                    (
-                        deck_id,
-                        deck_spec["metadata"]["title"],
-                        deck_spec["metadata"].get("dataset_id"),
-                        deck_spec["metadata"].get("sheet_id"),
-                        deck_spec["metadata"]["theme_id"],
-                        json.dumps(deck_spec),
-                        pptx_path.name if pptx_path else None,
-                        now,
-                        now
+            # Persist presentation deck
+            now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            try:
+                with get_connection() as conn:
+                    conn.execute(
+                        "INSERT INTO presentation_decks (id, title, dataset_id, sheet_id, theme_id, spec_json, pptx_filename, created_at, updated_at) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        (
+                            deck_id,
+                            deck_spec["metadata"]["title"],
+                            deck_spec["metadata"].get("dataset_id"),
+                            deck_spec["metadata"].get("sheet_id"),
+                            deck_spec["metadata"]["theme_id"],
+                            json.dumps(deck_spec),
+                            pptx_path.name if pptx_path else None,
+                            now,
+                            now
+                        )
                     )
-                )
-                conn.commit()
-        except Exception as exc:
-            raise RuntimeError("The deck was generated but could not be saved to persistent database. Please retry.") from exc
+                    conn.commit()
+            except Exception as exc:
+                raise RuntimeError("The deck was generated but could not be saved to persistent database. Please retry.") from exc
 
         # Memory indexing (Phase 1)
         try:
-            from .memory import memory_indexer
             threading.Thread(
-                target=memory_indexer.index_presentation_deck,
+                target=_index_persisted_deck,
                 args=(deck_spec,),
                 daemon=True,
                 name=f"pres-indexer-{deck_id}"

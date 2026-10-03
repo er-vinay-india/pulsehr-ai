@@ -4,6 +4,7 @@ import datetime
 import json
 import logging
 import re
+from functools import wraps
 from typing import Any, Literal
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse
@@ -11,6 +12,8 @@ from pydantic import BaseModel
 
 from ..core import config
 from ..db.database import get_connection
+from ..services.data_lifecycle import data_lifecycle_lock
+from ..services.dataset_deletion import require_live_sources
 from ..services.presentation_service import (
     THEMES,
     job_manager,
@@ -27,6 +30,14 @@ logger = logging.getLogger(__name__)
 from ..services.presentation.image_provider import search_free_images
 
 router = APIRouter(prefix="/api/presentations", tags=["presentations"])
+
+
+def _serialize_deck_write(function):
+    @wraps(function)
+    def guarded(*args, **kwargs):
+        with data_lifecycle_lock:
+            return function(*args, **kwargs)
+    return guarded
 
 
 @router.post("/layout-preview")
@@ -430,9 +441,12 @@ def approve_review_gate(deck_id: str, gate_id: str, req: ReviewGateSignoffReques
 
 
 @router.put("/decks/{deck_id}")
+@_serialize_deck_write
 def update_presentation_deck(deck_id: str, deck_spec: dict[str, Any]):
     """Saves updated PresentationDeckSpec after user inline edits or theme changes, invalidating relevant review gates."""
     from ..services.presentation.review_gates import invalidate_review_gates_on_edit
+
+    require_live_sources(deck_spec)
 
     # Retrieve current stored revision from database to guarantee monotonic revision increment
     stored_rev = 0
@@ -489,9 +503,11 @@ def handle_regenerate_slide(req: RegenerateSlideRequest):
 
 
 @router.post("/export-pptx")
+@_serialize_deck_write
 def export_presentation_to_pptx(req: ExportPptxRequest):
     """Builds and returns an editable PowerPoint file with native charts from deck spec."""
     deck_spec = req.deck_spec
+    require_live_sources(deck_spec)
     from ..services.presentation.review_gates import evaluate_automated_gates
     rg = evaluate_automated_gates(deck_spec)
     deck_spec.setdefault("metadata", {})["review_gates"] = rg
@@ -529,11 +545,13 @@ def export_presentation_to_pptx(req: ExportPptxRequest):
 
 
 @router.post("/export-pdf")
+@_serialize_deck_write
 def export_presentation_to_pdf(req: ExportPptxRequest):
     """Export the current editor spec, including edits not yet saved to a deck."""
     from ..services.presentation.review_gates import evaluate_automated_gates
     from ..services.report_generator import export_spec_to_pdf
     deck = req.deck_spec
+    require_live_sources(deck)
     review = evaluate_automated_gates(deck)
     failures = [g.get('automated', {}).get('details', 'Failed check') for g in review.get('gates', {}).values()
                 if g.get('automated', {}).get('status') == 'FAILED']
@@ -548,6 +566,7 @@ def export_presentation_to_pdf(req: ExportPptxRequest):
 
 
 @router.get("/download/{deck_id}")
+@_serialize_deck_write
 def download_deck_pptx(deck_id: str):
     """Exports or serves a PowerPoint presentation for a stored deck."""
     deck_spec = None
@@ -559,6 +578,7 @@ def download_deck_pptx(deck_id: str):
         raise HTTPException(status_code=404, detail="Presentation deck not found")
 
     if deck_spec:
+        require_live_sources(deck_spec)
         from ..services.presentation.review_gates import evaluate_automated_gates
         rg = evaluate_automated_gates(deck_spec)
         deck_spec.setdefault("metadata", {})["review_gates"] = rg
@@ -597,6 +617,7 @@ def download_deck_pptx(deck_id: str):
 
 
 @router.get("/download/{deck_id}/pdf")
+@_serialize_deck_write
 def download_deck_pdf(deck_id: str):
     """Exports or serves a PDF document for a stored deck."""
     from ..services.report_generator import export_spec_to_pdf
@@ -609,6 +630,7 @@ def download_deck_pdf(deck_id: str):
         raise HTTPException(status_code=404, detail="Presentation deck not found")
 
     if deck_spec:
+        require_live_sources(deck_spec)
         from ..services.presentation.review_gates import evaluate_automated_gates
         rg = evaluate_automated_gates(deck_spec)
         failed_gates = [

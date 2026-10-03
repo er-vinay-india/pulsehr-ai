@@ -45,6 +45,15 @@ export default function App() {
 
   // Key to force refresh DataExplorerPage when an upload finishes
   const [explorerRefreshKey, setExplorerRefreshKey] = useState(0);
+  useEffect(() => {
+    const clearDeletedData = () => {
+      setActiveDeck(null);
+      setActivePresentationJob(null);
+      setActiveScope({ datasetId: null, sheetId: null, snapshotId: null });
+    };
+    window.addEventListener('workbooks-deleted', clearDeletedData);
+    return () => window.removeEventListener('workbooks-deleted', clearDeletedData);
+  }, []);
 
   useEffect(() => {
     const handleHashChange = () => {

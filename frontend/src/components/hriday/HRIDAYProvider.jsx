@@ -7,11 +7,13 @@ export function HRIDAYProvider({ children }) {
   const ref = useRef(null);
   if (!ref.current) ref.current = new HRIDAYConversation(streamCopilotQuery);
   useEffect(() => {
+    const clearDeletedData = () => ref.current.newChat();
+    window.addEventListener('workbooks-deleted', clearDeletedData);
     const controller = new AbortController();
     getAssistantIdentity(controller.signal).then(identity => {
       if (!controller.signal.aborted) ref.current.setIdentity(identity);
     }).catch(() => {}); // Keep the central offline bootstrap if the API is unavailable.
-    return () => { controller.abort(); ref.current.stop(); };
+    return () => { controller.abort(); ref.current.stop(); window.removeEventListener('workbooks-deleted', clearDeletedData); };
   }, []);
   return <Context.Provider value={ref.current}>{children}</Context.Provider>;
 }

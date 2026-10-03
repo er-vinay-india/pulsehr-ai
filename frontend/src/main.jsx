@@ -12,6 +12,7 @@ import "./styles/theme-components.scss";
 import "./styles/presentation-interface.scss";
 import "./styles/slide-accessibility.scss";
 import "./styles/hriday-chat.scss";
+import "./styles/explorer-workspace.scss";
 import "./styles/mobile-layout.scss";
 
 ReactDOM.createRoot(document.getElementById("root")).render(

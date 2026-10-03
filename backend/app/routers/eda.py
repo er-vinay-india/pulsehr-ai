@@ -23,7 +23,8 @@ def get_sheet_eda_report(sheet_id: int):
         ).fetchone()
         if not row:
             # If not yet generated, attempt on-the-fly generation
-            run_eda_pipeline(sheet_ids=[sheet_id], conn=conn)
+            if conn.execute('SELECT 1 FROM sheets WHERE id=?', (sheet_id,)).fetchone():
+                run_eda_pipeline(conn=conn)
             row = conn.execute(
                 "SELECT id, sheet_id, dataset_id, health_score, report_json, created_at FROM eda_reports WHERE sheet_id=?",
                 (sheet_id,)

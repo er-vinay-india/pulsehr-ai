@@ -1,0 +1,32 @@
+.explorer-empty-state {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  min-height: 320px; padding: clamp(24px, 5vw, 48px) 20px; gap: 12px;
+  background: var(--color-bg-surface); border: 1px solid var(--color-border);
+  border-radius: 16px; text-align: center; margin-top: 20px;
+  color: var(--color-text-primary);
+  h2, h3 { margin: 0; color: var(--color-text-primary); font-size: clamp(20px, 3vw, 24px); line-height: 1.3; }
+  p { margin: 0 0 8px; max-width: 400px; color: var(--color-text-secondary); line-height: 1.6; }
+  button { min-height: 44px; }
+  &--compact { min-height: 240px; }
+}
+.explorer-empty-icon {
+  display: grid; place-items: center; width: 60px; height: 60px; border-radius: 16px;
+  color: var(--color-brand-secondary); background: var(--color-bg-soft-teal); margin-bottom: 4px;
+}
+.explorer-empty-hint { font-size: 12px; color: var(--color-text-muted); }
+.explorer-loading, .explorer-feedback { padding: 16px; margin-bottom: 16px; border-radius: 10px; color: var(--color-text-secondary); }
+.explorer-feedback { background: var(--color-bg-soft-teal); border: 1px solid var(--color-border); }
+.workspace-workbooks-menu {
+  .workbook-select-all { display: flex; align-items: center; gap: 10px; min-height: 44px; cursor: pointer; }
+  input[type=checkbox] { width: 18px; height: 18px; flex-shrink: 0; accent-color: var(--color-brand-primary); }
+  .workbook-selection-footer {
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px;
+    margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--color-border);
+    button {
+      min-height: 44px; border-radius: 8px; padding: 8px 12px;
+      background: #e11d48; color: #fff; border: 1px solid transparent; font-weight: 600;
+      &:disabled { opacity: .4; cursor: not-allowed; }
+      &:not(:disabled):hover { background: #be123c; }
+    }
+  }
+}

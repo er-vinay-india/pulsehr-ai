@@ -82,6 +82,13 @@ CREATE INDEX IF NOT EXISTS idx_alerts_severity ON hr_alerts(severity);
 
 -- Source-preserving upload catalogue. Derived relationships never overwrite rows.
 CREATE TABLE IF NOT EXISTS app_metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+-- Operational retry queue only. Completed cleanup tasks are removed, not retained as an audit trail.
+CREATE TABLE IF NOT EXISTS deletion_file_cleanup (
+    dataset_id INTEGER NOT NULL,
+    storage_kind TEXT NOT NULL CHECK(storage_kind IN ('upload', 'export')),
+    relative_path TEXT NOT NULL,
+    PRIMARY KEY(dataset_id, storage_kind, relative_path)
+);
 CREATE TABLE IF NOT EXISTS sheets (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     dataset_id INTEGER NOT NULL REFERENCES dataset_uploads(id) ON DELETE CASCADE,

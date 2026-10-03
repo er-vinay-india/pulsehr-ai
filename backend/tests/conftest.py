@@ -12,6 +12,7 @@ def isolated_workspace(request, tmp_path, monkeypatch):
     monkeypatch.setattr(config, 'DB_PATH', tmp_path / 'db' / 'test.sqlite3')
     monkeypatch.setattr(config, 'UPLOADS_DIR', tmp_path / 'uploads')
     monkeypatch.setattr(config, 'EXPORTS_DIR', tmp_path / 'exports')
+    monkeypatch.setattr(config, 'PRESENTATION_MEMORY_DB_PATH', tmp_path / 'db' / 'presentation_memory.sqlite3')
     config.UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
     config.EXPORTS_DIR.mkdir(parents=True, exist_ok=True)
     monkeypatch.setattr(sheet_catalog, 'model_embeddings', lambda texts: [])
@@ -96,4 +97,3 @@ def hriday_test_env(tmp_path, monkeypatch):
     monkeypatch.setattr(hybrid_retrieval, 'get_connection', connection)
 
     return {"db_path": db_path, "dataset_id": 1, "sheet_id": 1}
-

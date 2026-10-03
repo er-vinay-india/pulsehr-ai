@@ -325,8 +325,9 @@ export async function openExecutivePrintReport() {
 
 export async function deleteDataset(id) {
   const res = await fetch(`${API_BASE}/upload/datasets/${id}`, { method: "DELETE" });
-  if (!res.ok) throw new Error("Failed to delete dataset");
-  return res.json();
+  const result = await res.json();
+  if (!res.ok) throw new Error(typeof result.detail === 'string' ? result.detail : "Could not delete workbook. Please retry.");
+  return result;
 }
 
 export async function bulkDeleteDatasets(datasetIds = [], deleteAll = false) {
@@ -335,8 +336,9 @@ export async function bulkDeleteDatasets(datasetIds = [], deleteAll = false) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ dataset_ids: datasetIds, delete_all: deleteAll })
   });
-  if (!res.ok) throw new Error("Failed to bulk delete datasets");
-  return res.json();
+  const result = await res.json();
+  if (!res.ok) throw new Error(typeof result.detail === 'string' ? result.detail : "Could not delete selected workbooks. Please retry.");
+  return result;
 }
 
 export async function deleteAllDatasets() {

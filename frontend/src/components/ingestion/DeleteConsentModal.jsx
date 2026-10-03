@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useRef } from "react";
 import { AlertTriangle, FileSpreadsheet, Trash2, X } from "lucide-react";
 
 export default function DeleteConsentModal({
@@ -8,7 +8,28 @@ export default function DeleteConsentModal({
   deleting,
   onClose,
   onConfirmDelete,
+  error,
 }) {
+  const dialogRef = useRef(null);
+  const cancelRef = useRef(null);
+  const latest = useRef(null);
+  latest.current = { deleting, onClose };
+  const isOpen = Boolean(datasetToDelete);
+  useEffect(() => {
+    if (!isOpen) return;
+    const previousFocus = document.activeElement;
+    cancelRef.current?.focus();
+    const handleKey = event => {
+      if (event.key === 'Escape' && !latest.current.deleting) latest.current.onClose();
+      if (event.key !== 'Tab') return;
+      const nodes = [...dialogRef.current.querySelectorAll('button:not(:disabled), input:not(:disabled)')];
+      const first = nodes[0], last = nodes[nodes.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+      if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+    };
+    document.addEventListener('keydown', handleKey);
+    return () => { document.removeEventListener('keydown', handleKey); previousFocus?.focus(); };
+  }, [isOpen]);
   if (!datasetToDelete) return null;
 
   const isBulk = Boolean(datasetToDelete.isBulk);
@@ -25,7 +46,7 @@ export default function DeleteConsentModal({
       aria-modal="true"
       aria-labelledby="modal-title"
     >
-      <div className="modal-dialog" onClick={(e) => e.stopPropagation()}>
+      <div className="modal-dialog" ref={dialogRef} aria-busy={deleting} onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <div className="modal-title-group">
             <div className="modal-icon-badge">
@@ -33,7 +54,7 @@ export default function DeleteConsentModal({
             </div>
             <div>
               <h3 id="modal-title">
-                {isBulk ? (isAll ? "Confirm Delete All Datasets" : `Confirm Bulk Deletion (${count} Datasets)`) : "Confirm Dataset Deletion"}
+                {datasetToDelete.cleanupPending ? "Finish stored file cleanup" : isBulk ? (isAll ? "Delete all workbooks?" : `Delete ${count} workbooks?`) : "Delete this workbook?"}
               </h3>
               <p>Explicit consent required before permanent removal</p>
             </div>
@@ -44,6 +65,7 @@ export default function DeleteConsentModal({
             onClick={() => !deleting && onClose()}
             disabled={deleting}
             title="Cancel and close"
+            aria-label="Cancel and close deletion"
           >
             <X size={18} />
           </button>
@@ -85,10 +107,10 @@ export default function DeleteConsentModal({
               <span>Permanent Irreversible Action</span>
             </div>
             <ul>
-              <li>Permanently erases all <strong>{totalRows.toLocaleString()} indexed rows</strong> and cell values.</li>
-              <li>Cleanses associated <strong>vector chunks & BM25 search indices</strong>.</li>
-              <li>Unlinks all <strong>exact-key joins</strong> and relationships connected to {isBulk ? "these sheets" : "this sheet"}.</li>
-              <li>Removes stored {isBulk ? "files" : "file"} from local server storage.</li>
+              <li>Deletes <strong>every sheet and all {totalRows.toLocaleString()} records</strong> in {isBulk ? "these workbooks" : "this workbook"}.</li>
+              <li>Removes generated tables, relationships, search data and cached analysis that depend on them.</li>
+              <li>Deletes dependent saved presentations, presentation memory and exported files.</li>
+              <li>Removes the uploaded {isBulk ? "files" : "file"} from server storage. Other workbooks are kept.</li>
             </ul>
           </div>
 
@@ -103,12 +125,14 @@ export default function DeleteConsentModal({
               I understand that this action is permanent, cannot be undone, and will immediately remove {isBulk ? "these datasets" : "this dataset"} from all analytics and Copilot searches.
             </span>
           </label>
+          {error && <div className="alert-box alert-error" role="alert">{error}</div>}
         </div>
 
         <div className="modal-footer">
           <button
             type="button"
             className="btn-cancel"
+            ref={cancelRef}
             onClick={onClose}
             disabled={deleting}
           >
@@ -123,7 +147,9 @@ export default function DeleteConsentModal({
             <Trash2 size={14} />
             <span>
               {deleting
-                ? "Deleting..."
+                ? "Deleting and cleaning up…"
+                : datasetToDelete.cleanupPending
+                ? "Retry cleanup"
                 : isBulk
                 ? isAll
                   ? "Permanently Delete All"

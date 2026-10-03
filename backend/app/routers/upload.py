@@ -10,7 +10,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Query
 from fastapi.responses import FileResponse, Response, StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, StrictInt
 
 from ..core import config
 from ..db.database import get_connection
@@ -18,11 +18,13 @@ from ..services.sheet_catalog import read_sheets, prepare_sheets, insert_sheets,
 from ..services.industrial_analytics import run_ingestion_industrial_pipeline
 from ..services.sheet_naming_pipeline import generate_sheet_display_name
 from ..services.ingestion_job_manager import ingestion_job_manager
+from ..services.dataset_deletion import delete_datasets
+from ..services.data_lifecycle import data_lifecycle_lock
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix='/api/upload', tags=['upload'])
-_db_write_lock = threading.Lock()
+_db_write_lock = data_lifecycle_lock
 
 
 def execute_ingestion_job(
@@ -182,8 +184,8 @@ def execute_ingestion_job(
                                             atbl["table_id"],
                                             atbl["title"],
                                             atbl["description"],
-                                            json.dumps([dataset_id]),
-                                            json.dumps({"type": "scientific_enrichment_rollup", "sheet": s_name, "group_by": atbl.get("group_by_columns", [])}),
+                                            json.dumps([conn.execute("SELECT id FROM sheets WHERE dataset_id=? AND name=?", (dataset_id, s_name)).fetchone()[0]]),
+                                            json.dumps({"type": "scientific_enrichment_rollup", "source_kind": "sheet", "sheet": s_name, "group_by": atbl.get("group_by_columns", [])}),
                                             json.dumps(atbl["columns"]),
                                             atbl["row_count"]
                                         )
@@ -281,7 +283,11 @@ def execute_ingestion_job(
             'message': f'Indexed all {total} rows with {enrichment_summary["derived_features_count"] if enrichment_summary else 0} scientifically derived features.' if enrichment_summary else (f'Indexed all {total} rows. Reconciled user intent into analytical evidence pipeline.' if analysis_ctx_dict else f'Indexed all {total} rows. Found {linked} exact key relationships and computed industrial analytics pipeline.')
         }
 
-        ingestion_job_manager.complete_job(job_id, dataset_id, result_payload)
+        with data_lifecycle_lock:
+            with get_connection() as live_conn:
+                if not live_conn.execute('SELECT 1 FROM dataset_uploads WHERE id=?', (dataset_id,)).fetchone():
+                    raise ValueError('Workbook was deleted before ingestion finished.')
+            ingestion_job_manager.complete_job(job_id, dataset_id, result_payload)
         return result_payload
 
     except Exception as exc:
@@ -478,112 +484,36 @@ def reseed_kaggle():
 
 
 class BulkDeleteRequest(BaseModel):
-    dataset_ids: list[int] = []
+    dataset_ids: list[StrictInt] = Field(default_factory=list)
     delete_all: bool = False
 
 
 def perform_bulk_delete(dataset_ids: list[int] | None = None, delete_all: bool = False):
-    conn = get_connection()
-    try:
-        if delete_all or not dataset_ids:
-            rows = conn.execute('SELECT filename FROM dataset_uploads').fetchall()
-            with conn:
-                conn.execute('DELETE FROM executive_narratives')
-                conn.execute('DELETE FROM hr_alerts')
-                conn.execute('DELETE FROM tabular_vectors')
-                conn.execute('DELETE FROM derived_table_rows')
-                conn.execute('DELETE FROM derived_tables')
-                conn.execute('DELETE FROM dataset_uploads')
-                rebuild_relationships(conn)
-            for row in rows:
-                path = (config.UPLOADS_DIR / row['filename']).resolve()
-                if path.is_relative_to(config.UPLOADS_DIR.resolve()):
-                    path.unlink(missing_ok=True)
-            return {'message': 'All datasets, sheets, rows, search entries, cached narratives and relationships completely cleared.', 'deleted_count': len(rows)}
-
-        placeholders = ','.join('?' for _ in dataset_ids)
-        rows = conn.execute(f'SELECT id, filename FROM dataset_uploads WHERE id IN ({placeholders})', dataset_ids).fetchall()
-        if not rows:
-            return {'message': 'No matching datasets found to delete.', 'deleted_count': 0}
-        found_ids = [r['id'] for r in rows]
-        id_placeholders = ','.join('?' for _ in found_ids)
-        with conn:
-            conn.execute(f'DELETE FROM executive_narratives WHERE target_type=\'sheet\' AND target_id IN (SELECT id FROM sheets WHERE dataset_id IN ({id_placeholders}))', found_ids)
-            conn.execute('DELETE FROM executive_narratives WHERE target_type IN (\'global\', \'relationship\')')
-            conn.execute(f'DELETE FROM tabular_vectors WHERE id IN (SELECT id FROM tabular_chunks WHERE dataset_id IN ({id_placeholders}))', found_ids)
-            for did in found_ids:
-                conn.execute("DELETE FROM derived_table_rows WHERE derived_table_id IN (SELECT id FROM derived_tables WHERE source_sheets_json LIKE ?)", (f"%{did}%",))
-                conn.execute("DELETE FROM derived_tables WHERE source_sheets_json LIKE ?", (f"%{did}%",))
-            conn.execute(f'DELETE FROM dataset_uploads WHERE id IN ({id_placeholders})', found_ids)
-            rebuild_relationships(conn)
-            remaining = conn.execute('SELECT COUNT(*) FROM dataset_uploads').fetchone()[0]
-            if remaining == 0:
-                conn.execute('DELETE FROM executive_narratives')
-                conn.execute('DELETE FROM hr_alerts')
-                conn.execute('DELETE FROM derived_table_rows')
-                conn.execute('DELETE FROM derived_tables')
-        for row in rows:
-            path = (config.UPLOADS_DIR / row['filename']).resolve()
-            if path.is_relative_to(config.UPLOADS_DIR.resolve()):
-                path.unlink(missing_ok=True)
-        return {'message': f'Successfully deleted {len(found_ids)} dataset(s).', 'deleted_count': len(found_ids)}
-    finally:
-        conn.close()
+    return delete_datasets(dataset_ids, delete_all=delete_all)
 
 
 @router.delete('/datasets/{dataset_id}')
 def delete_dataset(dataset_id: int):
-    conn = get_connection()
-    try:
-        row = conn.execute('SELECT filename FROM dataset_uploads WHERE id=?', (dataset_id,)).fetchone()
-        if row is None:
-            raise HTTPException(404, 'Dataset not found')
-        with conn:
-            # 1. Clean up sheet-level cached executive narratives for sheets in this dataset
-            conn.execute('DELETE FROM executive_narratives WHERE target_type=\'sheet\' AND target_id IN (SELECT id FROM sheets WHERE dataset_id=?)', (dataset_id,))
-            # 2. Invalidate global and relationship narratives since workspace composition has changed
-            conn.execute('DELETE FROM executive_narratives WHERE target_type IN (\'global\', \'relationship\')')
-            # 3. Clean up tabular vectors
-            conn.execute('DELETE FROM tabular_vectors WHERE id IN (SELECT id FROM tabular_chunks WHERE dataset_id=?)', (dataset_id,))
-            # 4. Clean up synthesized derived tables
-            conn.execute("DELETE FROM derived_table_rows WHERE derived_table_id IN (SELECT id FROM derived_tables WHERE source_sheets_json LIKE ?)", (f"%{dataset_id}%",))
-            conn.execute("DELETE FROM derived_tables WHERE source_sheets_json LIKE ?", (f"%{dataset_id}%",))
-            # 5. Delete dataset (cascades to sheets, sheet_rows, sheet_cells, tabular_chunks, sheet_relationships)
-            conn.execute('DELETE FROM dataset_uploads WHERE id=?', (dataset_id,))
-            rebuild_relationships(conn)
-            # 6. If no datasets remain in workspace, complete purge of all narratives and alerts
-            remaining = conn.execute('SELECT COUNT(*) FROM dataset_uploads').fetchone()[0]
-            if remaining == 0:
-                conn.execute('DELETE FROM executive_narratives')
-                conn.execute('DELETE FROM hr_alerts')
-                conn.execute('DELETE FROM derived_table_rows')
-                conn.execute('DELETE FROM derived_tables')
-        path = (config.UPLOADS_DIR / row['filename']).resolve()
-        # Never delete external Kaggle caches or paths outside uploads.
-        if path.is_relative_to(config.UPLOADS_DIR.resolve()):
-            path.unlink(missing_ok=True)
-        return {'message': 'Deleted dataset, sheets, rows, search entries, cached narratives and relationships.'}
-    finally:
-        conn.close()
+    result = delete_datasets([dataset_id])
+    if not result['deleted_count'] and not result['cleanup_pending']:
+        # A repeated DELETE is safe, including after a lost success response.
+        result['message'] = 'Workbook is already removed; cleanup is complete.'
+    return result
 
 
 @router.delete('/datasets')
-def delete_all_datasets(ids: str | None = Query(None, description="Comma-separated dataset IDs to delete. If omitted or 'all', deletes all.")):
-    """Bulk deletion: deletes specified dataset IDs or completely purges all datasets, sheets, narratives, relationships, and uploads."""
-    if ids and ids.lower() != 'all':
-        try:
-            target_ids = [int(x.strip()) for x in ids.split(',') if x.strip().isdigit()]
-        except Exception:
-            raise HTTPException(400, "Invalid ids parameter format")
-        return perform_bulk_delete(target_ids, delete_all=False)
-    return perform_bulk_delete([], delete_all=True)
+def delete_all_datasets(ids: str | None = Query(None, description="Comma-separated dataset IDs to delete. Omitted or 'all' explicitly clears the workspace.")):
+    if ids is None or ids.lower() == 'all':
+        return delete_datasets(delete_all=True)
+    parts = ids.split(',')
+    if not parts or any(not part.strip().isdigit() or int(part.strip()) <= 0 for part in parts):
+        raise HTTPException(400, 'Invalid workbook IDs. Nothing was deleted.')
+    return delete_datasets([int(part.strip()) for part in parts])
 
 
 @router.post('/datasets/bulk-delete')
 def bulk_delete_datasets(payload: BulkDeleteRequest):
-    """Selective or full bulk deletion via JSON body."""
-    return perform_bulk_delete(payload.dataset_ids, payload.delete_all)
-
+    return delete_datasets(payload.dataset_ids, delete_all=payload.delete_all)
 
 
 class DatasetAnalysisBriefRequest(BaseModel):

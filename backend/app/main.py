@@ -16,6 +16,8 @@ async def lifespan(app: FastAPI):
     init_db()
     migrate_existing()
     backfill_display_names()
+    from .services.dataset_deletion import retry_file_cleanup
+    retry_file_cleanup()
     recover_presentation_jobs()
     print("[HighView] Startup completed. System ready on port", config.PORT)
     yield

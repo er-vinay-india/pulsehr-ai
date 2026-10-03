@@ -10,6 +10,7 @@ import {
   runEdaPipeline,
   listDatasets,
   deleteDataset,
+  bulkDeleteDatasets,
   getDatasetDownloadUrl
 } from '../api/client';
 import DataTable from '../components/DataTable';
@@ -72,78 +73,101 @@ export default function DataExplorerPage() {
   const [deleteConsent, setDeleteConsent] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [showWorkspaceDrawer, setShowWorkspaceDrawer] = useState(false);
+  const [selectedWorkbookIds, setSelectedWorkbookIds] = useState([]);
+  const [catalogLoading, setCatalogLoading] = useState(true);
+  const [catalogLoaded, setCatalogLoaded] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+  const [notice, setNotice] = useState('');
 
-  const refresh = () => {
-    getSheets()
-      .then((r) => {
-        setCatalog(r);
-        setSelected((current) => {
-          const params = new URLSearchParams(window.location.search);
-          const urlSheet = params.get('sheet_id');
-          if (urlSheet && r.sheets.some((s) => String(s.id) === urlSheet)) {
-            return urlSheet;
-          }
-          return r.sheets.some((s) => String(s.id) === current)
-            ? current
-            : String(r.sheets[r.sheets.length - 1]?.id || '');
-        });
-        setRelation('');
-        setPage(1);
-      })
-      .catch((e) => setError(e.message));
 
-    listDatasets()
-      .then((res) => {
-        setDatasets(res.datasets || []);
-      })
-      .catch(() => {});
-
-    getDerivedTables()
-      .then((res) => {
-        setDerivedTables(res.derived_tables || []);
-      })
-      .catch(() => {});
-
-    getCrossSheetCorrelations()
-      .then((res) => {
-        setCrossCorrelations(res.correlations || []);
-      })
-      .catch(() => {});
+  const refresh = async () => {
+    setCatalogLoading(true);
+    try {
+      const [sheets, workbooks, derived, correlations] = await Promise.all([
+        getSheets(), listDatasets(), getDerivedTables(), getCrossSheetCorrelations()
+      ]);
+      setError('');
+      setCatalog(sheets);
+      setDatasets(workbooks.datasets || []);
+      setDerivedTables(derived.derived_tables || []);
+      setCrossCorrelations(correlations.correlations || []);
+      setSelectedWorkbookIds(ids => ids.filter(id => (workbooks.datasets || []).some(d => d.id === id)));
+      setSelected(current => {
+        const params = new URLSearchParams(window.location.search);
+        const urlSheet = params.get('sheet_id');
+        const next = sheets.sheets.some(s => String(s.id) === current) ? current
+          : sheets.sheets.some(s => String(s.id) === urlSheet) ? urlSheet
+          : String(sheets.sheets[sheets.sheets.length - 1]?.id || '');
+        if (next) params.set('sheet_id', next); else params.delete('sheet_id');
+        window.history.replaceState(null, '', `${window.location.pathname}${params.size ? '?' + params : ''}${window.location.hash}`);
+        return next;
+      });
+      setSelectedDerivedId(current => (derived.derived_tables || []).some(d => String(d.id) === current) ? current : '');
+      setRelation('');
+      setPage(1);
+      setCatalogLoaded(true);
+      return true;
+    } catch (err) {
+      setError(`Could not refresh workbooks. ${err.message}`);
+      return false;
+    } finally {
+      setCatalogLoading(false);
+    }
   };
 
-  const handlePromptSingleDelete = (dataset) => {
+  const handlePromptSingleDelete = dataset => {
     if (!dataset) return;
     setDatasetToDelete(dataset);
     setDeleteConsent(false);
+    setDeleteError('');
+  };
+
+  const handlePromptBulkDelete = () => {
+    const targets = datasets.filter(d => selectedWorkbookIds.includes(d.id));
+    if (!targets.length) return;
+    setShowWorkspaceDrawer(false);
+    setDatasetToDelete({ isBulk: true, datasets: targets });
+    setDeleteConsent(false);
+    setDeleteError('');
   };
 
   const handleConfirmDelete = async () => {
     if (!datasetToDelete || !deleteConsent || deleting) return;
     setDeleting(true);
+    setDeleteError('');
     try {
-      await deleteDataset(datasetToDelete.id);
-      const deletedDatasetId = datasetToDelete.id;
-      setDatasetToDelete(null);
-      setDeleteConsent(false);
-      refresh();
-
-      if (selectedSheet && Number(selectedSheet.dataset_id) === Number(deletedDatasetId)) {
-        setSelected('');
+      const result = datasetToDelete.isBulk
+        ? await bulkDeleteDatasets(datasetToDelete.datasets.map(d => d.id))
+        : await deleteDataset(datasetToDelete.id);
+      const params = new URLSearchParams(window.location.search);
+      params.delete('sheet_id'); params.delete('derived_id');
+      window.history.replaceState(null, '', `${window.location.pathname}${params.size ? '?' + params : ''}${window.location.hash}`);
+      setSelected(''); setSelectedDerivedId(''); setRelation('');
+      setData(null); setEdaReport(null); setCrossCorrelations([]);
+      setSearch(''); setPage(1); setLoading(false); setLoadingEda(false);
+      setShowEnrichmentReview(false); setError('');
+      window.dispatchEvent(new CustomEvent('workbooks-deleted', { detail: result }));
+      if (result.cleanup_pending) {
+        setDatasetToDelete(current => ({ ...current, cleanupPending: true }));
+        setDeleteError('The workbooks are removed from the workspace, but stored file cleanup is incomplete. Retry cleanup to finish.');
+      } else {
+        setDatasetToDelete(null); setDeleteConsent(false);
+        setNotice('Workbooks deleted. Their sheets, generated tables, saved presentations and stored files have been cleaned up.');
       }
+      await refresh();
     } catch (err) {
-      setError('Failed to delete dataset: ' + err.message);
+      setDeleteError(err.message);
     } finally {
       setDeleting(false);
     }
   };
 
-  useEffect(() => {
-    refresh();
-  }, []);
+  useEffect(() => { refresh(); }, []);
 
   // Fetch Table Rows (Supports Curated, Raw, Joined, or Derived)
   useEffect(() => {
-    if (!selected && !selectedDerivedId) {
+    if (!catalogLoaded || (!selected && !selectedDerivedId)) {
+      setLoading(false);
       setData(null);
       return;
     }
@@ -176,21 +200,28 @@ export default function DataExplorerPage() {
     return () => {
       active = false;
     };
-  }, [selected, selectedDerivedId, relation, page, search, viewMode, dataVersion]);
+  }, [selected, selectedDerivedId, relation, page, search, viewMode, dataVersion, catalogLoaded]);
 
   // Fetch EDA Report when in 'eda' mode or when selected sheet changes
   useEffect(() => {
-    if (!selected) return;
+    if (!catalogLoaded || !selected) { setEdaReport(null); setLoadingEda(false); return; }
 
     let active = true;
     if (viewMode === 'eda') setLoadingEda(true);
 
     getSheetEdaReport(selected)
-      .then((rep) => {
-        if (active) setEdaReport(rep);
+      .then(async (rep) => {
+        if (!active) return;
+        setEdaReport(rep);
+        // Lazy analysis can rebuild generated views after source deletion.
+        const [derived, correlations] = await Promise.all([getDerivedTables(), getCrossSheetCorrelations()]);
+        if (active) {
+          setDerivedTables(derived.derived_tables || []);
+          setCrossCorrelations(correlations.correlations || []);
+        }
       })
       .catch((err) => {
-        if (active) console.error('Error loading EDA report:', err);
+        if (active) { setEdaReport(null); setError(`Could not load sheet analysis. ${err.message}`); }
       })
       .finally(() => {
         if (active) setLoadingEda(false);
@@ -199,7 +230,7 @@ export default function DataExplorerPage() {
     return () => {
       active = false;
     };
-  }, [selected, viewMode]);
+  }, [selected, viewMode, catalogLoaded]);
 
   const handleRerunEda = () => {
     setIsRerunningEda(true);
@@ -215,7 +246,7 @@ export default function DataExplorerPage() {
   };
 
   const selectedSheet = catalog.sheets.find((s) => String(s.id) === String(selected));
-  const activeDataset = datasets.find((d) => d.id === selectedSheet?.dataset_id) || datasets[0];
+  const activeDataset = datasets.find((d) => Number(d.id) === Number(selectedSheet?.dataset_id));
   const enrichment = activeDataset?.enrichment;
   const derivedFeatCount = enrichment?.derived_features_count || enrichment?.derived_features?.length || 0;
   const link = catalog.relationships.find((r) => String(r.id) === relation);
@@ -362,7 +393,7 @@ export default function DataExplorerPage() {
           </div>
 
           {/* View Mode Toggle */}
-          <div className="view-mode-pill-toggle" role="tablist" aria-label="Explorer View Modes">
+          {catalog.sheets.length > 0 && <div className="view-mode-pill-toggle" role="tablist" aria-label="Explorer View Modes">
             <button
               type="button"
               role="tab"
@@ -383,11 +414,11 @@ export default function DataExplorerPage() {
               <span className="explorer-mode-long">🔬 Exploratory Data Analysis & Predictive Analytics</span>
               <span className="explorer-mode-short">Insights & Trends</span>
             </button>
-          </div>
+          </div>}
         </div>
 
         {/* Unified Command & Filter Toolbar */}
-        <div className="explorer-compact-toolbar page-command-bar">
+        {catalog.sheets.length > 0 && <div className="explorer-compact-toolbar page-command-bar">
         {/* Left Controls: Sheet, Derived View, Table Version, Search */}
         <div className="explorer-toolbar-left" style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', flexWrap: 'wrap', flex: 1, minWidth: 0 }}>
           {/* Sheet Selector */}
@@ -632,7 +663,7 @@ export default function DataExplorerPage() {
                 title="View workbooks currently in workspace"
               >
                 <Layers size={13} color="var(--brand-400)" />
-                <span>{datasets.length} Workbook{datasets.length > 1 ? 's' : ''}</span>
+                <span>Manage {datasets.length} workbook{datasets.length > 1 ? 's' : ''}</span>
                 <ChevronDown size={12} style={{ transform: showWorkspaceDrawer ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
               </button>
 
@@ -656,9 +687,15 @@ export default function DataExplorerPage() {
                   }}
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', paddingBottom: '6px', borderBottom: '1px solid var(--border-subtle)' }}>
-                    <strong style={{ color: 'var(--fg-primary)', fontSize: '0.8rem' }}>Workspace Workbooks</strong>
+                    <strong style={{ color: 'var(--fg-primary)', fontSize: '0.8rem' }}>Manage workbooks</strong>
                     <span style={{ fontSize: '0.72rem', color: 'var(--fg-muted)' }}>{datasets.length} file(s)</span>
                   </div>
+                  <label className="workbook-select-all">
+                    <input type="checkbox" aria-label="Select all workbooks" disabled={deleting}
+                      checked={datasets.length > 0 && selectedWorkbookIds.length === datasets.length}
+                      onChange={e => setSelectedWorkbookIds(e.target.checked ? datasets.map(d => d.id) : [])} />
+                    Select all workbooks
+                  </label>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '200px', overflowY: 'auto' }}>
                     {datasets.map((d) => (
                       <div
@@ -674,10 +711,13 @@ export default function DataExplorerPage() {
                           border: d.id === selectedSheet?.dataset_id ? '1px solid rgba(255, 176, 137, 0.25)' : '1px solid transparent'
                         }}
                       >
-                        <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <input id={`workbook-select-${d.id}`} type="checkbox" aria-label={`Select ${d.original_name}`} disabled={deleting}
+                          checked={selectedWorkbookIds.includes(d.id)}
+                          onChange={e => setSelectedWorkbookIds(ids => e.target.checked ? [...ids, d.id] : ids.filter(id => id !== d.id))} />
+                        <label htmlFor={`workbook-select-${d.id}`} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, cursor: 'pointer' }}>
                           <div style={{ fontWeight: 600, color: 'var(--fg-primary)', fontSize: '0.8rem' }}>{d.original_name}</div>
                           <div style={{ fontSize: '0.72rem', color: 'var(--fg-muted)' }}>{d.row_count} rows · {d.sheet_count} sheet(s)</div>
-                        </div>
+                        </label>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
                           <a
                             href={getDatasetDownloadUrl(d.id)}
@@ -703,6 +743,11 @@ export default function DataExplorerPage() {
                         </div>
                       </div>
                     ))}
+                  </div>
+                  <div className="workbook-selection-footer">
+                    <span aria-live="polite">{selectedWorkbookIds.length} selected</span>
+                    <button type="button" className="btn-danger-confirm" disabled={!selectedWorkbookIds.length || deleting}
+                      onClick={handlePromptBulkDelete}>Delete selected ({selectedWorkbookIds.length})</button>
                   </div>
                 </div>
               )}
@@ -733,7 +778,7 @@ export default function DataExplorerPage() {
           )}
 
           {/* Minimal Delete Button: Discrete & Non-Intrusive */}
-          {selectedSheet && (
+          {activeDataset && (
             <button
               type="button"
               className="btn-minimal-delete"
@@ -746,7 +791,7 @@ export default function DataExplorerPage() {
                 };
                 handlePromptSingleDelete(target);
               }}
-              title="Delete active dataset from workspace"
+              title="Delete active workbook and all its sheets"
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -763,12 +808,30 @@ export default function DataExplorerPage() {
               }}
             >
               <Trash2 size={13} />
-              <span>Delete</span>
+              <span>Delete workbook</span>
             </button>
           )}
         </div>
-      </div>
+      </div>}
       </header>
+
+      {notice && <div className="explorer-feedback" role="status">{notice}</div>}
+      {catalogLoading && <div className="explorer-loading" role="status">Loading workbooks…</div>}
+      {!catalogLoading && !catalogLoaded && <section className="explorer-empty-state">
+        <div className="explorer-empty-icon"><FileSpreadsheet size={28} /></div>
+        <h2>Workbooks couldn’t be loaded</h2>
+        <p>Check that the server is available, then try again.</p>
+        <button type="button" className="btn-primary" onClick={refresh}>Try again</button>
+      </section>}
+      {!catalogLoading && catalogLoaded && catalog.sheets.length === 0 && <section className="explorer-empty-state" aria-labelledby="explorer-empty-title">
+        <div className="explorer-empty-icon"><FileSpreadsheet size={28} /></div>
+        <h2 id="explorer-empty-title">No workbooks yet</h2>
+        <p>Upload a CSV or Excel workbook to explore its records and insights.</p>
+        <button type="button" className="btn-primary" onClick={() => { window.location.hash = 'upload'; }}>
+          Upload spreadsheet
+        </button>
+        <span className="explorer-empty-hint">CSV, XLS and XLSX supported</span>
+      </section>}
 
       {/* Prominent Data Completeness, Missing Values & Data Types Highlight Chips */}
       {selectedSheet && !selectedDerivedId && dataHealth && (
@@ -793,7 +856,7 @@ export default function DataExplorerPage() {
       )}
 
       {/* VIEW 1: DATA TABLE INSPECTION */}
-      {viewMode === 'table' && (
+      {catalogLoaded && catalog.sheets.length > 0 && viewMode === 'table' && (
         <>
           {selectedDerivedId && activeDerivedTable && (
             <div
@@ -835,6 +898,8 @@ export default function DataExplorerPage() {
               serverTotalPages={data.pages}
               onPageChange={(newPage) => setPage(newPage)}
               loading={loading}
+              searchQuery={search}
+              onSearchChange={setSearch}
               sourceLabel={
                 selectedDerivedId
                   ? activeDerivedTable?.display_name || 'derived_view'
@@ -850,7 +915,7 @@ export default function DataExplorerPage() {
       )}
 
       {/* VIEW 2: EXPLORATORY DATA ANALYSIS (EDA) & PREDICTIVE ANALYTICS SUITE */}
-      {viewMode === 'eda' && (
+      {catalogLoaded && catalog.sheets.length > 0 && viewMode === 'eda' && (
         <VisualEdaDashboard
           edaReport={edaReport}
           loadingEda={loadingEda}
@@ -869,7 +934,8 @@ export default function DataExplorerPage() {
         deleteConsent={deleteConsent}
         setDeleteConsent={setDeleteConsent}
         deleting={deleting}
-        onClose={() => setDatasetToDelete(null)}
+        error={deleteError}
+        onClose={() => { if (!deleting) setDatasetToDelete(null); }}
         onConfirmDelete={handleConfirmDelete}
       />
     </div>

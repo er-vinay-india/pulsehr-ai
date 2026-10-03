@@ -38,6 +38,11 @@ def narration_test_db(tmp_path, monkeypatch):
     monkeypatch.setattr("app.core.config.EXPORTS_DIR", tmp_path / "exports")
     (tmp_path / "exports").mkdir(parents=True, exist_ok=True)
 
+    # Test storage and endpoint behavior without requiring the external TTS service.
+    async def synthesize_fixture(text, voice, output_path):
+        output_path.write_bytes(b"fixture MP3 audio" * 20)
+    monkeypatch.setattr("app.services.presentation.narration_service._synthesize_text_to_mp3", synthesize_fixture)
+
     return get_test_conn
 
 
@@ -79,7 +84,7 @@ def test_clean_speaker_notes_fallback_to_narrative():
 
 
 @pytest.mark.anyio
-async def test_deck_narration_generation_and_manifest(narration_test_db):
+async def test_deck_narration_generation_and_manifest(narration_test_db, monkeypatch):
     """Verifies edge-tts audio synthesis, manifest structure, and file caching."""
     conn = narration_test_db()
     deck_id = "deck_test_narration_001"
@@ -127,6 +132,10 @@ async def test_deck_narration_generation_and_manifest(narration_test_db):
     cached_manifest = get_deck_narration_manifest(deck_id)
     assert cached_manifest is not None
     assert cached_manifest["deck_id"] == deck_id
+    async def unexpected_synthesis(*args):
+        raise AssertionError("Existing narration should be reused")
+    monkeypatch.setattr("app.services.presentation.narration_service._synthesize_text_to_mp3", unexpected_synthesis)
+    assert (await generate_deck_narration_async(deck_id, conn=conn))["slide_count"] == 2
     conn.close()
 
 

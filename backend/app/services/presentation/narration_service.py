@@ -15,11 +15,14 @@ import json
 import logging
 import os
 from pathlib import Path
+from tempfile import TemporaryDirectory
+from shutil import copyfile
 import re
 from typing import Any
 
 from ...core import config
 from ...db.database import get_connection
+from ..data_lifecycle import data_lifecycle_lock
 
 logger = logging.getLogger(__name__)
 
@@ -121,7 +124,6 @@ def clean_speaker_notes_for_speech(
 def get_narration_dir(deck_id: str) -> Path:
     """Returns the dedicated on-disk directory for a deck's audio files."""
     d = config.EXPORTS_DIR / f"narration_{deck_id}"
-    d.mkdir(parents=True, exist_ok=True)
     return d
 
 
@@ -165,7 +167,8 @@ async def generate_deck_narration_async(
         if not slides:
             raise ValueError(f"Deck '{deck_id}' has no slides to narrate.")
 
-        narration_dir = get_narration_dir(deck_id)
+        staging = TemporaryDirectory(prefix="pulsehr-narration-")
+        narration_dir = Path(staging.name)
         manifest_path = narration_dir / "manifest.json"
 
         slide_manifests = []
@@ -185,6 +188,12 @@ async def generate_deck_narration_async(
             mp3_filename = f"slide_{order}.mp3"
             mp3_path = narration_dir / mp3_filename
 
+            with data_lifecycle_lock:
+                if not conn.execute("SELECT 1 FROM presentation_decks WHERE id=?", (deck_id,)).fetchone():
+                    raise ValueError(f"Presentation deck '{deck_id}' was deleted during narration.")
+                cached = get_narration_dir(deck_id) / mp3_filename
+                if cached.is_file() and cached.stat().st_size:
+                    copyfile(cached, mp3_path)
             # Synthesize audio if not already generated or if empty
             if not mp3_path.exists() or mp3_path.stat().st_size == 0:
                 await _synthesize_text_to_mp3(spoken_text, voice_id, mp3_path)
@@ -218,9 +227,19 @@ async def generate_deck_narration_async(
 
         # Save manifest to disk
         manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+        # Publish only while the source deck still exists; deletion cannot be undone by an in-flight TTS request.
+        with data_lifecycle_lock:
+            if not conn.execute("SELECT 1 FROM presentation_decks WHERE id=?", (deck_id,)).fetchone():
+                raise ValueError(f"Presentation deck '{deck_id}' was deleted during narration.")
+            destination = get_narration_dir(deck_id)
+            destination.mkdir(parents=True, exist_ok=True)
+            for audio_file in narration_dir.iterdir():
+                copyfile(audio_file, destination / audio_file.name)
         return manifest
 
     finally:
+        if "staging" in locals():
+            staging.cleanup()
         if should_close:
             conn.close()
 
