@@ -1,5 +1,20 @@
 /* Responsive containment; keep scrolling inside panels rather than clipping controls. */
 .explorer-mode-short { display: none; }
+body:has(.drawer-overlay, .evidence-drawer-backdrop, .chart-detail-modal-backdrop,
+  .upload-modal-overlay, .modal-overlay, .pres-review-gates-backdrop,
+  .pres-image-picker-overlay, .pres-regen-dialog-backdrop, .copilot-drawer-overlay, .hriday-backdrop) {
+  overflow-y: hidden;
+}
+// Keep modal controls visible while their content scrolls, including landscape phones.
+.modal-dialog { max-height: calc(100dvh - 24px); }
+.modal-dialog .modal-header { flex-shrink: 0; }
+.modal-dialog .modal-body { min-height: 0; overflow-y: auto; }
+.investigation-drawer-panel, .evidence-drawer-shell, .drawer-panel {
+  height: 100dvh; max-height: 100dvh;
+  .investigation-drawer-header, .drawer-header, .drawer-tabs-row,
+  .investigation-tabs, .drawer-footer { flex-shrink: 0; }
+  .drawer-body, .investigation-drawer-body { min-height: 0; overscroll-behavior: contain; }
+}
 .copilot-drawer-panel {
   height: 100dvh;
   max-height: 100dvh;
@@ -86,8 +101,58 @@
   .upload-modal-title-group { gap: 8px; }
   .upload-modal-close-btn { flex-shrink: 0; min-width: 44px; min-height: 44px; }
   .upload-modal-body { min-height: 0; max-height: none; padding: 16px; overscroll-behavior: contain; }
+  .app-main input, .app-main select, .app-main textarea { font-size: 16px; }
+  .modal-dialog .modal-close-btn { min-width: 44px; min-height: 44px; flex-shrink: 0; }
+  .investigation-drawer-panel, .evidence-drawer-shell, .drawer-panel {
+    width: 100%; max-width: 100%;
+    .drawer-header, .investigation-drawer-header { padding: 12px; gap: 8px; }
+    .drawer-title-wrap, .drawer-title-group, .header-title-meta { min-width: 0; overflow-wrap: anywhere; }
+    .drawer-body, .investigation-drawer-body { padding: 16px; }
+    .close-btn, .btn-icon-close, .drawer-tab-btn, .inv-tab-btn { min-height: 44px; }
+    .close-btn, .btn-icon-close { min-width: 44px; flex-shrink: 0; }
+    .drawer-tabs-row, .investigation-tabs { padding-inline: 12px; gap: 8px; overflow-x: auto; }
+    .drawer-tab-btn, .inv-tab-btn { flex-shrink: 0; white-space: nowrap; }
+    input, select, textarea { min-width: 0; font-size: 16px !important; }
+    .records-search-box { min-width: 0; min-height: 44px; }
+    .records-toolbar, .snapshot-seal-card, .drawer-footer { flex-wrap: wrap; }
+    .evidence-meta-grid, .defense-split-grid, .formula-components-grid { grid-template-columns: minmax(0, 1fr); }
+    .meta-card.full-span { grid-column: auto; }
+    .btn-jump-slide, .btn-link-action { min-height: 44px; }
+  }
+  .chart-detail-modal-backdrop { padding: 12px; }
+  .chart-detail-modal-content {
+    max-height: calc(100dvh - 24px);
+    .modal-header, .modal-toolbar, .modal-footer { padding: 12px; gap: 8px; flex-shrink: 0; }
+    .modal-toolbar, .modal-footer { flex-wrap: wrap; }
+    .modal-search-box { min-width: 0; width: 100%; }
+    .modal-search-input { min-height: 44px; font-size: 16px; }
+    .btn-modal-close, .btn-clear-search { min-width: 44px; min-height: 44px; flex-shrink: 0; }
+    .btn-modal-done, .btn-table-investigate { min-height: 44px; }
+    .modal-kpi-summary-strip { padding: 12px; gap: 8px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .modal-table-scroll-wrap { min-height: 0; padding-inline: 12px; overscroll-behavior: contain; }
+  }
+  // The 20-playbook audit stays browsable without displacing the rest of the dashboard.
+  .adaptive-coverage-drawer .adaptive-coverage-grid {
+    max-height: 70dvh; overflow-y: auto; overscroll-behavior: contain;
+  }
+  .pres-review-gates-backdrop .pres-review-gates-modal {
+    max-height: calc(100dvh - 32px);
+    .review-gates-header, .review-gates-footer { padding: 12px; gap: 8px; flex-shrink: 0; }
+    .review-gates-header .title-row { flex-wrap: wrap; }
+    .header-title-area { min-width: 0; }
+    .header-actions { flex-shrink: 0; }
+    .review-gates-list { min-height: 0; padding: 12px; overscroll-behavior: contain; }
+    .review-gates-summary-banner { padding: 12px; }
+    button { min-height: 44px; }
+    .btn-icon-close, .btn-icon-refresh { min-width: 44px; }
+  }
 }
 @media (max-height: 500px) {
+  .chart-detail-modal-content {
+    overflow-y: auto;
+    .modal-header { position: sticky; top: 0; z-index: 3; background: var(--color-bg-surface); }
+    .modal-table-scroll-wrap { flex: none; max-height: 45dvh; }
+  }
   .copilot-drawer-panel .copilot-suggestions-strip { display: none; }
   .copilot-drawer-panel .copilot-tools-container { max-height: 25dvh; }
   .copilot-drawer-panel .copilot-drawer-header { padding-block: 6px; }

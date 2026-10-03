@@ -170,7 +170,7 @@
     .scrim-slider-group, .scrim-hint { color: var(--color-text-secondary); }
     .scrim-value, .selected-preview-pill { color: var(--color-brand-secondary); }
   }
-  .pres-regen-dialog-backdrop, .pres-image-picker-overlay { background: var(--overlay-backdrop); }
+  .pres-regen-dialog-backdrop, .pres-image-picker-overlay, .pres-review-gates-backdrop { background: var(--overlay-backdrop); }
 
   // Focus styling is restricted to interface regions outside the slide canvas.
   .studio-sub-toolbar, .studio-thumbnails-rail, .hriday-curation-bar,

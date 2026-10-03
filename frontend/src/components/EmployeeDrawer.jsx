@@ -23,20 +23,20 @@ export default function EmployeeDrawer({ employeeId, onClose }) {
 
   return (
     <div className="drawer-overlay" onClick={onClose}>
-      <div className="drawer-panel" onClick={e => e.stopPropagation()}>
+      <div className="drawer-panel" role="dialog" aria-modal="true" aria-labelledby="employee-drawer-title" onClick={e => e.stopPropagation()}>
         <div className="drawer-header">
           <div className="drawer-title-group">
             <div className="avatar-large">
               {emp?.name ? emp.name.split(" ").map(n => n[0]).join("") : "EMP"}
             </div>
             <div>
-              <h2>{emp?.name || "Loading..."}</h2>
+              <h2 id="employee-drawer-title">{emp?.name || "Loading..."}</h2>
               <div className="drawer-subtitle">
                 <span>{emp?.employee_code}</span> · <span>{emp?.role}</span> · <span className="dept-tag">{emp?.department}</span>
               </div>
             </div>
           </div>
-          <button type="button" className="close-btn" onClick={onClose}>
+          <button type="button" className="close-btn" aria-label="Close employee profile" onClick={onClose}>
             <X size={20} />
           </button>
         </div>

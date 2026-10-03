@@ -516,7 +516,7 @@ export default function AnalysisCoverageSection({ coverage, sheetId, onNavigateT
           </div>
 
           {/* Strategy Cards Grid */}
-          <div className="adaptive-coverage-grid">
+          <div className="adaptive-coverage-grid" role="region" aria-label="Strategy audit playbooks" tabIndex={0}>
             {filteredStrategies.length === 0 ? (
               <div className="adaptive-coverage-empty">
                 <p>No strategy playbooks match the selected filters or search query.</p>

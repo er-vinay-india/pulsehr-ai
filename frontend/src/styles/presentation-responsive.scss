@@ -5390,9 +5390,9 @@ body:has(.presentation-modal-backdrop) {
     width: 100%;
     max-width: 820px;
     max-height: 88vh;
-    background: var(--hv-bg-secondary, #0f172a);
-    color: var(--hv-text-primary, #f8fafc);
-    border: 1px solid var(--hv-border-subtle, rgba(255, 255, 255, 0.1));
+    background: var(--color-bg-surface);
+    color: var(--color-text-primary);
+    border: 1px solid var(--color-border);
     border-radius: 12px;
     box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
     display: flex;
@@ -5420,12 +5420,12 @@ body:has(.presentation-modal-backdrop) {
             margin: 0;
             font-size: 1.15rem;
             font-weight: 700;
-            color: #ffffff;
+            color: var(--color-text-primary);
           }
 
           .revision-tag {
             background: rgba(59, 130, 246, 0.15);
-            color: #60a5fa;
+            color: var(--color-brand-secondary);
             font-size: 0.72rem;
             font-weight: 600;
             padding: 2px 8px;
@@ -5437,7 +5437,7 @@ body:has(.presentation-modal-backdrop) {
         .header-subtitle {
           margin: 6px 0 0 0;
           font-size: 0.8rem;
-          color: rgba(255, 255, 255, 0.65);
+          color: var(--color-text-secondary);
           line-height: 1.4;
         }
       }
@@ -5449,8 +5449,8 @@ body:has(.presentation-modal-backdrop) {
 
         .btn-icon-refresh, .btn-icon-close {
           background: transparent;
-          border: 1px solid rgba(255, 255, 255, 0.1);
-          color: rgba(255, 255, 255, 0.7);
+          border: 1px solid var(--color-border);
+          color: var(--color-text-secondary);
           border-radius: 6px;
           padding: 6px;
           cursor: pointer;
@@ -5460,9 +5460,9 @@ body:has(.presentation-modal-backdrop) {
           transition: all 0.15s ease;
 
           &:hover:not(:disabled) {
-            color: #fff;
-            background: rgba(255, 255, 255, 0.08);
-            border-color: rgba(255, 255, 255, 0.2);
+            color: var(--color-text-primary);
+            background: var(--color-bg-subtle);
+            border-color: var(--color-border-strong);
           }
         }
       }
@@ -5473,7 +5473,7 @@ body:has(.presentation-modal-backdrop) {
       grid-template-columns: repeat(3, 1fr);
       gap: 16px;
       padding: 12px 24px;
-      background: rgba(255, 255, 255, 0.03);
+      background: var(--color-bg-subtle);
       border-bottom: 1px solid var(--hv-border-subtle, rgba(255, 255, 255, 0.06));
 
       .summary-col {
@@ -5485,7 +5485,7 @@ body:has(.presentation-modal-backdrop) {
           font-size: 0.7rem;
           text-transform: uppercase;
           letter-spacing: 0.05em;
-          color: rgba(255, 255, 255, 0.5);
+          color: var(--color-text-secondary);
           font-weight: 600;
         }
 
@@ -5497,15 +5497,15 @@ body:has(.presentation-modal-backdrop) {
           font-weight: 600;
 
           &.passed, &.approved {
-            color: #34d399;
+            color: var(--color-success);
           }
 
           &.pending {
-            color: #fbbf24;
+            color: var(--color-warning);
           }
 
           &.policy-note {
-            color: rgba(255, 255, 255, 0.6);
+            color: var(--color-text-secondary);
             font-weight: 500;
             font-size: 0.78rem;
           }
@@ -5520,7 +5520,7 @@ body:has(.presentation-modal-backdrop) {
       padding: 10px 24px;
       background: rgba(239, 68, 68, 0.15);
       border-bottom: 1px solid rgba(239, 68, 68, 0.3);
-      color: #f87171;
+      color: var(--color-error);
       font-size: 0.82rem;
     }
 
@@ -5533,8 +5533,8 @@ body:has(.presentation-modal-backdrop) {
       gap: 14px;
 
       .gate-card {
-        background: rgba(255, 255, 255, 0.02);
-        border: 1px solid rgba(255, 255, 255, 0.08);
+        background: var(--color-bg-subtle);
+        border: 1px solid var(--color-border);
         border-radius: 8px;
         padding: 14px 18px;
         display: flex;
@@ -5543,19 +5543,19 @@ body:has(.presentation-modal-backdrop) {
         transition: border-color 0.15s ease;
 
         &:hover {
-          border-color: rgba(255, 255, 255, 0.15);
+          border-color: var(--color-border-strong);
         }
 
         &.gate-failed {
-          border-left: 3px solid #f87171;
+          border-left: 3px solid var(--color-error);
         }
 
         &.gate-requires_review {
-          border-left: 3px solid #fbbf24;
+          border-left: 3px solid var(--color-warning);
         }
 
         &.gate-passed {
-          border-left: 3px solid #34d399;
+          border-left: 3px solid var(--color-success);
         }
 
         .gate-card-header {
@@ -5573,8 +5573,8 @@ body:has(.presentation-modal-backdrop) {
             .gate-id-badge {
               font-size: 0.65rem;
               font-weight: 700;
-              color: rgba(255, 255, 255, 0.45);
-              background: rgba(255, 255, 255, 0.06);
+              color: var(--color-text-secondary);
+              background: var(--color-bg-subtle);
               padding: 2px 6px;
               border-radius: 3px;
               letter-spacing: 0.05em;
@@ -5584,7 +5584,7 @@ body:has(.presentation-modal-backdrop) {
               margin: 0;
               font-size: 0.95rem;
               font-weight: 600;
-              color: #ffffff;
+              color: var(--color-text-primary);
             }
           }
 
@@ -5603,37 +5603,37 @@ body:has(.presentation-modal-backdrop) {
               border-radius: 4px;
 
               &.auto-passed {
-                color: #34d399;
+                color: var(--color-success);
                 background: rgba(16, 185, 129, 0.15);
                 border: 1px solid rgba(16, 185, 129, 0.3);
               }
 
               &.auto-requires_review {
-                color: #fbbf24;
+                color: var(--color-warning);
                 background: rgba(245, 158, 11, 0.15);
                 border: 1px solid rgba(245, 158, 11, 0.3);
               }
 
               &.auto-failed {
-                color: #f87171;
+                color: var(--color-error);
                 background: rgba(239, 68, 68, 0.15);
                 border: 1px solid rgba(239, 68, 68, 0.3);
               }
 
               &.human-approved {
-                color: #34d399;
+                color: var(--color-success);
                 background: rgba(16, 185, 129, 0.15);
                 border: 1px solid rgba(16, 185, 129, 0.3);
               }
 
               &.human-pending {
-                color: #fbbf24;
+                color: var(--color-warning);
                 background: rgba(245, 158, 11, 0.12);
                 border: 1px solid rgba(245, 158, 11, 0.25);
               }
 
               &.human-rejected {
-                color: #f87171;
+                color: var(--color-error);
                 background: rgba(239, 68, 68, 0.15);
                 border: 1px solid rgba(239, 68, 68, 0.3);
               }
@@ -5644,12 +5644,12 @@ body:has(.presentation-modal-backdrop) {
         .gate-description {
           margin: 0;
           font-size: 0.8rem;
-          color: rgba(255, 255, 255, 0.6);
+          color: var(--color-text-secondary);
           line-height: 1.4;
         }
 
         .gate-section-automated {
-          background: rgba(0, 0, 0, 0.2);
+          background: var(--color-bg-subtle);
           border-radius: 6px;
           padding: 8px 12px;
           display: flex;
@@ -5661,13 +5661,13 @@ body:has(.presentation-modal-backdrop) {
             font-weight: 700;
             text-transform: uppercase;
             letter-spacing: 0.05em;
-            color: rgba(255, 255, 255, 0.45);
+            color: var(--color-text-secondary);
           }
 
           .sec-content {
             margin: 0;
             font-size: 0.82rem;
-            color: rgba(255, 255, 255, 0.9);
+            color: var(--color-text-primary);
             line-height: 1.4;
           }
 
@@ -5676,13 +5676,13 @@ body:has(.presentation-modal-backdrop) {
             align-items: center;
             gap: 4px;
             font-size: 0.7rem;
-            color: rgba(255, 255, 255, 0.4);
+            color: var(--color-text-secondary);
             margin-top: 2px;
           }
         }
 
         .gate-section-human {
-          border-top: 1px solid rgba(255, 255, 255, 0.06);
+          border-top: 1px solid var(--color-border);
           padding-top: 10px;
 
           .human-status-row {
@@ -5698,9 +5698,9 @@ body:has(.presentation-modal-backdrop) {
               gap: 6px;
               font-size: 0.8rem;
 
-              .green-icon { color: #34d399; }
-              .amber-icon { color: #fbbf24; }
-              .red-icon { color: #f87171; }
+              .green-icon { color: var(--color-success); }
+              .amber-icon { color: var(--color-warning); }
+              .red-icon { color: var(--color-error); }
             }
 
             .gate-actions {
@@ -5709,8 +5709,8 @@ body:has(.presentation-modal-backdrop) {
               gap: 8px;
 
               .btn-gate-approve {
-                background: #2563eb;
-                color: #ffffff;
+                background: var(--btn-primary-bg);
+                color: var(--btn-primary-fg);
                 border: none;
                 border-radius: 6px;
                 padding: 6px 14px;
@@ -5723,7 +5723,7 @@ body:has(.presentation-modal-backdrop) {
                 transition: background 0.15s ease;
 
                 &:hover:not(:disabled) {
-                  background: #1d4ed8;
+                  background: var(--btn-primary-hover);
                 }
 
                 &:disabled {
@@ -5734,7 +5734,7 @@ body:has(.presentation-modal-backdrop) {
 
               .btn-gate-reopen {
                 background: transparent;
-                color: #f87171;
+                color: var(--color-error);
                 border: 1px solid rgba(239, 68, 68, 0.3);
                 border-radius: 6px;
                 padding: 5px 12px;
@@ -5763,11 +5763,11 @@ body:has(.presentation-modal-backdrop) {
       justify-content: space-between;
       padding: 14px 24px;
       border-top: 1px solid var(--hv-border-subtle, rgba(255, 255, 255, 0.08));
-      background: rgba(0, 0, 0, 0.15);
+      background: var(--color-bg-subtle);
 
       .footer-policy {
         font-size: 0.75rem;
-        color: rgba(255, 255, 255, 0.5);
+        color: var(--color-text-secondary);
       }
     }
   }
