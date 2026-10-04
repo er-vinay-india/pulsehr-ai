@@ -22,7 +22,20 @@ export function isCurrentThemeDark(isDark) {
 
 export const numeric = value => value == null || value === '' || !Number.isFinite(Number(value)) ? null : Number(value);
 const suffix = unit => !unit || /^(units?)$/i.test(unit) ? '' : unit === '%' ? '%' : ` ${unit}`;
-export const formatFullValue = (value, unit = '') => numeric(value) == null ? '—' : `${unit === '$' ? '$' : ''}${Number(value).toLocaleString('en-US', { maximumFractionDigits: 20 })}${unit === '$' ? '' : suffix(unit)}`;
+export const formatFullValue = (value, unit = '') => {
+  if (value == null || value === '' || !Number.isFinite(Number(value))) return '—';
+  const str = String(value).trim();
+  let fullNumStr = '';
+  if (str.includes('.')) {
+    const [intPart, decPart] = str.split('.');
+    const intNum = Number(intPart);
+    fullNumStr = Number.isFinite(intNum) ? `${intNum.toLocaleString('en-US')}.${decPart}` : str;
+  } else {
+    const num = Number(value);
+    fullNumStr = num.toLocaleString('en-US');
+  }
+  return `${unit === '$' ? '$' : ''}${fullNumStr}${unit === '$' ? '' : suffix(unit)}`;
+};
 export const formatValue = (value, unit = '') => {
   const n = numeric(value);
   if (n == null) return '—';
@@ -30,7 +43,12 @@ export const formatValue = (value, unit = '') => {
   let scale = unit === '%' ? 1 : abs >= 1e9 ? 1e9 : abs >= 1e6 ? 1e6 : abs >= 1e3 ? 1e3 : 1;
   if (scale < 1e9 && scale > 1 && Math.abs(Number((n / scale).toFixed(2))) >= 1000) scale *= 1000;
   const marker = scale === 1e9 ? 'B' : scale === 1e6 ? 'M' : scale === 1e3 ? 'K' : '';
-  return `${unit === '$' ? '$' : ''}${(n / scale).toLocaleString('en-US', { maximumFractionDigits: 2 })}${marker}${unit === '$' ? '' : suffix(unit)}`;
+  const scaled = n / scale;
+  const formatted = scaled.toLocaleString('en-US', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2
+  });
+  return `${unit === '$' ? '$' : ''}${formatted}${marker}${unit === '$' ? '' : suffix(unit)}`;
 };
 export const metricUnit = (metric, unit = '') => unit || (/%|\bpercent(?:age)?\b/i.test(metric) ? '%' : '');
 

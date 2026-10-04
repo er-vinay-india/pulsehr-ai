@@ -182,3 +182,64 @@ export function formatAnalyticalTitle(calcType = 'Average', metricCol = '', grou
     subtitle: `Calculated ${calcType.toLowerCase()} across evaluated records`
   };
 }
+
+/**
+ * Curates any numeric value to at most 2 decimal places for display,
+ * preserving integers without synthetic trailing zeroes.
+ *
+ * @param {number|string} val
+ * @param {number} [maxDecimals=2]
+ * @returns {string} Curated display string (e.g. "211.10", "42.31", "1,643,690.90", "45")
+ */
+export function formatCuratedNumber(val, maxDecimals = 2) {
+  if (val == null || val === '') return '—';
+  if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}/.test(val.trim())) return val;
+  const num = Number(val);
+  if (!Number.isFinite(num)) return String(val);
+
+  if (Number.isInteger(num)) {
+    return num.toLocaleString('en-US');
+  }
+
+  return num.toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: maxDecimals
+  });
+}
+
+/**
+ * Returns the complete unrounded decimal representation of a value.
+ * Used for mouseover tooltips to inspect raw precision.
+ *
+ * @param {number|string} val
+ * @returns {string} Complete unrounded string with formatted integer part (e.g. "211.0963582", "1,643,690.9")
+ */
+export function formatCompleteNumber(val) {
+  if (val == null || val === '') return '';
+  const num = Number(val);
+  if (!Number.isFinite(num)) return String(val);
+
+  const str = String(val).trim();
+  if (str.includes('.')) {
+    const [intPart, decPart] = str.split('.');
+    const intNum = Number(intPart);
+    if (Number.isFinite(intNum)) {
+      return `${intNum.toLocaleString('en-US')}.${decPart}`;
+    }
+  }
+  return num.toLocaleString('en-US', { maximumFractionDigits: 20 });
+}
+
+/**
+ * Checks if a value is a finite floating point / decimal number.
+ *
+ * @param {any} val
+ * @returns {boolean}
+ */
+export function isDecimalNumber(val) {
+  if (val == null || val === '') return false;
+  if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}/.test(val.trim())) return false;
+  const num = Number(val);
+  return Number.isFinite(num) && !Number.isInteger(num);
+}
+

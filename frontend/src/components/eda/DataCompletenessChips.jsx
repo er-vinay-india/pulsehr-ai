@@ -104,8 +104,12 @@ export default function DataCompletenessChips({
                 {totalNullCells.toLocaleString()} Nulls
               </span>
             )}
-            <span className="metric-sub-pct">
-              {isClean ? '(100% Complete)' : `(${nullPct}% Null)`}
+            <span
+              className="metric-sub-pct"
+              title={!isClean ? `Complete: ${nullPct}% Null` : '100%'}
+              style={{ cursor: !isClean ? 'help' : 'default' }}
+            >
+              {isClean ? '(100% Complete)' : `(${Number(nullPct).toFixed(2)}% Null)`}
             </span>
           </div>
           <div className="chip-footer-caption">
@@ -130,8 +134,12 @@ export default function DataCompletenessChips({
             <span className={`metric-big ${incompleteRows === 0 ? 'text-clean' : 'text-warning-amber'}`}>
               {incompleteRows.toLocaleString()}
             </span>
-            <span className="metric-sub-pct">
-              / {totalRows.toLocaleString()} rows ({incompleteRowsPct}%)
+            <span
+              className="metric-sub-pct"
+              title={`Complete: ${incompleteRowsPct}%`}
+              style={{ cursor: 'help' }}
+            >
+              / {totalRows.toLocaleString()} rows ({Number(incompleteRowsPct).toFixed(2)}%)
             </span>
           </div>
           <div className="chip-footer-caption">

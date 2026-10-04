@@ -2613,7 +2613,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
                             </th>
                             <td>{it.formatted_value}</td>
                             <td>
-                              <strong>{it.share_pct.toFixed(1)}%</strong>
+                              <strong title={`Complete: ${it.share_pct}%`} style={{ cursor: 'help' }}>{it.share_pct.toFixed(2)}%</strong>
                             </td>
                             {tertiaryElement.items.some((item) => item.formatted_secondary) && (
                               <td>{it.formatted_secondary || "—"}</td>
@@ -2658,7 +2658,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
                             </th>
                             <td><strong>{it.formatted_value}</strong></td>
                             <td>{it.sample_label}</td>
-                            <td>{it.share_pct !== null && it.share_pct !== undefined ? `${it.share_pct.toFixed(1)}%` : "—"}</td>
+                            <td title={it.share_pct !== null && it.share_pct !== undefined ? `Complete: ${it.share_pct}%` : ''} style={it.share_pct !== null && it.share_pct !== undefined ? { cursor: 'help' } : {}}>{it.share_pct !== null && it.share_pct !== undefined ? `${it.share_pct.toFixed(2)}%` : "—"}</td>
                             {quaternaryElement.items.some((item) => item.formatted_secondary) && (
                               <td>{it.formatted_secondary || "—"}</td>
                             )}
@@ -2804,8 +2804,8 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
                         <div><strong>Point Estimate:</strong> {outlookElement.forecast_value} {outlookElement.unit}</div>
                         <div><strong>Empirical Range:</strong> {outlookElement.lower_bound}–{outlookElement.upper_bound} {outlookElement.unit}</div>
                         <div><strong>Validation Folds:</strong> {outlookElement.validation?.fold_count} rolling-origin folds</div>
-                        <div><strong>Model WAPE / MAE:</strong> {(outlookElement.validation?.wape * 100).toFixed(1)}% / {outlookElement.validation?.mae}</div>
-                        <div><strong>Baseline WAPE / MAE:</strong> {(outlookElement.validation?.baseline_wape * 100).toFixed(1)}% / {outlookElement.validation?.baseline_mae}</div>
+                        <div><strong>Model WAPE / MAE:</strong> <span title={`Complete WAPE: ${outlookElement.validation?.wape * 100}%`} style={{ cursor: 'help' }}>{(outlookElement.validation?.wape * 100).toFixed(2)}%</span> / {outlookElement.validation?.mae}</div>
+                        <div><strong>Baseline WAPE / MAE:</strong> <span title={`Complete Baseline WAPE: ${outlookElement.validation?.baseline_wape * 100}%`} style={{ cursor: 'help' }}>{(outlookElement.validation?.baseline_wape * 100).toFixed(2)}%</span> / {outlookElement.validation?.baseline_mae}</div>
                       </>
                     )}
                     <div><strong>Context & Status:</strong> {outlookElement.why_available_or_unavailable}</div>
@@ -2842,7 +2842,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
                       <span>
                         <strong>Coverage:</strong>{" "}
                         {enterpriseElement.lead_finding
-                          ? `${(enterpriseElement.lead_finding.coverage_ratio * 100).toFixed(1)}%`
+                          ? <span title={`Complete: ${enterpriseElement.lead_finding.coverage_ratio * 100}%`} style={{ cursor: 'help' }}>{`${(enterpriseElement.lead_finding.coverage_ratio * 100).toFixed(2)}%`}</span>
                           : "Not established"}
                       </span>
                     </div>

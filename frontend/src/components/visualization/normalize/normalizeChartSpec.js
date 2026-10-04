@@ -1,7 +1,7 @@
 import { validateChartSpec } from '../schema/chartSchema.js';
 import { VISUAL_POLICY } from '../policy/visualPolicy.js';
 import { calculateChartLayout } from '../layout/calculateChartLayout.js';
-import { formatCompactNumber, humanizeLabel } from '../layout/formatters.js';
+import { formatCompactNumber, formatFullNumber, humanizeLabel } from '../layout/formatters.js';
 
 /**
  * Normalizes a raw chart specification into a safe, guaranteed ECharts option.
@@ -53,7 +53,19 @@ export function normalizeChartSpec(rawSpec, options = {}) {
       meta: { cleanType: 'breakdown_tree' },
       option: {
         title: title ? { text: title, left: 'center', textStyle: { fontSize: VISUAL_POLICY.MIN_TITLE_FONT_SIZE } } : undefined,
-        tooltip: { trigger: 'item', confine: true },
+        tooltip: {
+          trigger: 'item',
+          confine: true,
+          formatter: params => {
+            const d = params.data;
+            if (!d) return '';
+            const name = d.full_name || d.name;
+            let text = `<b>${name}</b>`;
+            if (d.value != null) text += `<br/>Value: <b>${formatFullNumber(d.value, unit)}</b>`;
+            if (d.sample_size) text += `<br/>Cohort Size: <b>n = ${d.sample_size}</b>`;
+            return text;
+          }
+        },
         series: [{
           type: 'tree',
           data: [treeData],
@@ -89,7 +101,7 @@ export function normalizeChartSpec(rawSpec, options = {}) {
         tooltip: {
           trigger: 'item',
           confine: true,
-          formatter: params => `${params.name}: <b>${formatCompactNumber(params.value, unit)}</b> (${params.percent}%)`
+          formatter: params => `${params.name}: <b>${formatFullNumber(params.value, unit)}</b> (${params.percent}%)`
         },
         legend: {
           type: 'scroll',
@@ -142,7 +154,7 @@ export function normalizeChartSpec(rawSpec, options = {}) {
       triggerEvent: true,
       axisLabel: {
         fontSize: VISUAL_POLICY.MIN_AXIS_FONT_SIZE,
-        formatter: val => formatCompactNumber(val, unit)
+        formatter: val => formatCompactNumber(val, unit, 2)
       },
       splitLine: { show: true }
     };
@@ -156,7 +168,7 @@ export function normalizeChartSpec(rawSpec, options = {}) {
       triggerEvent: true,
       axisLabel: {
         fontSize: VISUAL_POLICY.MIN_AXIS_FONT_SIZE,
-        formatter: val => formatCompactNumber(val, unit)
+        formatter: val => formatCompactNumber(val, unit, 2)
       },
       splitLine: { show: true }
     };
@@ -183,7 +195,7 @@ export function normalizeChartSpec(rawSpec, options = {}) {
     },
     label: {
       show: true,
-      formatter: `${rl.label || 'Baseline'}: ${formatCompactNumber(rl.value, unit)}`,
+      formatter: `${rl.label || 'Baseline'}: ${formatCompactNumber(rl.value, unit, 2)}`,
       fontSize: 10,
       position: 'insideEndTop'
     }
@@ -221,7 +233,7 @@ export function normalizeChartSpec(rawSpec, options = {}) {
         trigger: 'axis',
         confine: true,
         axisPointer: { type: cleanType === 'line' ? 'line' : 'shadow' },
-        valueFormatter: val => formatCompactNumber(val, unit)
+        valueFormatter: val => formatFullNumber(val, unit)
       },
       ...(hasLegend ? {
         legend: {

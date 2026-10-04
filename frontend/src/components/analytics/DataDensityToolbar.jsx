@@ -1,5 +1,6 @@
 import React from 'react';
 import { Table, Search, X } from 'lucide-react';
+import { formatCompleteNumber } from '../../utils/displayFormatters';
 
 export default function DataDensityToolbar({
   totalCount,
@@ -19,10 +20,14 @@ export default function DataDensityToolbar({
     if (v == null || isNaN(v)) return '—';
     if (isCurrency) {
       if (Math.abs(v) >= 1_000_000) return `$${(v / 1_000_000).toFixed(2)}M`;
-      if (Math.abs(v) >= 1_000) return `$${(v / 1_000).toFixed(1)}k`;
+      if (Math.abs(v) >= 1_000) return `$${(v / 1_000).toFixed(2)}k`;
       return `$${Number(v).toFixed(2)}`;
     }
-    return `${Number(v).toLocaleString()} ${unit}`;
+    const num = Number(v);
+    if (!Number.isInteger(num)) {
+      return `${num.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} ${unit}`.trim();
+    }
+    return `${Number(v).toLocaleString()} ${unit}`.trim();
   };
 
   const isHighCount = totalCount > 10;
@@ -52,7 +57,11 @@ export default function DataDensityToolbar({
         </div>
 
         {benchmarkMean != null && (
-          <div className="density-benchmark-chip" title="Weighted dataset average across all records">
+          <div
+            className="density-benchmark-chip"
+            title={`Network Mean (Complete): ${formatCompleteNumber(benchmarkMean)}`}
+            style={{ cursor: 'help' }}
+          >
             <span className="benchmark-label">Network Mean:</span>
             <span className="benchmark-value">{formatVal(benchmarkMean)}</span>
           </div>

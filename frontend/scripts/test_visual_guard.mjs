@@ -3,7 +3,7 @@ import { validateChartSpec, SchemaErrorCode } from '../src/components/visualizat
 import { VISUAL_POLICY, requiresHorizontalOrientation } from '../src/components/visualization/policy/visualPolicy.js';
 import { calculateChartLayout } from '../src/components/visualization/layout/calculateChartLayout.js';
 import { calculateMargins } from '../src/components/visualization/layout/calculateMargins.js';
-import { formatCompactNumber } from '../src/components/visualization/layout/formatters.js';
+import { formatCompactNumber, formatFullNumber } from '../src/components/visualization/layout/formatters.js';
 import { normalizeChartSpec } from '../src/components/visualization/normalize/normalizeChartSpec.js';
 import { repairChartLayout, RepairAction } from '../src/components/visualization/repair/repairChartLayout.js';
 
@@ -98,12 +98,16 @@ console.log('   ✅ Pre-render layout & orientation tests passed.');
 // 3. Dynamic Margins & Number Formatters Tests
 console.log('3. Testing Dynamic Margins & Number Formatting...');
 {
-  // Number compaction
-  assert.equal(formatCompactNumber(1250000), '1.3M');
+  // Number compaction (curated up to 2 decimals)
+  assert.equal(formatCompactNumber(1250000), '1.25M');
   assert.equal(formatCompactNumber(45000), '45K');
   assert.equal(formatCompactNumber(1000000000), '1B');
   assert.equal(formatCompactNumber(85.5, '%'), '85.5%');
   assert.equal(formatCompactNumber(54000, '$'), '$54K');
+
+  // Complete unrounded number for hover tooltips
+  assert.equal(formatFullNumber(211.096358), '211.096358');
+  assert.equal(formatFullNumber(46871470.5284, '$'), '$46,871,470.5284');
 
   // Dynamic Margins for long labels
   const longCats = ['Enterprise Customer Success Operations', 'Supply Chain Global Logistics'];

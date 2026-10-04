@@ -1,6 +1,6 @@
 import React from "react";
 import { ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
-import { formatDisplayLabel } from "../../utils/displayFormatters";
+import { formatDisplayLabel, formatCuratedNumber, formatCompleteNumber, isDecimalNumber } from "../../utils/displayFormatters";
 
 export default function DataTableGrid({
   loading,
@@ -161,8 +161,32 @@ export default function DataTableGrid({
                   {/* Data Cells */}
                   {displayedCols.map((col, cIdx) => {
                     const val = row.values ? row.values[col] : undefined;
-                    const displayVal = val !== undefined && val !== null && val !== "" ? String(val) : "—";
-                    const isNull = displayVal === "—";
+                    const isNull = val === undefined || val === null || val === "";
+
+                    let displayVal = "—";
+                    let tooltipVal = "";
+
+                    if (!isNull) {
+                      const strVal = String(val).trim();
+                      const isDate = /^\d{4}-\d{2}-\d{2}/.test(strVal);
+                      const num = Number(val);
+                      const isNumeric = !isDate && Number.isFinite(num);
+
+                      if (isNumeric && !Number.isInteger(num)) {
+                        // Floating point decimal: curate to at most 2 decimal places
+                        displayVal = formatCuratedNumber(num, 2);
+                        // Complete unrounded decimal on mouseover
+                        tooltipVal = `Complete: ${formatCompleteNumber(val)}`;
+                      } else if (isNumeric && Number.isInteger(num)) {
+                        displayVal = num.toLocaleString('en-US');
+                        tooltipVal = String(val);
+                      } else {
+                        displayVal = strVal;
+                        tooltipVal = strVal;
+                      }
+                    }
+
+                    const isHoverableDecimal = tooltipVal && tooltipVal.startsWith('Complete:');
 
                     return (
                       <td
@@ -176,9 +200,10 @@ export default function DataTableGrid({
                           whiteSpace: "nowrap",
                           maxWidth: "280px",
                           overflow: "hidden",
-                          textOverflow: "ellipsis"
+                          textOverflow: "ellipsis",
+                          cursor: isHoverableDecimal ? "help" : "default"
                         }}
-                        title={!isNull ? displayVal : ""}
+                        title={tooltipVal}
                       >
                         {displayVal}
                       </td>

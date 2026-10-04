@@ -6,7 +6,7 @@ import { calculateChartLayout } from '../../visualization/layout/calculateChartL
 import SmartImpactCard from '../../charts/SmartImpactCard';
 import { getSlideTheme } from '../../../theme/slideTokens.js';
 import { cartesian, numeric } from '../../charts/chartOptions';
-import { humanizeLabel } from '../../visualization/layout/formatters.js';
+import { formatCompactNumber, formatFullNumber, humanizeLabel } from '../../visualization/layout/formatters.js';
 
 export default function SlideChart({ chart, chartData, theme, hideImpactCard = false }) {
   theme = getSlideTheme(theme);
@@ -22,7 +22,8 @@ export default function SlideChart({ chart, chartData, theme, hideImpactCard = f
   const fullChartTitle = humanizeLabel(actualChart.full_title || actualChart.title || actualChart.chart_title || chartLabel);
   const fullChartSubtitle = actualChart.full_subtitle || actualChart.subtitle || actualChart.chart_subtitle ? humanizeLabel(actualChart.full_subtitle || actualChart.subtitle || actualChart.chart_subtitle) : '';
   const type = (actualChart.type || actualChart.chart_type || 'column').toLowerCase();
-  const format = value => Math.abs(Number(value)) >= 1e6 ? `${(Number(value)/1e6).toFixed(1)}M` : Number(value).toLocaleString(undefined, { maximumFractionDigits: 2 });
+  const format = value => formatCompactNumber(value, actualChart.unit, 2);
+  const formatFull = value => formatFullNumber(value, actualChart.unit);
 
   const renderHeader = () => (
     <div
@@ -166,7 +167,7 @@ export default function SlideChart({ chart, chartData, theme, hideImpactCard = f
           if (!d) return '';
           const displayName = d.full_name || d.name;
           let text = `<div style="font-weight:700;margin-bottom:2px;max-width:280px;word-break:break-word;">${displayName}</div>`;
-          if (d.value != null) text += `<div>Mean Value: <b>${format(d.value)} ${d.unit || actualChart.unit || ''}</b></div>`;
+          if (d.value != null) text += `<div>Mean Value: <b>${formatFull(d.value)}</b></div>`;
           if (d.sample_size) text += `<div>Cohort Size: <b>n = ${d.sample_size}</b></div>`;
           if (d.severity) {
             const isCrit = String(d.severity).toLowerCase().includes('crit');
@@ -266,7 +267,7 @@ export default function SlideChart({ chart, chartData, theme, hideImpactCard = f
           const step = steps[delta.dataIndex];
           const fullLabel = step?.full_label || step?.label || delta.name;
           const typeLabel = step?.type ? `(${step.type.toUpperCase()})` : '';
-          return `<div style="font-weight:700;max-width:280px;word-break:break-word;">${fullLabel} ${typeLabel}</div><div>Value: <b>${format(delta.value)} ${actualChart.unit || ''}</b></div>`;
+          return `<div style="font-weight:700;max-width:280px;word-break:break-word;">${fullLabel} ${typeLabel}</div><div>Value: <b>${formatFull(delta.value)}</b></div>`;
         }
       },
       grid: {
@@ -392,7 +393,7 @@ export default function SlideChart({ chart, chartData, theme, hideImpactCard = f
       textStyle: { color: isDark ? '#f1f5f9' : '#1e293b', fontSize: 12 },
       formatter: params => {
         const fullCat = cleanCategories?.[params.dataIndex] || params.name;
-        return `<div style="font-weight:700;max-width:280px;word-break:break-word;">${fullCat}</div><div>Value: <b>${format(params.value)} (${params.percent}%)</b></div>`;
+        return `<div style="font-weight:700;max-width:280px;word-break:break-word;">${fullCat}</div><div>Value: <b>${formatFull(params.value)} (${params.percent}%)</b></div>`;
       }
     },
     series: [{

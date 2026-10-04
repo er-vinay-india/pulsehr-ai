@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Table, X, Search, ArrowUpDown, ChevronRight } from 'lucide-react';
-import { formatDisplayLabel } from '../../utils/displayFormatters';
+import { formatDisplayLabel, formatCompleteNumber } from '../../utils/displayFormatters';
 
 export default function ChartDetailModal({
   isOpen,
@@ -40,10 +40,14 @@ export default function ChartDetailModal({
     if (isCurrency) {
       if (Math.abs(v) >= 1_000_000_000) return `$${(v / 1_000_000_000).toFixed(2)}B`;
       if (Math.abs(v) >= 1_000_000) return `$${(v / 1_000_000).toFixed(2)}M`;
-      if (Math.abs(v) >= 1_000) return `$${(v / 1_000).toFixed(1)}k`;
+      if (Math.abs(v) >= 1_000) return `$${(v / 1_000).toFixed(2)}k`;
       return `$${Number(v).toFixed(2)}`;
     }
-    return `${Number(v).toLocaleString()} ${unit}`;
+    const num = Number(v);
+    if (!Number.isInteger(num)) {
+      return `${num.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} ${unit}`.trim();
+    }
+    return `${Number(v).toLocaleString()} ${unit}`.trim();
   };
 
   const highest = items.length > 0 ? items.reduce((prev, curr) => (curr.value > prev.value ? curr : prev), items[0]) : null;
@@ -203,18 +207,28 @@ export default function ChartDetailModal({
                       <span className="table-rank-chip">#{item.rank || idx + 1}</span>
                     </td>
                     <td className="td-label font-semibold">{item.label}</td>
-                    <td className="td-val font-mono">{formatVal(item.value)}</td>
+                    <td className="td-val font-mono" title={`Complete: ${formatCompleteNumber(item.value)}`} style={{ cursor: 'help' }}>
+                      {formatVal(item.value)}
+                    </td>
                     {benchmarkMean != null && (
                       <td className="td-benchmark">
                         {diffPct != null ? (
-                          <span className={`diff-pill ${isPositive ? 'diff-up' : 'diff-down'}`}>
-                            {isPositive ? `+${diffPct.toFixed(1)}%` : `${diffPct.toFixed(1)}%`}
+                          <span
+                            className={`diff-pill ${isPositive ? 'diff-up' : 'diff-down'}`}
+                            title={`Complete: ${diffPct}%`}
+                            style={{ cursor: 'help' }}
+                          >
+                            {isPositive ? `+${diffPct.toFixed(2)}%` : `${diffPct.toFixed(2)}%`}
                           </span>
                         ) : '—'}
                       </td>
                     )}
                     {benchmarkTotal != null && (
-                      <td className="td-share font-mono text-muted">
+                      <td
+                        className="td-share font-mono text-muted"
+                        title={sharePct != null ? `Complete: ${((item.value / benchmarkTotal) * 100)}%` : ''}
+                        style={sharePct != null ? { cursor: 'help' } : {}}
+                      >
                         {sharePct != null ? `${sharePct}%` : '—'}
                       </td>
                     )}
