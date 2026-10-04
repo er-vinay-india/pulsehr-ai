@@ -117,6 +117,63 @@ replaced with a full-cohort mean. The existing planner handles richer queries.
     profile = SemanticClassifier.profile_dataset(profile_frame, dataset_name=sheet_name)
     measures = set(profile.numeric_measures)
     metrics = [c for c in mentioned if c in measures]
+
+    categorical_cols = [c for c in columns if c not in measures]
+    mentioned_cats = [c for c in mentioned if c in categorical_cols]
+    is_entity_count = bool(re.search(r'\b(students?|employees?|headcount|records?|rows?|people|items?|stores?|count|frequency|distribution|breakdown|split)\b', query, re.I))
+    has_by_clause = bool(re.search(r'\b(by|across|breakdown|group|grouped)\b', query, re.I))
+
+    # Also resolve dashboard or follow-up reference to previous chart query
+    if not mentioned and re.search(r'\b(dashboard|available on dashboard|previous|that chart|same chart|the chart)\b', query, re.I):
+        for prev_q in previous_queries:
+            if not prev_q:
+                continue
+            prev_mentioned = _mentioned_columns(prev_q, columns)
+            prev_cats = [c for c in prev_mentioned if c in categorical_cols]
+            if prev_cats:
+                mentioned_cats = prev_cats
+                is_entity_count = True
+                break
+            prev_metrics = [c for c in prev_mentioned if c in measures]
+            if prev_metrics:
+                metrics = prev_metrics
+                break
+
+    # If no continuous numeric measures are requested, but a categorical dimension is requested for entity distribution:
+    if not metrics and mentioned_cats and (is_entity_count or has_by_clause or op == "count"):
+        dimension = mentioned_cats[0]
+        q_check = (query + " " + (previous_queries[0] if previous_queries else "")).lower()
+        entity_name = "Students" if any(w in q_check for w in ["student", "pupil"]) else (
+            "Employees" if any(w in q_check for w in ["employee", "staff", "headcount", "worker"]) else (
+                "Stores" if "store" in q_check else "Records"
+            )
+        )
+        counts = df[dimension].fillna("(missing)").astype(str).value_counts()
+        categories = list(counts.index)
+        results = [float(v) for v in counts.values]
+        title = f"{entity_name} by {dimension.title()}"
+        chart_type = "donut" if len(categories) <= 6 else "column"
+        disclosure = f"Total of {len(df):,} {entity_name.lower()} across {len(categories)} categories."
+        chart = VisualChartSpec(
+            chart_id="CHAT-" + hashlib.sha256(f"{sheet_id}:{entity_name}:{dimension}:count".encode()).hexdigest()[:12],
+            chart_type=chart_type,
+            title=title,
+            subtitle=sheet_name,
+            unit="",
+            categories=categories,
+            series=[ChartSeries(name=f"{entity_name} Count", values=results)],
+            metric_col=entity_name,
+            dimension_col=dimension,
+            aggregation_disclosure=disclosure,
+            metadata={"sheet_id": sheet_id, "operation": "count", "valid_rows": len(df)},
+        )
+        answer = f"### {title}\n\n**{len(df):,} total {entity_name.lower()}** broken down by **{dimension}**:\n\n" + "\n".join(
+            [f"- **{cat}**: {int(val):,} ({round(val / max(1, len(df)) * 100, 1)}%)" for cat, val in zip(categories, results)]
+        )
+        context = {"visualization_context": {"metric": entity_name, "dimension": dimension, "operation": "count", "source_query": query}, "metric": entity_name}
+        evidence = {"source_ids": [sheet_id], "metric_definition": entity_name, "calculation_method": "count", "coverage": {"total_rows": len(df), "used_rows": len(df), "missing_rows": 0}}
+        return response(answer, [chart.model_dump()], context=context, evidence=evidence)
+
     if len(metrics) > 1:
         return clarify("Which metric should I chart: " + ", ".join(metrics) + "?")
     metric = metrics[0] if metrics else descriptor.get("metric") if visual else None

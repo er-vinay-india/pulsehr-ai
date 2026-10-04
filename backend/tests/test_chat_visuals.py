@@ -141,3 +141,22 @@ def test_json_and_sse_chart_followup_bypass_llm(monkeypatch, students, engine):
 def test_group_by_without_deck_is_chat_analytics():
     assert copilot.classify_analytical_intent("show average Math Score grouped by Gender as a bar chart") != "SLIDE_MUTATION"
     assert copilot.classify_analytical_intent("switch chart to column", {"deck_id": 42}) == "SLIDE_MUTATION"
+
+
+@pytest.mark.unit
+def test_categorical_entity_count_and_dashboard_recovery(students):
+    """Verify that 'Students by Gender' draws a count distribution chart without requiring a continuous numeric measure."""
+    result = ask("draw the chart based on Students by Gender", students)
+    assert result["status"] == "success"
+    assert len(result["visual_charts"]) == 1
+    spec = result["visual_charts"][0]
+    assert "Gender" in spec["title"]
+    assert set(spec["categories"]) == {"Female", "Male"}
+    assert spec["series"][0]["values"] == [500.0, 500.0]
+
+    # Verify recovery when user says "the chart is available on dashboard"
+    followup = ask("the chart is availabe on dashboard", students, result["prior_context"])
+    assert followup["status"] == "success"
+    assert len(followup["visual_charts"]) == 1
+    assert set(followup["visual_charts"][0]["categories"]) == {"Female", "Male"}
+
