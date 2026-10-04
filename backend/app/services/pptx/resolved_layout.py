@@ -86,6 +86,15 @@ def render_resolved_slide(slide, plan, theme, colors, page, total):
         p.text += f" · {plan['part']}/{plan['parts']}"
     p.font.name, p.font.size = font, Pt(GEOMETRY['type']['source'])
     p.font.color.rgb = colors['secondary']
-    expected = {kind: sum(b['kind'] == kind for b in plan['blocks']) for kind in ('chart', 'table')}
-    if sum(s.has_table for s in slide.shapes) != expected['table'] or sum(s.has_chart for s in slide.shapes) != expected['chart']:
+    expected_tables = sum(b['kind'] == 'table' for b in plan['blocks'])
+    expected_excel_charts = sum(
+        b['kind'] == 'chart' and not (
+            str(b.get('chart', {}).get('type') or b.get('chart', {}).get('chart_type') or '').lower() in {'breakdown_tree', 'waterfall'}
+            or b.get('chart', {}).get('tree_data')
+            or b.get('chart', {}).get('waterfall_steps')
+        )
+        for b in plan['blocks']
+    )
+    if sum(s.has_table for s in slide.shapes) != expected_tables or sum(s.has_chart for s in slide.shapes) != expected_excel_charts:
         raise ValueError('Export is missing a required chart or table.')
+
