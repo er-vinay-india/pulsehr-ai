@@ -135,8 +135,11 @@ MODULE_REGISTRY: Dict[str, ModuleSpec] = {
             "backend/app/routers/copilot.py",
         ],
         test_files=[
+            "tests/test_council_coordinator.py",
             "tests/test_copilot_contextual_business.py",
             "tests/test_copilot_streaming.py",
+            "tests/test_chat_visuals.py",
+            "tests/test_copilot_sheet_quality.py",
             "tests/test_copilot_tools.py",
             "tests/test_generic_copilot_engine.py",
             "tests/test_chatbot_decision_integration.py",

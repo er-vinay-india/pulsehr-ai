@@ -501,7 +501,9 @@ export default function SlideChart({ chart, chartData, theme, hideImpactCard = f
       if (axis && !Array.isArray(axis)) {
         axis.triggerEvent = true;
         if (axis.type === 'value') {
-          axis.scale = true;
+          // Bars encode magnitude with length, so their value axis must include
+          // zero. Lines may use a tighter range to show chronological variation.
+          axis.scale = type === 'line';
           axis.axisLabel = {
             ...axis.axisLabel,
             fontSize: 10,

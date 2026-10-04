@@ -16,7 +16,11 @@ from ..services.copilot_query_planner import plan_analytical_query, execute_anal
 from ..services.ai_copilot import query_copilot, get_available_models, stream_copilot_generator
 from ..services.data_engine.semantic_classifier import SemanticClassifier
 from ..services.copilot.generic_copilot_engine import GenericCopilotEngine
+from ..services.copilot.chat_visuals import answer_chat_visual
+from ..services.copilot.sheet_quality import is_missing_values_query, answer_missing_values
 from ..services.copilot.union_war_room import UnionWarRoomEngine, COUNCIL_DELEGATES
+from ..services.copilot.coordinator_models import RoutingAssignment, WorkerTarget, CoordinatorDecision
+from ..services.copilot.council_coordinator import CouncilCoordinator
 from ..services.data_engine.analysis_context import AnalysisContext
 from ..services.presentation.slide_mutator import (
     SlideMutator,
@@ -445,8 +449,14 @@ def _is_explicit_legacy_hr_request(req: CopilotQueryRequest) -> bool:
 def ask_generic_copilot(req: CopilotQueryRequest):
     """GENERIC route: strictly executes via GenericCopilotEngine."""
     df, name, ctx, sid = _load_active_sheet_dataframe(req.sheet_id, req.dataset_id)
+    if is_missing_values_query(req.query):
+        return finalize_identity_response(answer_missing_values(req.query, req.sheet_id or sid, req.dataset_id), req.query)
     if df is None or df.empty:
         raise HTTPException(400, "No active tabular dataset found. Please upload a dataset first.")
+    visual_result = answer_chat_visual(req.query, df, name or "Uploaded Dataset", sid,
+                                      req.dataset_id, req.prior_context)
+    if visual_result is not None:
+        return finalize_identity_response(visual_result, req.query)
     if sid is not None:
         direct_ans = _answer_from_shared_findings(req.query, sid, name or "Uploaded Dataset")
         if direct_ans is not None:
@@ -718,8 +728,10 @@ def classify_analytical_intent(
     tool: ToolRequest | None = None,
     dataset_id: int | None = None,
     sheet_id: int | None = None
-) -> Literal["ANALYTICAL_CALCULATION", "FOLLOW_UP_REFINEMENT", "FACT_RETRIEVAL", "SLIDE_MUTATION", "TEMPORAL_VISUAL_ANALYSIS", "GENERAL_CHAT"]:
+) -> Literal["ANALYTICAL_CALCULATION", "FOLLOW_UP_REFINEMENT", "FACT_RETRIEVAL", "SLIDE_MUTATION", "TEMPORAL_VISUAL_ANALYSIS", "SHEET_DATA_QUALITY", "GENERAL_CHAT"]:
     """Classifies user query intent before engine dispatch to prevent department shortcuts or war room bypass."""
+    if is_missing_values_query(query):
+        return "SHEET_DATA_QUALITY"
     if tool is not None:
         return "ANALYTICAL_CALCULATION"
 
@@ -733,7 +745,8 @@ def classify_analytical_intent(
     ])
     has_slide_target = bool(re.search(r'\b(?:slide|deck|presentation|theme)\b', q_low))
     has_mutation_action = any(k in q_low for k in ("change", "group", "slice", "reslice", "switch", "convert", "revert", "undo", "filter", "turn into", "make"))
-    if is_slide_edit_phrase or (has_slide_target and has_mutation_action):
+    has_active_deck = bool(prior_context and (prior_context.get("deck_spec") or prior_context.get("deck_id")))
+    if (is_slide_edit_phrase and (has_slide_target or has_active_deck)) or (has_slide_target and has_mutation_action):
         return "SLIDE_MUTATION"
 
     # 0a. Temporal Grain & Visual Trend Queries
@@ -816,13 +829,47 @@ def ask_copilot(req: CopilotQueryRequest):
     df, name, ctx, sid = _load_active_sheet_dataframe(req.sheet_id, req.dataset_id)
     target_sheet_id = req.sheet_id or sid
 
+    # 1. Authoritative Council Coordinator routing
+    decision = CouncilCoordinator.coordinate(
+        query=req.query,
+        prior_context=req.prior_context,
+        tool=req.tool,
+        dataset_id=req.dataset_id,
+        sheet_id=target_sheet_id,
+        df=df,
+        engine=req.engine
+    )
+
+    # 1a. Fast-path & Specialist dispatch via Coordinator
+    if decision.worker_target in (
+        WorkerTarget.DETERMINISTIC_CALCULATOR,
+        WorkerTarget.IMMEDIATE_IDENTITY,
+        WorkerTarget.SHEET_QUALITY_INSPECTOR,
+        WorkerTarget.CHART_LIBRARY,
+        WorkerTarget.SINGLE_SPECIALIST_MODEL
+    ):
+        return CouncilCoordinator.execute_sync(
+            decision=decision,
+            query=req.query,
+            df=df,
+            sheet_name=name,
+            context=ctx,
+            sheet_id=target_sheet_id,
+            dataset_id=req.dataset_id,
+            model=req.model,
+            prior_context=decision.resolved_context
+        )
+
     intent_type = classify_analytical_intent(
         req.query,
-        prior_context=req.prior_context,
+        prior_context=decision.resolved_context,
         tool=req.tool,
         dataset_id=req.dataset_id,
         sheet_id=target_sheet_id
     )
+
+    if intent_type == "SHEET_DATA_QUALITY":
+        return finalize_identity_response(answer_missing_values(req.query, target_sheet_id, req.dataset_id), req.query)
 
     # 0. Conversational Slide & Presentation Mutation (Phase 4)
     if intent_type == "SLIDE_MUTATION":
@@ -905,6 +952,13 @@ def ask_copilot(req: CopilotQueryRequest):
         temporal_res = _handle_temporal_chart_query(req.query, df, name or "Uploaded Dataset", target_sheet_id)
         if temporal_res is not None:
             return finalize_identity_response(temporal_res, req.query)
+
+    # Chart requests must carry a library-ready payload instead of LLM text art.
+    if req.tool is None and intent_type != "SLIDE_MUTATION":
+        visual_result = answer_chat_visual(req.query, df, name or "Uploaded Dataset", target_sheet_id,
+                                          req.dataset_id, req.prior_context)
+        if visual_result is not None:
+            return finalize_identity_response(visual_result, req.query)
 
     # 1. Executable analytical calculations and follow-up refinements take top priority
     if intent_type in ("ANALYTICAL_CALCULATION", "FOLLOW_UP_REFINEMENT"):
@@ -992,13 +1046,57 @@ def ask_copilot_stream(req: CopilotQueryRequest):
     df, name, ctx, sid = _load_active_sheet_dataframe(req.sheet_id, req.dataset_id)
     target_sheet_id = req.sheet_id or sid
 
+    # 1. Authoritative Council Coordinator routing
+    decision = CouncilCoordinator.coordinate(
+        query=req.query,
+        prior_context=req.prior_context,
+        tool=req.tool,
+        dataset_id=req.dataset_id,
+        sheet_id=target_sheet_id,
+        df=df,
+        engine=req.engine
+    )
+
+    # 1a. Fast-path & Specialist dispatch via Coordinator stream
+    if decision.worker_target in (
+        WorkerTarget.DETERMINISTIC_CALCULATOR,
+        WorkerTarget.IMMEDIATE_IDENTITY,
+        WorkerTarget.SHEET_QUALITY_INSPECTOR,
+        WorkerTarget.CHART_LIBRARY,
+        WorkerTarget.SINGLE_SPECIALIST_MODEL
+    ):
+        return StreamingResponse(
+            CouncilCoordinator.stream_events(
+                decision=decision,
+                query=req.query,
+                df=df,
+                sheet_name=name,
+                context=ctx,
+                sheet_id=target_sheet_id,
+                dataset_id=req.dataset_id,
+                model=req.model,
+                prior_context=decision.resolved_context
+            ),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"}
+        )
+
     intent_type = classify_analytical_intent(
         req.query,
-        prior_context=req.prior_context,
+        prior_context=decision.resolved_context,
         tool=req.tool,
         dataset_id=req.dataset_id,
         sheet_id=target_sheet_id
     )
+
+    if intent_type == "SHEET_DATA_QUALITY":
+        quality_result = finalize_identity_response(answer_missing_values(req.query, target_sheet_id, req.dataset_id), req.query)
+        def _quality_stream():
+            yield f"event: status\ndata: {json.dumps({'phase': 'tool', 'message': 'Checking missing values in the original sheet…'})}\n\n"
+            yield f"event: token\ndata: {json.dumps({'token': quality_result['answer']})}\n\n"
+            yield f"event: done\ndata: {json.dumps(quality_result)}\n\n"
+        return StreamingResponse(_quality_stream(), media_type="text/event-stream",
+                                 headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"})
 
     # 0. Conversational Slide & Presentation Mutation (Phase 4)
     if intent_type == "SLIDE_MUTATION":
@@ -1105,6 +1203,21 @@ def ask_copilot_stream(req: CopilotQueryRequest):
             return StreamingResponse(
                 _temporal_stream(),
                 media_type="text/event-stream",
+                headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"}
+            )
+
+    # Use the same grounded visual contract for SSE and synchronous chat.
+    if req.tool is None and intent_type != "SLIDE_MUTATION":
+        visual_result = answer_chat_visual(req.query, df, name or "Uploaded Dataset", target_sheet_id,
+                                          req.dataset_id, req.prior_context)
+        if visual_result is not None:
+            visual_result = finalize_identity_response(visual_result, req.query)
+            def _visual_stream():
+                yield f"event: status\ndata: {json.dumps({'phase': 'tool', 'message': 'Preparing verified chart data…'})}\n\n"
+                yield f"event: token\ndata: {json.dumps({'token': visual_result['answer']})}\n\n"
+                yield f"event: done\ndata: {json.dumps(visual_result)}\n\n"
+            return StreamingResponse(
+                _visual_stream(), media_type="text/event-stream",
                 headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"}
             )
 

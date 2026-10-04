@@ -98,7 +98,7 @@ def sniff_delimiter_and_header(sample_text: str, default_sep: str = ',') -> tupl
     return detected_sep, header_idx
 
 
-def read_sheets(path):
+def read_sheets(path, *, prune_empty=True):
     suffix = path.suffix.lower()
     if suffix in ('.csv', '.tsv', '.txt'):
         default_sep = '\t' if suffix == '.tsv' else ','
@@ -114,14 +114,15 @@ def read_sheets(path):
                     skiprows=skip if skip > 0 else None,
                     dtype=str,
                     encoding=encoding,
-                    keep_default_na=False
+                    keep_default_na=False,
+                    skip_blank_lines=prune_empty,
                 )
                 frames = {'Sheet1': df}
                 break
             except (UnicodeDecodeError, Exception):
                 continue
         if frames is None:
-            frames = {'Sheet1': pd.read_csv(path, dtype=str, encoding='latin1', keep_default_na=False)}
+            frames = {'Sheet1': pd.read_csv(path, dtype=str, encoding='latin1', keep_default_na=False, skip_blank_lines=prune_empty)}
     elif path.suffix.lower() == '.xls':
         try:
             with pd.ExcelFile(path, engine='xlrd') as book:
@@ -138,6 +139,11 @@ def read_sheets(path):
             raise ValueError(f"Failed to parse Excel spreadsheet: {exc}")
     if sum(len(f) for f in frames.values()) > 20000:
         raise ValueError('Upload at most 20,000 rows per file. Split larger files before uploading.')
+
+    # Data-quality audits need original empty fields/records before ingestion
+    # removes empty columns. Ordinary ingestion keeps its existing behavior.
+    if not prune_empty:
+        return frames
 
     pruned_frames = {}
     for sheet_name, frame in frames.items():

@@ -126,3 +126,16 @@
   font: 700 0.82rem/1.4 var(--font-sans); cursor: pointer;
   &:focus-visible { outline: 3px solid var(--color-focus); outline-offset: 3px; }
 }
+
+.hriday-chat-visuals { margin: 10px 0; min-width: 0; }
+.hriday-chat-chart-wrapper {
+  min-width: 0; max-width: 100%; border-radius: 12px; padding: 12px;
+  background: var(--color-bg-surface); border: 1px solid var(--color-border); margin-bottom: 10px;
+}
+.hriday-chart-data {
+  margin-top: 10px; color: var(--color-text-secondary); font-size: 12px;
+  summary { cursor: pointer; padding: 8px 0; }
+  > div { max-height: 240px; overflow: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 6px; border-bottom: 1px solid var(--color-border); }
+}

@@ -7,9 +7,11 @@ import { presentArtifacts } from './presentation.js';
 import IconButton from './IconButton.jsx';
 import HRIDAYActivity from './HRIDAYActivity.jsx';
 import SlideChart from '../presentation/slides/SlideChart.jsx';
+import { useTheme } from '../../context/ThemeContext.jsx';
 
 export default function HRIDAYChat({ scope = {}, onClose, expanded = false, onExpand, inputRef, mobile = false, fullPage = false }) {
   const { conversation, messages, draft, loading, activity, announcement, identity } = useHRIDAY();
+  const { isDark } = useTheme();
   const localInput = useRef(null);
   const textarea = inputRef || localInput;
   const transcript = useRef(null);
@@ -91,20 +93,23 @@ export default function HRIDAYChat({ scope = {}, onClose, expanded = false, onEx
             </div>
           )}
           {message.visual_charts && message.visual_charts.length > 0 && (
-            <div className="hriday-chat-visuals" style={{ marginTop: '10px', marginBottom: '10px' }}>
+            <div className="hriday-chat-visuals">
               {message.visual_charts.map((vc, vIdx) => (
                 <div
                   key={vc.chart_id || `chat-chart-${vIdx}`}
                   className="hriday-chat-chart-wrapper"
-                  style={{
-                    borderRadius: '12px',
-                    padding: '12px',
-                    background: 'rgba(15, 23, 42, 0.45)',
-                    border: '1px solid rgba(255, 255, 255, 0.1)',
-                    marginBottom: '10px'
-                  }}
                 >
-                  <SlideChart chart={vc} theme={{ is_dark: true }} />
+                  <SlideChart chart={vc} theme={{ is_dark: isDark }} />
+                  {vc.categories?.length > 0 && vc.series?.length > 0 && <details className="hriday-chart-data">
+                    <summary>View chart data</summary>
+                    <div><table>
+                      <caption>{vc.title || 'Chart data'}</caption>
+                      <thead><tr><th scope="col">{vc.dimension_col || 'Cohort'}</th>{vc.series.map((series, index) => <th scope="col" key={index}>{series.name}</th>)}</tr></thead>
+                      <tbody>{vc.categories.map((category, index) => <tr key={index}>
+                        <th scope="row">{category}</th>{vc.series.map((series, seriesIndex) => <td key={seriesIndex}>{series.values?.[index] ?? series.data?.[index] ?? '—'}{vc.unit ? ` ${vc.unit}` : ''}</td>)}
+                      </tr>)}</tbody>
+                    </table></div>
+                  </details>}
                 </div>
               ))}
             </div>

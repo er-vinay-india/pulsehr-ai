@@ -15,6 +15,27 @@ function harness() {
   const c = new HRIDAYConversation((...args) => new Promise(resolve => calls.push({ args, cb: args[5], resolve })));
   return { c, calls };
 }
+test('chart payload and calculation context survive completion into the next turn', async () => {
+  const { c, calls } = harness();
+  const first = c.send('display me Cohort Average: Math Score');
+  const prior = { sheet_id: 7, visualization_context: { metric: 'Math Score', operation: 'mean' } };
+  calls[0].cb.onDone({ answer: 'Cohort average: 66.09', prior_context: prior });
+  calls[0].resolve(); await first;
+  const next = c.send('show me in chart format');
+  assert.deepEqual(calls[1].args[7], prior);
+  const chart = { chart_id: 'math', chart_type: 'column', categories: ['Cohort'], series: [{ name: 'Math Score', values: [66.09] }] };
+  calls[1].cb.onDone({ answer: 'Here is the chart.', visual_charts: [chart], prior_context: prior });
+  calls[1].resolve(); await next;
+  assert.deepEqual(c.state.messages[3].visual_charts, [chart]);
+  assert.equal(c.state.messages[3].phase, 'complete');
+});
+test('a chart-only response completes and singular chart fallback survives an empty chart list', async () => {
+  const chart = { categories: ['Cohort'], series: [{ values: [66.09] }] };
+  const c = new HRIDAYConversation(async (...args) => args[5].onDone({ visual_charts: [], visual_chart: chart }));
+  await c.send('show chart');
+  assert.equal(c.state.messages[1].phase, 'complete');
+  assert.deepEqual(c.state.messages[1].visual_charts, [chart]);
+});
 test('model identity and council banner never flash at any streaming boundary', () => {
   for (const answer of [banner + evidence, banner + greeting, greeting, 'I cannot access live weather. As ' + delegates[0].role_title + ', ' + evidence, 'As ' + delegates[0].role_title + ', ' + evidence, 'From my perspective as ' + delegates[0].role_title + ', ' + evidence]) {
     for (let end = 1; end <= answer.length; end++) {

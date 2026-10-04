@@ -755,7 +755,11 @@ def plan_analytical_query(
     is_breakdown = any(w in q for w in ('breakdown', 'by department', 'across department', 'each department',
                                         'by store', 'across stores', 'by severity', 'breakdown by'))
 
-    if not (is_worst or is_best or is_breakdown) and not (active_prior and active_prior.get('metric')):
+    if not (is_worst or is_best or is_breakdown):
+        # Having a preceding metric does not make every new question a ranking
+        # refinement. Explicit ID/limit/why follow-ups are handled above.
+        if active_prior and active_prior.get('metric'):
+            return None
         council_res = plan_with_council_qwen(
             query=q,
             all_measures=all_measures,
