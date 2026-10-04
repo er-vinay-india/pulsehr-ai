@@ -482,3 +482,43 @@ def test_copilot_distinct_queries():
 
     finally:
         conn.close()
+
+
+def test_disparity_title_and_series_humanized_no_underscores():
+    """Verify Gate 5 Segment Disparity titles and chart options never retain raw underscores."""
+    from app.services.adaptive_dashboard.orchestrator import orchestrate_sheet_strategies
+    from app.services.adaptive_dashboard.engine import profile_source
+    from tests.test_walmart_sales_analytics import WALMART_SAMPLE_ROWS, WALMART_COLUMNS
+
+    manifest, contract = profile_source(
+        sheet_id=99015,
+        sheet_name="Walmart_Sales_Store",
+        file_name="Walmart_Sales_Store.csv",
+        display_name="Walmart Store Analytics",
+        columns=WALMART_COLUMNS,
+        rows=WALMART_SAMPLE_ROWS,
+    )
+
+    cov, findings, priority_insight = orchestrate_sheet_strategies(
+        sheet_id=99015,
+        rows=WALMART_SAMPLE_ROWS,
+        manifest=manifest,
+        contract=contract,
+    )
+
+    s09 = next((f for f in findings if f.recipe_id == "recipe_s09_segment_disparity"), None)
+    assert s09 is not None
+    # Verify no raw underscores in title, comparison effect, or priority insight
+    assert "_" not in s09.short_business_title
+    assert "Weekly Sales" in s09.short_business_title
+    assert "Weekly_Sales" not in s09.short_business_title
+    assert s09.short_business_title == "Store Disparity: Store 20 vs Store 33 on Weekly Sales"
+
+    assert priority_insight is not None
+    assert "_" not in priority_insight.short_business_title
+    assert priority_insight.short_business_title == "Store Disparity: Store 20 vs Store 33 on Weekly Sales"
+    if priority_insight.echarts_option and priority_insight.echarts_option.get("series"):
+        series_name = priority_insight.echarts_option["series"][0].get("name", "")
+        assert "_" not in series_name
+        assert "Weekly_Sales" not in series_name
+

@@ -242,6 +242,32 @@ STRATEGY_REGISTRY: dict[str, dict[str, Any]] = {
 # 2. Semantic Input Binding & Unit / Grain Verification
 # -----------------------------------------------------------------------------
 
+def _clean_col_name(col: str | None) -> str:
+    """Sanitizes raw column names and identifiers into clean business English."""
+    if not col:
+        return ""
+    s = str(col).strip()
+    for prefix in [
+        "interact_mean_", "interact_ratio_", "interact_sum_", "interact_count_", "interact_",
+        "mean_", "sum_", "ratio_", "log_", "std_", "diff_", "pct_"
+    ]:
+        if s.lower().startswith(prefix):
+            s = s[len(prefix):]
+    s = s.replace("_", " ").strip()
+    acronyms = {"hr", "fte", "kpi", "id", "us", "uk", "cpi", "ols", "usd", "eur", "gbp", "inr", "roi", "ai", "qa", "ceo", "cfo", "vp"}
+    words = s.split()
+    capitalized = []
+    for idx, w in enumerate(words):
+        lower = w.lower()
+        if lower in acronyms:
+            capitalized.append(lower.upper())
+        elif idx > 0 and lower in {"by", "vs", "and", "of", "in", "on", "at", "to", "for", "with"}:
+            capitalized.append(lower)
+        else:
+            capitalized.append(w.capitalize())
+    return " ".join(capitalized)
+
+
 def _detect_column_unit(col_name: str | None) -> str:
     """Detects metric unit from column name keywords."""
     if not col_name:
@@ -615,8 +641,9 @@ def _build_echarts_bar_option(title: str, categories: list[str], values: list[fl
     """Generates WCAG 2.1 Level AAA accessible, responsive ECharts bar specification.
     Follows data visualization rule: Categorical comparison with N > 4 must render as a horizontal ranked bar
     to avoid label rotation, truncated text collisions, and cognitive load."""
+    clean_title = _clean_col_name(title)
     if len(categories) > 4:
-        rev_cats = list(reversed(categories))
+        rev_cats = [_clean_col_name(str(c)) if isinstance(c, str) else str(c) for c in reversed(categories)]
         rev_vals = list(reversed(values))
         dim_label = "Store" if any("store" in str(c).lower() for c in categories) else ("Department" if any("dept" in str(c).lower() for c in categories) else "")
         return {
@@ -653,7 +680,7 @@ def _build_echarts_bar_option(title: str, categories: list[str], values: list[fl
             },
             "series": [
                 {
-                    "name": title,
+                    "name": clean_title,
                     "type": "bar",
                     "data": rev_vals,
                     "itemStyle": {"color": "#005A6B", "borderRadius": [0, 4, 4, 0], "borderColor": "#0B1F3A", "borderWidth": 1},
@@ -670,12 +697,13 @@ def _build_echarts_bar_option(title: str, categories: list[str], values: list[fl
             ],
         }
 
+    clean_cats = [_clean_col_name(str(c)) if isinstance(c, str) else str(c) for c in categories]
     return {
         "tooltip": {"trigger": "axis", "axisPointer": {"type": "shadow"}, "backgroundColor": "#0B1F3A", "borderColor": "#123B5D", "textStyle": {"color": "#FFFFFF", "fontSize": 12}},
         "grid": {"left": "3%", "right": "4%", "bottom": "12%", "top": "15%", "containLabel": True},
         "xAxis": {
             "type": "category",
-            "data": categories,
+            "data": clean_cats,
             "axisLabel": {"interval": 0, "color": "#334155", "fontSize": 11},
         },
         "yAxis": {
@@ -685,7 +713,7 @@ def _build_echarts_bar_option(title: str, categories: list[str], values: list[fl
         },
         "series": [
             {
-                "name": title,
+                "name": clean_title,
                 "type": "bar",
                 "data": values,
                 "itemStyle": {"color": "#005A6B", "borderRadius": [4, 4, 0, 0], "borderColor": "#0B1F3A", "borderWidth": 1},
@@ -697,12 +725,14 @@ def _build_echarts_bar_option(title: str, categories: list[str], values: list[fl
 
 def _build_echarts_line_option(title: str, periods: list[str], values: list[float], unit: str) -> dict[str, Any]:
     """Generates WCAG 2.1 Level AAA accessible, responsive ECharts line specification."""
+    clean_title = _clean_col_name(title)
+    clean_periods = [_clean_col_name(str(p)) if isinstance(p, str) else str(p) for p in periods]
     return {
         "tooltip": {"trigger": "axis", "backgroundColor": "#0B1F3A", "borderColor": "#123B5D", "textStyle": {"color": "#FFFFFF", "fontSize": 12}},
         "grid": {"left": "3%", "right": "4%", "bottom": "12%", "top": "15%", "containLabel": True},
         "xAxis": {
             "type": "category",
-            "data": periods,
+            "data": clean_periods,
             "axisLabel": {"interval": 0, "rotate": 20 if len(periods) > 4 else 0, "color": "#334155", "fontSize": 11},
         },
         "yAxis": {
@@ -712,7 +742,7 @@ def _build_echarts_line_option(title: str, periods: list[str], values: list[floa
         },
         "series": [
             {
-                "name": title,
+                "name": clean_title,
                 "type": "line",
                 "data": values,
                 "smooth": True,
@@ -1299,7 +1329,7 @@ def orchestrate_sheet_strategies(
                     source_scope=[sheet_name],
                     snapshot=snapshot,
                     status="available",
-                    short_business_title=f"Category Concentration: {top_name}",
+                    short_business_title=f"Category Concentration: {_clean_col_name(top_name)}",
                     typed_value=round(top_pct, 1),
                     formatted_value=f"{top_pct:.1f}%",
                     unit="%",
@@ -1437,12 +1467,15 @@ def orchestrate_sheet_strategies(
                 else:
                     unit_label = unit_suffix
                     gap_fmt = _format_metric_value(gap, unit_label)
-                    title = f"{seg_noun} Disparity: {top_seg_display} vs {bot_seg_display} on {met_col}"
-                    implication = f"{top_seg_display} observed at {top_fmt} vs {bot_seg_display} at {bot_fmt} (spread: {gap_fmt})."
-                    next_act = f"Conduct operational diagnostic on performance factors differentiating {top_seg_display} and {bot_seg_display}."
+                    clean_top = _clean_col_name(top_seg_display)
+                    clean_bot = _clean_col_name(bot_seg_display)
+                    clean_met = _clean_col_name(met_col)
+                    title = f"{seg_noun} Disparity: {clean_top} vs {clean_bot} on {clean_met}"
+                    implication = f"{clean_top} observed at {top_fmt} vs {clean_bot} at {bot_fmt} (spread: {gap_fmt})."
+                    next_act = f"Conduct operational diagnostic on performance factors differentiating {clean_top} and {clean_bot}."
                     lims = ["Identified as largest observed peer gap; causal drivers require targeted investigation."]
-                    comp_effect = f"{top_seg_display}: {top_fmt} vs {bot_seg_display}: {bot_fmt}"
-                    ev_obs = f"Disparity of {gap_fmt} observed between top unit ({top_seg_display}: {top_fmt}) and bottom unit ({bot_seg_display}: {bot_fmt})."
+                    comp_effect = f"{clean_top}: {top_fmt} vs {clean_bot}: {bot_fmt}"
+                    ev_obs = f"Disparity of {gap_fmt} observed between top unit ({clean_top}: {top_fmt}) and bottom unit ({clean_bot}: {bot_fmt})."
 
                 fid = _generate_finding_id("s09", f"{sheet_id}_{snapshot}_{top_seg}_{bot_seg}")
                 f_s09 = UnifiedFinding(
@@ -1594,7 +1627,7 @@ def orchestrate_sheet_strategies(
                     source_scope=[sheet_name],
                     snapshot=snapshot,
                     status="available",
-                    short_business_title=f"Tail Burden & Spread: {inputs.primary_metric_col}",
+                    short_business_title=f"Tail Burden & Spread: {_clean_col_name(inputs.primary_metric_col)}",
                     typed_value=round(tail_pct, 1),
                     formatted_value=f"{tail_pct:.1f}%",
                     unit="%",
@@ -1830,7 +1863,7 @@ def orchestrate_sheet_strategies(
                     source_scope=[sheet_name],
                     snapshot=snapshot,
                     status="available",
-                    short_business_title=f"Statistical Association: {col_x} vs {col_y}",
+                    short_business_title=f"Statistical Association: {_clean_col_name(col_x)} vs {_clean_col_name(col_y)}",
                     typed_value=round(raw_r, 2),
                     formatted_value=f"r = {raw_r:+.2f}",
                     unit="r",
@@ -1838,7 +1871,7 @@ def orchestrate_sheet_strategies(
                     comparison_and_effect=f"Multiplicity-adjusted: r = {adjusted_r:+.2f}",
                     evidence_bound_observation=res_rel.what_it_establishes,
                     possible_operational_implication="Observed statistical correlation warrants further investigative testing.",
-                    one_next_check_or_action=f"Test for common confounding variables between {col_x} and {col_y}.",
+                    one_next_check_or_action=f"Test for common confounding variables between {_clean_col_name(col_x)} and {_clean_col_name(col_y)}.",
                     allowed_claim_level="statistical_association",
                     visual_kind="distribution",
                     visual_points_summary=[{"label": f"{col_x[:4]}", "value": round(raw_r, 2)}],
@@ -1977,7 +2010,7 @@ def orchestrate_sheet_strategies(
                 source_scope=[sheet_name, sib_name],
                 snapshot=snapshot,
                 status="available",
-                short_business_title=f"Cross-Source Reconciliation: {sheet_name} vs {sib_name}",
+                short_business_title=f"Cross-Source Reconciliation: {_clean_col_name(sheet_name)} vs {_clean_col_name(sib_name)}",
                 typed_value=match_pct,
                 formatted_value=f"{match_pct:.1f}%",
                 unit="%",
@@ -2121,7 +2154,7 @@ def orchestrate_sheet_strategies(
                 source_scope=[sheet_name],
                 snapshot=snapshot,
                 status="available",
-                short_business_title=f"Empirical Trajectory: {inputs.primary_metric_col}",
+                short_business_title=f"Empirical Trajectory: {_clean_col_name(inputs.primary_metric_col)}",
                 typed_value=3.4,
                 formatted_value="+3.4%",
                 unit="%",
@@ -2288,7 +2321,7 @@ def orchestrate_sheet_strategies(
             recipe_id=top_f.recipe_id,
             strategy_code=strategy_code,
             strategy_name=strategy_name,
-            short_business_title=top_f.short_business_title,
+            short_business_title=_clean_col_name(top_f.short_business_title),
             prominent_number=top_f.formatted_value,
             numeric_value=top_f.typed_value,
             unit=top_f.unit,

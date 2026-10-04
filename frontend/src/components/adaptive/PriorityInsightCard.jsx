@@ -21,6 +21,7 @@ import SafeReactECharts from "../charts/SafeReactECharts";
 import { useTheme } from "../../context/ThemeContext";
 import { getChartPalette } from "../charts/chartOptions";
 import { getThemeTokens } from "../../theme/tokens";
+import { humanizeLabel } from "../visualization/layout/formatters";
 
 /**
  * Intelligent number formatting with currency, SI prefixes (K, M, B) or standard rounding.
@@ -45,9 +46,10 @@ function formatCompactNumber(val, unit = "") {
 function formatCategoryLabel(cat, dimensionName = "") {
   const str = String(cat ?? "").trim();
   if (/^\d+$/.test(str) && dimensionName) {
-    return `${dimensionName} ${str}`;
+    const cleanDim = humanizeLabel(dimensionName);
+    return `${cleanDim} ${str}`;
   }
-  return str;
+  return humanizeLabel(str);
 }
 
 /**
@@ -157,7 +159,7 @@ function buildDonutData(
     },
     series: [
       {
-        name: title || "Unit Split",
+        name: humanizeLabel(title) || "Unit Split",
         type: "pie",
         radius: ["58%", "86%"],
         center: ["50%", "50%"],
@@ -285,6 +287,9 @@ function buildBoundedBarOption(baseOption, densityMode, unit = "", dimensionName
   }
 
   if (opt.series && opt.series[0]) {
+    if (opt.series[0].name) {
+      opt.series[0].name = humanizeLabel(opt.series[0].name);
+    }
     opt.series[0].data = filteredVals;
     opt.series[0].itemStyle = {
       ...opt.series[0].itemStyle,
@@ -310,8 +315,9 @@ function buildBoundedBarOption(baseOption, densityMode, unit = "", dimensionName
     textStyle: { color: isDark ? "#F8FAFC" : "#0B1F3A", fontSize: 12 },
     formatter: (params) => {
       const item = Array.isArray(params) ? params[0] : params;
+      const cleanName = humanizeLabel(item.name);
       const valFmt = formatCompactNumber(item.value, unit);
-      return `${item.name}: <strong>${valFmt}</strong>`;
+      return `${cleanName}: <strong>${valFmt}</strong>`;
     },
   };
 
@@ -471,7 +477,7 @@ export default function PriorityInsightCard({
           <span className="adaptive-priority-card__kicker">
             {isHr ? "Workforce Priority Insight" : "Strategic Priority Insight"}
           </span>
-          <h2 className="adaptive-priority-card__title">{short_business_title}</h2>
+          <h2 className="adaptive-priority-card__title">{humanizeLabel(short_business_title)}</h2>
           <p className="adaptive-priority-card__coverage">
             Population scope: <strong>{population_summary}</strong>
           </p>

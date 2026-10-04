@@ -59,6 +59,32 @@ class AnalysisOpportunityMap(BaseModel):
     opportunities: list[AnalysisOpportunity] = Field(default_factory=list)
 
 
+def _clean_name(name: str | None) -> str:
+    """Sanitizes raw column names and tokens into clean business English."""
+    if not name:
+        return ""
+    s = str(name).strip()
+    for prefix in [
+        "interact_mean_", "interact_ratio_", "interact_sum_", "interact_count_", "interact_",
+        "mean_", "sum_", "ratio_", "log_", "std_", "diff_", "pct_"
+    ]:
+        if s.lower().startswith(prefix):
+            s = s[len(prefix):]
+    s = s.replace("_", " ").strip()
+    acronyms = {"hr", "fte", "kpi", "id", "us", "uk", "cpi", "ols", "usd", "eur", "gbp", "inr", "roi", "ai", "qa"}
+    words = s.split()
+    capitalized = []
+    for idx, w in enumerate(words):
+        lower = w.lower()
+        if lower in acronyms:
+            capitalized.append(lower.upper())
+        elif idx > 0 and lower in {"by", "vs", "and", "of", "in", "on", "at", "to", "for", "with", "over", "across"}:
+            capitalized.append(lower)
+        else:
+            capitalized.append(w.capitalize())
+    return " ".join(capitalized)
+
+
 class OpportunityMapGenerator:
     """Discovers mathematically viable analytical paths from a SemanticDatasetProfile."""
 
@@ -84,12 +110,13 @@ class OpportunityMapGenerator:
             for rule in context.business_rules:
                 dims = getattr(context, "important_dimensions", []) or categories[:2]
                 for dim in dims[:2]:
+                    clean_dim = _clean_name(dim)
                     opportunities.append(AnalysisOpportunity(
                         opportunity_id=f"OPP-{opp_idx:03d}",
                         opportunity_type=OpportunityType.TARGET_COMPLIANCE,
                         primary_column=dim,
                         secondary_column=rule.metric,
-                        title=f"Target Compliance: {dim} adherence to {rule.description or (rule.metric + ' ' + rule.operator + ' ' + str(rule.threshold))}",
+                        title=f"Target Compliance: {clean_dim} adherence to {rule.description or (rule.metric + ' ' + rule.operator + ' ' + str(rule.threshold))}",
                         rationale=f"Evaluates compliance percentage against explicit user business rule ({rule.source}).",
                         mathematical_method="threshold_compliance_rate_by_group",
                         feasibility_score=1.0,
@@ -104,13 +131,15 @@ class OpportunityMapGenerator:
             for m_col in measures[:4]:
                 p_col = profile.columns.get(m_col)
                 feasibility = 1.0 - ((profile.columns.get(dt_col).null_percentage if dt_col in profile.columns else 0) / 100.0)
+                m_label = _clean_name(p_col.display_name if p_col and p_col.display_name else m_col)
+                dt_label = _clean_name(dt_col)
                 opportunities.append(AnalysisOpportunity(
                     opportunity_id=f"OPP-{opp_idx:03d}",
                     opportunity_type=OpportunityType.PERIOD_TREND,
                     primary_column=dt_col,
                     secondary_column=m_col,
-                    title=f"Chronological Trend Analysis: {p_col.display_name if p_col else m_col} over {dt_col}",
-                    rationale=f"Evaluates trajectory, momentum, and period-over-period changes in {m_col}.",
+                    title=f"Chronological Trend Analysis: {m_label} over {dt_label}",
+                    rationale=f"Evaluates trajectory, momentum, and period-over-period changes in {m_label}.",
                     mathematical_method="temporal_aggregation_and_slope",
                     feasibility_score=round(max(0.2, feasibility), 2)
                 ))
@@ -123,12 +152,14 @@ class OpportunityMapGenerator:
             if 2 <= card <= 40:
                 for m_col in measures[:4]:
                     m_prof = profile.columns.get(m_col)
+                    m_label = _clean_name(m_prof.display_name if m_prof and m_prof.display_name else m_col)
+                    dim_label = _clean_name(dim_prof.display_name if dim_prof and dim_prof.display_name else dim_col)
                     opportunities.append(AnalysisOpportunity(
                         opportunity_id=f"OPP-{opp_idx:03d}",
                         opportunity_type=OpportunityType.SEGMENT_COMPARISON,
                         primary_column=dim_col,
                         secondary_column=m_col,
-                        title=f"Segment Comparison: {m_prof.display_name if m_prof else m_col} across {dim_prof.display_name if dim_prof else dim_col}",
+                        title=f"Segment Comparison: {m_label} across {dim_label}",
                         rationale=f"Discovers cohort disparities and identifies outperformer vs underperformer segments.",
                         mathematical_method="group_distribution_and_variance",
                         feasibility_score=0.95
@@ -139,13 +170,15 @@ class OpportunityMapGenerator:
         for dim_col in categories[:2]:
             for r_col in rates[:2]:
                 r_prof = profile.columns.get(r_col)
+                r_label = _clean_name(r_prof.display_name if r_prof and r_prof.display_name else r_col)
+                dim_label = _clean_name(dim_col)
                 opportunities.append(AnalysisOpportunity(
                     opportunity_id=f"OPP-{opp_idx:03d}",
                     opportunity_type=OpportunityType.SUBGROUP_RATE_DISPARITY,
                     primary_column=dim_col,
                     secondary_column=r_col,
-                    title=f"Rate Disparity Analysis: {r_prof.display_name if r_prof else r_col} by {dim_col}",
-                    rationale=f"Audits percentage spread and structural divergence across groups for {r_col}.",
+                    title=f"Rate Disparity Analysis: {r_label} by {dim_label}",
+                    rationale=f"Audits percentage spread and structural divergence across groups for {r_label}.",
                     mathematical_method="proportional_variance_and_effect_size",
                     feasibility_score=0.90
                 ))
@@ -156,13 +189,15 @@ class OpportunityMapGenerator:
             for i in range(min(3, len(measures))):
                 for j in range(i + 1, min(4, len(measures))):
                     m1, m2 = measures[i], measures[j]
+                    clean_m1 = _clean_name(m1)
+                    clean_m2 = _clean_name(m2)
                     opportunities.append(AnalysisOpportunity(
                         opportunity_id=f"OPP-{opp_idx:03d}",
                         opportunity_type=OpportunityType.MEASURE_RELATIONSHIP,
                         primary_column=m1,
                         secondary_column=m2,
-                        title=f"Bivariate Association: {m1} vs {m2}",
-                        rationale=f"Tests statistical correlation, trade-offs, and empirical dependency between {m1} and {m2}.",
+                        title=f"Bivariate Association: {clean_m1} vs {clean_m2}",
+                        rationale=f"Tests statistical correlation, trade-offs, and empirical dependency between {clean_m1} and {clean_m2}.",
                         mathematical_method="pearson_spearman_correlation_matrix",
                         feasibility_score=0.85
                     ))
@@ -174,13 +209,15 @@ class OpportunityMapGenerator:
         if high_card_entities and vol_measures:
             ent = high_card_entities[0]
             meas = vol_measures[0]
+            clean_meas = _clean_name(meas)
+            clean_ent = _clean_name(ent)
             opportunities.append(AnalysisOpportunity(
                 opportunity_id=f"OPP-{opp_idx:03d}",
                 opportunity_type=OpportunityType.ENTITY_CONCENTRATION,
                 primary_column=ent,
                 secondary_column=meas,
-                title=f"Concentration & Pareto Analysis: {meas} by {ent}",
-                rationale=f"Determines whether the top 20% of {ent} entities drive the majority of {meas}.",
+                title=f"Concentration & Pareto Analysis: {clean_meas} by {clean_ent}",
+                rationale=f"Determines whether the top 20% of {clean_ent} entities drive the majority of {clean_meas}.",
                 mathematical_method="cumulative_sum_and_gini_coefficient",
                 feasibility_score=0.90
             ))
@@ -189,14 +226,16 @@ class OpportunityMapGenerator:
         # 6. Target Association (Target Flag x Measure / Dimension)
         if targets:
             tgt = targets[0]
+            clean_tgt = _clean_name(tgt)
             for m_col in measures[:2]:
+                clean_m = _clean_name(m_col)
                 opportunities.append(AnalysisOpportunity(
                     opportunity_id=f"OPP-{opp_idx:03d}",
                     opportunity_type=OpportunityType.TARGET_ASSOCIATION,
                     primary_column=tgt,
                     secondary_column=m_col,
-                    title=f"Outcome Driver Analysis: {m_col} impact on {tgt}",
-                    rationale=f"Analyzes how metric variance correlates with the target state ({tgt}).",
+                    title=f"Outcome Driver Analysis: {clean_m} impact on {clean_tgt}",
+                    rationale=f"Analyzes how metric variance correlates with the target state ({clean_tgt}).",
                     mathematical_method="logistic_odds_ratio_or_group_split",
                     feasibility_score=0.88
                 ))
@@ -205,13 +244,15 @@ class OpportunityMapGenerator:
         # 7. Categorical Cross-Tabulation (Dimension x Dimension)
         if len(categories) >= 2:
             c1, c2 = categories[0], categories[1]
+            clean_c1 = _clean_name(c1)
+            clean_c2 = _clean_name(c2)
             opportunities.append(AnalysisOpportunity(
                 opportunity_id=f"OPP-{opp_idx:03d}",
                 opportunity_type=OpportunityType.CATEGORICAL_CROSS_TAB,
                 primary_column=c1,
                 secondary_column=c2,
-                title=f"Cross-Tabulation Matrix: {c1} × {c2}",
-                rationale=f"Evaluates cohort volume co-occurrence and segment distribution across {c1} and {c2}.",
+                title=f"Cross-Tabulation Matrix: {clean_c1} × {clean_c2}",
+                rationale=f"Evaluates cohort volume co-occurrence and segment distribution across {clean_c1} and {clean_c2}.",
                 mathematical_method="contingency_table_chi_squared",
                 feasibility_score=0.85
             ))
@@ -228,14 +269,17 @@ class OpportunityMapGenerator:
 
             if len(viable_dims) >= 2:
                 c1, c2 = viable_dims[0], viable_dims[1]
+                clean_c1 = _clean_name(c1)
+                clean_c2 = _clean_name(c2)
                 for m_col in measures[:2]:
+                    clean_m = _clean_name(m_col)
                     opportunities.append(AnalysisOpportunity(
                         opportunity_id=f"OPP-{opp_idx:03d}",
                         opportunity_type=OpportunityType.MULTI_FACTOR_SEGMENT_DISPARITY,
                         primary_column=f"{c1}__x__{c2}",
                         secondary_column=m_col,
-                        title=f"Multi-Factor Deep Segment Disparity: {m_col} across {c1} × {c2}",
-                        rationale=f"Evaluates non-linear cross-segment disparities and compound outlier cohorts across {c1} and {c2}.",
+                        title=f"Multi-Factor Deep Segment Disparity: {clean_m} across {clean_c1} × {clean_c2}",
+                        rationale=f"Evaluates non-linear cross-segment disparities and compound outlier cohorts across {clean_c1} and {clean_c2}.",
                         mathematical_method="bivariate_group_aggregation_and_pareto_concentration",
                         feasibility_score=0.92,
                         metadata={"dim1": c1, "dim2": c2, "measure": m_col}
