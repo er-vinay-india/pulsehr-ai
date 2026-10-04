@@ -193,7 +193,7 @@ def test_breakdown_tree_visualization():
     assert chart.tree_data["value"] == 14.2
     assert len(chart.tree_data["children"]) == 1
     d1_child = chart.tree_data["children"][0]
-    assert d1_child["name"] == "department: Engineering"
+    assert d1_child["name"] == "Department: Engineering"
     assert len(d1_child["children"]) == 1
     d2_child = d1_child["children"][0]
     assert d2_child["value"] == 38.5

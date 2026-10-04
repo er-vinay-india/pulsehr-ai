@@ -70,15 +70,31 @@ class FactVisualizer:
         s = str(name).strip()
         for prefix in [
             "interact_mean_", "interact_ratio_", "interact_sum_", "interact_count_", "interact_",
-            "mean_", "sum_", "ratio_", "log_", "std_", "diff_"
+            "mean_", "sum_", "ratio_", "log_", "std_", "diff_", "pct_"
         ]:
             if s.lower().startswith(prefix):
                 s = s[len(prefix):]
         if "_by_" in s:
-            s = s.split("_by_")[0]
+            parts = [cls._humanize_name(p) for p in s.split("_by_")]
+            s = " by ".join(parts)
+            return s
         if "_vs_" in s:
-            s = s.split("_vs_")[0]
-        clean = s.replace("_", " ").strip().title()
+            parts = [cls._humanize_name(p) for p in s.split("_vs_")]
+            s = " vs ".join(parts)
+            return s
+        s = s.replace("_", " ").strip()
+        acronyms = {"hr", "fte", "kpi", "id", "us", "uk", "cpi", "ols", "usd", "eur", "gbp", "inr", "roi", "ai", "qa", "ceo", "cfo", "vp"}
+        words = s.split()
+        capitalized = []
+        for idx, w in enumerate(words):
+            lower = w.lower()
+            if lower in acronyms:
+                capitalized.append(lower.upper())
+            elif idx > 0 and lower in {"by", "vs", "and", "of", "in", "on", "at", "to", "for", "with"}:
+                capitalized.append(lower)
+            else:
+                capitalized.append(w.capitalize())
+        clean = " ".join(capitalized)
         if max_len and len(clean) > max_len:
             clean = clean[:max_len - 1].rstrip() + "…"
         return clean
@@ -147,7 +163,7 @@ class FactVisualizer:
 
                 # Sort by time_col
                 grp = temp_df.groupby(time_col)["__val"].mean()
-                categories = [str(idx) for idx in grp.index][:15]
+                categories = [cls._humanize_name(str(idx)) for idx in grp.index][:15]
                 values = [round(float(v), 2) for v in grp.values][:15]
             except Exception as e:
                 logger.warning(f"Failed to group dataframe for period trend: {e}")
@@ -170,7 +186,8 @@ class FactVisualizer:
                 line_style="dashed"
             ))
 
-        line_title = f"{fact.metric.replace('_', ' ').title()} Temporal Trajectory"
+        metric_name = cls._humanize_name(fact.metric)
+        line_title = f"{metric_name} Temporal Trajectory"
         line_subtitle = f"Observed chronological progression across {len(categories)} intervals"
 
         return VisualChartSpec(
@@ -182,7 +199,7 @@ class FactVisualizer:
             full_subtitle=line_subtitle,
             unit=unit,
             categories=categories,
-            series=[ChartSeries(name=fact.metric.replace('_', ' ').title(), values=values)],
+            series=[ChartSeries(name=metric_name, values=values)],
             reference_lines=ref_lines,
             supporting_fact_id=fact.fact_id,
             metric_col=fact.metric,
@@ -213,14 +230,14 @@ class FactVisualizer:
                 temp_df = temp_df.dropna(subset=["__val"])
                 grp = temp_df.groupby(dim_col)["__val"].mean().sort_values(ascending=False)
                 # Keep top 8 segments
-                categories = [str(idx) for idx in grp.index[:8]]
-                values = [round(float(v), 2) for v in grp.values[:8]]
+                categories = [cls._humanize_name(str(idx)) for idx in grp.index[:8]]
+                values = [round(float(v), 2) for v in grp.values][:8]
             except Exception as e:
                 logger.warning(f"Failed to group dataframe for segment comparison: {e}")
 
         # Fallback if df unavailable
         if not categories or not values:
-            seg_name = str(target_seg) if target_seg is not None else "Observed Segment"
+            seg_name = cls._humanize_name(str(target_seg)) if target_seg is not None else "Observed Segment"
             categories = [seg_name, "Overall Baseline"]
             obs_v = fact.value if fact.value is not None else 0.0
             base_v = fact.baseline_value if fact.baseline_value is not None else 0.0
@@ -286,7 +303,7 @@ class FactVisualizer:
                     top_5_sum = top_5.sum()
                     other_sum = max(0.0, total_sum - top_5_sum)
 
-                    categories = [str(idx) for idx in top_5.index] + ["All Other Entities"]
+                    categories = [cls._humanize_name(str(idx)) for idx in top_5.index] + ["All Other Entities"]
                     values = [round(float(v), 2) for v in top_5.values] + [round(float(other_sum), 2)]
             except Exception as e:
                 logger.warning(f"Failed to group dataframe for entity concentration: {e}")
@@ -300,8 +317,9 @@ class FactVisualizer:
             unit = "%"
 
         name_m = cls._humanize_name(fact.metric)
+        dim_m = cls._humanize_name(entity_col)
         title = f"{name_m} Concentration Breakdown"
-        subtitle = f"Distribution share of leading {entity_col.replace('_', ' ')} contributors"
+        subtitle = f"Distribution share of leading {dim_m} contributors"
 
         return VisualChartSpec(
             chart_id=f"{chart_id_prefix}-{fact.fact_id}",
@@ -394,8 +412,10 @@ class FactVisualizer:
         """Synthesizes a comparative bar chart across target status groups."""
         unit = cls._infer_unit(fact.metric, profile)
         target_col = fact.dimensions.get("target") or "target"
+        target_label = cls._humanize_name(target_col)
+        metric_name = cls._humanize_name(fact.metric)
 
-        categories = [f"{target_col}=True", f"{target_col}=False"]
+        categories = [f"{target_label} Active", f"{target_label} Baseline"]
         obs_val = fact.value if fact.value is not None else 0.0
         base_val = fact.baseline_value if fact.baseline_value is not None else 0.0
         values = [round(obs_val, 2), round(base_val, 2)]
@@ -411,11 +431,11 @@ class FactVisualizer:
         return VisualChartSpec(
             chart_id=f"{chart_id_prefix}-{fact.fact_id}",
             chart_type="column",
-            title=f"{fact.metric.replace('_', ' ').title()} by {target_col.replace('_', ' ').title()}",
+            title=f"{metric_name} by {target_label}",
             subtitle=f"Conditional target distribution",
             unit=unit,
             categories=categories,
-            series=[ChartSeries(name=fact.metric.replace('_', ' ').title(), values=values)],
+            series=[ChartSeries(name=metric_name, values=values)],
             reference_lines=ref_lines,
             supporting_fact_id=fact.fact_id,
             metric_col=fact.metric,
@@ -447,7 +467,13 @@ class FactVisualizer:
             dim2 = keys[1] if len(keys) > 1 else "Factor 2"
             val2 = fact.dimensions.get(dim2, "Cohort B")
 
-        root_name = f"Overall {fact.metric.replace('_', ' ').title()}"
+        dim1_name = cls._humanize_name(dim1)
+        val1_name = cls._humanize_name(str(val1))
+        dim2_name = cls._humanize_name(dim2)
+        val2_name = cls._humanize_name(str(val2))
+        metric_name = cls._humanize_name(fact.metric)
+
+        root_name = f"Overall {metric_name}"
         root_val = round(fact.baseline_value if fact.baseline_value is not None else 0.0, 2)
         total_n = stat.get("total_records") or (len(df) if df is not None else 100)
 
@@ -483,10 +509,11 @@ class FactVisualizer:
 
                 for idx_val, row in top_items.iterrows():
                     is_target = str(idx_val) == str(val2)
-                    clean_name = str(idx_val)[:22]
+                    clean_name = cls._humanize_name(str(idx_val))[:22]
+                    full_name_clean = cls._humanize_name(str(idx_val))
                     dim2_children.append({
-                        "name": f"{dim2}: {clean_name}",
-                        "full_name": f"{dim2}: {idx_val}",
+                        "name": f"{dim2_name}: {clean_name}",
+                        "full_name": f"{dim2_name}: {full_name_clean}",
                         "value": round(float(row["mean"]), 2),
                         "sample_size": int(row["count"]),
                         "is_outlier": is_target,
@@ -497,8 +524,8 @@ class FactVisualizer:
                     other_mean = round(float(other_items["mean"].mean()), 2)
                     other_count = int(other_items["count"].sum())
                     dim2_children.append({
-                        "name": f"Other ({len(other_items)} {dim2}s)",
-                        "full_name": f"All Other ({len(other_items)}) {dim2} Cohorts Consolidated",
+                        "name": f"Other ({len(other_items)} {dim2_name}s)",
+                        "full_name": f"All Other ({len(other_items)}) {dim2_name} Cohorts Consolidated",
                         "value": other_mean,
                         "sample_size": other_count,
                         "is_outlier": False,
@@ -510,8 +537,8 @@ class FactVisualizer:
         if not dim2_children:
             is_crit = bool(getattr(fact, "business_impact", None) and str(getattr(fact.business_impact, "severity", "")).upper().endswith("CRITICAL"))
             dim2_children.append({
-                "name": f"{dim2}: {val2} (Disparity)",
-                "full_name": f"{dim2}: {val2} (Disparity)",
+                "name": f"{dim2_name}: {val2_name} (Disparity)",
+                "full_name": f"{dim2_name}: {val2_name} (Disparity)",
                 "value": round(fact.value or 0.0, 2),
                 "sample_size": fact.sample_size,
                 "is_outlier": True,
@@ -526,8 +553,8 @@ class FactVisualizer:
             "unit": unit,
             "children": [
                 {
-                    "name": f"{dim1}: {val1}",
-                    "full_name": f"{dim1}: {val1}",
+                    "name": f"{dim1_name}: {val1_name}",
+                    "full_name": f"{dim1_name}: {val1_name}",
                     "value": dim1_mean,
                     "sample_size": dim1_n,
                     "unit": unit,
@@ -536,8 +563,8 @@ class FactVisualizer:
             ]
         }
 
-        tree_title = f"{fact.metric.replace('_', ' ').title()} Driver Decomposition Tree"
-        tree_subtitle = f"Multi-factor cohort analysis across {dim1} and {dim2}"
+        tree_title = f"{metric_name} Driver Decomposition Tree"
+        tree_subtitle = f"Multi-factor cohort analysis across {dim1_name} and {dim2_name}"
 
         return VisualChartSpec(
             chart_id=f"{chart_id_prefix}-{fact.fact_id}",
@@ -547,7 +574,7 @@ class FactVisualizer:
             subtitle=tree_subtitle,
             full_subtitle=tree_subtitle,
             unit=unit,
-            categories=[dim1, dim2],
+            categories=[dim1_name, dim2_name],
             series=[],
             tree_data=tree_data,
             supporting_fact_id=fact.fact_id,
@@ -572,11 +599,13 @@ class FactVisualizer:
 
         seg_dim = next(iter(fact.dimensions), "Segment")
         seg_val = fact.dimensions.get(seg_dim, "Cohort")
-        seg_val_clean = str(seg_val)[:20]
+        seg_dim_label = cls._humanize_name(seg_dim)
+        seg_val_label = cls._humanize_name(str(seg_val))
+        seg_val_clean = seg_val_label[:20]
 
         waterfall_steps: list[dict[str, Any]] = [
             {"label": "Baseline / Expected", "full_label": "Baseline / Expected Value", "value": round(base_val, 2), "type": "total"},
-            {"label": f"{seg_val_clean} Gap", "full_label": f"{seg_dim}: {seg_val} Gap", "value": round(gap_val, 2), "type": "increase" if gap_val >= 0 else "decrease"}
+            {"label": f"{seg_val_clean} Gap", "full_label": f"{seg_dim_label}: {seg_val_label} Gap", "value": round(gap_val, 2), "type": "increase" if gap_val >= 0 else "decrease"}
         ]
 
         bi = getattr(fact, "business_impact", None)
@@ -600,13 +629,13 @@ class FactVisualizer:
         else:
             waterfall_steps.append({
                 "label": f"Observed ({seg_val_clean})",
-                "full_label": f"Observed Segment Value ({seg_dim}: {seg_val})",
+                "full_label": f"Observed Segment Value ({seg_dim_label}: {seg_val_label})",
                 "value": round(obs_val, 2),
                 "type": "total"
             })
 
         # Calculate helper base and delta series for stacked bar waterfall rendering
-        categories = [step["label"] for step in waterfall_steps]
+        categories = [cls._humanize_name(step["label"]) for step in waterfall_steps]
         helper_base: list[float] = []
         delta_vals: list[float] = []
         running = 0.0
@@ -633,8 +662,9 @@ class FactVisualizer:
             ChartSeries(name="Delta", values=delta_vals, color_token="#ef4444" if gap_val > 0 else "#10b981")
         ]
 
-        wf_title = f"{fact.metric.replace('_', ' ').title()} Variance Waterfall"
-        wf_subtitle = f"Attribution bridge for {seg_dim}: {seg_val}"
+        metric_name = cls._humanize_name(fact.metric)
+        wf_title = f"{metric_name} Variance Waterfall"
+        wf_subtitle = f"Attribution bridge for {seg_dim_label}: {seg_val_label}"
 
         return VisualChartSpec(
             chart_id=f"{chart_id_prefix}-{fact.fact_id}",

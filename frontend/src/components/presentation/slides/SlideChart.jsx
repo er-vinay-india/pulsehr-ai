@@ -6,6 +6,7 @@ import { calculateChartLayout } from '../../visualization/layout/calculateChartL
 import SmartImpactCard from '../../charts/SmartImpactCard';
 import { getSlideTheme } from '../../../theme/slideTokens.js';
 import { cartesian, numeric } from '../../charts/chartOptions';
+import { humanizeLabel } from '../../visualization/layout/formatters.js';
 
 export default function SlideChart({ chart, chartData, theme, hideImpactCard = false }) {
   theme = getSlideTheme(theme);
@@ -17,9 +18,9 @@ export default function SlideChart({ chart, chartData, theme, hideImpactCard = f
     return <p style={{ color: theme.muted_text || '#64748b', padding: 12 }}>No chart data available.</p>;
   }
 
-  const chartLabel = actualChart.title || actualChart.chart_title || actualChart.series?.[0]?.name || "Data visualization chart";
-  const fullChartTitle = actualChart.full_title || actualChart.title || actualChart.chart_title || chartLabel;
-  const fullChartSubtitle = actualChart.full_subtitle || actualChart.subtitle || actualChart.chart_subtitle;
+  const chartLabel = humanizeLabel(actualChart.title || actualChart.chart_title || actualChart.series?.[0]?.name || "Data visualization chart");
+  const fullChartTitle = humanizeLabel(actualChart.full_title || actualChart.title || actualChart.chart_title || chartLabel);
+  const fullChartSubtitle = actualChart.full_subtitle || actualChart.subtitle || actualChart.chart_subtitle ? humanizeLabel(actualChart.full_subtitle || actualChart.subtitle || actualChart.chart_subtitle) : '';
   const type = (actualChart.type || actualChart.chart_type || 'column').toLowerCase();
   const format = value => Math.abs(Number(value)) >= 1e6 ? `${(Number(value)/1e6).toFixed(1)}M` : Number(value).toLocaleString(undefined, { maximumFractionDigits: 2 });
 
@@ -130,9 +131,8 @@ export default function SlideChart({ chart, chartData, theme, hideImpactCard = f
     const sanitizeTreeNode = (node) => {
       if (!node) return node;
       const copy = { ...node };
-      if (!copy.full_name) {
-        copy.full_name = copy.name;
-      }
+      copy.name = humanizeLabel(copy.name);
+      copy.full_name = humanizeLabel(copy.full_name || copy.name);
       if (Array.isArray(copy.children) && copy.children.length > 6) {
         const topChildren = copy.children.slice(0, 5);
         const remaining = copy.children.slice(5);
@@ -242,8 +242,12 @@ export default function SlideChart({ chart, chartData, theme, hideImpactCard = f
 
   // 3. Variance Waterfall Bridge
   if (type === 'waterfall' || actualChart.waterfall_steps) {
-    const steps = actualChart.waterfall_steps || [];
-    const cats = steps.length > 0 ? steps.map(s => s.full_label || s.label) : (actualChart.categories || []);
+    const steps = (actualChart.waterfall_steps || []).map(s => ({
+      ...s,
+      label: humanizeLabel(s.label),
+      full_label: humanizeLabel(s.full_label || s.label)
+    }));
+    const cats = steps.length > 0 ? steps.map(s => s.full_label || s.label) : (actualChart.categories || []).map(humanizeLabel);
 
     const helperBase = actualChart.series?.[0]?.values || [];
     const deltaVals = actualChart.series?.[1]?.values || [];
@@ -354,6 +358,12 @@ export default function SlideChart({ chart, chartData, theme, hideImpactCard = f
     return <p style={{ color: theme.muted_text || '#64748b', padding: 12 }}>No chart data available.</p>;
   }
 
+  const cleanCategories = (actualChart.categories || []).map(c => typeof c === 'string' ? humanizeLabel(c) : c);
+  const cleanSeries = (actualChart.series || []).map(s => ({
+    ...s,
+    name: humanizeLabel(s.name)
+  }));
+
   const pie = ['pie', 'donut'].includes(type);
   const option = pie ? {
     legend: { show: false },
@@ -364,13 +374,13 @@ export default function SlideChart({ chart, chartData, theme, hideImpactCard = f
       borderColor: isDark ? '#334155' : '#cbd5e1',
       textStyle: { color: isDark ? '#f1f5f9' : '#1e293b', fontSize: 12 },
       formatter: params => {
-        const fullCat = actualChart.categories?.[params.dataIndex] || params.name;
+        const fullCat = cleanCategories?.[params.dataIndex] || params.name;
         return `<div style="font-weight:700;max-width:280px;word-break:break-word;">${fullCat}</div><div>Value: <b>${format(params.value)} (${params.percent}%)</b></div>`;
       }
     },
     series: [{
       type: 'pie',
-      name: actualChart.series[0].name || '',
+      name: cleanSeries[0]?.name || '',
       radius: type === 'donut' ? ['40%', '64%'] : '64%',
       center: ['50%', '50%'],
       avoidLabelOverlap: true,
@@ -382,22 +392,22 @@ export default function SlideChart({ chart, chartData, theme, hideImpactCard = f
       },
       labelLine: { show: true, length: 8, length2: 8 },
       itemStyle: { borderWidth: 2, borderColor: isDark ? '#08111f' : '#ffffff' },
-      data: actualChart.categories.map((label, i) => ({
+      data: cleanCategories.map((label, i) => ({
         name: String(label),
-        value: actualChart.series[0].values?.[i] ?? actualChart.series[0].data?.[i]
+        value: cleanSeries[0]?.values?.[i] ?? cleanSeries[0]?.data?.[i]
       }))
     }],
-  } : cartesian(actualChart.categories,
-    actualChart.series.map(s => ({
+  } : cartesian(cleanCategories,
+    cleanSeries.map(s => ({
       name: s.name && s.name.length > 20 ? s.name.slice(0, 18) + '…' : s.name,
       type: type === 'line' ? 'line' : 'bar',
-      data: actualChart.categories.map((_, i) => numeric(s.values?.[i] ?? s.data?.[i])),
+      data: cleanCategories.map((_, i) => numeric(s.values?.[i] ?? s.data?.[i])),
       label: { show: true, fontSize: 10, position: ['bar', 'horizontal_bar'].includes(type) ? 'right' : 'top', formatter: p => format(p.value) }
     })),
     ['bar', 'horizontal_bar'].includes(type), actualChart.unit, isDark);
 
   if (!pie) {
-    const hasLegend = actualChart.series.length > 1;
+    const hasLegend = cleanSeries.length > 1;
     option.legend = {
       ...option.legend,
       show: hasLegend,
@@ -412,7 +422,7 @@ export default function SlideChart({ chart, chartData, theme, hideImpactCard = f
       }
     };
     const dynamicMargins = calculateMargins({
-      categories: actualChart.categories,
+      categories: cleanCategories,
       isVertical: !['bar', 'horizontal_bar'].includes(type),
       hasLegend
     });
@@ -431,10 +441,10 @@ export default function SlideChart({ chart, chartData, theme, hideImpactCard = f
       formatter: params => {
         if (!params || !params.length) return '';
         const catIdx = params[0].dataIndex;
-        const fullCat = actualChart.categories?.[catIdx] || params[0].name;
+        const fullCat = cleanCategories?.[catIdx] || params[0].name;
         let html = `<div style="font-weight:700;margin-bottom:3px;max-width:280px;word-break:break-word;">${fullCat}</div>`;
         for (const p of params) {
-          const sName = actualChart.series?.[p.seriesIndex]?.name || p.seriesName;
+          const sName = cleanSeries?.[p.seriesIndex]?.name || p.seriesName;
           html += `<div style="display:flex;align-items:center;gap:6px;margin-top:2px;">
             <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background-color:${p.color};"></span>
             <span style="font-size:11px;color:${isDark ? '#cbd5e1' : '#475569'};">${sName}:</span>

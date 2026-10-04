@@ -46,7 +46,8 @@ export default function SafeChart({
 
   // 2. DOM Visual QA Observer
   const { qaIssues } = useVisualQA(containerRef, {
-    enabled: Boolean(activeOption && repairCountRef.current < 2)
+    enabled: Boolean(activeOption && repairCountRef.current < 2),
+    chartOption: activeOption
   });
 
   // 3. Deterministic Auto-Repair Cascade

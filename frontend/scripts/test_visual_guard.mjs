@@ -167,4 +167,51 @@ console.log('5. Testing Deterministic Auto-Repair Priority Chain...');
 }
 console.log('   ✅ Deterministic Auto-Repair tests passed.');
 
+// 6. Label Humanization & Underscore Auto-Repair Tests
+console.log('6. Testing Label Humanization & Underscore Auto-Repair...');
+{
+  const { humanizeLabel } = await import('../src/components/visualization/layout/formatters.js');
+  const { detectUnderscoresInOption } = await import('../src/components/visualization/observers/useVisualQA.js');
+
+  // Test humanizeLabel transforms
+  assert.equal(humanizeLabel('turnover_rate'), 'Turnover Rate');
+  assert.equal(humanizeLabel('interact_mean_department_name'), 'Department Name');
+  assert.equal(humanizeLabel('employee_hr_id'), 'Employee HR ID');
+  assert.equal(humanizeLabel('annual_fte_count'), 'Annual FTE Count');
+  assert.equal(humanizeLabel('turnover_by_department'), 'Turnover by Department');
+  assert.equal(humanizeLabel('actual_vs_target'), 'Actual vs Target');
+  assert.equal(humanizeLabel('department_name: software_engineer'), 'Department Name: Software Engineer');
+
+  // Test detectUnderscoresInOption
+  assert.equal(detectUnderscoresInOption({ xAxis: { data: ['Clean A', 'Clean B'] } }), false);
+  assert.equal(detectUnderscoresInOption({ xAxis: { data: ['dirty_a', 'dirty_b'] } }), true);
+  assert.equal(detectUnderscoresInOption({ series: [{ name: 'dirty_metric', data: [1, 2] }] }), true);
+
+  // Test normalizeChartSpec automatically cleans underscore tokens
+  const normWithUnderscores = normalizeChartSpec({
+    title: 'employee_attrition_rate',
+    chart_type: 'column',
+    categories: ['sales_dept', 'eng_dept', 'hr_ops'],
+    series: [{ name: 'attrition_count', data: [12, 18, 5] }]
+  });
+  assert.equal(normWithUnderscores.isValid, true);
+  assert.equal(normWithUnderscores.option.title.text, 'Employee Attrition Rate');
+  assert.deepEqual(normWithUnderscores.option.xAxis.data, ['Sales Dept', 'Eng Dept', 'HR Ops']);
+  assert.equal(normWithUnderscores.option.series[0].name, 'Attrition Count');
+
+  // Test repairChartLayout repairs underscores when detected
+  const unhumanizedOption = {
+    title: { text: 'gross_margin_variance' },
+    xAxis: { data: ['product_a', 'product_b'] },
+    series: [{ name: 'revenue_leakage', data: [{ name: 'item_one', value: 100 }] }]
+  };
+  const repair4 = repairChartLayout(unhumanizedOption, { hasUnderscoreLabels: true });
+  assert.ok(repair4.repairsApplied.some(r => r.action === RepairAction.HUMANIZE_LABELS));
+  assert.equal(repair4.repairedOption.title.text, 'Gross Margin Variance');
+  assert.deepEqual(repair4.repairedOption.xAxis.data, ['Product A', 'Product B']);
+  assert.equal(repair4.repairedOption.series[0].name, 'Revenue Leakage');
+  assert.equal(repair4.repairedOption.series[0].data[0].name, 'Item One');
+}
+console.log('   ✅ Label Humanization & Underscore Auto-Repair tests passed.');
+
 console.log('\n🎉 ALL VISUAL GUARD & PRESENTATION ENGINE TESTS PASSED!\n');

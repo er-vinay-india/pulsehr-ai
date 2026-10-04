@@ -1,5 +1,6 @@
 import { VISUAL_POLICY, requiresHorizontalOrientation } from '../policy/visualPolicy.js';
 import { calculateMargins } from './calculateMargins.js';
+import { humanizeLabel } from './formatters.js';
 
 /**
  * Calculates optimal pre-render layout, orientation, and margins.
@@ -16,9 +17,10 @@ export function calculateChartLayout({
   series = [],
   hasLegend = false
 }) {
+  const cleanCategories = categories.map(c => typeof c === 'string' ? humanizeLabel(c) : c);
   const cleanType = String(type).toLowerCase();
-  const catCount = categories.length;
-  const maxLabelLen = categories.reduce((max, c) => Math.max(max, String(c || '').length), 0);
+  const catCount = cleanCategories.length;
+  const maxLabelLen = cleanCategories.reduce((max, c) => Math.max(max, String(c || '').length), 0);
 
   // 1. Determine orientation for Cartesian bar/column
   let isVertical = true;
@@ -31,8 +33,8 @@ export function calculateChartLayout({
   }
 
   // 2. High-cardinality Top-N consolidation (if > 25 categories)
-  let layoutCategories = [...categories];
-  let layoutSeries = series.map(s => ({ ...s, data: [...(s.data || [])] }));
+  let layoutCategories = [...cleanCategories];
+  let layoutSeries = series.map(s => ({ ...s, name: humanizeLabel(s.name), data: [...(s.data || [])] }));
   let isConsolidated = false;
   let hiddenCount = 0;
 

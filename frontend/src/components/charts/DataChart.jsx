@@ -5,7 +5,7 @@ import { useChartTheme } from '../../theme/useChartTheme';
 import { useVisualQA } from '../visualization/observers/useVisualQA';
 import { repairChartLayout } from '../visualization/repair/repairChartLayout';
 import { VISUAL_POLICY } from '../visualization/policy/visualPolicy';
-import { formatCompactNumber } from '../visualization/layout/formatters';
+import { formatCompactNumber, humanizeLabel } from '../visualization/layout/formatters';
 
 export default function DataChart({
   items = [],
@@ -71,6 +71,8 @@ export default function DataChart({
 
   // 3. Construct base chart options
   const baseOption = useMemo(() => {
+    const cleanMetric = humanizeLabel(metric);
+
     if (isPie) {
       return {
         color: activePalette,
@@ -84,18 +86,19 @@ export default function DataChart({
         legend: {
           type: 'scroll',
           bottom: 0,
+          formatter: name => (typeof name === 'string' ? humanizeLabel(name) : name),
           textStyle: { color: textColor, fontSize: 11 }
         },
         series: [{
           type: 'pie',
-          name: metric,
+          name: cleanMetric,
           radius: type === 'donut' ? ['45%', '68%'] : '68%',
           center: ['50%', '44%'],
           label: { show: false },
           itemStyle: { borderColor, borderWidth: 2 },
           data: displayItems
             .filter(p => numeric(p.value) != null && Number(p.value) >= 0)
-            .map(p => ({ name: String(p.label), value: Number(p.value) }))
+            .map(p => ({ name: humanizeLabel(String(p.label)), value: Number(p.value) }))
         }]
       };
     }
@@ -103,9 +106,9 @@ export default function DataChart({
     // Cartesian Chart (Column, Bar, Line, Scatter)
     const isHorizontal = shouldFlipToHorizontal;
     return cartesian(
-      displayItems.map(p => String(p.label)),
+      displayItems.map(p => humanizeLabel(String(p.label))),
       [{
-        name: metric,
+        name: cleanMetric,
         type: type === 'line' ? 'line' : type === 'dot' ? 'scatter' : 'bar',
         data: displayItems.map(p => numeric(p.value)),
         ...(numeric(baseline) != null ? {
@@ -132,7 +135,8 @@ export default function DataChart({
 
   // 5. Post-render DOM Visual QA Observer
   const { qaIssues } = useVisualQA(containerRef, {
-    enabled: Boolean(activeOption && repairCountRef.current < 2)
+    enabled: Boolean(activeOption && repairCountRef.current < 2),
+    chartOption: activeOption
   });
 
   // 6. Deterministic Auto-Repair Cascade

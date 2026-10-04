@@ -4,6 +4,7 @@ import * as echarts from 'echarts';
 import { lightPalette, darkPalette, isCurrentThemeDark } from './chartOptions';
 import { getThemeTokens } from '../../theme/tokens';
 import { useTheme } from '../../context/ThemeContext';
+import { humanizeLabel } from '../visualization/layout/formatters';
 import '../../styles/minimal-charts.scss';
 
 const LEGACY_COLORS = new Set([
@@ -36,13 +37,31 @@ function minimalOptions(option, isDark = false) {
 
   const mergeAxis = a => {
     if (!a) return a;
+    const cleanData = Array.isArray(a.data)
+      ? a.data.map(item => {
+          if (typeof item === 'string') return humanizeLabel(item);
+          if (item && typeof item === 'object' && item.value != null) {
+            return { ...item, value: humanizeLabel(item.value) };
+          }
+          return item;
+        })
+      : a.data;
+
     return {
       ...a,
       triggerEvent: true,
+      name: a.name ? humanizeLabel(a.name) : a.name,
+      ...(cleanData ? { data: cleanData } : {}),
       axisLabel: {
         fontSize: 11,
         ...a?.axisLabel,
         color: sanitizeColor(a?.axisLabel?.color, labelColor),
+        formatter: a?.axisLabel?.formatter
+          ? (val, idx) => {
+              const res = typeof a.axisLabel.formatter === 'function' ? a.axisLabel.formatter(val, idx) : a.axisLabel.formatter;
+              return typeof res === 'string' && res.includes('_') ? humanizeLabel(res) : res;
+            }
+          : (val => (typeof val === 'string' && val.includes('_') ? humanizeLabel(val) : val)),
       },
       nameTextStyle: {
         fontSize: 11,
@@ -78,6 +97,7 @@ function minimalOptions(option, isDark = false) {
       pageTextStyle: { color: labelColor },
       triggerEvent: true,
       tooltip: { show: true },
+      formatter: name => (typeof name === 'string' ? humanizeLabel(name) : name),
       ...option.legend,
       textStyle: {
         fontSize: 11,
@@ -91,6 +111,7 @@ function minimalOptions(option, isDark = false) {
   const sanitizedSeries = (option.series || []).map((s, index) => {
     const fallbackColor = activePalette[index % activePalette.length];
     const seriesColor = sanitizeColor(s.itemStyle?.color, fallbackColor);
+    const seriesName = s.name ? humanizeLabel(s.name) : s.name;
 
     let sanitizedData = s.data;
     if (Array.isArray(s.data)) {
@@ -101,6 +122,8 @@ function minimalOptions(option, isDark = false) {
           const itemBorderColor = d.itemStyle?.borderColor ? sanitizeColor(d.itemStyle.borderColor, tokens.colors.surface) : undefined;
           return {
             ...d,
+            ...(d.name ? { name: humanizeLabel(d.name) } : {}),
+            ...(d.full_name ? { full_name: humanizeLabel(d.full_name) } : {}),
             ...(itemColor ? { color: itemColor } : {}),
             itemStyle: {
               ...d.itemStyle,
@@ -116,6 +139,7 @@ function minimalOptions(option, isDark = false) {
     return {
       smooth: s.smooth ?? false,
       ...s,
+      name: seriesName,
       itemStyle: {
         shadowBlur: 0,
         borderRadius: s.type === 'bar' ? 2 : undefined,
@@ -221,7 +245,7 @@ export default function SafeReactECharts({ option = {}, style, onEvents, opts = 
     const handleMouseOver = (params) => {
       if (!params) return;
       if (params.targetType === 'axisLabel' || params.componentType === 'xAxis' || params.componentType === 'yAxis') {
-        const fullText = params.value != null ? String(params.value) : '';
+        const fullText = params.value != null ? humanizeLabel(String(params.value)) : '';
         if (fullText) {
           setHoverTooltip({
             text: fullText,
@@ -232,7 +256,7 @@ export default function SafeReactECharts({ option = {}, style, onEvents, opts = 
       } else if (params.componentType === 'legend') {
         if (params.name) {
           setHoverTooltip({
-            text: params.name,
+            text: humanizeLabel(params.name),
             x: params.event?.offsetX ?? 120,
             y: params.event?.offsetY ?? 120
           });
@@ -241,7 +265,7 @@ export default function SafeReactECharts({ option = {}, style, onEvents, opts = 
         const fullText = params.data?.full_name || params.data?.name || params.name;
         if (fullText) {
           setHoverTooltip({
-            text: fullText,
+            text: humanizeLabel(fullText),
             x: params.event?.offsetX ?? 120,
             y: params.event?.offsetY ?? 120
           });
@@ -336,7 +360,7 @@ export default function SafeReactECharts({ option = {}, style, onEvents, opts = 
             backdropFilter: 'blur(8px)',
           }}
         >
-          {hoverTooltip.text}
+          {humanizeLabel(hoverTooltip.text)}
         </div>
       )}
       {error && <p role="status">Chart unavailable. Open the data table to inspect the values.</p>}

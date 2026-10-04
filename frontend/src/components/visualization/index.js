@@ -6,6 +6,6 @@ export { VISUAL_POLICY } from './policy/visualPolicy.js';
 export { normalizeChartSpec } from './normalize/normalizeChartSpec.js';
 export { calculateChartLayout } from './layout/calculateChartLayout.js';
 export { calculateMargins } from './layout/calculateMargins.js';
-export { formatCompactNumber, clampText } from './layout/formatters.js';
+export { formatCompactNumber, clampText, humanizeLabel } from './layout/formatters.js';
 export { useVisualQA } from './observers/useVisualQA.js';
 export { repairChartLayout, RepairAction } from './repair/repairChartLayout.js';

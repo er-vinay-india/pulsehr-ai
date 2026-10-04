@@ -1,6 +1,7 @@
 import { lightTokens, darkTokens, getThemeTokens } from '../../theme/tokens';
 import { calculateMargins } from '../visualization/layout/calculateMargins';
 import { VISUAL_POLICY } from '../visualization/policy/visualPolicy';
+import { humanizeLabel } from '../visualization/layout/formatters';
 
 export const lightPalette = lightTokens.chart.palette;
 export const darkPalette = darkTokens.chart.palette;
@@ -33,7 +34,7 @@ export const formatValue = (value, unit = '') => {
 };
 export const metricUnit = (metric, unit = '') => unit || (/%|\bpercent(?:age)?\b/i.test(metric) ? '%' : '');
 
-export function cartesian(categories, series, horizontal = false, unit = '', themeDark) {
+export function cartesian(categories = [], series = [], horizontal = false, unit = '', themeDark) {
   const isDark = isCurrentThemeDark(themeDark);
   const chartTokens = getThemeTokens(isDark).chart;
   const activePalette = chartTokens.palette;
@@ -44,10 +45,15 @@ export function cartesian(categories, series, horizontal = false, unit = '', the
   const tooltipBg = chartTokens.tooltipBg;
   const tooltipBorder = chartTokens.tooltipBorder;
 
+  const cleanCategories = (categories || []).map(c => (typeof c === 'string' ? humanizeLabel(c) : c));
+  const cleanSeries = (series || []).map(s => ({
+    ...s,
+    name: s.name ? humanizeLabel(s.name) : s.name
+  }));
 
   const category = {
     type: 'category',
-    data: categories,
+    data: cleanCategories,
     inverse: horizontal,
     triggerEvent: true,
     axisTick: { show: false },
@@ -57,7 +63,8 @@ export function cartesian(categories, series, horizontal = false, unit = '', the
       width: horizontal ? 140 : 90,
       overflow: horizontal ? 'break' : 'truncate',
       color: textColor,
-      fontSize: VISUAL_POLICY.MIN_AXIS_FONT_SIZE
+      fontSize: VISUAL_POLICY.MIN_AXIS_FONT_SIZE,
+      formatter: val => (typeof val === 'string' ? humanizeLabel(val) : val)
     }
   };
   const value = {
@@ -76,17 +83,17 @@ export function cartesian(categories, series, horizontal = false, unit = '', the
   };
 
   const dynamicGrid = calculateMargins({
-    categories,
+    categories: cleanCategories,
     isVertical: !horizontal,
-    hasLegend: series.length > 1
+    hasLegend: cleanSeries.length > 1
   });
 
   return {
     color: activePalette,
     grid: {
       ...dynamicGrid,
-      top: series.length > 1 ? 44 : 20,
-      bottom: categories.length > 12 ? Math.max(dynamicGrid.bottom, 48) : dynamicGrid.bottom,
+      top: cleanSeries.length > 1 ? 44 : 20,
+      bottom: cleanCategories.length > 12 ? Math.max(dynamicGrid.bottom, 48) : dynamicGrid.bottom,
       containLabel: true
     },
     tooltip: {
@@ -99,16 +106,17 @@ export function cartesian(categories, series, horizontal = false, unit = '', the
       extraCssText: isDark ? 'box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4); border-radius: 8px;' : 'box-shadow: 0 4px 14px rgba(11, 31, 58, 0.12); border-radius: 8px;'
     },
     legend: {
-      show: series.length > 1,
+      show: cleanSeries.length > 1,
       type: 'scroll',
       top: 0,
       triggerEvent: true,
       tooltip: { show: true },
+      formatter: name => (typeof name === 'string' ? humanizeLabel(name) : name),
       textStyle: { color: headingColor, fontSize: 11, fontWeight: 600 }
     },
     xAxis: horizontal ? value : category,
     yAxis: horizontal ? category : value,
-    dataZoom: categories.length > 12 ? [{ type: 'slider', ...(horizontal ? { yAxisIndex: 0, right: 0, width: 12 } : { xAxisIndex: 0, bottom: 0, height: 18 }), start: 0, end: Math.min(100, 12 / categories.length * 100) }] : [],
-    series: series.map(s => ({ barMaxWidth: 20, symbolSize: 5, connectNulls: false, ...s }))
+    dataZoom: cleanCategories.length > 12 ? [{ type: 'slider', ...(horizontal ? { yAxisIndex: 0, right: 0, width: 12 } : { xAxisIndex: 0, bottom: 0, height: 18 }), start: 0, end: Math.min(100, 12 / cleanCategories.length * 100) }] : [],
+    series: cleanSeries.map(s => ({ barMaxWidth: 20, symbolSize: 5, connectNulls: false, ...s }))
   };
 }

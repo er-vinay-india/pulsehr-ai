@@ -4,13 +4,16 @@
  * 0 LLM calls - purely geometric calculations.
  */
 
+import { humanizeLabel } from '../layout/formatters.js';
+
 export const RepairAction = {
   EXPAND_LEFT_MARGIN: 'EXPAND_LEFT_MARGIN',
   EXPAND_BOTTOM_MARGIN: 'EXPAND_BOTTOM_MARGIN',
   ROTATE_X_LABELS: 'ROTATE_X_LABELS',
   STAGGER_X_LABELS: 'STAGGER_X_LABELS',
   MOVE_LEGEND_BOTTOM: 'MOVE_LEGEND_BOTTOM',
-  CLAMP_Y_DOMAIN: 'CLAMP_Y_DOMAIN'
+  CLAMP_Y_DOMAIN: 'CLAMP_Y_DOMAIN',
+  HUMANIZE_LABELS: 'HUMANIZE_LABELS'
 };
 
 /**
@@ -85,6 +88,74 @@ export function repairChartLayout(option, qaIssues = {}) {
     repairsApplied.push({
       action: RepairAction.EXPAND_BOTTOM_MARGIN,
       reason: 'Compacted top/bottom grid margins to resolve vertical container overflow.'
+    });
+  }
+
+  // 4. Repair Underscore-Laden Machine Labels (convert snake_case to clean human business labels)
+  let labelsRepaired = false;
+
+  const sanitizeAxis = (ax) => {
+    if (!ax) return;
+    if (Array.isArray(ax.data)) {
+      const hasUnderscores = ax.data.some(d => typeof d === 'string' && d.includes('_'));
+      if (hasUnderscores) {
+        ax.data = ax.data.map(d => (typeof d === 'string' ? humanizeLabel(d) : d));
+        labelsRepaired = true;
+      }
+    }
+    if (typeof ax.name === 'string' && ax.name.includes('_')) {
+      ax.name = humanizeLabel(ax.name);
+      labelsRepaired = true;
+    }
+  };
+
+  if (repaired.xAxis) {
+    if (Array.isArray(repaired.xAxis)) repaired.xAxis.forEach(sanitizeAxis);
+    else sanitizeAxis(repaired.xAxis);
+  }
+  if (repaired.yAxis) {
+    if (Array.isArray(repaired.yAxis)) repaired.yAxis.forEach(sanitizeAxis);
+    else sanitizeAxis(repaired.yAxis);
+  }
+
+  if (Array.isArray(repaired.series)) {
+    repaired.series.forEach(s => {
+      if (typeof s.name === 'string' && s.name.includes('_')) {
+        s.name = humanizeLabel(s.name);
+        labelsRepaired = true;
+      }
+      if (Array.isArray(s.data)) {
+        s.data.forEach(item => {
+          if (item && typeof item === 'object') {
+            if (typeof item.name === 'string' && item.name.includes('_')) {
+              item.name = humanizeLabel(item.name);
+              labelsRepaired = true;
+            }
+            if (typeof item.full_name === 'string' && item.full_name.includes('_')) {
+              item.full_name = humanizeLabel(item.full_name);
+              labelsRepaired = true;
+            }
+          }
+        });
+      }
+    });
+  }
+
+  if (repaired.title) {
+    if (typeof repaired.title.text === 'string' && repaired.title.text.includes('_')) {
+      repaired.title.text = humanizeLabel(repaired.title.text);
+      labelsRepaired = true;
+    }
+    if (typeof repaired.title.subtext === 'string' && repaired.title.subtext.includes('_')) {
+      repaired.title.subtext = humanizeLabel(repaired.title.subtext);
+      labelsRepaired = true;
+    }
+  }
+
+  if (labelsRepaired || qaIssues.hasUnderscoreLabels) {
+    repairsApplied.push({
+      action: RepairAction.HUMANIZE_LABELS,
+      reason: 'Humanized chart labels, axes, and series names by replacing underscores with spaces.'
     });
   }
 
