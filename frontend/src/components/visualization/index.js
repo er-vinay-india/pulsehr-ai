@@ -1,0 +1,11 @@
+export { default as SafeChart } from './components/SafeChart.jsx';
+export { default as ChartHeader } from './components/ChartHeader.jsx';
+export { default as ChartNarrative } from './components/ChartNarrative.jsx';
+export { validateChartSpec, SchemaErrorCode } from './schema/chartSchema.js';
+export { VISUAL_POLICY } from './policy/visualPolicy.js';
+export { normalizeChartSpec } from './normalize/normalizeChartSpec.js';
+export { calculateChartLayout } from './layout/calculateChartLayout.js';
+export { calculateMargins } from './layout/calculateMargins.js';
+export { formatCompactNumber, clampText } from './layout/formatters.js';
+export { useVisualQA } from './observers/useVisualQA.js';
+export { repairChartLayout, RepairAction } from './repair/repairChartLayout.js';

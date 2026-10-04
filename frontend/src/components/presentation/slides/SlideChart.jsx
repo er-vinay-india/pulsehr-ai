@@ -1,5 +1,8 @@
 import React from 'react';
 import SafeReactECharts from '../../charts/SafeReactECharts';
+import SafeChart from '../../visualization/components/SafeChart';
+import { calculateMargins } from '../../visualization/layout/calculateMargins';
+import { calculateChartLayout } from '../../visualization/layout/calculateChartLayout';
 import SmartImpactCard from '../../charts/SmartImpactCard';
 import { getSlideTheme } from '../../../theme/slideTokens.js';
 import { cartesian, numeric } from '../../charts/chartOptions';
@@ -26,7 +29,7 @@ export default function SlideChart({ chart, chartData, theme }) {
         style={{ width: '100%', minWidth: 0, height: '100%', minHeight: '260px' }}
       >
         {actualChart.impact_card && <SmartImpactCard impact={actualChart.impact_card} compact />}
-        <SafeReactECharts presentationTheme={theme} option={actualChart} style={{ height: '100%', minHeight: '260px', width: '100%' }} />
+        <SafeChart spec={actualChart} presentationTheme={theme} height={260} />
       </div>
     );
   }
@@ -140,7 +143,7 @@ export default function SlideChart({ chart, chartData, theme }) {
           return `<div style="font-weight:700;">${delta.name} ${typeLabel}</div><div>Value: <b>${format(delta.value)} ${actualChart.unit || ''}</b></div>`;
         }
       },
-      grid: { left: 40, right: 35, top: 48, bottom: 36, containLabel: true },
+      grid: calculateMargins({ categories: cats, isVertical: true, hasLegend: false }),
       xAxis: {
         type: 'category',
         data: cats,
@@ -237,7 +240,15 @@ export default function SlideChart({ chart, chartData, theme }) {
   if (!pie) {
     option.title = { text: chartLabel, left: 'center', textStyle: { fontSize: 18 } };
     option.legend = { ...option.legend, show: actualChart.series.length > 1, top: 26 };
-    option.grid = { left: 30, right: 55, top: actualChart.series.length > 1 ? 65 : 48, bottom: 28, containLabel: true };
+    const dynamicMargins = calculateMargins({
+      categories: actualChart.categories,
+      isVertical: !['bar', 'horizontal_bar'].includes(type),
+      hasLegend: actualChart.series.length > 1
+    });
+    option.grid = {
+      ...dynamicMargins,
+      top: actualChart.series.length > 1 ? 65 : 48
+    };
     for (const name of ['xAxis', 'yAxis']) {
       const axis = option[name];
       if (axis && !Array.isArray(axis)) axis.axisLabel = { ...axis.axisLabel, fontSize: 14, ...(axis.type === 'value' ? { formatter: format } : {}) };
