@@ -2113,7 +2113,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
 
             {/* Top Impact Metric Cards */}
             {executiveVisuals.some(v => v.impact_card) && (
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "12px", marginBottom: "16px" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 280px), 1fr))", gap: "12px", marginBottom: "16px" }}>
                 {executiveVisuals.filter(v => v.impact_card).map((v, idx) => (
                   <SmartImpactCard key={`impact-${v.chart_id || idx}`} impact={v.impact_card} />
                 ))}
@@ -2121,19 +2121,27 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
             )}
 
             {/* Interactive Breakdown Trees & Waterfall Lenses */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(460px, 1fr))", gap: "16px" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 420px), 1fr))", gap: "16px" }}>
               {executiveVisuals.slice(0, 4).map((v, idx) => (
                 <div
                   key={`lens-${v.chart_id || idx}`}
                   style={{
-                    background: "var(--card-bg, rgba(30, 41, 59, 0.7))",
-                    border: "1px solid var(--border-color, rgba(255, 255, 255, 0.1))",
+                    background: isDark ? "rgba(15, 23, 42, 0.75)" : "#ffffff",
+                    border: isDark ? "1px solid rgba(255, 255, 255, 0.1)" : "1px solid var(--border-subtle, #e2e8f0)",
                     borderRadius: "12px",
                     padding: "16px",
-                    boxShadow: "0 4px 12px rgba(0, 0, 0, 0.05)"
+                    boxShadow: isDark ? "0 4px 14px rgba(0, 0, 0, 0.3)" : "0 4px 12px rgba(0, 0, 0, 0.05)",
+                    overflow: "hidden",
+                    minWidth: 0,
+                    display: "flex",
+                    flexDirection: "column"
                   }}
                 >
-                  <SlideChart chart={v} theme={{ is_dark: isDark }} />
+                  <SlideChart
+                    chart={v}
+                    theme={isDark ? 'executive_dark' : 'swiss_modern'}
+                    hideImpactCard={executiveVisuals.some(ev => Boolean(ev.impact_card))}
+                  />
                 </div>
               ))}
             </div>

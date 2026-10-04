@@ -33,11 +33,12 @@ export default function SmartImpactCard({ impact, className = "", compact = fals
           ? "0 4px 14px rgba(0, 0, 0, 0.25)"
           : "0 4px 12px rgba(0, 0, 0, 0.05)",
         backdropFilter: "blur(8px)",
-        marginBottom: "12px",
+        marginBottom: compact ? 0 : "8px",
+        overflow: "hidden",
       }}
     >
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", marginBottom: "6px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "8px", marginBottom: "6px" }}>
+        <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "8px" }}>
           <span
             style={{
               display: "inline-flex",

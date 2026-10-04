@@ -3,6 +3,11 @@ export { SLIDE_THEMES };
 
 // Built-in IDs deliberately use the current preset, including decks saved before a palette fix.
 export function getSlideTheme(input = 'executive_dark') {
+  if (typeof input === 'object' && input !== null) {
+    if (input.is_dark !== undefined && !input.id && !input.theme_id) {
+      return input.is_dark ? SLIDE_THEMES.executive_dark : SLIDE_THEMES.swiss_modern;
+    }
+  }
   const rawId = typeof input === 'string' ? input : input?.id || input?.theme_id;
   const id = String(rawId || 'executive_dark').toLowerCase().replaceAll('-', '_');
   const theme = SLIDE_THEMES[SLIDE_THEME_ALIASES[id] || id] || SLIDE_THEMES.executive_dark;

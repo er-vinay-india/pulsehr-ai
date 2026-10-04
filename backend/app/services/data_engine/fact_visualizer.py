@@ -425,14 +425,36 @@ class FactVisualizer:
                 temp_df2 = df[df[dim1].astype(str) == str(val1)][[dim2, fact.metric]].dropna().copy()
                 temp_df2["__val"] = temp_df2[fact.metric].apply(cls._clean_series_value)
                 grp2 = temp_df2.groupby(dim2)["__val"].agg(["mean", "count"]).dropna()
-                for idx_val, row in grp2.iterrows():
+                # Prioritize target disparity cohort, then sort remaining by sample count
+                is_target_series = grp2.index.astype(str) == str(val2)
+                target_rows = grp2[is_target_series]
+                non_target_rows = grp2[~is_target_series].sort_values(by="count", ascending=False)
+                
+                # Consolidate beyond top 5 to prevent visual congestion/tree node overflow
+                max_top = 4 if len(target_rows) > 0 else 5
+                top_items = pd.concat([target_rows, non_target_rows.iloc[:max_top]])
+                other_items = non_target_rows.iloc[max_top:]
+
+                for idx_val, row in top_items.iterrows():
                     is_target = str(idx_val) == str(val2)
+                    clean_name = str(idx_val)[:22]
                     dim2_children.append({
-                        "name": f"{dim2}: {idx_val}",
+                        "name": f"{dim2}: {clean_name}",
                         "value": round(float(row["mean"]), 2),
                         "sample_size": int(row["count"]),
                         "is_outlier": is_target,
                         "severity": "critical" if (is_target and getattr(fact, "business_impact", None) and str(getattr(fact.business_impact, "severity", "")).upper().endswith("CRITICAL")) else ("warning" if is_target else "normal")
+                    })
+
+                if len(other_items) > 0:
+                    other_mean = round(float(other_items["mean"].mean()), 2)
+                    other_count = int(other_items["count"].sum())
+                    dim2_children.append({
+                        "name": f"Other ({len(other_items)} {dim2}s)",
+                        "value": other_mean,
+                        "sample_size": other_count,
+                        "is_outlier": False,
+                        "severity": "normal"
                     })
             except Exception as e:
                 logger.debug(f"Tree dim2 computation fallback: {e}")
@@ -494,10 +516,11 @@ class FactVisualizer:
 
         seg_dim = next(iter(fact.dimensions), "Segment")
         seg_val = fact.dimensions.get(seg_dim, "Cohort")
+        seg_val_clean = str(seg_val)[:20]
 
         waterfall_steps: list[dict[str, Any]] = [
             {"label": "Baseline / Expected", "value": round(base_val, 2), "type": "total"},
-            {"label": f"{seg_val} Gap", "value": round(gap_val, 2), "type": "increase" if gap_val >= 0 else "decrease"}
+            {"label": f"{seg_val_clean} Gap", "value": round(gap_val, 2), "type": "increase" if gap_val >= 0 else "decrease"}
         ]
 
         bi = getattr(fact, "business_impact", None)

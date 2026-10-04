@@ -12,10 +12,34 @@ export function slideChartOptions(option, input) {
     ...(option.xAxis ? {xAxis:axes(option.xAxis)}:{}), ...(option.yAxis ? {yAxis:axes(option.yAxis)}:{}),
     ...(option.tooltip ? {tooltip:{...option.tooltip,backgroundColor:t.card_bg,borderColor:t.card_border,textStyle:{...option.tooltip.textStyle,color:t.primary_text}}}:{}),
     series:(option.series || []).map((s,i)=>{
-      const color=t.chart_palette[i%t.chart_palette.length];
-      return {...s,itemStyle:{...s.itemStyle,color:s.type==='pie'?undefined:color,borderColor:t.card_bg},lineStyle:{...s.lineStyle,color},label:{...s.label,color:t.primary_text,position:s.type==='pie'?'outside':s.label?.position?.startsWith('inside')?'top':s.label?.position},
-        emphasis:{...s.emphasis,label:{...s.emphasis?.label,color:t.primary_text}},
-        data:s.data?.map(d=>d && typeof d==='object' && !Array.isArray(d)?{...d,itemStyle:{...d.itemStyle,color:undefined,borderColor:t.card_bg},label:{...d.label,color:t.primary_text}}:d)};
+      const isTransparent = s.name === 'Helper Base' || s.itemStyle?.color === 'transparent';
+      const isCustomColorFunc = typeof s.itemStyle?.color === 'function';
+      const isSpecialType = s.type === 'pie' || s.type === 'tree';
+      const color = t.chart_palette[i%t.chart_palette.length];
+      const seriesColor = isTransparent ? 'transparent' : (isCustomColorFunc ? s.itemStyle.color : (isSpecialType ? undefined : color));
+      const borderColor = isTransparent ? 'transparent' : t.card_bg;
+      return {
+        ...s,
+        itemStyle: {
+          ...s.itemStyle,
+          color: seriesColor,
+          borderColor: borderColor
+        },
+        lineStyle: { ...s.lineStyle, color: isTransparent ? 'transparent' : color },
+        label: {
+          ...s.label,
+          color: t.primary_text,
+          position: s.type==='pie' ? 'outside' : (s.label?.position?.startsWith('inside') ? 'top' : s.label?.position)
+        },
+        emphasis: {
+          ...s.emphasis,
+          itemStyle: isTransparent ? { color: 'transparent', borderColor: 'transparent' } : s.emphasis?.itemStyle,
+          label: { ...s.emphasis?.label, color: t.primary_text }
+        },
+        data: s.data?.map(d=>d && typeof d==='object' && !Array.isArray(d)
+          ? { ...d, itemStyle: { ...d.itemStyle, color: isTransparent ? 'transparent' : (d.itemStyle?.color || undefined), borderColor }, label: { ...d.label, color: t.primary_text } }
+          : d)
+      };
     })
   };
 }
