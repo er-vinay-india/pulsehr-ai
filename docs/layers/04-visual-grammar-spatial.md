@@ -73,4 +73,15 @@ Implemented in `backend/app/services/presentation/slide_layout.py` and `resolved
 ### E. Native Multi-Format Exporters
 - **Native PowerPoint (`python-pptx`)**: Generates real editable shape tables and native vector chart objects—never low-resolution screenshots.
 - **Executive PDF (`resolved_pdf.py`)**: Headless browser render enforcing identical 960×540 pt geometry and print CSS rules.
-- **Interactive Web Studio (`FrontendSlidesDeck.jsx`)**: Responsive slider navigation, inline AI text refinement, and speaker notes drawer.
+- **Interactive Web Studio (`FrontendSlidesDeck.jsx`, `DeckStudioView.jsx`)**: Responsive slider navigation, live conversational slide mutation with rollback, and speaker notes drawer.
+
+### F. Multi-Surface Visual Intelligence Grammar
+- **6 Supported Analytical Chart Primitives**:
+  - `variance_waterfall`: Stepped baseline delta bars calculating positive vs negative variance contributions.
+  - `breakdown_tree`: Hierarchical parent-to-child horizontal/vertical breakdown trees.
+  - `donut`: Proportional distribution with center stat callout.
+  - `column`: Discrete categorical metric comparison.
+  - `line`: Longitudinal chronological trends with confidence bands.
+  - `metric_distribution`: Min/median/p90/max quantile distribution spans.
+- **Direct Visual Parity Invariant**: Every chart primitive rendered in React ECharts has an identical native vector equivalent in `python-pptx` and headless PDF.
+- **Native PPTX Contrast Guarantee**: Audited by `tests/test_slide_export_contrast.py` across all themes (`SLIDE_THEME_PRESETS`) ensuring all text and chart labels maintain &ge; 7:1 contrast against slide and card backgrounds.

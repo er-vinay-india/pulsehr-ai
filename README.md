@@ -26,10 +26,10 @@ README.md (Root Parent Node)
 | Layer | Architecture Specification | Key Responsibilities & Code Modules |
 | :--- | :--- | :--- |
 | **Blueprint** | [system-architecture.md](docs/system-architecture.md) | **Master Architectural Blueprint**: End-to-end data flow, system axioms, and inter-layer contracts. |
-| **Layer 1** | [01-deterministic-truth-engine.md](docs/layers/01-deterministic-truth-engine.md) | **Deterministic Truth & Evidence Engine**: Ingestion (`upload.py`), semantic profiling (`semantic_classifier.py`), fact discovery (`FACT-XXX`), industrial models (McKinsey 9-Box, Bradford Factor $B=S^2 \times D$, Burnout Strain, Holt-damped forecast), cryptographic evidence ledger (`EVID-XXX`, SHA-256 seal). |
-| **Layer 2** | [02-cognitive-routing-governance.md](docs/layers/02-cognitive-routing-governance.md) | **Cognitive Routing & Governance**: Sub-millisecond intent routing (`RuleDecisionEngine` <1ms), `ModelRouter` escalation, role-based gateway (`FAST`, `ANALYST`, `REASONER`, `WRITER`, `CRITIC`), `assistant_identity.py` (HRIDAY persona, `identity_leak` guard), and deterministic claim verification. |
-| **Layer 3** | [03-consumer-delivery-engine.md](docs/layers/03-consumer-delivery-engine.md) | **Consumer Delivery Engine**: Adaptive dashboard (7 registered domains, 3 progressive disclosure tiers `GLANCE`/`EXPLAIN`/`INSPECT`), automated 13-phase presentation engine (`PIPELINE_PHASES`), interactive copilot & council war room, and executive decision brief API. |
-| **Layer 4** | [04-visual-grammar-spatial.md](docs/layers/04-visual-grammar-spatial.md) | **Visual Grammar & Spatial Contract**: HighView WCAG AAA tokens (`_tokens.scss`), unified 16:9 baseline geometry (`960 × 540 pt`), typography scale (38pt cover, 30pt header, 18pt body), dense table overflow protection, and native python-pptx / headless PDF exporters. |
+| **Layer 1** | [01-deterministic-truth-engine.md](docs/layers/01-deterministic-truth-engine.md) | **Deterministic Truth & Evidence Engine**: Ingestion (`upload.py`), semantic profiling (`semantic_classifier.py`), fact discovery (`FACT-XXX`), industrial models (McKinsey 9-Box, Bradford Factor $B=S^2 \times D$, Burnout Strain, Holt-damped forecast), System Function Library (28+ verified functions, compact token micro-schema <35 tokens/fn), cryptographic evidence ledger (`EVID-XXX`, SHA-256 seal). |
+| **Layer 2** | [02-cognitive-routing-governance.md](docs/layers/02-cognitive-routing-governance.md) | **Cognitive Routing & Governance**: Sub-millisecond intent routing (`RuleDecisionEngine` <1ms), `ModelRouter` escalation, role-based gateway (`FAST`, `ANALYST`, `REASONER`, `WRITER`, `CRITIC`), `assistant_identity.py` (HRIDAY persona, `identity_leak` guard), slide mutation intent routing, and deterministic claim verification. |
+| **Layer 3** | [03-consumer-delivery-engine.md](docs/layers/03-consumer-delivery-engine.md) | **Consumer Delivery Engine**: Adaptive dashboard (7 registered domains, 3 progressive disclosure tiers `GLANCE`/`EXPLAIN`/`INSPECT`), automated 13-phase presentation engine (`PIPELINE_PHASES`), conversational slide mutator (`SlideMutator`, re-slice, re-type, filter, theme, revert), interactive copilot & council war room, and executive decision brief API. |
+| **Layer 4** | [04-visual-grammar-spatial.md](docs/layers/04-visual-grammar-spatial.md) | **Visual Grammar & Spatial Contract**: HighView WCAG AAA tokens (`_tokens.scss`), unified 16:9 baseline geometry (`960 × 540 pt`), typography scale (38pt cover, 30pt header, 18pt body), visual intelligence charts (waterfall, breakdown tree, donut, line, column), dense table overflow protection, and native python-pptx / headless PDF exporters. |
 | **Layer 5** | [05-platform-reliability-ops.md](docs/layers/05-platform-reliability-ops.md) | **Platform Reliability & Test Ops**: Startup background worker recovery (`recover_presentation_jobs`), SQLite atomic claims, 3-tier test pyramid, and pre-push impact analyzer (`scripts/run_impacted_tests.py`). |
 
 > *Archived & uncompacted historical documents are preserved in the [trash/](trash/README.md) folder for reference and restoration.*
@@ -73,18 +73,20 @@ npm run dev -- --port 5175
 - **Adaptive Dashboard**:
   - `GET /api/adaptive-dashboard/primary-element`: Top 2 primary visual cards.
   - `GET /api/adaptive-dashboard/findings`: Domain-specific verified findings and narratives.
-- **Decision Brief**:
+- **Decision Brief & Reporting**:
   - `GET /api/analytics/decision-brief`: Deterministic executive brief (strengths, headwinds, initiatives).
   - `POST /api/analytics/decision-brief/prioritize`: Permutation-only finding reordering.
   - `POST /api/analytics/decision-brief/voiceover`: Spoken presenter script.
+  - `POST /api/reports/orchestrate`: Full generic workflow orchestration (Validation &rarr; Profiling &rarr; Opportunities &rarr; Facts &rarr; Ranking &rarr; Interpretation &rarr; Visuals &rarr; Deck Spec).
 - **Presentation Engine**:
   - `POST /api/presentations/generate`: Trigger 13-phase presentation generation.
   - `POST /api/presentations/scope-preview`: Preflight slide count, evidence items, and layout preview.
+  - `POST /api/presentations/mutate-slide`: Conversational slide mutation engine (re-slice, re-type, filter, theme, revert) with snapshot rollback.
   - `GET /api/presentations/decks/{id}`: Fetch complete presentation specification.
   - `GET /api/reports/presentation/latest`: Download latest generated 16:9 PowerPoint deck.
 - **HRIDAY Copilot**:
   - `POST /api/copilot/generic`: Dedicated factual Q&A with 0-LLM math.
-  - `POST /api/copilot/query` / `stream`: Conversational chat with intent auto-routing.
+  - `POST /api/copilot/query` / `stream`: Conversational chat with intent auto-routing & slide mutation events.
   - `POST /api/copilot/war-room`: Multi-model council consensus generation.
   - `GET /api/copilot/identity`: Public HRIDAY identity metadata.
 - **Sheets & Ingestion**:

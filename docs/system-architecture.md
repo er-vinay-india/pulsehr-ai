@@ -42,8 +42,8 @@ Rather than fragmenting functionality across disconnected silos, the codebase is
   LAYER 3: MULTI-SURFACE CONSUMER DELIVERY ENGINE
   ┌─────────────────────────────────────────────────────────────────────────────────────────────┐
   │ • Consumer 3A: Adaptive Multi-Domain Decision Dashboard (7 domains, 3 disclosure tiers)     │
-  │ • Consumer 3B: Automated Presentation Engine (13-phase orchestrator, 7 layouts, notes)      │
-  │ • Consumer 3C: HRIDAY Copilot & Multi-Model Council War Room (0-LLM math, grain integrity)  │
+  │ • Consumer 3B: Automated Presentation Engine (13-phase orchestrator, live SlideMutator)     │
+  │ • Consumer 3C: HRIDAY Copilot & Multi-Model Council War Room (0-LLM math, slide mutation SSE)│
   │ • Consumer 3D: Executive Decision Brief API (GET/POST /api/analytics/decision-brief)        │
   └──────────────────────────────────────┬──────────────────────────────────────────────────────┘
                                          │  Contracts: Slide Specs, Visual Cards, Table Specs
@@ -75,7 +75,7 @@ Each layer is comprehensively documented in its own dedicated, cohesive document
 | :--- | :--- | :--- |
 | [Layer 1](layers/01-deterministic-truth-engine.md) | **Deterministic Truth & Evidence Engine** | Data ingestion, semantic profiling, `FACT-XXX` discovery, 9-Box, Bradford Factor, evidence ledger. |
 | [Layer 2](layers/02-cognitive-routing-governance.md) | **Cognitive Routing & Governance** | Decision routing (<1ms), model roles, HRIDAY identity guard, claim verification, permutation rule. |
-| [Layer 3](layers/03-consumer-delivery-engine.md) | **Consumer Delivery Engine** | Adaptive dashboard (7 domains, 3 tiers), 13-phase presentation engine, copilot, decision briefs. |
+| [Layer 3](layers/03-consumer-delivery-engine.md) | **Consumer Delivery Engine** | Adaptive dashboard (7 domains, 3 tiers), 13-phase presentation engine, copilot, decision briefs, conversational slide mutator. |
 | [Layer 4](layers/04-visual-grammar-spatial.md) | **Visual Grammar & Spatial Contract** | Design tokens (`_tokens.scss`), 16:9 geometry (960×540 pt), typography hierarchy, table safety. |
 | [Layer 5](layers/05-platform-reliability-ops.md) | **Platform Reliability & Test Ops** | Background worker PID recovery, 3-tier test pyramid, pre-push impact runner. |
 
