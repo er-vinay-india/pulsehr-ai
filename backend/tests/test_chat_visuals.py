@@ -160,3 +160,15 @@ def test_categorical_entity_count_and_dashboard_recovery(students):
     assert len(followup["visual_charts"]) == 1
     assert set(followup["visual_charts"][0]["categories"]) == {"Female", "Male"}
 
+
+@pytest.mark.unit
+def test_draw_chart_based_on_cohort_average(students):
+    """Verify natural phrasing 'draw the chart based on Cohort Average: Math Score' succeeds directly."""
+    result = ask("draw the chart based on Cohort Average: Math Score", students)
+    assert result["status"] == "success"
+    assert len(result["visual_charts"]) == 1
+    spec = result["visual_charts"][0]
+    assert spec["title"] == "Cohort Average: Math Score"
+    assert spec["series"][0]["values"] == pytest.approx([66.09])
+
+

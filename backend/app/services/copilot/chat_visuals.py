@@ -20,7 +20,7 @@ def _normalized(text: Any) -> str:
 
 
 def is_visual_request(query: str) -> bool:
-    return bool(re.search(r"\b(chart|charts|graph|plot|diagram|visualize|visualise|visualization|visualisation)\b", query, re.I))
+    return bool(re.search(r"\b(chart|charts|graph|plot|diagram|visualize|visualise|visualization|visualisation|draw|render)\b", query, re.I))
 
 
 def _mentioned_columns(query: str, columns: list[str]) -> list[str]:
@@ -205,6 +205,7 @@ replaced with a full-cohort mean. The existing planner handles richer queries.
                    "can", "could", "you", "give", "what", "is", "calculate", "compute", "cohort",
                    "overall", "average", "mean", "median", "sum", "total", "minimum", "min", "maximum", "max", "count",
                    "chart", "charts", "graph", "plot", "diagram", "format", "visualize", "visualise", "visualization", "visualisation",
+                   "draw", "render", "make", "create", "generate", "based", "on", "using", "with",
                    "it", "this", "that", "these", "as", "bar", "horizontal", "column", "line", "pie", "donut",
                    "by", "across", "breakdown", "group", "grouped", "and", "instead", "now", "again", "to", "convert", "switch", "change"}
         if any(word not in allowed for word in remainder.split()):
