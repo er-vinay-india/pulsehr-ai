@@ -450,17 +450,18 @@ def plan_analytical_query(
             explanation="Adds Department descriptive field while preserving employee grain."
         )
 
-    # 3. Limit refinement ("only top 3", "top 3", "show bottom 3", "only 3", "limit to 5")
-    limit_match = re.search(r'\b(?:only\s+)?(?:show\s+(?:the\s+)?)?(top|bottom|worst|best)?\s*(\d+|three|two|four|five|six|seven|eight|nine|ten)\b', q)
+    # 3. Limit refinement ("only top 3", "top 3", "show bottom 3", "limit to 5")
+    # Requires explicit ranking intent keywords so unrelated numbers (e.g., 'square root of 9') are not hijacked.
+    limit_match = re.search(r'\b(?:(?:only\s+)?(?:show\s+(?:the\s+)?)?(top|bottom|worst|best)\s*(\d+|three|two|four|five|six|seven|eight|nine|ten)|(?:limit\s+to|only)\s+(\d+|three|two|four|five|six|seven|eight|nine|ten))\b', q)
     if limit_match and active_prior and (active_prior.get('metric') or active_prior.get('last_ranking')):
         dir_word = limit_match.group(1)
-        cnt_token = limit_match.group(2)
-        if cnt_token or 'only' in q:
-            count = int(cnt_token) if cnt_token and cnt_token.isdigit() else (num_map.get(cnt_token, 3) if cnt_token else 3)
+        cnt_token = limit_match.group(2) or limit_match.group(3)
+        if cnt_token:
+            count = int(cnt_token) if cnt_token.isdigit() else num_map.get(cnt_token, 3)
             prior_dir = active_prior.get('direction', 'lowest')
             metric = active_prior.get('metric', 'attendance')
             m_dir = resolve_metric_direction(metric)
-            if 'only' in q or dir_word == 'top':
+            if dir_word == 'top' or (not dir_word and 'only' in q):
                 direction = prior_dir
             elif dir_word in ('bottom', 'worst'):
                 direction = 'highest' if m_dir == 'higher_is_worse' else 'lowest'
@@ -473,7 +474,7 @@ def plan_analytical_query(
                 intent='ranking',
                 metric=metric,
                 entity_grain=active_prior.get('entity_grain', 'employee'),
-                entity_dimension=active_prior.get('dimension') or 'Department',
+                entity_dimension=active_prior.get('dimension'),
                 identifier_col=active_prior.get('identifier_col', 'ID'),
                 direction=direction,
                 ranking_limit=count,
@@ -692,11 +693,13 @@ def plan_analytical_query(
                 entity_dimension = car_dim or all_dimensions[0]
             elif any(k in q for k in ('dept', 'department', 'by department', 'which department')):
                 dept_dim = next((d for d in all_dimensions if 'dept' in d.lower()), None)
-                entity_dimension = dept_dim or 'Department'
-            elif detected_domain == "People operations" and any('dept' in d.lower() for d in all_dimensions):
+                entity_dimension = dept_dim
+            elif detected_domain == "People operations" and any('dept' in d.lower() for d in all_dimensions) and any(w in q for w in ('group', 'by', 'across', 'each', 'breakdown')):
                 entity_dimension = next(d for d in all_dimensions if 'dept' in d.lower())
-            else:
+            elif any(w in q for w in ('group', 'by', 'across', 'each', 'breakdown')):
                 entity_dimension = all_dimensions[0]
+            else:
+                entity_dimension = None
     else:
         if 'store' in q:
             entity_dimension = 'Store'
@@ -708,10 +711,10 @@ def plan_analytical_query(
             entity_dimension = 'Severity'
         elif any(k in q for k in ('car', 'cars', 'vehicle', 'make')):
             entity_dimension = 'Make'
-        elif any(k in q for k in ('dept', 'department')) or detected_domain == "People operations":
+        elif any(k in q for k in ('dept', 'department')):
             entity_dimension = 'Department'
         else:
-            entity_dimension = 'Department'
+            entity_dimension = None
 
     # 3. RESOLVE METRIC ACROSS DOMAINS
     metric = None

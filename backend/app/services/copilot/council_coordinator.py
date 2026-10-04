@@ -21,7 +21,7 @@ from .coordinator_models import RoutingAssignment, WorkerTarget, CoordinatorDeci
 from ..copilot_tools import arithmetic, ToolRequest
 from ..copilot_query_planner import plan_analytical_query, execute_analytical_plan
 from .sheet_quality import is_missing_values_query, answer_missing_values
-from .chat_visuals import answer_chat_visual
+from .chat_visuals import answer_chat_visual, is_visual_request
 from .union_war_room import UnionWarRoomEngine
 from ..ai_copilot import query_copilot, stream_copilot_generator
 from ..gateway.assistant_identity import finalize_identity_response, public_identity
@@ -64,7 +64,7 @@ class CouncilCoordinator:
 
     @classmethod
     def _is_arithmetic_request(cls, query: str) -> tuple[bool, str | None]:
-        """Detects whether query is a safe math expression (e.g. 'what is 2+2=?', '(12+8)/4')."""
+        """Detects whether query is a safe math expression (e.g. 'what is 2+2=?', 'square root of 9', '(12+8)/4')."""
         q = query.strip().rstrip('?').strip()
         clean = cls.ARITHMETIC_PREFIX_RE.sub('', q).strip()
         clean = clean.rstrip('=').strip()
@@ -73,6 +73,28 @@ class CouncilCoordinator:
         if not clean or not re.search(r'\d', clean):
             return False, None
 
+        # Check for natural language bounded math phrases
+        # 1. Square root
+        sqrt_match = re.search(r'^(?:the\s+)?(?:square\s+root|sqrt)\s+(?:of\s+)?(\d+(?:\.\d+)?)$', clean, re.I)
+        if sqrt_match:
+            return True, f"sqrt({sqrt_match.group(1)})"
+
+        # 2. Cube root
+        cbrt_match = re.search(r'^(?:the\s+)?(?:cube\s+root|cbrt)\s+(?:of\s+)?(\d+(?:\.\d+)?)$', clean, re.I)
+        if cbrt_match:
+            return True, f"cbrt({cbrt_match.group(1)})"
+
+        # 3. Power phrasing: "9 squared", "3 cubed", "2 to the power of 8"
+        squared_match = re.search(r'^(\d+(?:\.\d+)?)\s+squared$', clean, re.I)
+        if squared_match:
+            return True, f"({squared_match.group(1)}) ** 2"
+        cubed_match = re.search(r'^(\d+(?:\.\d+)?)\s+cubed$', clean, re.I)
+        if cubed_match:
+            return True, f"({cubed_match.group(1)}) ** 3"
+        pow_match = re.search(r'^(\d+(?:\.\d+)?)\s+(?:to\s+the\s+power\s+of|raised\s+to|pow)\s+(\d+(?:\.\d+)?)$', clean, re.I)
+        if pow_match:
+            return True, f"({pow_match.group(1)}) ** ({pow_match.group(2)})"
+
         # Check for arithmetic operators
         has_operator = bool(re.search(r'[\+\-\*\/\^%]', clean))
         if has_operator and cls.ARITHMETIC_CHARS_RE.fullmatch(clean):
@@ -80,6 +102,8 @@ class CouncilCoordinator:
             try:
                 # Replace caret with power if safe
                 clean_expr = clean.replace('^', '**')
+                # Validate with arithmetic tool
+                arithmetic(clean_expr)
                 return True, clean_expr
             except Exception:
                 return False, None
@@ -223,11 +247,12 @@ class CouncilCoordinator:
                 confidence=1.0
             )
 
-        # 5. Fast-Path: Follow-up Chart Request
+        # 5. Fast-Path: Visual Chart Request
+        is_visual = is_visual_request(query)
         is_chart_follow_up = bool(cls.CHART_FOLLOW_UP_RE.search(q_low))
-        has_chart_keyword = any(k in q_low for k in ("chart", "diagram", "graph", "plot", "visualize"))
+        has_chart_keyword = any(k in q_low for k in ("chart", "diagram", "graph", "plot", "visualize", "draw", "render"))
 
-        if is_chart_follow_up or (has_chart_keyword and prior_context and ("visualization_context" in prior_context or "metric" in prior_context or "calculation" in prior_context)):
+        if (is_visual and (df is not None or sheet_id is not None)) or is_chart_follow_up or (has_chart_keyword and prior_context and ("visualization_context" in prior_context or "metric" in prior_context or "calculation" in prior_context)):
             resolved_ctx, is_fu = cls.resolve_context(query, prior_context, RoutingAssignment.VISUAL_CHART, df)
             return CoordinatorDecision(
                 assignment=RoutingAssignment.VISUAL_CHART,
@@ -236,7 +261,7 @@ class CouncilCoordinator:
                 max_retries=1,
                 requires_visual=True,
                 resolved_context=resolved_ctx,
-                rationale="Direct visualization chart synthesis from resolved calculation context",
+                rationale="Direct visualization chart synthesis from dataset or resolved calculation context",
                 is_follow_up=is_fu,
                 confidence=1.0
             )
@@ -502,7 +527,8 @@ class CouncilCoordinator:
                 selected_model=model,
                 dataset_id=dataset_id,
                 sheet_id=sheet_id,
-                prior_context=decision.resolved_context
+                prior_context=decision.resolved_context,
+                allow_inferred_tools=False
             )
             return cls.verify_delivery(decision, finalize_identity_response(res, query), df, sheet_name, sheet_id)
 
@@ -519,7 +545,7 @@ class CouncilCoordinator:
             return cls.verify_delivery(decision, finalize_identity_response(council_res, query), df, sheet_name, sheet_id)
 
         # Fallback query copilot
-        fallback_res = query_copilot(user_query=query, selected_model=model, dataset_id=dataset_id, sheet_id=sheet_id, prior_context=decision.resolved_context)
+        fallback_res = query_copilot(user_query=query, selected_model=model, dataset_id=dataset_id, sheet_id=sheet_id, prior_context=decision.resolved_context, allow_inferred_tools=False)
         return cls.verify_delivery(decision, finalize_identity_response(fallback_res, query), df, sheet_name, sheet_id)
 
     # =========================================================================
@@ -660,7 +686,8 @@ class CouncilCoordinator:
                 selected_model=model,
                 dataset_id=dataset_id,
                 sheet_id=sheet_id,
-                prior_context=decision.resolved_context
+                prior_context=decision.resolved_context,
+                allow_inferred_tools=False
             )
             for event in generator:
                 yield event

@@ -219,13 +219,14 @@ def query_copilot(
     sheet_id: int | None = None,
     prior_context: dict | None = None,
     snapshot_id: str | None = None,
-    page: str | None = None
+    page: str | None = None,
+    allow_inferred_tools: bool = True
 ) -> dict:
     t_start = time.perf_counter()
     from .sheet_catalog import linked_evidence
     
-    # 1. Deterministic Tool Execution
-    requested_tool = tool or infer_tool(user_query, dataset_id=dataset_id, sheet_id=sheet_id, prior_context=prior_context)
+    # 1. Deterministic Tool Execution (only when explicitly provided or allowed)
+    requested_tool = tool or (infer_tool(user_query, dataset_id=dataset_id, sheet_id=sheet_id, prior_context=prior_context) if allow_inferred_tools else None)
     if requested_tool:
         tool_res = execute_tool(user_query, requested_tool, dataset_id=dataset_id, sheet_id=sheet_id, prior_context=prior_context)
         duration_ms = (time.perf_counter() - t_start) * 1000
@@ -390,7 +391,8 @@ def stream_copilot_generator(
     sheet_id: int | None = None,
     prior_context: dict | None = None,
     snapshot_id: str | None = None,
-    page: str | None = None
+    page: str | None = None,
+    allow_inferred_tools: bool = True
 ) -> Generator[str, None, None]:
     """Streams Copilot responses as Server-Sent Events (SSE).
     Substantially lowers perceived latency by streaming tokens in real time.
@@ -398,9 +400,9 @@ def stream_copilot_generator(
     t_start = time.perf_counter()
     from .sheet_catalog import linked_evidence
 
-    # Stage 1: Tool check
+    # Stage 1: Tool check (only when explicitly provided or allowed)
     yield f"event: status\ndata: {json.dumps({'phase': 'planning', 'message': 'Checking calculation tools…'})}\n\n"
-    requested_tool = tool or infer_tool(user_query, dataset_id=dataset_id, sheet_id=sheet_id, prior_context=prior_context)
+    requested_tool = tool or (infer_tool(user_query, dataset_id=dataset_id, sheet_id=sheet_id, prior_context=prior_context) if allow_inferred_tools else None)
     if requested_tool:
         yield f"event: status\ndata: {json.dumps({'phase': 'tool', 'message': f'Executing exact calculation: {requested_tool.name}…'})}\n\n"
         tool_res = execute_tool(user_query, requested_tool, dataset_id=dataset_id, sheet_id=sheet_id, prior_context=prior_context)

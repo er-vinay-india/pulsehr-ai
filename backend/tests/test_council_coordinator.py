@@ -139,3 +139,68 @@ def test_coordinator_execution_sync_greeting():
     assert "HRIDAY" in res["answer"]
     assert res["status"] == "success"
     assert res["timings"]["is_deterministic"] is True
+
+
+def test_coordinator_bounded_natural_language_math():
+    """Verify natural-language bounded math (square root, cube root, powers) routes to deterministic calculator."""
+    cases = [
+        ("what is the square root of 9", "sqrt(9)", 3.0),
+        ("square root of 16", "sqrt(16)", 4.0),
+        ("sqrt 25", "sqrt(25)", 5.0),
+        ("cube root of 27", "cbrt(27)", 3.0),
+        ("9 squared", "(9) ** 2", 81.0),
+        ("3 cubed", "(3) ** 3", 27.0),
+        ("2 to the power of 8", "(2) ** (8)", 256.0),
+    ]
+    for query, expected_expr, expected_val in cases:
+        decision = CouncilCoordinator.coordinate(query)
+        assert decision.assignment == RoutingAssignment.SAFE_CALCULATOR
+        assert decision.worker_target == WorkerTarget.DETERMINISTIC_CALCULATOR
+        assert decision.extracted_expression == expected_expr
+        res = CouncilCoordinator.execute_sync(decision, query)
+        assert f"{expected_val:,.12g}" in res["answer"]
+        assert res["status"] == "success"
+        assert res["timings"]["is_deterministic"] is True
+
+
+def test_complete_conversation_replay():
+    """Replay exact user conversation:
+    1. 'Students by Gender' (draw count distribution chart)
+    2. 'draw the chart based on Cohort Average: Math Score' (recomputes 66.09)
+    3. 'what is the square root of 9' (assert answer is 3 with 0 dataset/model calls)
+    """
+    students = pd.DataFrame({
+        "Math Score": [66] * 990 + [75] * 10,
+        "Reading_Score": [70] * 1000,
+        "Gender": ["Female"] * 500 + ["Male"] * 500
+    })
+
+    # Turn 1: Students by Gender
+    d1 = CouncilCoordinator.coordinate("draw the chart based on Students by Gender", df=students, sheet_id=7)
+    r1 = CouncilCoordinator.execute_sync(d1, "draw the chart based on Students by Gender", df=students, sheet_name="Students", sheet_id=7)
+    assert r1["status"] == "success"
+    assert len(r1["visual_charts"]) == 1
+    assert set(r1["visual_charts"][0]["categories"]) == {"Female", "Male"}
+
+    # Turn 2: Cohort Average: Math Score
+    ctx1 = r1["prior_context"]
+    d2 = CouncilCoordinator.coordinate("draw the chart based on Cohort Average: Math Score", prior_context=ctx1, df=students, sheet_id=7)
+    r2 = CouncilCoordinator.execute_sync(d2, "draw the chart based on Cohort Average: Math Score", df=students, sheet_name="Students", sheet_id=7, prior_context=d2.resolved_context)
+    assert r2["status"] == "success"
+    assert len(r2["visual_charts"]) == 1
+    assert r2["visual_charts"][0]["series"][0]["values"] == [pytest.approx(66.09, abs=0.01)]
+
+    # Turn 3: What is the square root of 9
+    ctx2 = r2["prior_context"]
+    d3 = CouncilCoordinator.coordinate("what is the square root of 9", prior_context=ctx2, df=students, sheet_id=7)
+    assert d3.assignment == RoutingAssignment.SAFE_CALCULATOR
+    assert d3.worker_target == WorkerTarget.DETERMINISTIC_CALCULATOR
+    assert d3.extracted_expression == "sqrt(9)"
+    assert d3.resolved_context == {}  # Execution context strictly separated from prior dataset context
+
+    r3 = CouncilCoordinator.execute_sync(d3, "what is the square root of 9", df=students, sheet_name="Students", sheet_id=7, prior_context=d3.resolved_context)
+    assert r3["status"] == "success"
+    assert "**3**" in r3["answer"] or "= **3**" in r3["answer"]
+    assert r3["tool_used"] == "arithmetic"
+    assert r3["timings"]["is_deterministic"] is True
+

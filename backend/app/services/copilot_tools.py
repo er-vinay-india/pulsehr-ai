@@ -131,22 +131,49 @@ def calculate(request: CalculationRequest) -> dict:
 
 
 def arithmetic(expression: str) -> float:
-    """Small arithmetic grammar, with bounded size and no calls, names or powers."""
+    """Small arithmetic grammar, with bounded size and strictly allowlisted operations."""
     if not expression or len(expression) > 200:
         raise ValueError('Enter an arithmetic expression of at most 200 characters.')
-    operations = {ast.Add: operator.add, ast.Sub: operator.sub, ast.Mult: operator.mul, ast.Div: operator.truediv}
+    operations = {
+        ast.Add: operator.add,
+        ast.Sub: operator.sub,
+        ast.Mult: operator.mul,
+        ast.Div: operator.truediv,
+        ast.Pow: operator.pow,
+        ast.Mod: operator.mod
+    }
+    allowed_funcs = {
+        'sqrt': math.sqrt,
+        'cbrt': math.cbrt if hasattr(math, 'cbrt') else lambda x: x ** (1.0 / 3.0),
+        'abs': abs,
+        'round': round,
+    }
+
     def evaluate(node):
         if isinstance(node, ast.Constant) and type(node.value) in (int, float):
             value = float(node.value)
         elif isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.UAdd, ast.USub)):
             value = evaluate(node.operand) * (-1 if isinstance(node.op, ast.USub) else 1)
         elif isinstance(node, ast.BinOp) and type(node.op) in operations:
-            value = operations[type(node.op)](evaluate(node.left), evaluate(node.right))
+            left_val = evaluate(node.left)
+            right_val = evaluate(node.right)
+            if isinstance(node.op, ast.Pow) and (abs(right_val) > 100 or abs(left_val) > 1e7):
+                raise ValueError('Power operand exceeds safe bounds.')
+            value = float(operations[type(node.op)](left_val, right_val))
+        elif isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in allowed_funcs:
+            func = allowed_funcs[node.func.id]
+            if len(node.args) != 1:
+                raise ValueError(f"Function {node.func.id} expects exactly 1 argument.")
+            arg_val = evaluate(node.args[0])
+            if node.func.id in ('sqrt', 'cbrt') and arg_val < 0:
+                raise ValueError(f"Cannot calculate {node.func.id} of a negative number.")
+            value = float(func(arg_val))
         else:
-            raise ValueError('Use only numbers, parentheses and +, -, *, /.')
+            raise ValueError('Use only numbers, parentheses, +, -, *, /, powers, and sqrt/cbrt/abs/round.')
         if not math.isfinite(value) or abs(value) > 1e15:
             raise ValueError('Result is outside the supported numeric range.')
         return value
+
     try:
         return evaluate(ast.parse(expression, mode='eval').body)
     except (SyntaxError, ZeroDivisionError, OverflowError, RecursionError) as exc:
