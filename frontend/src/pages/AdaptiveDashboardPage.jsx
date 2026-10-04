@@ -2112,13 +2112,28 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
             </div>
 
             {/* Top Impact Metric Cards */}
-            {executiveVisuals.some(v => v.impact_card) && (
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 280px), 1fr))", gap: "12px", marginBottom: "16px" }}>
-                {executiveVisuals.filter(v => v.impact_card).map((v, idx) => (
-                  <SmartImpactCard key={`impact-${v.chart_id || idx}`} impact={v.impact_card} />
-                ))}
-              </div>
-            )}
+            {executiveVisuals.some(v => v.impact_card) && (() => {
+              const seen = new Set();
+              const uniqueImpacts = executiveVisuals
+                .filter(v => v.impact_card)
+                .filter(v => {
+                  const key = `${v.impact_card.primary_metric}_${v.impact_card.formatted_amount}`;
+                  if (seen.has(key)) return false;
+                  seen.add(key);
+                  return true;
+                })
+                .slice(0, 3);
+
+              if (uniqueImpacts.length === 0) return null;
+
+              return (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 300px), 1fr))", gap: "12px", marginBottom: "16px" }}>
+                  {uniqueImpacts.map((v, idx) => (
+                    <SmartImpactCard key={`impact-${v.chart_id || idx}`} impact={v.impact_card} />
+                  ))}
+                </div>
+              );
+            })()}
 
             {/* Interactive Breakdown Trees & Waterfall Lenses */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 420px), 1fr))", gap: "16px" }}>

@@ -59,12 +59,17 @@ export default function SmartImpactCard({ impact, className = "", compact = fals
           </span>
           <span
             style={{
-              fontSize: "12px",
+              fontSize: "11.5px",
               fontWeight: 600,
               color: isDark ? "#94a3b8" : "#64748b",
               textTransform: "uppercase",
-              letterSpacing: "0.03em"
+              letterSpacing: "0.03em",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              maxWidth: "200px"
             }}
+            title={impact.primary_metric}
           >
             {impact.primary_metric || "Verified Metric"}
           </span>
@@ -86,27 +91,44 @@ export default function SmartImpactCard({ impact, className = "", compact = fals
         )}
       </div>
 
-      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", flexWrap: "wrap", gap: "10px", margin: "4px 0" }}>
-        <div
-          style={{
-            fontSize: compact ? "1.25rem" : "1.6rem",
-            fontWeight: 800,
-            color: isCritical ? (isDark ? "#f87171" : "#dc2626") : (isDark ? "#38bdf8" : "#0284c7"),
-            letterSpacing: "-0.02em",
-          }}
-        >
-          {impact.formatted_amount || (impact.amount != null ? `${impact.unit || "$"}${Number(impact.amount).toLocaleString()}` : "—")}
-        </div>
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", flexWrap: "wrap", gap: "10px", margin: "4px 0", maxWidth: "100%", overflow: "hidden" }}>
+        {(() => {
+          const amountStr = impact.formatted_amount || (impact.amount != null ? `${impact.unit || "$"}${Number(impact.amount).toLocaleString()}` : "—");
+          const len = amountStr.length;
+          const fontSize = compact
+            ? (len > 24 ? "0.95rem" : len > 16 ? "1.05rem" : "1.2rem")
+            : (len > 28 ? "1.05rem" : len > 20 ? "1.2rem" : len > 14 ? "1.35rem" : "1.55rem");
+
+          return (
+            <div
+              style={{
+                fontSize,
+                fontWeight: 800,
+                color: isCritical ? (isDark ? "#f87171" : "#dc2626") : (isDark ? "#38bdf8" : "#0284c7"),
+                letterSpacing: "-0.02em",
+                wordBreak: "break-word",
+                overflowWrap: "anywhere",
+                lineHeight: 1.25,
+                maxWidth: "100%"
+              }}
+            >
+              {amountStr}
+            </div>
+          );
+        })()}
       </div>
 
       {impact.headline && (
         <p
           style={{
             margin: "4px 0 6px 0",
-            fontSize: compact ? "12px" : "13.5px",
+            fontSize: compact ? "11.5px" : "12.5px",
             lineHeight: 1.45,
-            color: isDark ? "#e2e8f0" : "#1e293b",
+            color: isDark ? "#cbd5e1" : "#334155",
             fontWeight: 500,
+            wordBreak: "break-word",
+            overflowWrap: "anywhere",
+            maxWidth: "100%"
           }}
         >
           {impact.headline}

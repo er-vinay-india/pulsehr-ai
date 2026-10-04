@@ -63,6 +63,27 @@ class FactVisualizer:
         return ""
 
     @classmethod
+    def _humanize_name(cls, name: str | None, max_len: int = 34) -> str:
+        """Sanitizes raw column names and synthetic feature tokens into clean human business labels."""
+        if not name:
+            return ""
+        s = str(name).strip()
+        for prefix in [
+            "interact_mean_", "interact_ratio_", "interact_sum_", "interact_count_", "interact_",
+            "mean_", "sum_", "ratio_", "log_", "std_", "diff_"
+        ]:
+            if s.lower().startswith(prefix):
+                s = s[len(prefix):]
+        if "_by_" in s:
+            s = s.split("_by_")[0]
+        if "_vs_" in s:
+            s = s.split("_vs_")[0]
+        clean = s.replace("_", " ").strip().title()
+        if len(clean) > max_len:
+            clean = clean[:max_len - 1].rstrip() + "…"
+        return clean
+
+    @classmethod
     def recommend_chart(
         cls,
         fact: CandidateFact,
@@ -210,14 +231,20 @@ class FactVisualizer:
                 line_style="dashed"
             ))
 
+        name_m = cls._humanize_name(fact.metric)
+        dim_label = cls._humanize_name(dim_col) or 'Segment'
+        title = f"{name_m} by {dim_label}"
+        if len(title) > 48:
+            title = title[:46].rstrip() + "…"
+
         return VisualChartSpec(
             chart_id=f"{chart_id_prefix}-{fact.fact_id}",
             chart_type=chart_type,
-            title=f"{fact.metric.replace('_', ' ').title()} by {dim_col.replace('_', ' ').title() if dim_col else 'Segment'}",
+            title=title,
             subtitle=f"Comparative variance across {len(categories)} operating segments",
             unit=unit,
             categories=categories,
-            series=[ChartSeries(name=fact.metric.replace('_', ' ').title(), values=values)],
+            series=[ChartSeries(name=name_m, values=values)],
             reference_lines=ref_lines,
             supporting_fact_id=fact.fact_id,
             metric_col=fact.metric,
@@ -266,10 +293,15 @@ class FactVisualizer:
             values = [round(top_share, 1), round(other_share, 1)]
             unit = "%"
 
+        name_m = cls._humanize_name(fact.metric)
+        title = f"{name_m} Concentration Breakdown"
+        if len(title) > 48:
+            title = title[:46].rstrip() + "…"
+
         return VisualChartSpec(
             chart_id=f"{chart_id_prefix}-{fact.fact_id}",
             chart_type="donut",
-            title=f"{fact.metric.replace('_', ' ').title()} Concentration Breakdown",
+            title=title,
             subtitle=f"Distribution share of leading {entity_col.replace('_', ' ')} contributors",
             unit=unit,
             categories=categories,
@@ -319,16 +351,22 @@ class FactVisualizer:
 
         points = [{"x": a, "y": b} for a, b in zip(series_a_vals, series_b_vals)]
 
+        name_a = cls._humanize_name(fact.metric)
+        name_b = cls._humanize_name(sec_metric)
+        title = f"{name_a} vs {name_b}"
+        if len(title) > 48:
+            title = title[:46].rstrip() + "…"
+
         return VisualChartSpec(
             chart_id=f"{chart_id_prefix}-{fact.fact_id}",
             chart_type="scatter",
-            title=f"{fact.metric.replace('_', ' ').title()} vs {sec_metric.replace('_', ' ').title()}",
+            title=title,
             subtitle=f"Scatter distribution demonstrating empirical correlation",
             unit=unit_a,
             categories=categories,
             series=[
-                ChartSeries(name=fact.metric.replace('_', ' ').title(), values=series_a_vals),
-                ChartSeries(name=sec_metric.replace('_', ' ').title(), values=series_b_vals)
+                ChartSeries(name=name_a, values=series_a_vals),
+                ChartSeries(name=name_b, values=series_b_vals)
             ],
             reference_lines=[],
             supporting_fact_id=fact.fact_id,

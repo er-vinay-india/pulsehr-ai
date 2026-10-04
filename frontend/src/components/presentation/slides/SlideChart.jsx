@@ -280,41 +280,104 @@ export default function SlideChart({ chart, chartData, theme, hideImpactCard = f
     return <p style={{ color: theme.muted_text || '#64748b', padding: 12 }}>No chart data available.</p>;
   }
 
+  const cleanTitle = (chartLabel || "").length > 42 ? (chartLabel.slice(0, 40) + "…") : chartLabel;
+  const hasSubtitle = Boolean(actualChart.subtitle);
+  const cleanSubtitle = hasSubtitle ? (actualChart.subtitle.length > 46 ? actualChart.subtitle.slice(0, 44) + "…" : actualChart.subtitle) : undefined;
+
+  const titleConfig = {
+    text: cleanTitle,
+    subtext: cleanSubtitle,
+    left: 'center',
+    top: 4,
+    textStyle: {
+      fontSize: 13,
+      fontWeight: 600,
+      color: isDark ? '#f8fafc' : '#0f172a',
+      width: 280,
+      overflow: 'truncate',
+      ellipsis: '…'
+    },
+    subtextStyle: {
+      fontSize: 10.5,
+      color: isDark ? '#94a3b8' : '#64748b',
+      width: 280,
+      overflow: 'truncate',
+      ellipsis: '…'
+    }
+  };
+
   const pie = ['pie', 'donut'].includes(type);
   const option = pie ? {
-    title: { text: chartLabel, left: 'center', top: 4, textStyle: { fontSize: 15, color: isDark ? '#f8fafc' : '#0f172a' } },
+    title: titleConfig,
     legend: { show: false },
     tooltip: { trigger: 'item', confine: true, formatter: '{b}: {c} ({d}%)' },
     series: [{
-      type: 'pie', name: actualChart.series[0].name || '',
-      radius: type === 'donut' ? ['35%', '58%'] : '58%', center: ['50%', '54%'],
-      label: { show: true, fontSize: 11, formatter: '{b}\n{c} ({d}%)' },
-      labelLine: { show: true }, itemStyle: { borderWidth: 2 },
-      data: actualChart.categories.map((label, i) => ({ name: String(label), value: actualChart.series[0].values?.[i] ?? actualChart.series[0].data?.[i] }))
+      type: 'pie',
+      name: actualChart.series[0].name || '',
+      radius: type === 'donut' ? ['38%', '60%'] : '60%',
+      center: ['50%', cleanSubtitle ? '58%' : '54%'],
+      avoidLabelOverlap: true,
+      label: {
+        show: true,
+        fontSize: 10,
+        color: isDark ? '#e2e8f0' : '#1e293b',
+        formatter: p => `${p.name && p.name.length > 14 ? p.name.slice(0, 12) + '…' : p.name}\n${p.percent}%`
+      },
+      labelLine: { show: true, length: 8, length2: 8 },
+      itemStyle: { borderWidth: 2, borderColor: isDark ? '#08111f' : '#ffffff' },
+      data: actualChart.categories.map((label, i) => ({
+        name: String(label),
+        value: actualChart.series[0].values?.[i] ?? actualChart.series[0].data?.[i]
+      }))
     }],
   } : cartesian(actualChart.categories,
     actualChart.series.map(s => ({
-      name: s.name, type: type === 'line' ? 'line' : 'bar',
+      name: s.name && s.name.length > 20 ? s.name.slice(0, 18) + '…' : s.name,
+      type: type === 'line' ? 'line' : 'bar',
       data: actualChart.categories.map((_, i) => numeric(s.values?.[i] ?? s.data?.[i])),
-      label: { show: true, fontSize: 11, position: ['bar', 'horizontal_bar'].includes(type) ? 'right' : 'top', formatter: p => format(p.value) }
+      label: { show: true, fontSize: 10, position: ['bar', 'horizontal_bar'].includes(type) ? 'right' : 'top', formatter: p => format(p.value) }
     })),
     ['bar', 'horizontal_bar'].includes(type), actualChart.unit, isDark);
 
   if (!pie) {
-    option.title = { text: chartLabel, left: 'center', top: 4, textStyle: { fontSize: 15, color: isDark ? '#f8fafc' : '#0f172a' } };
-    option.legend = { ...option.legend, show: actualChart.series.length > 1, top: 26 };
+    option.title = titleConfig;
+    const hasLegend = actualChart.series.length > 1;
+    option.legend = {
+      ...option.legend,
+      show: hasLegend,
+      type: 'scroll',
+      top: cleanSubtitle ? 40 : 26,
+      formatter: name => (name && name.length > 18 ? name.slice(0, 16) + '…' : name),
+      textStyle: {
+        color: isDark ? '#cbd5e1' : '#475569',
+        fontSize: 10
+      }
+    };
     const dynamicMargins = calculateMargins({
       categories: actualChart.categories,
       isVertical: !['bar', 'horizontal_bar'].includes(type),
-      hasLegend: actualChart.series.length > 1
+      hasLegend
     });
+    const gridTop = hasLegend ? (cleanSubtitle ? 68 : 54) : (cleanSubtitle ? 50 : 38);
     option.grid = {
       ...dynamicMargins,
-      top: actualChart.series.length > 1 ? 58 : 42
+      top: gridTop,
+      containLabel: true
     };
     for (const name of ['xAxis', 'yAxis']) {
       const axis = option[name];
-      if (axis && !Array.isArray(axis)) axis.axisLabel = { ...axis.axisLabel, fontSize: 11, ...(axis.type === 'value' ? { formatter: format } : {}) };
+      if (axis && !Array.isArray(axis)) {
+        axis.axisLabel = {
+          ...axis.axisLabel,
+          fontSize: 10,
+          hideOverlap: true,
+          ...(axis.type === 'value' ? { formatter: format } : {
+            width: 75,
+            overflow: 'truncate',
+            ellipsis: '…'
+          })
+        };
+      }
     }
   }
 
@@ -322,10 +385,10 @@ export default function SlideChart({ chart, chartData, theme, hideImpactCard = f
     <div
       role="img"
       aria-label={`${chartLabel} (${type} chart)`}
-      style={{ width: '100%', minWidth: 0, height: '100%', minHeight: '230px' }}
+      style={{ width: '100%', minWidth: 0, height: '100%', minHeight: '260px' }}
     >
       {!hideImpactCard && actualChart.impact_card && <SmartImpactCard impact={actualChart.impact_card} compact />}
-      <SafeReactECharts presentationTheme={theme} option={option} style={{ height: '230px', width: '100%' }} />
+      <SafeReactECharts presentationTheme={theme} option={option} style={{ height: '260px', width: '100%' }} />
       {actualChart.aggregation_disclosure && (
         <p className="chart-aggregation-note" style={{ fontSize: '11px', marginTop: '4px', color: theme.muted_text || '#64748b' }}>
           {actualChart.aggregation_disclosure}

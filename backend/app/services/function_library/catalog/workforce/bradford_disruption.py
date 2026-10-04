@@ -110,7 +110,23 @@ class BradfordDisruptionFunction(BaseAnalyticalFunction):
         segment_name = ""
         dims = getattr(fact, "dimensions", {}) or {}
         if dims:
-            segment_name = " in " + ", ".join(f"{k}='{v}'" for k, v in dims.items())
+            clean_parts = []
+            for k, v in dims.items():
+                if k in ("rank", "tier"):
+                    continue
+                v_str = str(v)
+                for prefix in ("interact_mean_", "interact_ratio_", "interact_sum_", "interact_"):
+                    if v_str.startswith(prefix):
+                        v_str = v_str[len(prefix):]
+                if "_by_" in v_str:
+                    v_str = v_str.split("_by_")[0]
+                if "_vs_" in v_str:
+                    v_str = v_str.split("_vs_")[0]
+                v_clean = v_str.replace("_", " ").strip().title()[:24]
+                k_clean = str(k).replace("measure_x", "Cohort").replace("measure_y", "Comparison").replace("_", " ").title()
+                clean_parts.append(f"{k_clean}='{v_clean}'")
+            if clean_parts:
+                segment_name = " in " + ", ".join(clean_parts)
 
         formatted_impact = f"{lost_hours:,.0f} Lost Hours (~${replacement_cost:,.0f} Cost)"
         layman_takeaway = (
