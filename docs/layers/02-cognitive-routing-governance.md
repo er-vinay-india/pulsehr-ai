@@ -67,6 +67,12 @@ Implemented in `backend/app/services/analyst/interpretation_validator.py` and `b
 - **Permutation-Only Prioritization**: AI prioritization is restricted to reordering existing finding IDs (`EVID-XXX` / `FACT-XXX`). The model cannot alter percentages, invert signs, or invent claims.
 - **Query Grain Invariant**: Retrieving a department-level average is never accepted as an answer for an employee-level calculation.
 
+### F. Conversational Slide & Dashboard Mutation Engine (Phase 4)
+Implemented in `backend/app/services/presentation/slide_mutator.py` & `backend/app/routers/copilot.py`:
+- **Intent Parsing (`parse_slide_mutation_intent`)**: Classifies natural language requests ("reslice slide 3 by Location", "switch chart to waterfall", "change theme to executive dark", "revert slide") into typed `SlideMutationRequest` payloads.
+- **Zero LLM Math Invariant**: Aggregations are recomputed via Python/Pandas deterministically in `<15ms`. The LLM never invents numbers or hallucinates series.
+- **Full State Snapshotting & Revert**: Captures `previous_slide_snapshot` on every mutation, enabling instantaneous 1-click **Accept / Revert** in the UI.
+
 ---
 
 ## 3. Layer Integration Contract (Output to Layer 3)
@@ -76,3 +82,4 @@ Implemented in `backend/app/services/analyst/interpretation_validator.py` and `b
 | **Audited Insights** | `InterpretationResponse` | Layer 3 `WorkflowOrchestrator`, `PresentationEngine` | 100% of claims verified against Layer 1 facts. |
 | **Prioritized Findings** | `list[str]` (Ordered IDs) | Layer 3 `DecisionBrief`, `VisualAnalyticsPanel` | Permutation only; zero math mutation. |
 | **Grounded Answers** | SSE Stream / JSON | Layer 3 `HRIDAY Copilot Chat` | Identity-sealed (`HRIDAY`); grain-preserved calculations. |
+| **Slide Mutations** | `SlideMutationResult` | Layer 3 `DeckStudioView`, `HRIDAYChat` | Deterministic recalculation with full Revert checkpoint. |

@@ -1,5 +1,5 @@
 import { useSlideLayout } from './slides/ResolvedSlideContent.jsx';
-import { exportPresentationPdf } from '../../api/client.js';
+import { exportPresentationPdf, mutatePresentationSlide } from '../../api/client.js';
 import DeckControl from './DeckControl.jsx';
 import Select from '../common/Select.jsx';
 import React, { useState } from "react";
@@ -36,11 +36,12 @@ import AcousticOrbPresenter from "./AcousticOrbPresenter.jsx";
 import AnimatedAcousticOrb from "./AnimatedAcousticOrb.jsx";
 
 const SUGGESTION_PROMPTS = [
+  "Switch chart to variance waterfall",
+  "Convert chart to breakdown tree",
+  "Group by Location instead of Department",
   "Highlight disparity spread & cost risk",
   "Condense to 2 high-impact takeaways",
-  "Make tone more decisive for Board",
-  "Rephrase for CFO & Executive Committee",
-  "Emphasize Simpson's Paradox guardrail",
+  "Change theme to executive dark",
 ];
 
 export default function DeckStudioView({
@@ -80,8 +81,31 @@ export default function DeckStudioView({
   const [curationError, setCurationError] = useState("");
   const [previousSlideSnapshot, setPreviousSlideSnapshot] = useState(null);
   const [showApprovalBanner, setShowApprovalBanner] = useState(false);
+  const [mutationSummary, setMutationSummary] = useState("");
   const notesPanelRef = React.useRef(null);
   const shouldRevealNotes = React.useRef(false);
+
+  // Listen for real-time conversational mutations dispatched from Hriday Chat
+  React.useEffect(() => {
+    const handleDeckMutated = (event) => {
+      const mut = event.detail;
+      if (!mut || !mut.updated_deck_spec) return;
+      if (mut.previous_slide_snapshot) {
+        setPreviousSlideSnapshot(mut.previous_slide_snapshot);
+      }
+      if (mut.slide_index !== undefined && mut.slide_index !== null) {
+        setActiveSlideIndex(mut.slide_index);
+      }
+      setMutationSummary(mut.diff_summary || "HRIDAY applied slide mutation.");
+      setShowApprovalBanner(true);
+      const newSlide = mut.updated_deck_spec.slides[mut.slide_index];
+      if (newSlide) {
+        onUpdateSlide(mut.slide_index, newSlide);
+      }
+    };
+    window.addEventListener("presentation:deck-mutated", handleDeckMutated);
+    return () => window.removeEventListener("presentation:deck-mutated", handleDeckMutated);
+  }, [setActiveSlideIndex, onUpdateSlide]);
 
   React.useEffect(() => {
     if (window.matchMedia("(max-width: 768px)").matches) setSpeakerNotesOpen(false);
@@ -98,19 +122,65 @@ export default function DeckStudioView({
   const currentSlide = deckSpec.slides[activeSlideIndex] || deckSpec.slides[0];
   const { plan: currentLayout } = useSlideLayout(currentSlide);
 
-  // Handle Copilot Slide Curation
+  // Handle Copilot Slide Curation & Deterministic Mutations
   const handleApplyCopilotCuration = async (promptText) => {
     const prompt = (promptText || curatePrompt).trim();
     if (!prompt || !currentSlide || isBusy || isCurating) return;
 
     setIsCurating(true);
-    // Snapshot current state for Revert capability
     setPreviousSlideSnapshot(JSON.parse(JSON.stringify(currentSlide)));
 
     try {
       setCurationError("");
+      const pLow = prompt.toLowerCase();
+
+      // Check if prompt is a deterministic mutation
+      let mutationAction = null;
+      let mutationParams = {};
+
+      if (pLow.includes("waterfall")) {
+        mutationAction = "retype_chart";
+        mutationParams = { chart_type: "waterfall" };
+      } else if (pLow.includes("breakdown tree") || pLow.includes("tree")) {
+        mutationAction = "retype_chart";
+        mutationParams = { chart_type: "breakdown_tree" };
+      } else if (pLow.includes("donut") || pLow.includes("pie")) {
+        mutationAction = "retype_chart";
+        mutationParams = { chart_type: "donut" };
+      } else if (pLow.includes("theme")) {
+        mutationAction = "change_theme";
+        mutationParams = { theme_id: pLow.includes("dark") ? "executive_dark" : "corporate_navy" };
+      } else if (pLow.includes("group by") || pLow.includes("slice by") || pLow.includes("by location")) {
+        mutationAction = "reslice_slide";
+        const dimMatch = prompt.match(/(?:group\s+by|slice\s+by|by)\s+([A-Za-z0-9_\s]+?)(?:\s+instead|\s*$|\.)/i);
+        const dim = dimMatch ? dimMatch[1].trim() : "Location";
+        mutationParams = { dimension_col: dim };
+      }
+
+      if (mutationAction) {
+        const mutRes = await mutatePresentationSlide({
+          deckSpec,
+          action: mutationAction,
+          params: mutationParams,
+          slideIndex: activeSlideIndex,
+          slideId: currentSlide.id,
+          deckId: deckSpec.id,
+          prompt
+        });
+        if (mutRes?.success) {
+          const updatedSlide = mutRes.updated_deck_spec.slides[activeSlideIndex];
+          if (updatedSlide) onUpdateSlide(activeSlideIndex, updatedSlide);
+          setMutationSummary(mutRes.diff_summary);
+          setShowApprovalBanner(true);
+          setCuratePrompt("");
+          return;
+        }
+      }
+
+      // Fallback to text narrative refinement
       const result = await onRefineSlide(prompt);
       if (!result) { setCurationError("HRIDAY could not refine this slide. Your content is unchanged. Please try again."); return; }
+      setMutationSummary("Slide narrative refined based on executive instructions.");
       setShowApprovalBanner(true);
       setCuratePrompt("");
     } catch (err) {
@@ -123,6 +193,7 @@ export default function DeckStudioView({
   const handleAcceptChanges = () => {
     setShowApprovalBanner(false);
     setPreviousSlideSnapshot(null);
+    setMutationSummary("");
   };
 
   const handleRevertChanges = () => {
@@ -130,6 +201,7 @@ export default function DeckStudioView({
       onUpdateSlide(activeSlideIndex, previousSlideSnapshot);
       setShowApprovalBanner(false);
       setPreviousSlideSnapshot(null);
+      setMutationSummary("");
     }
   };
 
@@ -484,7 +556,7 @@ export default function DeckStudioView({
             <div className="pres-approval-banner">
               <div className="banner-left">
                 <Sparkles size={14} className="sparkle-anim" />
-                <span>HRIDAY refined this slide. Review the adjustments:</span>
+                <span>{mutationSummary || "HRIDAY refined this slide. Review the adjustments:"}</span>
               </div>
               <div className="banner-actions">
                 <button type="button" className="btn-approve" onClick={handleAcceptChanges}>

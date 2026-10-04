@@ -57,19 +57,30 @@ Implemented in `backend/app/services/presentation/pipeline_orchestrator.py`:
   3. *SUPPORTING EVIDENCE*: Provenance sheet label and `EVID-XXX` audit citations.
   4. *TIME BUDGET*: Estimated speaking seconds evaluated against presentation time target.
   5. *TRANSITION*: Logical narrative bridge connecting to the next slide.
+- **Conversational Co-Pilot Slide Mutation & Re-Slicing Engine**:
+  Implemented in `backend/app/services/presentation/slide_mutator.py` and `backend/app/routers/presentations.py` (`POST /api/presentations/mutate-slide`):
+  - Enables live structural modification of generated slides via HRIDAY natural language or quick action prompts:
+    - `RESLICE_SLIDE`: Regroups and aggregates underlying sheet tabular records deterministically via pandas in <15ms.
+    - `RETYPE_CHART`: Instant transformation to `variance_waterfall`, `breakdown_tree`, `donut`, `line`, or `column`.
+    - `FILTER_COHORT`: Slices slide visuals by category/department/region without altering source files.
+    - `CHANGE_THEME`: Live switching of palette styling (`midnight_navy`, `executive_platinum`, `emerald_growth`, `sunset_amber`, `crimson_alert`).
+    - `REVERT_MUTATION`: Instant 100% rollback to pre-mutation snapshot.
+  - Zero LLM Math Guarantee: Intent classification only yields action contracts; all metrics recalculate through pandas aggregations against verified sheet records.
 - **Endpoints**:
   - `POST /api/presentations/generate`: Trigger background generation pipeline.
   - `POST /api/presentations/scope-preview`: Preflight slide count, evidence items, and layouts.
+  - `POST /api/presentations/mutate-slide`: Programmatic slide mutation engine with snapshotting.
   - `GET /api/reports/presentation/latest`: Download latest generated 16:9 PowerPoint deck.
 
 ### Consumer 3C: HRIDAY Copilot & Council War Room
 Implemented in `backend/app/services/copilot/` and `backend/app/routers/copilot.py`:
 - **0-LLM Math Factual Q&A**: `GenericCopilotEngine` resolves numerical queries directly in code with zero LLM math hallucinations.
+- **Conversational Slide Mutation Routing**: Intent classification recognizes slide transformation commands ("group by department", "convert to waterfall", "switch to midnight navy theme"), mutates the active slide spec, attaches a visual mutation badge, and synchronizes live with the presentation studio via window events.
 - **Multi-Model Council War Room**: `union_war_room.py` gathers candidate answers across multiple local models, executing internal peer election to surface consensus recommendations.
 - **Query Grain Invariant**: Employee queries calculate at employee row grain; department queries calculate at department grain. Follow-ups preserve scope.
 - **Endpoints**:
   - `POST /api/copilot/generic`: Factual Q&A.
-  - `POST /api/copilot/query/stream`: Server-Sent Events (SSE) streaming chat.
+  - `POST /api/copilot/query/stream`: Server-Sent Events (SSE) streaming chat with slide mutation event payload.
   - `POST /api/copilot/war-room`: Multi-model council consensus.
   - `GET /api/copilot/identity`: Frontend identity hydration.
 

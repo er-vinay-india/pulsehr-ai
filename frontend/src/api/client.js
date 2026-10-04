@@ -559,6 +559,27 @@ export async function regenerateSlide(deckSpec, slideId, prompt) {
   return res.json();
 }
 
+export async function mutatePresentationSlide({ deckSpec, action, params = {}, slideIndex = null, slideId = null, deckId = null, prompt = null }) {
+  const res = await fetch(`${API_BASE}/presentations/mutate-slide`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      deck_spec: deckSpec,
+      action,
+      params,
+      slide_index: slideIndex,
+      slide_id: slideId,
+      deck_id: deckId,
+      prompt
+    })
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Failed to mutate slide");
+  }
+  return res.json();
+}
+
 export async function exportPresentationPptx(deckSpec) {
   return exportPresentationFile(deckSpec, 'pptx');
 }

@@ -25,6 +25,13 @@ from ..services.presentation_service import (
 from ..services.presentation.pipeline_orchestrator import recover_presentation_jobs
 from ..services.report_generator import export_spec_to_pptx
 
+from ..services.presentation.slide_mutator import (
+    SlideMutator,
+    SlideMutationRequest,
+    SlideMutationResult,
+    SlideMutationAction,
+)
+
 logger = logging.getLogger(__name__)
 
 from ..services.presentation.image_provider import search_free_images
@@ -500,6 +507,36 @@ def handle_regenerate_slide(req: RegenerateSlideRequest):
     except Exception as exc:
         logger.error(f"Slide regeneration error: {exc}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.post("/mutate-slide", response_model=SlideMutationResult)
+def handle_mutate_slide(req: SlideMutationRequest):
+    """Deterministically mutates a presentation slide (reslice, retype chart, filter, change theme)."""
+    res = SlideMutator.mutate_slide(
+        deck_spec=req.deck_spec,
+        action=req.action,
+        params=req.params,
+        slide_index=req.slide_index,
+        slide_id=req.slide_id,
+        prompt=req.prompt
+    )
+    if not res.success:
+        raise HTTPException(status_code=400, detail=res.error or res.diff_summary)
+
+    # Persist updated deck if persisted deck_id is provided
+    if req.deck_id:
+        try:
+            conn = get_connection()
+            conn.execute(
+                "UPDATE presentation_decks SET spec_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                (json.dumps(res.updated_deck_spec), req.deck_id)
+            )
+            conn.commit()
+            conn.close()
+        except Exception as exc:
+            logger.warning(f"Could not persist mutated deck {req.deck_id}: {exc}")
+
+    return res
 
 
 @router.post("/export-pptx")

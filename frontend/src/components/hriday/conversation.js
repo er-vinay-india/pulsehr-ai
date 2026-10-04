@@ -94,11 +94,15 @@ export class HRIDAYConversation {
           request.terminal = true;
           this.request = null;
           const visualCharts = data.visual_charts || (data.visual_chart ? [data.visual_chart] : (data.chart ? [data.chart] : []));
+          if (data.mutation?.updated_deck_spec && typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('presentation:deck-mutated', { detail: data.mutation }));
+          }
           this.updateMessage(id, {
             content,
             phase: content ? 'complete' : 'error',
             artifacts: data.artifacts || [],
             visual_charts: visualCharts,
+            mutation: data.mutation || null,
           }, { loading: false, activity: null, announcement: content ? `${this.state.identity.name}’s response is ready.` : `${this.state.identity.name} couldn’t finish. Your question is saved.` });
         },
         onError: finishError,

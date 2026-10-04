@@ -1,5 +1,5 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { ArrowUp, ArrowDown, Square, SquarePen, X, Maximize2, Minimize2, Copy, ThumbsUp, ThumbsDown, RefreshCw, Download } from 'lucide-react';
+import { ArrowUp, ArrowDown, Square, SquarePen, X, Maximize2, Minimize2, Copy, ThumbsUp, ThumbsDown, RefreshCw, Download, Sparkles } from 'lucide-react';
 import AnimatedAcousticOrb from '../presentation/AnimatedAcousticOrb.jsx';
 import MarkdownView from '../MarkdownView.jsx';
 import { useHRIDAY } from './HRIDAYProvider.jsx';
@@ -69,6 +69,27 @@ export default function HRIDAYChat({ scope = {}, onClose, expanded = false, onEx
         <div className="hriday-message-author">{message.role === 'user' ? 'You' : identity.name}</div>
         {message.role === 'user' ? <div className="hriday-user-bubble">{message.content}</div> : <>
           {message.content && <MarkdownView content={message.content} className="hriday-answer" />}
+          {message.mutation && (
+            <div
+              className="hriday-chat-mutation-badge"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '8px 12px',
+                borderRadius: '8px',
+                background: 'rgba(255, 138, 98, 0.12)',
+                border: '1px solid rgba(255, 138, 98, 0.35)',
+                marginTop: '8px',
+                marginBottom: '8px',
+                fontSize: '12.5px',
+                color: '#f8fafc'
+              }}
+            >
+              <Sparkles size={14} style={{ color: '#ff8a62', flexShrink: 0 }} />
+              <span><strong>Slide #{message.mutation.slide_index + 1} Mutated:</strong> {message.mutation.diff_summary}</span>
+            </div>
+          )}
           {message.visual_charts && message.visual_charts.length > 0 && (
             <div className="hriday-chat-visuals" style={{ marginTop: '10px', marginBottom: '10px' }}>
               {message.visual_charts.map((vc, vIdx) => (
