@@ -30,6 +30,7 @@ from .contracts import (
     SemanticContract,
     SourceManifest,
 )
+from ..display_formatters import format_display_label
 
 logger = logging.getLogger(__name__)
 
@@ -202,6 +203,10 @@ def is_eligible_numeric_measure(col_name: str, values: list[Any], contract: Sema
         if c_lower not in ("paid", "valid", "credit"):
             return False
 
+    # Disallow synthetic interaction columns and complex derived expressions from triggering executive exceptions
+    if c_lower.startswith(("interact_", "interact ", "mean_", "sum_", "ratio_", "log_", "std_", "diff_", "pct_")) or "_over_" in c_lower or "_by_" in c_lower or " + " in c_lower or " / " in c_lower:
+        return False
+
     # Disallow unresolved derived metrics from triggering exceptions
     if any(unresolved in c_lower for unresolved in ("final attendance", "net attendance", "adjusted attendance")):
         return False
@@ -359,7 +364,7 @@ def discover_segment_exception_candidates(
                     exception_type="segment",
                     subject_type=cat_col,
                     subject_label=seg,
-                    metric_name=num_col,
+                    metric_name=format_display_label(num_col),
                     unit=unit,
                     observed_value=round(val, 2),
                     formatted_observed_value=fmt_val,
@@ -491,7 +496,13 @@ def discover_temporal_exception_candidates(
         if stats["mad"] <= 1e-9 and stats["iqr"] <= 1e-9:
             continue
 
-        unit = "$" if any(tok in num_col.lower() for tok in ("sales", "revenue", "$")) else ""
+        unit = ""
+        if any(tok in num_col.lower() for tok in ("rate", "reliability", "pct", "%")):
+            unit = "%"
+        elif any(tok in num_col.lower() for tok in ("sales", "revenue", "profit", "amount", "$")):
+            unit = "$"
+        elif any(tok in num_col.lower() for tok in ("days", "attendance", "leaves", "hours", "hrs")):
+            unit = "days" if "hour" not in num_col.lower() and "hr" not in num_col.lower() else "hours"
 
         for idx, p in enumerate(period_keys):
             val = p_means[idx]
@@ -519,7 +530,7 @@ def discover_temporal_exception_candidates(
                 exception_type="temporal",
                 subject_type="Period",
                 subject_label=format_human_date(p),
-                metric_name=num_col,
+                metric_name=format_display_label(num_col),
                 unit=unit,
                 observed_value=round(val, 2),
                 formatted_observed_value=fmt_val,
@@ -763,7 +774,7 @@ def build_exception_watch_element(
     )
 
     headline = (
-        f"Unusual {lead_item.metric_name.lower()} in {lead_item.subject_label}"
+        f"Unusual {lead_item.metric_name} in {lead_item.subject_label}"
         if lead_item.exception_type == "segment"
         else f"Unusual period: {lead_item.subject_label}"
     )

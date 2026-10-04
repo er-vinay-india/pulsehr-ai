@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { Info, ArrowRight, ShieldCheck, AlertCircle } from "lucide-react";
 import SafeReactECharts from "../charts/SafeReactECharts";
+import { sanitizeTitle, sanitizeText } from "../guard";
 
 /**
  * Intelligent compact number formatter for metrics, ticks, tooltips, and data tables.
@@ -136,14 +137,14 @@ export default function ExceptionWatchCard({
     }
   };
 
-  // Humanize title if it contains raw ISO period
+  // Humanize title using SurfaceGuard invariants
   const displayTitle = useMemo(() => {
     if (!exception.title) return "Exception watch";
     if (exception.title.startsWith("Unusual period: ")) {
       const rawDate = exception.title.replace("Unusual period: ", "");
       return `Unusual period: ${formatHumanDate(rawDate)}`;
     }
-    return exception.title;
+    return sanitizeTitle(exception.title);
   }, [exception.title]);
 
   // Ensure human-readable observed value and expected range
@@ -169,10 +170,11 @@ export default function ExceptionWatchCard({
     return `${displayObservedValue} · ${displayExpectedRange} typical · ${lead.formatted_deviation}`;
   }, [exception.caption, displayObservedValue, displayExpectedRange, lead.formatted_deviation]);
 
-  // Humanize narrative dates
+  // Humanize narrative dates & clean raw tokens
   const displayWhyInspect = useMemo(() => {
     if (!exception.why_inspect) return "";
-    return exception.why_inspect.replace(/\b(\d{4}-\d{2}-\d{2})\b/g, (match) => formatHumanDate(match));
+    const cleanNarrative = sanitizeText(exception.why_inspect);
+    return cleanNarrative.replace(/\b(\d{4}-\d{2}-\d{2})\b/g, (match) => formatHumanDate(match));
   }, [exception.why_inspect]);
 
   // Build ECharts option based on visual kind

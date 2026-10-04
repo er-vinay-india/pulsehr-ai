@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 
 from .models import EnrichmentColumnProfile, SemanticRole
+from ..display_formatters import format_display_label
 
 # Unit Regex Patterns
 DISTANCE_PATTERN = re.compile(r'^\s*([+-]?(?:\d+(?:\.\d*)?|\.\d+))\s*(km|kilometers?|m|meters?|cm|mm|miles?|mi|ft|feet|yards?|yd)\s*$', re.IGNORECASE)
@@ -298,10 +299,19 @@ class EnrichmentProfiler:
             semantic_type = "categorical"
 
         probable_role = roles[0].value if roles else "DIMENSION"
+        is_syn = bool(
+            col_name.lower().startswith(('interact_', 'mean_', 'ratio_', 'log_', 'std_', 'diff_', 'pct_'))
+            or '_over_' in col_name.lower()
+            or '_by_' in col_name.lower()
+            or '+' in col_name
+            or '/' in col_name
+        )
 
         return EnrichmentColumnProfile(
             column=col_name,
             original_name=col_name,
+            display_name=format_display_label(col_name),
+            is_synthetic=is_syn,
             physical_type=physical_type,
             semantic_type=semantic_type,
             roles=roles,

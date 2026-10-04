@@ -15,6 +15,7 @@ import SlideChart from "../components/presentation/slides/SlideChart";
 import "../styles/adaptive-dashboard.scss";
 import { useTheme } from "../context/ThemeContext";
 import { getThemeTokens } from "../theme/tokens";
+import { SurfaceGuard } from "../components/guard";
 
 async function fetchJson(url, options = {}) {
   const res = await fetch(url, options);
@@ -1435,7 +1436,8 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
       )}
 
       {/* Primary & Secondary Elements Container */}
-      <section className="adaptive-content-container" aria-label="Dashboard Content">
+      <SurfaceGuard surface="dashboard">
+        <section className="adaptive-content-container" aria-label="Dashboard Content">
         {/* State A: Calculating Placeholder */}
         {calculating && (
           <div className="adaptive-tile-calculating" role="status" aria-live="polite">
@@ -2424,7 +2426,8 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
             )}
           </div>
         )}
-      </section>
+        </section>
+      </SurfaceGuard>
 
       {/* Layer 3: Inspect Modal Details Dialog / Sheet */}
       {inspectModalOpen && activeInspect && (

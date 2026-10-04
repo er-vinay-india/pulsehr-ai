@@ -44,6 +44,8 @@ class EnrichmentColumnProfile(BaseModel):
     frequent_values: list[dict[str, Any]] = Field(default_factory=list)
     pattern: str | None = None          # regex pattern or structure label
     detected_unit: str | None = None    # km, $, %, kg, hours, m2, etc.
+    display_name: str | None = None     # Humanized, sentence-cased display label
+    is_synthetic: bool = False          # True if derived via feature engineering
     probable_semantic_role: str | None = None
     possible_domain: str | None = None  # physics, finance, transportation, hr, operations
     confidence: float = 1.0
@@ -90,6 +92,8 @@ class CandidateFeature(BaseModel):
 class DerivedFeature(BaseModel):
     """A generated, normalized, scientific, or interaction feature bounded by budget."""
     name: str
+    display_name: str | None = None
+    is_synthetic: bool = True
     source_columns: list[str]
     derivation_type: str  # primitive_date, primitive_measurement, scientific_formula, interaction_ratio, etc.
     expression: str

@@ -14,6 +14,7 @@ import pandas as pd
 
 from .config import BudgetGuard, EnrichmentConfig
 from .models import DerivedFeature, EnrichmentColumnProfile, SemanticRole
+from ..display_formatters import format_display_label
 
 logger = logging.getLogger(__name__)
 
@@ -65,9 +66,12 @@ class InteractionFeatureEngine:
                 if group_means.std() > 0:
                     enriched_df[feat_name] = np.round(group_means, 4)
                     budget_guard.record_derived_columns(1)
+                    disp_name = f"Mean {format_display_label(num_col)} by {format_display_label(cat_col)}"
                     interaction_features.append(
                         DerivedFeature(
                             name=feat_name,
+                            display_name=disp_name,
+                            is_synthetic=True,
                             source_columns=[num_col, cat_col],
                             derivation_type="interaction_group_mean",
                             expression=f"mean({num_col}) grouped_by {cat_col}",
@@ -101,9 +105,12 @@ class InteractionFeatureEngine:
                         if res.std() > 0:
                             enriched_df[ratio_name] = res
                             budget_guard.record_derived_columns(1)
+                            disp_name = f"Ratio of {format_display_label(c1)} to {format_display_label(c2)}"
                             interaction_features.append(
                                 DerivedFeature(
                                     name=ratio_name,
+                                    display_name=disp_name,
+                                    is_synthetic=True,
                                     source_columns=[c1, c2],
                                     derivation_type="interaction_ratio",
                                     expression=f"{c1} / {c2}",

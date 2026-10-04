@@ -13,7 +13,8 @@
     "pretest:theme": "node scripts/generate_theme_tokens.mjs",
     "test:theme": "node scripts/test_theme_contrast.mjs",
     "test:slides": "node scripts/test_slide_contrast.mjs",
-    "test:visual": "node scripts/test_visual_guard.mjs",
+    "test:surface": "node scripts/test_surface_guard.mjs",
+    "test:visual": "node scripts/test_visual_guard.mjs && node scripts/test_surface_guard.mjs",
     "pretest:slides": "node scripts/generate_slide_tokens.mjs"
   },
   "dependencies": {
