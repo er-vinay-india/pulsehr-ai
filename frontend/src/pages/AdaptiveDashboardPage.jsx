@@ -10,6 +10,8 @@ import PriorityInsightCard from "../components/adaptive/PriorityInsightCard";
 import AnalysisCoverageSection from "../components/adaptive/AnalysisCoverageSection";
 import InvestigationDrawer from "../components/InvestigationDrawer";
 import EmployeeDrawer from "../components/EmployeeDrawer";
+import SmartImpactCard from "../components/charts/SmartImpactCard";
+import SlideChart from "../components/presentation/slides/SlideChart";
 import "../styles/adaptive-dashboard.scss";
 import { useTheme } from "../context/ThemeContext";
 import { getThemeTokens } from "../theme/tokens";
@@ -418,6 +420,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
   const glance = element?.glance;
   const explain = element?.explain;
   const inspect = element?.inspect;
+  const executiveVisuals = data?.executive_visuals || [];
 
   const isHr = data?.contract?.domain === "hr" || data?.contract?.domain === "workforce_hr" || data?.contract?.analyst_persona?.toLowerCase().includes("hr");
   const isEducation = data?.contract?.domain === "education" || data?.contract?.domain === "education_academic" || data?.contract?.analyst_persona?.toLowerCase().includes("student") || data?.contract?.analyst_persona?.toLowerCase().includes("academic");
@@ -2088,6 +2091,54 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
         )}
       </SecondaryFindingsWrapper>
     )}
+
+        {/* Executive Business Impact & Visual Decomposition (Phase 3) */}
+        {!calculating && !calcError && executiveVisuals.length > 0 && (
+          <section className="executive-impact-visuals-section" aria-labelledby="executive-visuals-title" style={{ marginTop: "1.5rem", marginBottom: "1.5rem" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <div style={{ background: "rgba(14, 165, 233, 0.15)", color: "#0ea5e9", padding: "8px", borderRadius: "8px" }}>
+                  <Sparkles size={20} />
+                </div>
+                <div>
+                  <h2 id="executive-visuals-title" style={{ margin: 0, fontSize: "1.2rem", fontWeight: 700, color: "var(--fg-primary)" }}>
+                    Executive Business Impact & Decomposition Lenses
+                  </h2>
+                  <p style={{ margin: "2px 0 0 0", fontSize: "0.85rem", color: "var(--fg-muted)" }}>
+                    Verified scale ($ cost, capacity, headcount risk) with interactive breakdown trees and variance waterfalls
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Top Impact Metric Cards */}
+            {executiveVisuals.some(v => v.impact_card) && (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "12px", marginBottom: "16px" }}>
+                {executiveVisuals.filter(v => v.impact_card).map((v, idx) => (
+                  <SmartImpactCard key={`impact-${v.chart_id || idx}`} impact={v.impact_card} />
+                ))}
+              </div>
+            )}
+
+            {/* Interactive Breakdown Trees & Waterfall Lenses */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(460px, 1fr))", gap: "16px" }}>
+              {executiveVisuals.slice(0, 4).map((v, idx) => (
+                <div
+                  key={`lens-${v.chart_id || idx}`}
+                  style={{
+                    background: "var(--card-bg, rgba(30, 41, 59, 0.7))",
+                    border: "1px solid var(--border-color, rgba(255, 255, 255, 0.1))",
+                    borderRadius: "12px",
+                    padding: "16px",
+                    boxShadow: "0 4px 12px rgba(0, 0, 0, 0.05)"
+                  }}
+                >
+                  <SlideChart chart={v} theme={{ is_dark: isDark }} />
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* Layer 1: Element 7 — Executive Briefing with Voice Orb (Gate 7) */}
         {!calculating && !calcError && briefingElement && (

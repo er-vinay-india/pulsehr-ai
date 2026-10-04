@@ -73,19 +73,35 @@ class FactVisualizer:
         """Recommends and synthesizes the optimal chart for a CandidateFact."""
         ftype = (fact.fact_type or "").lower()
 
-        if ftype in ("period_trend", "trend"):
-            return cls._build_period_trend_chart(fact, df, profile, chart_id_prefix)
+        spec = None
+        if ftype in ("multi_factor_segment_disparity", "compound_cohort_disparity"):
+            spec = cls._build_breakdown_tree_chart(fact, df, profile, chart_id_prefix)
+        elif ftype in ("period_trend", "trend"):
+            spec = cls._build_period_trend_chart(fact, df, profile, chart_id_prefix)
         elif ftype in ("segment_comparison", "segment_gap"):
-            return cls._build_segment_comparison_chart(fact, df, profile, chart_id_prefix)
+            bi = getattr(fact, "business_impact", None)
+            is_financial = any(k in str(getattr(fact, "metric", "")).lower() for k in ("margin", "revenue", "cost", "profit", "leakage", "variance", "budget"))
+            if bi and (is_financial or getattr(bi, "preferred_visual", None) == "waterfall"):
+                spec = cls._build_variance_waterfall_chart(fact, df, profile, chart_id_prefix)
+            else:
+                spec = cls._build_segment_comparison_chart(fact, df, profile, chart_id_prefix)
+        elif ftype in ("variance_waterfall", "financial_variance", "waterfall"):
+            spec = cls._build_variance_waterfall_chart(fact, df, profile, chart_id_prefix)
         elif ftype in ("entity_concentration", "concentration"):
-            return cls._build_entity_concentration_chart(fact, df, profile, chart_id_prefix)
+            spec = cls._build_entity_concentration_chart(fact, df, profile, chart_id_prefix)
         elif ftype in ("measure_relationship", "correlation"):
-            return cls._build_measure_relationship_chart(fact, df, profile, chart_id_prefix)
+            spec = cls._build_measure_relationship_chart(fact, df, profile, chart_id_prefix)
         elif ftype in ("target_association", "subgroup_rate"):
-            return cls._build_target_association_chart(fact, df, profile, chart_id_prefix)
+            spec = cls._build_target_association_chart(fact, df, profile, chart_id_prefix)
         else:
             # Generic fallback to segment or bar
-            return cls._build_segment_comparison_chart(fact, df, profile, chart_id_prefix)
+            spec = cls._build_segment_comparison_chart(fact, df, profile, chart_id_prefix)
+
+        # Attach impact card metadata if available
+        if spec and getattr(fact, "business_impact", None) is not None:
+            spec.impact_card = cls._build_impact_card_dict(fact)
+
+        return spec
 
     @classmethod
     def _build_period_trend_chart(
@@ -360,6 +376,215 @@ class FactVisualizer:
             dimension_col=target_col,
             aggregation_disclosure=f"Target association analysis (sample size n={fact.sample_size})."
         )
+
+    @classmethod
+    def _build_breakdown_tree_chart(
+        cls,
+        fact: CandidateFact,
+        df: pd.DataFrame | None,
+        profile: SemanticDatasetProfile | None,
+        chart_id_prefix: str
+    ) -> VisualChartSpec:
+        """Synthesizes an interactive breakdown tree decomposition for multi-factor disparities."""
+        unit = cls._infer_unit(fact.metric, profile)
+        
+        stat = fact.statistical_info or {}
+        dim1 = stat.get("dimension_1")
+        val1 = stat.get("dimension_1_value")
+        dim2 = stat.get("dimension_2")
+        val2 = stat.get("dimension_2_value")
+
+        if not dim1 or not dim2:
+            keys = list(fact.dimensions.keys())
+            dim1 = keys[0] if len(keys) > 0 else "Factor 1"
+            val1 = fact.dimensions.get(dim1, "Cohort A")
+            dim2 = keys[1] if len(keys) > 1 else "Factor 2"
+            val2 = fact.dimensions.get(dim2, "Cohort B")
+
+        root_name = f"Overall {fact.metric.replace('_', ' ').title()}"
+        root_val = round(fact.baseline_value if fact.baseline_value is not None else 0.0, 2)
+        total_n = stat.get("total_records") or (len(df) if df is not None else 100)
+
+        dim1_mean = root_val
+        dim1_n = total_n
+        dim2_children: list[dict[str, Any]] = []
+
+        if df is not None and dim1 in df.columns and fact.metric in df.columns:
+            try:
+                temp_df = df[[dim1, fact.metric]].dropna().copy()
+                temp_df["__val"] = temp_df[fact.metric].apply(cls._clean_series_value)
+                grp1 = temp_df.groupby(dim1)["__val"].agg(["mean", "count"]).dropna()
+                if str(val1) in grp1.index:
+                    dim1_mean = round(float(grp1.loc[str(val1), "mean"]), 2)
+                    dim1_n = int(grp1.loc[str(val1), "count"])
+            except Exception as e:
+                logger.debug(f"Tree dim1 computation fallback: {e}")
+
+        if df is not None and dim1 in df.columns and dim2 in df.columns and fact.metric in df.columns:
+            try:
+                temp_df2 = df[df[dim1].astype(str) == str(val1)][[dim2, fact.metric]].dropna().copy()
+                temp_df2["__val"] = temp_df2[fact.metric].apply(cls._clean_series_value)
+                grp2 = temp_df2.groupby(dim2)["__val"].agg(["mean", "count"]).dropna()
+                for idx_val, row in grp2.iterrows():
+                    is_target = str(idx_val) == str(val2)
+                    dim2_children.append({
+                        "name": f"{dim2}: {idx_val}",
+                        "value": round(float(row["mean"]), 2),
+                        "sample_size": int(row["count"]),
+                        "is_outlier": is_target,
+                        "severity": "critical" if (is_target and getattr(fact, "business_impact", None) and str(getattr(fact.business_impact, "severity", "")).upper().endswith("CRITICAL")) else ("warning" if is_target else "normal")
+                    })
+            except Exception as e:
+                logger.debug(f"Tree dim2 computation fallback: {e}")
+
+        if not dim2_children:
+            is_crit = bool(getattr(fact, "business_impact", None) and str(getattr(fact.business_impact, "severity", "")).upper().endswith("CRITICAL"))
+            dim2_children.append({
+                "name": f"{dim2}: {val2} (Disparity)",
+                "value": round(fact.value or 0.0, 2),
+                "sample_size": fact.sample_size,
+                "is_outlier": True,
+                "severity": "critical" if is_crit else "warning"
+            })
+
+        tree_data = {
+            "name": root_name,
+            "value": root_val,
+            "sample_size": total_n,
+            "unit": unit,
+            "children": [
+                {
+                    "name": f"{dim1}: {val1}",
+                    "value": dim1_mean,
+                    "sample_size": dim1_n,
+                    "unit": unit,
+                    "children": dim2_children
+                }
+            ]
+        }
+
+        return VisualChartSpec(
+            chart_id=f"{chart_id_prefix}-{fact.fact_id}",
+            chart_type="breakdown_tree",
+            title=f"{fact.metric.replace('_', ' ').title()} Driver Decomposition Tree",
+            subtitle=f"Multi-factor cohort analysis across {dim1} and {dim2}",
+            unit=unit,
+            categories=[dim1, dim2],
+            series=[],
+            tree_data=tree_data,
+            supporting_fact_id=fact.fact_id,
+            metric_col=fact.metric,
+            dimension_col=dim1,
+            aggregation_disclosure=f"Hierarchical tree decomposition (segment n={fact.sample_size}, total n={total_n})."
+        )
+
+    @classmethod
+    def _build_variance_waterfall_chart(
+        cls,
+        fact: CandidateFact,
+        df: pd.DataFrame | None,
+        profile: SemanticDatasetProfile | None,
+        chart_id_prefix: str
+    ) -> VisualChartSpec:
+        """Synthesizes a variance waterfall bridging baseline expected values to observed segment impacts."""
+        unit = cls._infer_unit(fact.metric, profile)
+        base_val = fact.baseline_value if fact.baseline_value is not None else 0.0
+        obs_val = fact.value if fact.value is not None else base_val
+        gap_val = fact.absolute_difference if fact.absolute_difference is not None else (obs_val - base_val)
+
+        seg_dim = next(iter(fact.dimensions), "Segment")
+        seg_val = fact.dimensions.get(seg_dim, "Cohort")
+
+        waterfall_steps: list[dict[str, Any]] = [
+            {"label": "Baseline / Expected", "value": round(base_val, 2), "type": "total"},
+            {"label": f"{seg_val} Gap", "value": round(gap_val, 2), "type": "increase" if gap_val >= 0 else "decrease"}
+        ]
+
+        bi = getattr(fact, "business_impact", None)
+        impact_val = getattr(bi, "impact_value", 0.0) if bi else 0.0
+        if bi and impact_val > 0:
+            scale_diff = round(impact_val - abs(gap_val), 2)
+            if scale_diff > 0:
+                waterfall_steps.append({
+                    "label": f"Scale Effect (n={fact.sample_size})",
+                    "value": scale_diff,
+                    "type": "increase"
+                })
+            waterfall_steps.append({
+                "label": "Total Business Impact",
+                "value": round(impact_val, 2),
+                "type": "total"
+            })
+            unit = getattr(bi, "unit", unit) or unit
+        else:
+            waterfall_steps.append({
+                "label": f"Observed ({seg_val})",
+                "value": round(obs_val, 2),
+                "type": "total"
+            })
+
+        # Calculate helper base and delta series for stacked bar waterfall rendering
+        categories = [step["label"] for step in waterfall_steps]
+        helper_base: list[float] = []
+        delta_vals: list[float] = []
+        running = 0.0
+
+        for s in waterfall_steps:
+            v = s["value"]
+            stype = s.get("type", "increase")
+            if stype == "total":
+                helper_base.append(0.0)
+                delta_vals.append(round(v, 2))
+                running = v
+            elif stype == "decrease" or v < 0:
+                v_abs = abs(v)
+                running -= v_abs
+                helper_base.append(round(max(0.0, running), 2))
+                delta_vals.append(round(v_abs, 2))
+            else:
+                helper_base.append(round(max(0.0, running), 2))
+                delta_vals.append(round(v, 2))
+                running += v
+
+        series = [
+            ChartSeries(name="Helper Base", values=helper_base, color_token="transparent"),
+            ChartSeries(name="Delta", values=delta_vals, color_token="#ef4444" if gap_val > 0 else "#10b981")
+        ]
+
+        return VisualChartSpec(
+            chart_id=f"{chart_id_prefix}-{fact.fact_id}",
+            chart_type="waterfall",
+            title=f"{fact.metric.replace('_', ' ').title()} Variance Waterfall",
+            subtitle=f"Attribution bridge for {seg_dim}: {seg_val}",
+            unit=unit,
+            categories=categories,
+            series=series,
+            waterfall_steps=waterfall_steps,
+            supporting_fact_id=fact.fact_id,
+            metric_col=fact.metric,
+            dimension_col=seg_dim,
+            aggregation_disclosure=f"Waterfall variance bridge (cohort sample size n={fact.sample_size})."
+        )
+
+    @classmethod
+    def _build_impact_card_dict(cls, fact: CandidateFact) -> dict[str, Any] | None:
+        """Synthesizes executive impact card metadata for a fact."""
+        bi = getattr(fact, "business_impact", None)
+        if not bi:
+            return None
+
+        severity_str = str(getattr(bi.severity, "value", bi.severity))
+        return {
+            "headline": bi.layman_takeaway,
+            "primary_metric": bi.impact_metric,
+            "amount": round(bi.impact_value, 2),
+            "formatted_amount": bi.formatted_impact,
+            "unit": bi.unit,
+            "affected_population": fact.sample_size,
+            "risk_level": severity_str,
+            "formula_explanation": bi.formula_explanation,
+            "impact_type": str(getattr(bi.impact_type, "value", bi.impact_type)),
+        }
 
     @classmethod
     def visualize_insights(

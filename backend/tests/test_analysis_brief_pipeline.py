@@ -13,7 +13,20 @@ from app.services.data_engine.candidate_fact_discovery import CandidateFactDisco
 from app.services.data_engine.interestingness_ranker import FactInterestingnessRanker
 from app.services.reporting.workflow_orchestrator import WorkflowOrchestrator
 from app.services.copilot.generic_copilot_engine import GenericCopilotEngine
+from unittest.mock import patch
 from app.db.database import get_connection, init_db
+from app.services.gateway.model_gateway import GatewayResult
+from app.core.models_config import ModelRole
+
+
+@pytest.fixture(autouse=True)
+def mock_gateway_offline():
+    """Ensure tests run purely offline without hanging on external LLM / Ollama connection."""
+    with patch(
+        "app.services.gateway.model_gateway.ModelGateway.generate",
+        return_value=GatewayResult(raw_text="", success=True, error=None, role=ModelRole.ANALYST)
+    ):
+        yield
 
 
 @pytest.fixture

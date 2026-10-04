@@ -4841,6 +4841,30 @@ def run_adaptive_dashboard(sheet_id: int | None = None) -> AdaptiveDashboardResp
         except Exception as gb_err:
             logger.warning("Could not compute group-by projections for dashboard: %s", gb_err)
 
+        # 16. Synthesize Executive Business Visuals (Breakdown Trees, Waterfalls, Impact Cards)
+        executive_visuals = []
+        try:
+            if rows and len(rows) > 0:
+                import pandas as pd
+                from ..data_engine.semantic_classifier import SemanticClassifier
+                from ..data_engine.opportunity_map import OpportunityMapGenerator
+                from ..data_engine.candidate_fact_discovery import CandidateFactDiscoveryEngine
+                from ..data_engine.interestingness_ranker import FactInterestingnessRanker
+                from ..data_engine.fact_visualizer import FactVisualizer
+
+                sheet_df = pd.DataFrame(rows)
+                sname = getattr(manifest, "sheet_name", None) or getattr(manifest, "name", None) or "Dataset"
+                prof = SemanticClassifier.profile_dataset(sheet_df, sname)
+                opp_map = OpportunityMapGenerator.generate(prof)
+                facts, _ = CandidateFactDiscoveryEngine.discover_facts(sheet_df, prof, opp_map)
+                ranked = FactInterestingnessRanker.rank_interesting_facts(facts, limit=6)
+                for rf in ranked:
+                    chart = FactVisualizer.recommend_chart(rf.fact, df=sheet_df, profile=prof)
+                    if chart:
+                        executive_visuals.append(chart.model_dump())
+        except Exception as ev_err:
+            logger.warning("Could not synthesize executive visuals for dashboard: %s", ev_err)
+
         # Return atomic response
         return AdaptiveDashboardResponse(
             version="adaptive-v10",
@@ -4863,6 +4887,7 @@ def run_adaptive_dashboard(sheet_id: int | None = None) -> AdaptiveDashboardResp
             orchestrator_findings=orchestrator_findings,
             analytical_tables=analytical_tables,
             group_by_projections=group_by_projections,
+            executive_visuals=executive_visuals,
             run_status="ready" if spec.kind == "kpi" else "needs_definition",
         )
 

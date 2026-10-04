@@ -149,3 +149,101 @@ def test_insight_visualization_linking(sales_df):
         assert isinstance(chart, VisualChartSpec)
         assert chart.supporting_fact_id in facts_lookup
         assert len(chart.categories) == len(chart.series[0].values)
+
+
+def test_breakdown_tree_visualization():
+    """Verifies that a multi_factor_segment_disparity fact produces a breakdown tree spec."""
+    from app.services.data_engine.candidate_fact import CandidateFact
+    from app.services.function_library.base import BusinessImpactAssessment, ImpactType, ImpactSeverity
+
+    fact = CandidateFact(
+        fact_id="FACT-099",
+        fact_type="multi_factor_segment_disparity",
+        metric="turnover_rate",
+        dimensions={"department": "Engineering", "tenure_band": "1-2 Years"},
+        value=38.5,
+        baseline_value=14.2,
+        absolute_difference=24.3,
+        relative_difference=171.1,
+        sample_size=18,
+        statistical_info={
+            "dimension_1": "department",
+            "dimension_1_value": "Engineering",
+            "dimension_2": "tenure_band",
+            "dimension_2_value": "1-2 Years",
+            "total_records": 450
+        },
+        business_impact=BusinessImpactAssessment(
+            impact_type=ImpactType.HEADCOUNT_AT_RISK,
+            impact_metric="Turnover Exposure",
+            impact_value=125000.0,
+            formatted_impact="$125,000",
+            unit="$",
+            severity=ImpactSeverity.CRITICAL,
+            formula_explanation="18 employees × turnover delta × replacement cost",
+            layman_takeaway="Engineering 1-2 Years cohort drives $125k in turnover exposure."
+        )
+    )
+
+    chart = FactVisualizer.recommend_chart(fact)
+    assert chart is not None
+    assert chart.chart_type == "breakdown_tree"
+    assert chart.tree_data is not None
+    assert chart.tree_data["name"] == "Overall Turnover Rate"
+    assert chart.tree_data["value"] == 14.2
+    assert len(chart.tree_data["children"]) == 1
+    d1_child = chart.tree_data["children"][0]
+    assert d1_child["name"] == "department: Engineering"
+    assert len(d1_child["children"]) == 1
+    d2_child = d1_child["children"][0]
+    assert d2_child["value"] == 38.5
+    assert d2_child["severity"] == "critical"
+    # Verify impact card attached
+    assert chart.impact_card is not None
+    assert chart.impact_card["headline"] == "Engineering 1-2 Years cohort drives $125k in turnover exposure."
+    assert chart.impact_card["amount"] == 125000.0
+    assert chart.impact_card["risk_level"] == "CRITICAL"
+
+
+def test_variance_waterfall_visualization():
+    """Verifies that a segment fact with financial impact produces a variance waterfall spec."""
+    from app.services.data_engine.candidate_fact import CandidateFact
+    from app.services.function_library.base import BusinessImpactAssessment, ImpactType, ImpactSeverity
+
+    fact = CandidateFact(
+        fact_id="FACT-100",
+        fact_type="segment_gap",
+        metric="gross_margin",
+        dimensions={"product_line": "Custom Enterprise"},
+        value=18.5,
+        baseline_value=32.0,
+        absolute_difference=-13.5,
+        relative_difference=-42.2,
+        sample_size=40,
+        business_impact=BusinessImpactAssessment(
+            impact_type=ImpactType.MARGIN_LEAKAGE,
+            impact_metric="Gross Margin Leakage",
+            impact_value=85000.0,
+            formatted_impact="$85,000",
+            unit="$",
+            severity=ImpactSeverity.HIGH,
+            formula_explanation="Volume * margin delta",
+            layman_takeaway="Custom Enterprise underperformed margin baseline resulting in $85,000 leakage."
+        )
+    )
+
+    chart = FactVisualizer.recommend_chart(fact)
+    assert chart is not None
+    assert chart.chart_type == "waterfall"
+    assert chart.waterfall_steps is not None
+    assert len(chart.waterfall_steps) >= 3
+    assert chart.waterfall_steps[0]["label"] == "Baseline / Expected"
+    assert chart.waterfall_steps[0]["value"] == 32.0
+    assert chart.waterfall_steps[-1]["label"] == "Total Business Impact"
+    assert chart.waterfall_steps[-1]["value"] == 85000.0
+    # Verify stacked bar series generated
+    assert len(chart.series) == 2
+    assert chart.series[0].name == "Helper Base"
+    assert chart.series[1].name == "Delta"
+    assert chart.impact_card is not None
+    assert chart.impact_card["formatted_amount"] == "$85,000"

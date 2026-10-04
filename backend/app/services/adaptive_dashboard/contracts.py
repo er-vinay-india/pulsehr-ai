@@ -452,6 +452,7 @@ class AdaptiveDashboardResponse(BaseModel):
     orchestrator_findings: list["UnifiedFinding"] = Field(default_factory=list)
     analytical_tables: list[dict[str, Any]] = Field(default_factory=list)
     group_by_projections: dict[str, Any] = Field(default_factory=dict)
+    executive_visuals: list[dict[str, Any]] = Field(default_factory=list)
     run_status: Literal["ready", "needs_definition", "failed"] = "ready"
 
 

@@ -25,7 +25,7 @@ class ChartReferenceLine(BaseModel):
 class VisualChartSpec(BaseModel):
     """Structured, client-ready chart specification."""
     chart_id: str
-    chart_type: str  # "line", "column", "bar", "horizontal_bar", "donut", "scatter", "pareto"
+    chart_type: str  # "line", "column", "bar", "horizontal_bar", "donut", "scatter", "pareto", "breakdown_tree", "waterfall", "impact_card", "heatmap"
     title: str
     subtitle: str
     unit: str = ""
@@ -36,4 +36,8 @@ class VisualChartSpec(BaseModel):
     metric_col: str | None = None
     dimension_col: str | None = None
     aggregation_disclosure: str | None = None
+    tree_data: dict[str, Any] | None = None
+    waterfall_steps: list[dict[str, Any]] | None = None
+    impact_card: dict[str, Any] | None = None
+    matrix_data: dict[str, Any] | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)

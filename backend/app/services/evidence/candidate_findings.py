@@ -129,8 +129,9 @@ def inventory_candidate_findings(
     temp_metric_name = "Longitudinal Trends"
     temp_metric_val = "Single-Period Baseline"
     temp_num_val = None
-    p_records = sheet_contexts[primary_sid]["records"]
-    p_cols = sheet_contexts[primary_sid]["columns"]
+    p_ctx = sheet_contexts.get(primary_sid, {})
+    p_records = p_ctx.get("records") or p_ctx.get("rows") or []
+    p_cols = p_ctx.get("columns") or []
     try:
         import pandas as pd
         from ..analytics.temporal_categorical_engine import extract_multi_grain_temporal_insights

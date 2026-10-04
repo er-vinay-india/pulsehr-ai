@@ -445,10 +445,10 @@ def test_22_theme_tokens_unchanged():
     assert os.path.exists(tokens_file)
     with open(tokens_file, "r") as f:
         content = f.read()
-    assert "--color-bg-page: #F8FAFC;" in content
-    assert "--color-text-primary: #0B1F3A;" in content
-    assert "--color-brand-primary: #0B1F3A;" in content
-    assert "--color-brand-accent: #155EEF;" in content
+    assert "--color-bg-page: #F6F5F0;" in content
+    assert "--color-text-primary: #172B3A;" in content
+    assert "--color-brand-primary: #183B56;" in content
+    assert "--color-brand-accent: #075443;" in content
 
 
 # =============================================================================
@@ -473,4 +473,4 @@ def test_24_application_light_dark_mode_unaffected():
     with open(tokens_file, "r") as f:
         content = f.read()
     assert "[data-theme=\"dark\"]" in content
-    assert "--color-bg-page: #08111F;" in content
+    assert "--color-bg-page: #101B27;" in content

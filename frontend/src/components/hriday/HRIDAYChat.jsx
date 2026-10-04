@@ -6,6 +6,7 @@ import { useHRIDAY } from './HRIDAYProvider.jsx';
 import { presentArtifacts } from './presentation.js';
 import IconButton from './IconButton.jsx';
 import HRIDAYActivity from './HRIDAYActivity.jsx';
+import SlideChart from '../presentation/slides/SlideChart.jsx';
 
 export default function HRIDAYChat({ scope = {}, onClose, expanded = false, onExpand, inputRef, mobile = false, fullPage = false }) {
   const { conversation, messages, draft, loading, activity, announcement, identity } = useHRIDAY();
@@ -68,6 +69,25 @@ export default function HRIDAYChat({ scope = {}, onClose, expanded = false, onEx
         <div className="hriday-message-author">{message.role === 'user' ? 'You' : identity.name}</div>
         {message.role === 'user' ? <div className="hriday-user-bubble">{message.content}</div> : <>
           {message.content && <MarkdownView content={message.content} className="hriday-answer" />}
+          {message.visual_charts && message.visual_charts.length > 0 && (
+            <div className="hriday-chat-visuals" style={{ marginTop: '10px', marginBottom: '10px' }}>
+              {message.visual_charts.map((vc, vIdx) => (
+                <div
+                  key={vc.chart_id || `chat-chart-${vIdx}`}
+                  className="hriday-chat-chart-wrapper"
+                  style={{
+                    borderRadius: '12px',
+                    padding: '12px',
+                    background: 'rgba(15, 23, 42, 0.45)',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    marginBottom: '10px'
+                  }}
+                >
+                  <SlideChart chart={vc} theme={{ is_dark: true }} />
+                </div>
+              ))}
+            </div>
+          )}
           {message.phase === 'loading' && <HRIDAYActivity activity={activity} />}
           {message.phase === 'stopped' && <p className="hriday-recovery">{message.content ? 'Response stopped. This answer is incomplete.' : 'Stopped. You can ask again or change your question.'}</p>}
           {message.phase === 'error' && <div className="hriday-recovery">

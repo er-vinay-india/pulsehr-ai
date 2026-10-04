@@ -1,9 +1,20 @@
-"""End-to-end integration tests for the full WorkflowOrchestrator state machine."""
-
+from unittest.mock import patch
 import pandas as pd
 import pytest
 
 from app.services.reporting.workflow_orchestrator import WorkflowOrchestrator, WorkflowExecutionResult
+from app.services.gateway.model_gateway import GatewayResult
+from app.core.models_config import ModelRole
+
+
+@pytest.fixture(autouse=True)
+def mock_gateway_offline():
+    """Ensure workflow orchestrator tests run purely offline without hanging on external LLM / Ollama connection."""
+    with patch(
+        "app.services.gateway.model_gateway.ModelGateway.generate",
+        return_value=GatewayResult(raw_text="", success=True, error=None, role=ModelRole.ANALYST)
+    ):
+        yield
 
 
 @pytest.fixture

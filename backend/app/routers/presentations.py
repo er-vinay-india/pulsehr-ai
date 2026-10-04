@@ -577,7 +577,7 @@ def download_deck_pptx(deck_id: str):
     elif not (config.EXPORTS_DIR / f"presentation_{deck_id}.pptx").exists():
         raise HTTPException(status_code=404, detail="Presentation deck not found")
 
-    if deck_spec:
+    if deck_spec and deck_spec.get("slides"):
         require_live_sources(deck_spec)
         from ..services.presentation.review_gates import evaluate_automated_gates
         rg = evaluate_automated_gates(deck_spec)

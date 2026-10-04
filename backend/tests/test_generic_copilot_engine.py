@@ -9,10 +9,23 @@ Verifies interactive query execution across arbitrary datasets:
 
 import pytest
 import pandas as pd
+from unittest.mock import patch
 
 from app.services.data_engine.semantic_classifier import SemanticClassifier
 from app.services.copilot.generic_copilot_engine import GenericCopilotEngine
 from app.services.copilot.copilot_models import GroundedAnswer
+from app.services.gateway.model_gateway import GatewayResult
+from app.core.models_config import ModelRole
+
+
+@pytest.fixture(autouse=True)
+def mock_gateway_offline():
+    """Ensure copilot tests run purely offline without hanging on external LLM / Ollama connection."""
+    with patch(
+        "app.services.gateway.model_gateway.ModelGateway.generate",
+        return_value=GatewayResult(raw_text="", success=True, error=None, role=ModelRole.ANALYST)
+    ):
+        yield
 
 
 @pytest.fixture

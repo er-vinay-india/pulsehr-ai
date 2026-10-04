@@ -14,6 +14,7 @@ Audits outputs using InterpretationClaimValidator:
 """
 
 import time
+from unittest.mock import patch
 import pytest
 import pandas as pd
 
@@ -23,11 +24,22 @@ from app.services.data_engine.candidate_fact_discovery import CandidateFactDisco
 from app.services.data_engine.interestingness_ranker import FactInterestingnessRanker
 from app.services.analyst.analyst_agent import AnalystAgent
 from app.services.analyst.interpretation_validator import InterpretationClaimValidator
+from app.services.gateway.model_gateway import GatewayResult
+from app.core.models_config import ModelRole
 
 
 # -----------------------------------------------------------------------------
 # FIXTURES
 # -----------------------------------------------------------------------------
+
+@pytest.fixture(autouse=True)
+def mock_gateway_offline():
+    """Ensure tests run purely offline without hanging on external LLM / Ollama connection."""
+    with patch(
+        "app.services.gateway.model_gateway.ModelGateway.generate",
+        return_value=GatewayResult(raw_text="", success=True, error=None, role=ModelRole.ANALYST)
+    ):
+        yield
 
 @pytest.fixture
 def sales_df():

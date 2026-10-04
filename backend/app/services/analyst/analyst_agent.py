@@ -506,8 +506,9 @@ Synthesize 2 to 3 structured insights. Output ONLY valid JSON matching this sche
                     confidence=0.70,
                     caveats=["Generated via deterministic fallback."]
                 ))
+            count_word = {1: "one", 2: "two", 3: "three", 4: "four", 5: "five"}.get(len(fallback_insights), "multiple")
             response = InterpretationResponse(
-                executive_synthesis=f"Analysis of {profile.dataset_name} identified {len(fallback_insights)} primary findings [{unpacked_facts[0].fact_id}].",
+                executive_synthesis=f"Analysis of {profile.dataset_name} identified {count_word} primary findings [{unpacked_facts[0].fact_id}].",
                 insights=fallback_insights
             )
 

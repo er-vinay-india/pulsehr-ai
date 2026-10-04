@@ -490,10 +490,11 @@ def classify_analytical_intent(
         return "GENERAL_CHAT"
 
     # 3. FACT_RETRIEVAL
-    # Overview / Key points / facts
+    # Overview / Key points / facts / shared findings
     pts_match = re.search(r'\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+(?:key\s+points?|key\s+findings?|points?|findings?|facts?|takeaways?)\b', q_low)
     is_top_points = bool(pts_match) or any(phrase in q_low for phrase in ['top findings', 'key findings', 'summary of findings', 'overview of findings', 'key points', 'verified findings', 'reconciliation'])
-    if is_top_points:
+    is_worst_or_highest_dept = bool(re.search(r'\b(?:which|what)\s+department\b', q_low) and ('worst' in q_low or 'lowest' in q_low or 'highest' in q_low or 'best' in q_low))
+    if is_top_points or is_worst_or_highest_dept:
         return "FACT_RETRIEVAL"
 
     # 4. ANALYTICAL_CALCULATION

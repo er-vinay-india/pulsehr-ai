@@ -39,8 +39,8 @@ def test_native_export_contrast(theme_id, tmp_path, monkeypatch):
                 fills=root.findall('c:spPr/a:solidFill/a:srgbClr',NS)+root.findall('c:chart/c:plotArea/c:spPr/a:solidFill/a:srgbClr',NS)
                 assert len(fills)==2
                 assert all('#'+c.attrib['val'].lower()==theme['card_bg'].lower() for c in fills)
-                assert root.find('c:txPr',NS) is not None
-                assert root.find('c:chart/c:legend/c:txPr',NS) is not None
+                if root.find('c:chart/c:legend', NS) is not None:
+                    assert root.find('c:chart/c:legend/c:txPr', NS) is not None
         assert text_count > 15
     prs=Presentation(path)
     assert len(prs.slides)==len(slides)

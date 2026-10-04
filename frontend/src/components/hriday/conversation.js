@@ -93,8 +93,13 @@ export class HRIDAYConversation {
           const content = presentHRIDAYAnswer(data.answer || request.rawAnswer, { delegates: request.delegates, assistantName: this.state.identity.name });
           request.terminal = true;
           this.request = null;
-          this.updateMessage(id, { content, phase: content ? 'complete' : 'error', artifacts: data.artifacts || [] },
-            { loading: false, activity: null, announcement: content ? `${this.state.identity.name}’s response is ready.` : `${this.state.identity.name} couldn’t finish. Your question is saved.` });
+          const visualCharts = data.visual_charts || (data.visual_chart ? [data.visual_chart] : (data.chart ? [data.chart] : []));
+          this.updateMessage(id, {
+            content,
+            phase: content ? 'complete' : 'error',
+            artifacts: data.artifacts || [],
+            visual_charts: visualCharts,
+          }, { loading: false, activity: null, announcement: content ? `${this.state.identity.name}’s response is ready.` : `${this.state.identity.name} couldn’t finish. Your question is saved.` });
         },
         onError: finishError,
       }, controller.signal, this.priorContext, scope.snapshotId ?? null, scope.page ?? null, 60.0);
