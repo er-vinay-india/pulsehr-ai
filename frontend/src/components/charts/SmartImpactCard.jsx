@@ -101,6 +101,7 @@ export default function SmartImpactCard({ impact, className = "", compact = fals
 
           return (
             <div
+              title={amountStr}
               style={{
                 fontSize,
                 fontWeight: 800,
@@ -109,7 +110,8 @@ export default function SmartImpactCard({ impact, className = "", compact = fals
                 wordBreak: "break-word",
                 overflowWrap: "anywhere",
                 lineHeight: 1.25,
-                maxWidth: "100%"
+                maxWidth: "100%",
+                cursor: "default"
               }}
             >
               {amountStr}
@@ -120,6 +122,7 @@ export default function SmartImpactCard({ impact, className = "", compact = fals
 
       {impact.headline && (
         <p
+          title={impact.headline}
           style={{
             margin: "4px 0 6px 0",
             fontSize: compact ? "11.5px" : "12.5px",
@@ -128,7 +131,8 @@ export default function SmartImpactCard({ impact, className = "", compact = fals
             fontWeight: 500,
             wordBreak: "break-word",
             overflowWrap: "anywhere",
-            maxWidth: "100%"
+            maxWidth: "100%",
+            cursor: "default"
           }}
         >
           {impact.headline}

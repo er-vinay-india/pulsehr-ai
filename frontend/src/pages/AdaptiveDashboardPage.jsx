@@ -1029,6 +1029,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
           padding: [0, 0, 6, 0],
         },
         data: categories,
+        triggerEvent: true,
         axisLine: {
           lineStyle: { color: themeTokens.colors.borderStrong },
         },
@@ -1205,6 +1206,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
           padding: [0, 0, 6, 0],
         },
         data: categories,
+        triggerEvent: true,
         axisLine: {
           lineStyle: { color: themeTokens.colors.borderStrong },
         },

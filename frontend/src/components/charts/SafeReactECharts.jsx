@@ -38,6 +38,7 @@ function minimalOptions(option, isDark = false) {
     if (!a) return a;
     return {
       ...a,
+      triggerEvent: true,
       axisLabel: {
         fontSize: 11,
         ...a?.axisLabel,
@@ -75,6 +76,8 @@ function minimalOptions(option, isDark = false) {
   } else if (option.legend) {
     legendConfig = {
       pageTextStyle: { color: labelColor },
+      triggerEvent: true,
+      tooltip: { show: true },
       ...option.legend,
       textStyle: {
         fontSize: 11,
@@ -199,6 +202,7 @@ export default function SafeReactECharts({ option = {}, style, onEvents, opts = 
   const handlers = useRef(onEvents);
   handlers.current = onEvents;
   const [error, setError] = useState(false);
+  const [hoverTooltip, setHoverTooltip] = useState(null);
 
   let themeContext;
   try {
@@ -213,9 +217,70 @@ export default function SafeReactECharts({ option = {}, style, onEvents, opts = 
     if (!node) return;
     const chart = echarts.init(node, null, { renderer: opts.renderer || 'canvas' });
     instance.current = chart;
+
+    const handleMouseOver = (params) => {
+      if (!params) return;
+      if (params.targetType === 'axisLabel' || params.componentType === 'xAxis' || params.componentType === 'yAxis') {
+        const fullText = params.value != null ? String(params.value) : '';
+        if (fullText) {
+          setHoverTooltip({
+            text: fullText,
+            x: params.event?.offsetX ?? 120,
+            y: params.event?.offsetY ?? 120
+          });
+        }
+      } else if (params.componentType === 'legend') {
+        if (params.name) {
+          setHoverTooltip({
+            text: params.name,
+            x: params.event?.offsetX ?? 120,
+            y: params.event?.offsetY ?? 120
+          });
+        }
+      } else if (params.componentType === 'series' && params.seriesType === 'tree') {
+        const fullText = params.data?.full_name || params.data?.name || params.name;
+        if (fullText) {
+          setHoverTooltip({
+            text: fullText,
+            x: params.event?.offsetX ?? 120,
+            y: params.event?.offsetY ?? 120
+          });
+        }
+      }
+    };
+
+    const handleMouseOut = (params) => {
+      if (!params || params.targetType === 'axisLabel' || params.componentType === 'xAxis' || params.componentType === 'yAxis' || params.componentType === 'legend' || (params.componentType === 'series' && params.seriesType === 'tree')) {
+        setHoverTooltip(null);
+      }
+    };
+
+    chart.on('mouseover', handleMouseOver);
+    chart.on('mouseout', handleMouseOut);
+
+    const zr = chart.getZr();
+    const handleZrMouseMove = (e) => {
+      setHoverTooltip(prev => (prev ? { ...prev, x: e.offsetX, y: e.offsetY } : null));
+    };
+    const handleZrMouseOut = () => {
+      setHoverTooltip(null);
+    };
+
+    zr.on('mousemove', handleZrMouseMove);
+    zr.on('mouseout', handleZrMouseOut);
+
     const observer = new ResizeObserver(() => { if (node.clientWidth && node.clientHeight) chart.resize(); });
     observer.observe(node);
-    return () => { observer.disconnect(); chart.dispose(); instance.current = null; };
+
+    return () => {
+      observer.disconnect();
+      chart.off('mouseover', handleMouseOver);
+      chart.off('mouseout', handleMouseOut);
+      zr.off('mousemove', handleZrMouseMove);
+      zr.off('mouseout', handleZrMouseOut);
+      chart.dispose();
+      instance.current = null;
+    };
   }, []);
 
   useEffect(() => {
@@ -242,8 +307,38 @@ export default function SafeReactECharts({ option = {}, style, onEvents, opts = 
   }, [eventNames]);
 
   return (
-    <div className="minimal-chart" style={{ minWidth: 0, width: '100%', maxWidth: '100%', overflow: 'hidden' }}>
+    <div className="minimal-chart" style={{ position: 'relative', minWidth: 0, width: '100%', maxWidth: '100%', overflow: 'visible' }}>
       <div ref={container} style={{ height: 300, width: '100%', maxWidth: '100%', overflow: 'hidden', ...style }} />
+      {hoverTooltip && hoverTooltip.text && (
+        <div
+          role="tooltip"
+          aria-hidden="false"
+          style={{
+            position: 'absolute',
+            left: Math.max(12, Math.min(hoverTooltip.x, (container.current?.clientWidth || 300) - 24)),
+            top: Math.max(12, hoverTooltip.y - 10),
+            transform: 'translate(-50%, -100%)',
+            pointerEvents: 'none',
+            zIndex: 9999,
+            backgroundColor: isDark ? 'rgba(15, 23, 42, 0.96)' : 'rgba(255, 255, 255, 0.98)',
+            color: isDark ? '#f8fafc' : '#0f172a',
+            border: isDark ? '1px solid rgba(255, 255, 255, 0.15)' : '1px solid rgba(0, 0, 0, 0.12)',
+            boxShadow: isDark ? '0 8px 24px rgba(0, 0, 0, 0.5)' : '0 6px 20px rgba(0, 0, 0, 0.12)',
+            borderRadius: '6px',
+            padding: '5px 10px',
+            fontSize: '11.5px',
+            fontWeight: 600,
+            lineHeight: 1.35,
+            whiteSpace: 'normal',
+            maxWidth: '300px',
+            wordBreak: 'break-word',
+            textAlign: 'center',
+            backdropFilter: 'blur(8px)',
+          }}
+        >
+          {hoverTooltip.text}
+        </div>
+      )}
       {error && <p role="status">Chart unavailable. Open the data table to inspect the values.</p>}
     </div>
   );

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import SafeReactECharts from '../../charts/SafeReactECharts';
 import SafeChart from '../../visualization/components/SafeChart';
 import { calculateMargins } from '../../visualization/layout/calculateMargins';
@@ -11,14 +11,98 @@ export default function SlideChart({ chart, chartData, theme, hideImpactCard = f
   theme = getSlideTheme(theme);
   const isDark = Boolean(theme.is_dark);
   const actualChart = chart || chartData;
+  const [headerTooltip, setHeaderTooltip] = useState(null);
 
   if (!actualChart) {
     return <p style={{ color: theme.muted_text || '#64748b', padding: 12 }}>No chart data available.</p>;
   }
 
   const chartLabel = actualChart.title || actualChart.chart_title || actualChart.series?.[0]?.name || "Data visualization chart";
+  const fullChartTitle = actualChart.full_title || actualChart.title || actualChart.chart_title || chartLabel;
+  const fullChartSubtitle = actualChart.full_subtitle || actualChart.subtitle || actualChart.chart_subtitle;
   const type = (actualChart.type || actualChart.chart_type || 'column').toLowerCase();
   const format = value => Math.abs(Number(value)) >= 1e6 ? `${(Number(value)/1e6).toFixed(1)}M` : Number(value).toLocaleString(undefined, { maximumFractionDigits: 2 });
+
+  const renderHeader = () => (
+    <div
+      className="slide-chart-header"
+      style={{
+        position: 'relative',
+        textAlign: 'center',
+        marginBottom: '6px',
+        padding: '0 8px',
+        width: '100%',
+        minWidth: 0,
+        boxSizing: 'border-box'
+      }}
+    >
+      <h4
+        title={fullChartTitle}
+        onMouseEnter={() => setHeaderTooltip({ text: fullChartTitle, isTitle: true })}
+        onMouseLeave={() => setHeaderTooltip(null)}
+        style={{
+          margin: 0,
+          fontSize: '13.5px',
+          fontWeight: 700,
+          color: isDark ? '#f8fafc' : '#0f172a',
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          lineHeight: 1.3,
+          cursor: 'pointer'
+        }}
+      >
+        {chartLabel}
+      </h4>
+      {fullChartSubtitle && (
+        <p
+          title={fullChartSubtitle}
+          onMouseEnter={() => setHeaderTooltip({ text: fullChartSubtitle, isTitle: false })}
+          onMouseLeave={() => setHeaderTooltip(null)}
+          style={{
+            margin: '2px 0 0 0',
+            fontSize: '11px',
+            color: isDark ? '#94a3b8' : '#64748b',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            cursor: 'pointer'
+          }}
+        >
+          {fullChartSubtitle}
+        </p>
+      )}
+      {headerTooltip && (
+        <div
+          role="tooltip"
+          aria-hidden="false"
+          style={{
+            position: 'absolute',
+            top: headerTooltip.isTitle ? '22px' : '36px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 9999,
+            backgroundColor: isDark ? 'rgba(15, 23, 42, 0.98)' : 'rgba(255, 255, 255, 0.98)',
+            color: isDark ? '#f8fafc' : '#0f172a',
+            border: isDark ? '1px solid rgba(255, 255, 255, 0.15)' : '1px solid rgba(0, 0, 0, 0.12)',
+            boxShadow: isDark ? '0 8px 24px rgba(0, 0, 0, 0.5)' : '0 6px 20px rgba(0, 0, 0, 0.12)',
+            borderRadius: '6px',
+            padding: '5px 10px',
+            fontSize: '11.5px',
+            fontWeight: 600,
+            lineHeight: 1.3,
+            maxWidth: '340px',
+            width: 'max-content',
+            wordBreak: 'break-word',
+            pointerEvents: 'none',
+            backdropFilter: 'blur(8px)',
+          }}
+        >
+          {headerTooltip.text}
+        </div>
+      )}
+    </div>
+  );
 
   // 1. Direct ECharts Option object passed
   if (actualChart.xAxis || (actualChart.series && actualChart.series[0]?.type && actualChart.series[0]?.data)) {
@@ -46,6 +130,9 @@ export default function SlideChart({ chart, chartData, theme, hideImpactCard = f
     const sanitizeTreeNode = (node) => {
       if (!node) return node;
       const copy = { ...node };
+      if (!copy.full_name) {
+        copy.full_name = copy.name;
+      }
       if (Array.isArray(copy.children) && copy.children.length > 6) {
         const topChildren = copy.children.slice(0, 5);
         const remaining = copy.children.slice(5);
@@ -53,6 +140,7 @@ export default function SlideChart({ chart, chartData, theme, hideImpactCard = f
         const remSample = remaining.reduce((acc, c) => acc + (Number(c.sample_size) || 0), 0);
         topChildren.push({
           name: `Other (${remaining.length} cohorts)`,
+          full_name: `All Other (${remaining.length}) Cohorts Consolidated`,
           value: Math.round(remAvg * 100) / 100,
           sample_size: remSample,
           severity: 'normal'
@@ -66,16 +154,6 @@ export default function SlideChart({ chart, chartData, theme, hideImpactCard = f
     const treeData = sanitizeTreeNode(rawTreeData);
 
     const treeOption = {
-      title: {
-        text: chartLabel,
-        left: 'center',
-        top: 4,
-        textStyle: {
-          fontSize: 14,
-          fontWeight: 600,
-          color: isDark ? '#f8fafc' : '#0f172a'
-        }
-      },
       tooltip: {
         trigger: 'item',
         triggerOn: 'mousemove',
@@ -86,7 +164,8 @@ export default function SlideChart({ chart, chartData, theme, hideImpactCard = f
         formatter: params => {
           const d = params.data;
           if (!d) return '';
-          let text = `<div style="font-weight:700;margin-bottom:2px;">${d.name}</div>`;
+          const displayName = d.full_name || d.name;
+          let text = `<div style="font-weight:700;margin-bottom:2px;max-width:280px;word-break:break-word;">${displayName}</div>`;
           if (d.value != null) text += `<div>Mean Value: <b>${format(d.value)} ${d.unit || actualChart.unit || ''}</b></div>`;
           if (d.sample_size) text += `<div>Cohort Size: <b>n = ${d.sample_size}</b></div>`;
           if (d.severity) {
@@ -100,13 +179,14 @@ export default function SlideChart({ chart, chartData, theme, hideImpactCard = f
         {
           type: 'tree',
           data: [treeData],
-          top: '16%',
+          top: '8%',
           left: '18%',
-          bottom: '12%',
+          bottom: '8%',
           right: '28%',
-          symbolSize: 10,
+          symbolSize: 12,
           orient: 'LR',
           initialTreeDepth: 3,
+          triggerEvent: true,
           label: {
             position: 'left',
             verticalAlign: 'middle',
@@ -146,12 +226,13 @@ export default function SlideChart({ chart, chartData, theme, hideImpactCard = f
       <div
         role="img"
         aria-label={`${chartLabel} (breakdown tree)`}
-        style={{ width: '100%', minWidth: 0, height: '100%', minHeight: '260px' }}
+        style={{ width: '100%', minWidth: 0, height: '100%', minHeight: '260px', display: 'flex', flexDirection: 'column' }}
       >
         {!hideImpactCard && actualChart.impact_card && <SmartImpactCard impact={actualChart.impact_card} compact />}
-        <SafeReactECharts presentationTheme={theme} option={treeOption} style={{ height: '260px', width: '100%' }} />
+        {renderHeader()}
+        <SafeReactECharts presentationTheme={theme} option={treeOption} style={{ height: '240px', width: '100%', flex: '1 1 auto' }} />
         {actualChart.aggregation_disclosure && (
-          <p className="chart-aggregation-note" style={{ fontSize: '11px', marginTop: '4px', color: theme.muted_text || '#64748b' }}>
+          <p className="chart-aggregation-note" style={{ fontSize: '11px', marginTop: '4px', color: theme.muted_text || '#64748b', textAlign: 'center' }}>
             {actualChart.aggregation_disclosure}
           </p>
         )}
@@ -161,23 +242,13 @@ export default function SlideChart({ chart, chartData, theme, hideImpactCard = f
 
   // 3. Variance Waterfall Bridge
   if (type === 'waterfall' || actualChart.waterfall_steps) {
-    const cats = actualChart.categories || (actualChart.waterfall_steps || []).map(s => s.label);
     const steps = actualChart.waterfall_steps || [];
+    const cats = steps.length > 0 ? steps.map(s => s.full_label || s.label) : (actualChart.categories || []);
 
     const helperBase = actualChart.series?.[0]?.values || [];
     const deltaVals = actualChart.series?.[1]?.values || [];
 
     const waterfallOption = {
-      title: {
-        text: chartLabel,
-        left: 'center',
-        top: 4,
-        textStyle: {
-          fontSize: 14,
-          fontWeight: 600,
-          color: isDark ? '#f8fafc' : '#0f172a'
-        }
-      },
       tooltip: {
         trigger: 'axis',
         axisPointer: { type: 'shadow' },
@@ -189,18 +260,20 @@ export default function SlideChart({ chart, chartData, theme, hideImpactCard = f
           const delta = params.find(p => p.seriesName === 'Delta' || p.seriesName === 'Variance');
           if (!delta) return '';
           const step = steps[delta.dataIndex];
+          const fullLabel = step?.full_label || step?.label || delta.name;
           const typeLabel = step?.type ? `(${step.type.toUpperCase()})` : '';
-          return `<div style="font-weight:700;">${delta.name} ${typeLabel}</div><div>Value: <b>${format(delta.value)} ${actualChart.unit || ''}</b></div>`;
+          return `<div style="font-weight:700;max-width:280px;word-break:break-word;">${fullLabel} ${typeLabel}</div><div>Value: <b>${format(delta.value)} ${actualChart.unit || ''}</b></div>`;
         }
       },
       grid: {
         ...calculateMargins({ categories: cats, isVertical: true, hasLegend: false }),
-        top: 44,
-        bottom: cats.some(c => String(c).length > 8) ? 45 : 32
+        top: 24,
+        bottom: cats.some(c => String(c).length > 8) ? 45 : 30
       },
       xAxis: {
         type: 'category',
         data: cats,
+        triggerEvent: true,
         axisLabel: {
           interval: 0,
           rotate: cats.length > 3 ? 18 : 0,
@@ -248,8 +321,8 @@ export default function SlideChart({ chart, chartData, theme, hideImpactCard = f
               const step = steps[params.dataIndex];
               if (!step) return '#3b82f6';
               if (step.type === 'total') return isDark ? '#818cf8' : '#4f46e5';
-              if (step.type === 'decrease' || step.value < 0) return isDark ? '#34d399' : '#059669'; // Savings or favorable
-              return isDark ? '#f87171' : '#dc2626'; // Variance / adverse / leakage
+              if (step.type === 'decrease' || step.value < 0) return isDark ? '#34d399' : '#059669';
+              return isDark ? '#f87171' : '#dc2626';
             },
             borderRadius: [4, 4, 0, 0]
           },
@@ -262,12 +335,13 @@ export default function SlideChart({ chart, chartData, theme, hideImpactCard = f
       <div
         role="img"
         aria-label={`${chartLabel} (variance waterfall)`}
-        style={{ width: '100%', minWidth: 0, height: '100%', minHeight: '260px' }}
+        style={{ width: '100%', minWidth: 0, height: '100%', minHeight: '260px', display: 'flex', flexDirection: 'column' }}
       >
         {!hideImpactCard && actualChart.impact_card && <SmartImpactCard impact={actualChart.impact_card} compact />}
-        <SafeReactECharts presentationTheme={theme} option={waterfallOption} style={{ height: '260px', width: '100%' }} />
+        {renderHeader()}
+        <SafeReactECharts presentationTheme={theme} option={waterfallOption} style={{ height: '240px', width: '100%', flex: '1 1 auto' }} />
         {actualChart.aggregation_disclosure && (
-          <p className="chart-aggregation-note" style={{ fontSize: '11px', marginTop: '4px', color: theme.muted_text || '#64748b' }}>
+          <p className="chart-aggregation-note" style={{ fontSize: '11px', marginTop: '4px', color: theme.muted_text || '#64748b', textAlign: 'center' }}>
             {actualChart.aggregation_disclosure}
           </p>
         )}
@@ -280,42 +354,25 @@ export default function SlideChart({ chart, chartData, theme, hideImpactCard = f
     return <p style={{ color: theme.muted_text || '#64748b', padding: 12 }}>No chart data available.</p>;
   }
 
-  const cleanTitle = (chartLabel || "").length > 42 ? (chartLabel.slice(0, 40) + "…") : chartLabel;
-  const hasSubtitle = Boolean(actualChart.subtitle);
-  const cleanSubtitle = hasSubtitle ? (actualChart.subtitle.length > 46 ? actualChart.subtitle.slice(0, 44) + "…" : actualChart.subtitle) : undefined;
-
-  const titleConfig = {
-    text: cleanTitle,
-    subtext: cleanSubtitle,
-    left: 'center',
-    top: 4,
-    textStyle: {
-      fontSize: 13,
-      fontWeight: 600,
-      color: isDark ? '#f8fafc' : '#0f172a',
-      width: 280,
-      overflow: 'truncate',
-      ellipsis: '…'
-    },
-    subtextStyle: {
-      fontSize: 10.5,
-      color: isDark ? '#94a3b8' : '#64748b',
-      width: 280,
-      overflow: 'truncate',
-      ellipsis: '…'
-    }
-  };
-
   const pie = ['pie', 'donut'].includes(type);
   const option = pie ? {
-    title: titleConfig,
     legend: { show: false },
-    tooltip: { trigger: 'item', confine: true, formatter: '{b}: {c} ({d}%)' },
+    tooltip: {
+      trigger: 'item',
+      confine: true,
+      backgroundColor: isDark ? 'rgba(15, 23, 42, 0.95)' : 'rgba(255, 255, 255, 0.98)',
+      borderColor: isDark ? '#334155' : '#cbd5e1',
+      textStyle: { color: isDark ? '#f1f5f9' : '#1e293b', fontSize: 12 },
+      formatter: params => {
+        const fullCat = actualChart.categories?.[params.dataIndex] || params.name;
+        return `<div style="font-weight:700;max-width:280px;word-break:break-word;">${fullCat}</div><div>Value: <b>${format(params.value)} (${params.percent}%)</b></div>`;
+      }
+    },
     series: [{
       type: 'pie',
       name: actualChart.series[0].name || '',
-      radius: type === 'donut' ? ['38%', '60%'] : '60%',
-      center: ['50%', cleanSubtitle ? '58%' : '54%'],
+      radius: type === 'donut' ? ['40%', '64%'] : '64%',
+      center: ['50%', '50%'],
       avoidLabelOverlap: true,
       label: {
         show: true,
@@ -340,13 +397,14 @@ export default function SlideChart({ chart, chartData, theme, hideImpactCard = f
     ['bar', 'horizontal_bar'].includes(type), actualChart.unit, isDark);
 
   if (!pie) {
-    option.title = titleConfig;
     const hasLegend = actualChart.series.length > 1;
     option.legend = {
       ...option.legend,
       show: hasLegend,
       type: 'scroll',
-      top: cleanSubtitle ? 40 : 26,
+      top: 4,
+      triggerEvent: true,
+      tooltip: { show: true },
       formatter: name => (name && name.length > 18 ? name.slice(0, 16) + '…' : name),
       textStyle: {
         color: isDark ? '#cbd5e1' : '#475569',
@@ -358,15 +416,38 @@ export default function SlideChart({ chart, chartData, theme, hideImpactCard = f
       isVertical: !['bar', 'horizontal_bar'].includes(type),
       hasLegend
     });
-    const gridTop = hasLegend ? (cleanSubtitle ? 68 : 54) : (cleanSubtitle ? 50 : 38);
     option.grid = {
       ...dynamicMargins,
-      top: gridTop,
+      top: hasLegend ? 34 : 16,
       containLabel: true
+    };
+    option.tooltip = {
+      trigger: 'axis',
+      axisPointer: { type: 'shadow' },
+      confine: true,
+      backgroundColor: isDark ? 'rgba(15, 23, 42, 0.95)' : 'rgba(255, 255, 255, 0.98)',
+      borderColor: isDark ? '#334155' : '#cbd5e1',
+      textStyle: { color: isDark ? '#f1f5f9' : '#1e293b', fontSize: 12 },
+      formatter: params => {
+        if (!params || !params.length) return '';
+        const catIdx = params[0].dataIndex;
+        const fullCat = actualChart.categories?.[catIdx] || params[0].name;
+        let html = `<div style="font-weight:700;margin-bottom:3px;max-width:280px;word-break:break-word;">${fullCat}</div>`;
+        for (const p of params) {
+          const sName = actualChart.series?.[p.seriesIndex]?.name || p.seriesName;
+          html += `<div style="display:flex;align-items:center;gap:6px;margin-top:2px;">
+            <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background-color:${p.color};"></span>
+            <span style="font-size:11px;color:${isDark ? '#cbd5e1' : '#475569'};">${sName}:</span>
+            <b>${format(p.value)} ${actualChart.unit || ''}</b>
+          </div>`;
+        }
+        return html;
+      }
     };
     for (const name of ['xAxis', 'yAxis']) {
       const axis = option[name];
       if (axis && !Array.isArray(axis)) {
+        axis.triggerEvent = true;
         axis.axisLabel = {
           ...axis.axisLabel,
           fontSize: 10,
@@ -385,12 +466,13 @@ export default function SlideChart({ chart, chartData, theme, hideImpactCard = f
     <div
       role="img"
       aria-label={`${chartLabel} (${type} chart)`}
-      style={{ width: '100%', minWidth: 0, height: '100%', minHeight: '260px' }}
+      style={{ width: '100%', minWidth: 0, height: '100%', minHeight: '260px', display: 'flex', flexDirection: 'column' }}
     >
       {!hideImpactCard && actualChart.impact_card && <SmartImpactCard impact={actualChart.impact_card} compact />}
-      <SafeReactECharts presentationTheme={theme} option={option} style={{ height: '260px', width: '100%' }} />
+      {renderHeader()}
+      <SafeReactECharts presentationTheme={theme} option={option} style={{ height: '240px', width: '100%', flex: '1 1 auto' }} />
       {actualChart.aggregation_disclosure && (
-        <p className="chart-aggregation-note" style={{ fontSize: '11px', marginTop: '4px', color: theme.muted_text || '#64748b' }}>
+        <p className="chart-aggregation-note" style={{ fontSize: '11px', marginTop: '4px', color: theme.muted_text || '#64748b', textAlign: 'center' }}>
           {actualChart.aggregation_disclosure}
         </p>
       )}

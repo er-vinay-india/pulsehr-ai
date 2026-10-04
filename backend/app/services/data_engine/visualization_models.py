@@ -28,6 +28,8 @@ class VisualChartSpec(BaseModel):
     chart_type: str  # "line", "column", "bar", "horizontal_bar", "donut", "scatter", "pareto", "breakdown_tree", "waterfall", "impact_card", "heatmap"
     title: str
     subtitle: str
+    full_title: str | None = None
+    full_subtitle: str | None = None
     unit: str = ""
     categories: list[str] = Field(default_factory=list)
     series: list[ChartSeries] = Field(default_factory=list)

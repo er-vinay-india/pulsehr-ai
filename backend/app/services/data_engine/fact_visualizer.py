@@ -63,7 +63,7 @@ class FactVisualizer:
         return ""
 
     @classmethod
-    def _humanize_name(cls, name: str | None, max_len: int = 34) -> str:
+    def _humanize_name(cls, name: str | None, max_len: int | None = None) -> str:
         """Sanitizes raw column names and synthetic feature tokens into clean human business labels."""
         if not name:
             return ""
@@ -79,7 +79,7 @@ class FactVisualizer:
         if "_vs_" in s:
             s = s.split("_vs_")[0]
         clean = s.replace("_", " ").strip().title()
-        if len(clean) > max_len:
+        if max_len and len(clean) > max_len:
             clean = clean[:max_len - 1].rstrip() + "…"
         return clean
 
@@ -170,11 +170,16 @@ class FactVisualizer:
                 line_style="dashed"
             ))
 
+        line_title = f"{fact.metric.replace('_', ' ').title()} Temporal Trajectory"
+        line_subtitle = f"Observed chronological progression across {len(categories)} intervals"
+
         return VisualChartSpec(
             chart_id=f"{chart_id_prefix}-{fact.fact_id}",
             chart_type="line",
-            title=f"{fact.metric.replace('_', ' ').title()} Temporal Trajectory",
-            subtitle=f"Observed chronological progression across {len(categories)} intervals",
+            title=line_title,
+            full_title=line_title,
+            subtitle=line_subtitle,
+            full_subtitle=line_subtitle,
             unit=unit,
             categories=categories,
             series=[ChartSeries(name=fact.metric.replace('_', ' ').title(), values=values)],
@@ -234,14 +239,15 @@ class FactVisualizer:
         name_m = cls._humanize_name(fact.metric)
         dim_label = cls._humanize_name(dim_col) or 'Segment'
         title = f"{name_m} by {dim_label}"
-        if len(title) > 48:
-            title = title[:46].rstrip() + "…"
+        subtitle = f"Comparative variance across {len(categories)} operating segments"
 
         return VisualChartSpec(
             chart_id=f"{chart_id_prefix}-{fact.fact_id}",
             chart_type=chart_type,
             title=title,
-            subtitle=f"Comparative variance across {len(categories)} operating segments",
+            full_title=title,
+            subtitle=subtitle,
+            full_subtitle=subtitle,
             unit=unit,
             categories=categories,
             series=[ChartSeries(name=name_m, values=values)],
@@ -295,14 +301,15 @@ class FactVisualizer:
 
         name_m = cls._humanize_name(fact.metric)
         title = f"{name_m} Concentration Breakdown"
-        if len(title) > 48:
-            title = title[:46].rstrip() + "…"
+        subtitle = f"Distribution share of leading {entity_col.replace('_', ' ')} contributors"
 
         return VisualChartSpec(
             chart_id=f"{chart_id_prefix}-{fact.fact_id}",
             chart_type="donut",
             title=title,
-            subtitle=f"Distribution share of leading {entity_col.replace('_', ' ')} contributors",
+            full_title=title,
+            subtitle=subtitle,
+            full_subtitle=subtitle,
             unit=unit,
             categories=categories,
             series=[ChartSeries(name="Volume Share", values=values)],
@@ -354,14 +361,15 @@ class FactVisualizer:
         name_a = cls._humanize_name(fact.metric)
         name_b = cls._humanize_name(sec_metric)
         title = f"{name_a} vs {name_b}"
-        if len(title) > 48:
-            title = title[:46].rstrip() + "…"
+        subtitle = "Scatter distribution demonstrating empirical correlation"
 
         return VisualChartSpec(
             chart_id=f"{chart_id_prefix}-{fact.fact_id}",
             chart_type="scatter",
             title=title,
-            subtitle=f"Scatter distribution demonstrating empirical correlation",
+            full_title=title,
+            subtitle=subtitle,
+            full_subtitle=subtitle,
             unit=unit_a,
             categories=categories,
             series=[
@@ -478,6 +486,7 @@ class FactVisualizer:
                     clean_name = str(idx_val)[:22]
                     dim2_children.append({
                         "name": f"{dim2}: {clean_name}",
+                        "full_name": f"{dim2}: {idx_val}",
                         "value": round(float(row["mean"]), 2),
                         "sample_size": int(row["count"]),
                         "is_outlier": is_target,
@@ -489,6 +498,7 @@ class FactVisualizer:
                     other_count = int(other_items["count"].sum())
                     dim2_children.append({
                         "name": f"Other ({len(other_items)} {dim2}s)",
+                        "full_name": f"All Other ({len(other_items)}) {dim2} Cohorts Consolidated",
                         "value": other_mean,
                         "sample_size": other_count,
                         "is_outlier": False,
@@ -501,6 +511,7 @@ class FactVisualizer:
             is_crit = bool(getattr(fact, "business_impact", None) and str(getattr(fact.business_impact, "severity", "")).upper().endswith("CRITICAL"))
             dim2_children.append({
                 "name": f"{dim2}: {val2} (Disparity)",
+                "full_name": f"{dim2}: {val2} (Disparity)",
                 "value": round(fact.value or 0.0, 2),
                 "sample_size": fact.sample_size,
                 "is_outlier": True,
@@ -509,12 +520,14 @@ class FactVisualizer:
 
         tree_data = {
             "name": root_name,
+            "full_name": root_name,
             "value": root_val,
             "sample_size": total_n,
             "unit": unit,
             "children": [
                 {
                     "name": f"{dim1}: {val1}",
+                    "full_name": f"{dim1}: {val1}",
                     "value": dim1_mean,
                     "sample_size": dim1_n,
                     "unit": unit,
@@ -523,11 +536,16 @@ class FactVisualizer:
             ]
         }
 
+        tree_title = f"{fact.metric.replace('_', ' ').title()} Driver Decomposition Tree"
+        tree_subtitle = f"Multi-factor cohort analysis across {dim1} and {dim2}"
+
         return VisualChartSpec(
             chart_id=f"{chart_id_prefix}-{fact.fact_id}",
             chart_type="breakdown_tree",
-            title=f"{fact.metric.replace('_', ' ').title()} Driver Decomposition Tree",
-            subtitle=f"Multi-factor cohort analysis across {dim1} and {dim2}",
+            title=tree_title,
+            full_title=tree_title,
+            subtitle=tree_subtitle,
+            full_subtitle=tree_subtitle,
             unit=unit,
             categories=[dim1, dim2],
             series=[],
@@ -557,8 +575,8 @@ class FactVisualizer:
         seg_val_clean = str(seg_val)[:20]
 
         waterfall_steps: list[dict[str, Any]] = [
-            {"label": "Baseline / Expected", "value": round(base_val, 2), "type": "total"},
-            {"label": f"{seg_val_clean} Gap", "value": round(gap_val, 2), "type": "increase" if gap_val >= 0 else "decrease"}
+            {"label": "Baseline / Expected", "full_label": "Baseline / Expected Value", "value": round(base_val, 2), "type": "total"},
+            {"label": f"{seg_val_clean} Gap", "full_label": f"{seg_dim}: {seg_val} Gap", "value": round(gap_val, 2), "type": "increase" if gap_val >= 0 else "decrease"}
         ]
 
         bi = getattr(fact, "business_impact", None)
@@ -568,18 +586,21 @@ class FactVisualizer:
             if scale_diff > 0:
                 waterfall_steps.append({
                     "label": f"Scale Effect (n={fact.sample_size})",
+                    "full_label": f"Population Scale Impact (Cohort Size n={fact.sample_size})",
                     "value": scale_diff,
                     "type": "increase"
                 })
             waterfall_steps.append({
                 "label": "Total Business Impact",
+                "full_label": "Total Net Business Exposure",
                 "value": round(impact_val, 2),
                 "type": "total"
             })
             unit = getattr(bi, "unit", unit) or unit
         else:
             waterfall_steps.append({
-                "label": f"Observed ({seg_val})",
+                "label": f"Observed ({seg_val_clean})",
+                "full_label": f"Observed Segment Value ({seg_dim}: {seg_val})",
                 "value": round(obs_val, 2),
                 "type": "total"
             })
@@ -612,11 +633,16 @@ class FactVisualizer:
             ChartSeries(name="Delta", values=delta_vals, color_token="#ef4444" if gap_val > 0 else "#10b981")
         ]
 
+        wf_title = f"{fact.metric.replace('_', ' ').title()} Variance Waterfall"
+        wf_subtitle = f"Attribution bridge for {seg_dim}: {seg_val}"
+
         return VisualChartSpec(
             chart_id=f"{chart_id_prefix}-{fact.fact_id}",
             chart_type="waterfall",
-            title=f"{fact.metric.replace('_', ' ').title()} Variance Waterfall",
-            subtitle=f"Attribution bridge for {seg_dim}: {seg_val}",
+            title=wf_title,
+            full_title=wf_title,
+            subtitle=wf_subtitle,
+            full_subtitle=wf_subtitle,
             unit=unit,
             categories=categories,
             series=series,

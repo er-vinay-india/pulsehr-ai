@@ -49,6 +49,7 @@ export function cartesian(categories, series, horizontal = false, unit = '', the
     type: 'category',
     data: categories,
     inverse: horizontal,
+    triggerEvent: true,
     axisTick: { show: false },
     axisLine: { lineStyle: { color: lineColor } },
     axisLabel: {
@@ -101,6 +102,8 @@ export function cartesian(categories, series, horizontal = false, unit = '', the
       show: series.length > 1,
       type: 'scroll',
       top: 0,
+      triggerEvent: true,
+      tooltip: { show: true },
       textStyle: { color: headingColor, fontSize: 11, fontWeight: 600 }
     },
     xAxis: horizontal ? value : category,
