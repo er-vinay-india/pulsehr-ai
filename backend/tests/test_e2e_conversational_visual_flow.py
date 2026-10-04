@@ -28,6 +28,7 @@ from app.services.presentation.slide_mutator import SlideMutator, SlideMutationA
 from pptx import Presentation
 
 client = TestClient(app)
+pytestmark = [pytest.mark.presentation]
 
 
 @pytest.fixture

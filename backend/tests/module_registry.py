@@ -94,6 +94,7 @@ MODULE_REGISTRY: Dict[str, ModuleSpec] = {
             "backend/app/services/presentation/",
             "backend/app/services/presentation_*.py",
             "backend/app/routers/presentation.py",
+            "backend/app/routers/presentations.py",
             "backend/app/services/pptx/",
         ],
         test_files=[
@@ -108,6 +109,10 @@ MODULE_REGISTRY: Dict[str, ModuleSpec] = {
             "tests/test_spatial_overflow_monitor.py",
             "tests/test_decision_deck.py",
             "tests/test_local_voiceover.py",
+            "tests/test_slide_export_contrast.py",
+            "tests/test_export_parity_guard.py",
+            "tests/test_presentation_chatbot_mutations.py",
+            "tests/test_e2e_conversational_visual_flow.py",
         ],
         unit_only_keywords=[
             "test_intent_extraction",

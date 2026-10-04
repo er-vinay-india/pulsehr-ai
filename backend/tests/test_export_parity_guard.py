@@ -20,6 +20,8 @@ from app.services.report_generator import export_spec_to_pptx
 from app.services.presentation.visual.design_tokens import SLIDE_THEME_PRESETS, slide_theme_preset
 from app.services.presentation.photo_background import _contrast
 
+pytestmark = [pytest.mark.presentation]
+
 NS = {
     'a': 'http://schemas.openxmlformats.org/drawingml/2006/main',
     'c': 'http://schemas.openxmlformats.org/drawingml/2006/chart',

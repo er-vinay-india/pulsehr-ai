@@ -23,6 +23,9 @@ from app.services.presentation.slide_mutator import (
     SlideMutationResult,
 )
 
+pytestmark = [pytest.mark.presentation]
+
+
 
 @pytest.fixture
 def sample_sales_df():

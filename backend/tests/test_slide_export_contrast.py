@@ -11,6 +11,7 @@ from app.services.presentation.photo_background import _contrast, photo_scrim_op
 from pptx import Presentation
 
 NS = {'a':'http://schemas.openxmlformats.org/drawingml/2006/main', 'c':'http://schemas.openxmlformats.org/drawingml/2006/chart'}
+pytestmark = [pytest.mark.presentation]
 
 @pytest.mark.parametrize('theme_id', list(SLIDE_THEME_PRESETS))
 def test_native_export_contrast(theme_id, tmp_path, monkeypatch):
