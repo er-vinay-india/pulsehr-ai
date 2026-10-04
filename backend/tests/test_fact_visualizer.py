@@ -12,6 +12,7 @@ Verifies deterministic, mathematically defensible visual mapping for CandidateFa
 import pytest
 import pandas as pd
 
+from unittest.mock import patch
 from app.services.data_engine.semantic_classifier import SemanticClassifier
 from app.services.data_engine.opportunity_map import OpportunityMapGenerator
 from app.services.data_engine.candidate_fact_discovery import CandidateFactDiscoveryEngine
@@ -19,6 +20,18 @@ from app.services.data_engine.interestingness_ranker import FactInterestingnessR
 from app.services.data_engine.fact_visualizer import FactVisualizer
 from app.services.data_engine.visualization_models import VisualChartSpec
 from app.services.analyst.analyst_agent import AnalystAgent
+from app.services.gateway.model_gateway import GatewayResult
+from app.core.models_config import ModelRole
+
+
+@pytest.fixture(autouse=True)
+def mock_gateway_offline():
+    """Ensure tests run purely offline without hanging on external LLM / Ollama connection."""
+    with patch(
+        "app.services.gateway.model_gateway.ModelGateway.generate",
+        return_value=GatewayResult(raw_text="", success=True, error=None, role=ModelRole.ANALYST)
+    ):
+        yield
 
 
 # -----------------------------------------------------------------------------

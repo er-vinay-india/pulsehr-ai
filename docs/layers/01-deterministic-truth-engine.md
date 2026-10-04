@@ -51,7 +51,15 @@ flowchart TD
 - **Contract**: `CandidateFact` tagged with unique `FACT-001`, `FACT-002`, baseline delta, sample size, and statistical confidence.
 - **Pure Code Computation**: Calculates top/bottom performers, Pareto distributions, baseline drifts, multi-factor compound cohort disparities (concentration ratios, z-scores, intra-segment spread), and outlier clusters using pure Python, Pandas, and NumPy. Minimum subgroup sample sizes ($N \ge 4$ or $5$) are strictly enforced to suppress noise and small-sample bias.
 
-### E. Industrial People Analytics Models
+### E. Analytical Function & Business Jargon Library (`function_library/`)
+- **Files**: `backend/app/services/function_library/base.py`, `registry.py`, `storage.py`, `catalog/`
+- **Permanent Metadata DB**: `data/db/system_function_library.sqlite3` (`system_function_catalog` table)
+- **Decoupled Lifecycle**: Completely isolated from dataset/sheet lifecycles. Wiping or deleting sheets via `dataset_deletion.py` or the UI **never** deletes the system function library.
+- **Token-Optimized Micro-Schema**: Pre-compiles an ultra-dense markdown DSL (`compact_token_repr`, <35 tokens/function) injecting the entire library into LLM prompts in under 400 tokens total.
+- **Persona Jargon Translations**: Maps abstract statistical signals into crisp non-technical action items across **HR** (burnout, flight risk), **Finance** (payroll leaks, replacement costs), and **Project Management** (velocity drag, lost sprint hours).
+- **Deterministic Business Impact Engine**: Attaches `BusinessImpactAssessment` ($ cost, lost productive hours, headcount at risk, margin leakage) to every reliable candidate fact without LLM arithmetic.
+
+### F. Industrial People Analytics Models
 Implemented in `backend/app/services/industrial/`:
 1. **McKinsey / GE 9-Box Matrix (`talent_9box_model.py`)**:
    - 3×3 grid mapping Performance Rating vs Potential Rating.
@@ -64,7 +72,7 @@ Implemented in `backend/app/services/industrial/`:
 4. **Longitudinal Trajectory Forecasting (`time_series_forecast.py`)**:
    - Holt-damped exponential smoothing with cyclical peak detection and historical variance bands.
 
-### F. Shared Evidence Package & Cryptographic Ledger (`EVID-XXX`)
+### G. Shared Evidence Package & Cryptographic Ledger (`EVID-XXX`)
 - **File**: `backend/app/services/shared_evidence_package.py`
 - **Output**: `SharedEvidencePackage`
 - **Integrity**: Every finding is assigned an audited citation ID (`EVID-EXEC-01`, `EVID-KPI-01`, `EVID-STRENGTH-01`) sealed with a SHA-256 snapshot hash.

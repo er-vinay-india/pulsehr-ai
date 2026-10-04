@@ -44,6 +44,8 @@ class CandidateFact(BaseModel):
     provenance: str = "DATA_INFERRED"  # "USER_EXPLICIT", "USER_INFERRED", "DATA_INFERRED", "SYSTEM_DEFAULT"
     target_rule_description: str | None = None
     matching_user_question: str | None = None
+    function_id: str | None = None
+    business_impact: Any | None = None
 
     @model_validator(mode="before")
     @classmethod

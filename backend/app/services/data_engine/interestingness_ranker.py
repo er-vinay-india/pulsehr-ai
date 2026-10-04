@@ -99,7 +99,20 @@ class FactInterestingnessRanker:
                 total_penalty = min(0.55, m_penalty + d_penalty + t_penalty)
                 # User-priority facts receive a top-tier boost so user questions rank first
                 priority_boost = 10.0 if fact.priority_type == "USER_PRIORITY" else 0.0
-                adjusted_score = round(base_score + priority_boost - (1.0 - diversity_lambda) * total_penalty, 3)
+
+                # Business impact boost for critical financial/operational consequences
+                impact_boost = 0.0
+                if getattr(fact, "business_impact", None) is not None:
+                    bi = fact.business_impact
+                    sev = str(getattr(bi, "severity", "")).upper()
+                    if "CRITICAL" in sev:
+                        impact_boost = 0.35
+                    elif "HIGH" in sev:
+                        impact_boost = 0.20
+                    elif "OPPORTUNITY" in sev:
+                        impact_boost = 0.15
+
+                adjusted_score = round(base_score + priority_boost + impact_boost - (1.0 - diversity_lambda) * total_penalty, 3)
 
                 if adjusted_score > best_adjusted_score:
                     best_adjusted_score = adjusted_score

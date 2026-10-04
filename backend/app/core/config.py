@@ -32,6 +32,7 @@ PRESENTATION_MEMORY_MAX_CONTEXT_ITEMS = int(os.getenv("PRESENTATION_MEMORY_MAX_C
 PRESENTATION_MEMORY_MAX_TOTAL_CHARS = int(os.getenv("PRESENTATION_MEMORY_MAX_TOTAL_CHARS", "4000"))
 PRESENTATION_MEMORY_DB_PATH = DATA_DIR / "db" / "presentation_memory.sqlite3"
 PRESENTATION_MEMORY_VECTOR_STORE = os.getenv("PRESENTATION_MEMORY_VECTOR_STORE", "sqlite_vec")
+SYSTEM_FUNCTION_LIBRARY_DB_PATH = DATA_DIR / "db" / "system_function_library.sqlite3"
 
 # Presentation Director (Phase 2) Configuration
 PRESENTATION_DIRECTOR_ENABLED = os.getenv("PRESENTATION_DIRECTOR_ENABLED", "true").lower() in ("true", "1", "yes")

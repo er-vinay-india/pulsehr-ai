@@ -44,6 +44,12 @@ class CandidateFactDiscoveryEngine:
                 else:
                     unreliable_facts.append(fact)
 
+        # Deterministically enrich reliable facts with business impact assessments from the Function Library
+        from ..function_library import AnalyticalFunctionRegistry
+        for fact in reliable_facts:
+            if getattr(fact, "business_impact", None) is None:
+                fact.business_impact = AnalyticalFunctionRegistry.evaluate_business_impact(fact, df, profile)
+
         return reliable_facts, unreliable_facts
 
     @classmethod

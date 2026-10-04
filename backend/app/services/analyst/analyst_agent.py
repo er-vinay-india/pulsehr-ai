@@ -418,6 +418,13 @@ Return a valid JSON object matching this schema:
                 "polarity": f.polarity.value if hasattr(f.polarity, "value") else str(f.polarity),
                 "summary": f.statement
             }
+            if getattr(f, "business_impact", None) is not None:
+                bi = f.business_impact
+                item["business_impact"] = {
+                    "formatted_impact": getattr(bi, "formatted_impact", ""),
+                    "severity": getattr(bi, "severity", ""),
+                    "layman_takeaway": getattr(bi, "layman_takeaway", "")
+                }
             facts_payload.append(item)
 
         # Format column polarities
