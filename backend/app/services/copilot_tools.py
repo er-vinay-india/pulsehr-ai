@@ -147,6 +147,10 @@ def arithmetic(expression: str) -> float:
         'cbrt': math.cbrt if hasattr(math, 'cbrt') else lambda x: x ** (1.0 / 3.0),
         'abs': abs,
         'round': round,
+        'log': math.log,
+        'log10': math.log10,
+        'log2': math.log2,
+        'exp': math.exp,
     }
 
     def evaluate(node):
@@ -162,12 +166,22 @@ def arithmetic(expression: str) -> float:
             value = float(operations[type(node.op)](left_val, right_val))
         elif isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in allowed_funcs:
             func = allowed_funcs[node.func.id]
-            if len(node.args) != 1:
-                raise ValueError(f"Function {node.func.id} expects exactly 1 argument.")
-            arg_val = evaluate(node.args[0])
-            if node.func.id in ('sqrt', 'cbrt') and arg_val < 0:
-                raise ValueError(f"Cannot calculate {node.func.id} of a negative number.")
-            value = float(func(arg_val))
+            if node.func.id == 'log' and len(node.args) == 2:
+                # log(x, base)
+                arg_val = evaluate(node.args[0])
+                base_val = evaluate(node.args[1])
+                if arg_val <= 0 or base_val <= 0 or base_val == 1:
+                    raise ValueError(f"Invalid arguments for log(x, base): x={arg_val}, base={base_val}.")
+                value = float(math.log(arg_val, base_val))
+            elif len(node.args) == 1:
+                arg_val = evaluate(node.args[0])
+                if node.func.id in ('sqrt', 'cbrt') and arg_val < 0:
+                    raise ValueError(f"Cannot calculate {node.func.id} of a negative number.")
+                if node.func.id in ('log', 'log10', 'log2') and arg_val <= 0:
+                    raise ValueError(f"Cannot calculate {node.func.id} of non-positive number: {arg_val}.")
+                value = float(func(arg_val))
+            else:
+                raise ValueError(f"Function {node.func.id} received unexpected number of arguments.")
         else:
             raise ValueError('Use only numbers, parentheses, +, -, *, /, powers, and sqrt/cbrt/abs/round.')
         if not math.isfinite(value) or abs(value) > 1e15:

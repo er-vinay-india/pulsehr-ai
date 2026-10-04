@@ -94,6 +94,19 @@ class CouncilCoordinator:
         pow_match = re.search(r'^(\d+(?:\.\d+)?)\s+(?:to\s+the\s+power\s+of|raised\s+to|pow)\s+(\d+(?:\.\d+)?)$', clean, re.I)
         if pow_match:
             return True, f"({pow_match.group(1)}) ** ({pow_match.group(2)})"
+        # 4. Logarithm phrasing: "log of 10 base 2", "log 10 base 2", "log base 2 of 10", "log 100", "log10 of 100"
+        log_base_match = re.search(r'^(?:the\s+)?log(?:arithm)?\s+(?:of\s+)?(\d+(?:\.\d+)?)\s+base\s+(\d+(?:\.\d+)?)$', clean, re.I)
+        if log_base_match:
+            return True, f"log({log_base_match.group(1)}, {log_base_match.group(2)})"
+        log_base_rev = re.search(r'^(?:the\s+)?log(?:arithm)?\s+base\s+(\d+(?:\.\d+)?)\s+(?:of\s+)?(\d+(?:\.\d+)?)$', clean, re.I)
+        if log_base_rev:
+            return True, f"log({log_base_rev.group(2)}, {log_base_rev.group(1)})"
+        log_single = re.search(r'^(?:the\s+)?(?:log10|log)\s+(?:of\s+)?(\d+(?:\.\d+)?)$', clean, re.I)
+        if log_single:
+            return True, f"log10({log_single.group(1)})"
+        log2_single = re.search(r'^(?:the\s+)?log2\s+(?:of\s+)?(\d+(?:\.\d+)?)$', clean, re.I)
+        if log2_single:
+            return True, f"log2({log2_single.group(1)})"
 
         # Check for arithmetic operators
         has_operator = bool(re.search(r'[\+\-\*\/\^%]', clean))

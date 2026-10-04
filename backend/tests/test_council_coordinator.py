@@ -151,6 +151,9 @@ def test_coordinator_bounded_natural_language_math():
         ("9 squared", "(9) ** 2", 81.0),
         ("3 cubed", "(3) ** 3", 27.0),
         ("2 to the power of 8", "(2) ** (8)", 256.0),
+        ("what is the log of 10 base 2", "log(10, 2)", 3.32192809489),
+        ("log 10 base 2", "log(10, 2)", 3.32192809489),
+        ("log10 of 100", "log10(100)", 2.0),
     ]
     for query, expected_expr, expected_val in cases:
         decision = CouncilCoordinator.coordinate(query)

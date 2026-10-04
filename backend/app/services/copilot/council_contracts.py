@@ -30,6 +30,10 @@ class EntityGrain(str, Enum):
     DEPARTMENT = "department"
     STORE = "store"
     GLOBAL = "global"
+    STUDENT = "student"
+    CUSTOMER = "customer"
+    RECORD = "record"
+    INDIVIDUAL = "individual"
 
 
 class OperationType(str, Enum):
