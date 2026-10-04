@@ -42,13 +42,14 @@ flowchart TD
 - **Responsibility**: Enumerates all mathematically defensible combinations:
   - Univariate distributions (measures across observations).
   - Bivariate segment cross-tabs (dimensions against measures).
+  - Multi-Factor Segment Disparity (`MULTI_FACTOR_SEGMENT_DISPARITY`: Dimension A × Dimension B × Measure).
   - Continuous correlations and longitudinal period trends.
   - Blocks meaningless operations (e.g., averaging ID numbers).
 
 ### D. Empirical Candidate Fact Discovery (`FACT-XXX`)
 - **File**: `backend/app/services/data_engine/candidate_fact_discovery.py`
 - **Contract**: `CandidateFact` tagged with unique `FACT-001`, `FACT-002`, baseline delta, sample size, and statistical confidence.
-- **Pure Code Computation**: Calculates top/bottom performers, Pareto distributions, baseline drifts, and outlier clusters using pure Python, Pandas, and NumPy.
+- **Pure Code Computation**: Calculates top/bottom performers, Pareto distributions, baseline drifts, multi-factor compound cohort disparities (concentration ratios, z-scores, intra-segment spread), and outlier clusters using pure Python, Pandas, and NumPy. Minimum subgroup sample sizes ($N \ge 4$ or $5$) are strictly enforced to suppress noise and small-sample bias.
 
 ### E. Industrial People Analytics Models
 Implemented in `backend/app/services/industrial/`:

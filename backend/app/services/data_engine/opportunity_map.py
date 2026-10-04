@@ -27,6 +27,7 @@ class OpportunityType(str, Enum):
     CATEGORICAL_CROSS_TAB = "categorical_cross_tab"   # Dimension + Dimension
     TARGET_ASSOCIATION = "target_association"         # Possible Target + Dimension / Measure
     TARGET_COMPLIANCE = "target_compliance"           # Explicit Business Rule / Threshold Compliance
+    MULTI_FACTOR_SEGMENT_DISPARITY = "multi_factor_segment_disparity"  # Dimension A × Dimension B × Measure
 
 
 class AnalysisOpportunity(BaseModel):
@@ -216,7 +217,32 @@ class OpportunityMapGenerator:
             ))
             opp_idx += 1
 
-        # 8. User-Priority Tagging & Reordering
+        # 8. Multi-Factor Segment Disparity (Dimension A × Dimension B × Measure)
+        if len(categories) >= 2 and measures:
+            viable_dims = []
+            for cat in categories:
+                col_meta = profile.columns.get(cat)
+                dist_cnt = col_meta.unique_count if col_meta and getattr(col_meta, "unique_count", None) is not None else 5
+                if 2 <= dist_cnt <= 15:
+                    viable_dims.append(cat)
+
+            if len(viable_dims) >= 2:
+                c1, c2 = viable_dims[0], viable_dims[1]
+                for m_col in measures[:2]:
+                    opportunities.append(AnalysisOpportunity(
+                        opportunity_id=f"OPP-{opp_idx:03d}",
+                        opportunity_type=OpportunityType.MULTI_FACTOR_SEGMENT_DISPARITY,
+                        primary_column=f"{c1}__x__{c2}",
+                        secondary_column=m_col,
+                        title=f"Multi-Factor Deep Segment Disparity: {m_col} across {c1} × {c2}",
+                        rationale=f"Evaluates non-linear cross-segment disparities and compound outlier cohorts across {c1} and {c2}.",
+                        mathematical_method="bivariate_group_aggregation_and_pareto_concentration",
+                        feasibility_score=0.92,
+                        metadata={"dim1": c1, "dim2": c2, "measure": m_col}
+                    ))
+                    opp_idx += 1
+
+        # 9. User-Priority Tagging & Reordering
         if context and getattr(context, "has_user_intent", False):
             user_questions_text = " ".join(getattr(context, "questions_to_answer", [])).lower()
             user_obj_text = (getattr(context, "user_objective", "") or "").lower()

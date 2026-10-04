@@ -270,3 +270,69 @@ def test_backward_compatibility_with_legacy_candidate_fact():
     assert fact.significance_score == 0.88
     assert fact.raw_proof == {"data": "sample"}
     assert fact.reliability_status == ReliabilityStatus.RELIABLE
+
+
+def test_multi_factor_segment_disparity_discovery():
+    """Test 8: Deep multi-factor segment disparity discovers compound outlier cohorts (Dim A × Dim B × Measure)."""
+    # Create realistic workforce dataset with a clear hidden cross-segment spike in Warehouse x Night
+    departments = ["Sales"] * 20 + ["Engineering"] * 20 + ["Warehouse"] * 20
+    shifts = (["Day"] * 10 + ["Night"] * 10) * 3
+    # Baseline absences around 3-4 days, but Warehouse x Night averages 14 days
+    absences = []
+    for d, s in zip(departments, shifts):
+        if d == "Warehouse" and s == "Night":
+            absences.append(14.0)
+        elif d == "Engineering" and s == "Night":
+            absences.append(6.0)
+        else:
+            absences.append(3.0)
+
+    workforce_df = pd.DataFrame({
+        "employee_id": [f"EMP-{i:03d}" for i in range(1, 61)],
+        "department": departments,
+        "shift": shifts,
+        "absence_days": absences
+    })
+
+    profile = SemanticClassifier.profile_dataset(workforce_df, "Workforce Attendance")
+    opp_map = OpportunityMapGenerator.generate(profile)
+
+    # Opportunity map should generate MULTI_FACTOR_SEGMENT_DISPARITY
+    opp_types = [o.opportunity_type for o in opp_map.opportunities]
+    assert OpportunityType.MULTI_FACTOR_SEGMENT_DISPARITY in opp_types
+
+    reliable, _ = CandidateFactDiscoveryEngine.discover_facts(workforce_df, profile, opp_map)
+    multi_facts = [f for f in reliable if f.fact_type == OpportunityType.MULTI_FACTOR_SEGMENT_DISPARITY.value]
+
+    assert len(multi_facts) > 0
+    # The top fact should isolate the Warehouse x Night intersection
+    top_compound = multi_facts[0]
+    assert top_compound.metric == "absence_days" or "spread" in top_compound.metric
+    assert top_compound.sample_size >= 5
+    assert top_compound.value > top_compound.baseline_value
+    assert top_compound.relative_difference > 50.0  # Significant spike
+    assert "statistical_info" in top_compound.model_dump()
+    assert "statement" in top_compound.model_dump() and len(top_compound.statement) > 0
+
+
+def test_multi_factor_small_sample_suppression():
+    """Test 9: Cross-segment discovery suppresses cohorts with fewer than minimum required records."""
+    # Cohort with only 2 records in IT x Night
+    tiny_df = pd.DataFrame({
+        "id": [f"ID-{i}" for i in range(1, 15)],
+        "dept": ["IT"] * 2 + ["HR"] * 12,
+        "shift": ["Night"] * 2 + ["Day"] * 12,
+        "cost": [100.0, 105.0] + [20.0] * 12
+    })
+    profile = SemanticClassifier.profile_dataset(tiny_df, "Small Test")
+    opp_map = OpportunityMapGenerator.generate(profile)
+
+    reliable, _ = CandidateFactDiscoveryEngine.discover_facts(tiny_df, profile, opp_map)
+    # The 2-record IT x Night cohort should NOT appear as a reliable multi-factor fact
+    multi_facts = [
+        f for f in reliable
+        if f.fact_type == OpportunityType.MULTI_FACTOR_SEGMENT_DISPARITY.value
+        and f.dimensions.get("dept") == "IT"
+        and f.dimensions.get("shift") == "Night"
+    ]
+    assert len(multi_facts) == 0

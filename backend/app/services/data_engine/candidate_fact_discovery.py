@@ -75,6 +75,8 @@ class CandidateFactDiscoveryEngine:
             facts = cls._evaluate_categorical_cross_tab(df, profile, opp, start_idx, max_facts)
         elif opp_type == OpportunityType.TARGET_ASSOCIATION:
             facts = cls._evaluate_target_association(df, profile, opp, start_idx, max_facts)
+        elif opp_type == OpportunityType.MULTI_FACTOR_SEGMENT_DISPARITY:
+            facts = cls._evaluate_multi_factor_segment_disparity(df, profile, opp, start_idx, max_facts)
 
         if opp.is_user_priority:
             for f in facts:
@@ -1207,3 +1209,254 @@ class CandidateFactDiscoveryEngine:
             return [fact]
 
         return []
+
+    # -------------------------------------------------------------------------
+    # 8. MULTI_FACTOR_SEGMENT_DISPARITY (Dimension A × Dimension B × Numeric Measure)
+    # -------------------------------------------------------------------------
+
+    @classmethod
+    def _evaluate_multi_factor_segment_disparity(
+        cls,
+        df: pd.DataFrame,
+        profile: SemanticDatasetProfile,
+        opp: AnalysisOpportunity,
+        start_idx: int,
+        max_facts: int
+    ) -> list[CandidateFact]:
+        """Discovers non-linear cross-segment disparities, compound outlier cohorts, and Pareto skew.
+
+        Evaluates intersections of Dimension A × Dimension B against a continuous Measure.
+        Enforces minimum sample sizes to prevent spurious single-row anomalies.
+        """
+        dim1 = opp.metadata.get("dim1")
+        dim2 = opp.metadata.get("dim2")
+        meas_col = opp.secondary_column or opp.metadata.get("measure")
+
+        if not dim1 or not dim2 or not meas_col:
+            if "__x__" in opp.primary_column:
+                parts = opp.primary_column.split("__x__")
+                if len(parts) >= 2:
+                    dim1, dim2 = parts[0], parts[1]
+
+        if not dim1 or not dim2 or not meas_col:
+            return []
+
+        if dim1 not in df.columns or dim2 not in df.columns or meas_col not in df.columns:
+            return []
+
+        clean_meas = cls._coerce_numeric(df[meas_col])
+        clean_d1 = df[dim1].astype(str).str.strip()
+        clean_d2 = df[dim2].astype(str).str.strip()
+
+        work_df = pd.DataFrame({
+            "d1": clean_d1,
+            "d2": clean_d2,
+            "val": clean_meas
+        }).dropna()
+
+        work_df = work_df[
+            (~work_df["d1"].str.lower().isin(["nan", "none", "", "null"])) &
+            (~work_df["d2"].str.lower().isin(["nan", "none", "", "null"]))
+        ]
+
+        total_records = len(work_df)
+        if total_records < 10:
+            return []
+
+        grand_sum = float(work_df["val"].sum())
+        grand_mean = float(work_df["val"].mean())
+        grand_std = float(work_df["val"].std())
+
+        if pd.isna(grand_std) or grand_std == 0:
+            return []
+
+        meas_prof = profile.columns.get(meas_col)
+        polarity = meas_prof.metric_polarity if meas_prof else MetricPolarity.UNKNOWN
+        unit = meas_prof.unit or "" if meas_prof else ""
+        is_rate = (meas_prof.semantic_role == SemanticRole.PERCENTAGE_RATE) if meas_prof else False
+
+        min_sample = 4 if total_records < 50 else 5
+
+        grouped = work_df.groupby(["d1", "d2"])
+        cohort_candidates = []
+
+        for (v1, v2), g_df in grouped:
+            c_len = len(g_df)
+            if c_len < min_sample:
+                continue
+
+            c_mean = float(g_df["val"].mean())
+            c_sum = float(g_df["val"].sum())
+            c_pop_share = (c_len / total_records) * 100.0
+            c_metric_share = (c_sum / grand_sum * 100.0) if grand_sum > 0 else 0.0
+            concentration_ratio = (c_metric_share / c_pop_share) if c_pop_share > 0 else 1.0
+
+            abs_diff = c_mean - grand_mean
+            rel_diff = (abs_diff / grand_mean * 100.0) if grand_mean != 0 else 0.0
+            se = grand_std / np.sqrt(c_len)
+            z_score = abs_diff / se if se > 0 else 0.0
+
+            is_meaningful = (
+                abs(rel_diff) >= 30.0 or
+                concentration_ratio >= 1.6 or
+                concentration_ratio <= 0.5 or
+                abs(z_score) >= 1.75
+            )
+
+            if is_meaningful:
+                interest_score = abs(rel_diff) * max(concentration_ratio, 1.0 / max(concentration_ratio, 0.1)) * np.sqrt(c_len)
+                cohort_candidates.append({
+                    "dim1_val": v1,
+                    "dim2_val": v2,
+                    "cohort_n": c_len,
+                    "cohort_mean": c_mean,
+                    "cohort_sum": c_sum,
+                    "cohort_pop_share": c_pop_share,
+                    "cohort_metric_share": c_metric_share,
+                    "concentration_ratio": concentration_ratio,
+                    "abs_diff": abs_diff,
+                    "rel_diff": rel_diff,
+                    "z_score": z_score,
+                    "interest_score": interest_score
+                })
+
+        cohort_candidates.sort(key=lambda x: x["interest_score"], reverse=True)
+
+        facts: list[CandidateFact] = []
+        cur_idx = start_idx
+
+        # 1. Surface Top Bivariate Outlier / Disparity Cohorts
+        for item in cohort_candidates[:max(1, max_facts - 1)]:
+            v1 = item["dim1_val"]
+            v2 = item["dim2_val"]
+            n = item["cohort_n"]
+            mean_val = round(item["cohort_mean"], 2)
+            b_val = round(grand_mean, 2)
+            a_diff = round(item["abs_diff"], 2)
+            r_diff = round(item["rel_diff"], 1)
+            pop_share = round(item["cohort_pop_share"], 1)
+            metric_share = round(item["cohort_metric_share"], 1)
+            conc_ratio = round(item["concentration_ratio"], 2)
+
+            val_str = cls._format_value_str(mean_val, unit)
+            base_str = cls._format_value_str(b_val, unit)
+            diff_str = cls._format_diff_str(a_diff, unit, is_rate)
+
+            direction = "higher" if a_diff > 0 else "lower"
+            skew_clause = ""
+            if conc_ratio >= 1.5:
+                skew_clause = f", driving an outsized {metric_share}% of total {meas_col} ({conc_ratio}x concentration)"
+            elif conc_ratio <= 0.6:
+                skew_clause = f", contributing only {metric_share}% of total {meas_col}"
+
+            stmt = (
+                f"Cross-segment intersection [{dim1}='{v1}' × {dim2}='{v2}'] (n = {n}, {pop_share}% of records) "
+                f"averaged {val_str} for {meas_col} vs baseline {base_str} ({diff_str} / {r_diff:+0.1f}% {direction}{skew_clause}; n = {n})."
+            )
+
+            fact = CandidateFact(
+                fact_id=f"FACT-{cur_idx:03d}",
+                fact_type=OpportunityType.MULTI_FACTOR_SEGMENT_DISPARITY.value,
+                metric=meas_col,
+                dimensions={dim1: v1, dim2: v2},
+                value=mean_val,
+                baseline_value=b_val,
+                absolute_difference=a_diff,
+                relative_difference=r_diff,
+                sample_size=n,
+                statistical_info={
+                    "dimension_1": dim1,
+                    "dimension_1_value": v1,
+                    "dimension_2": dim2,
+                    "dimension_2_value": v2,
+                    "cohort_n": n,
+                    "total_records": total_records,
+                    "cohort_pop_share_pct": pop_share,
+                    "cohort_metric_share_pct": metric_share,
+                    "concentration_ratio": conc_ratio,
+                    "z_score": round(item["z_score"], 2),
+                    "grand_baseline_mean": b_val
+                },
+                source_columns=[dim1, dim2, meas_col],
+                polarity=polarity,
+                semantic_confidence=0.92,
+                calculation_method="bivariate_group_aggregation_and_pareto_concentration",
+                evidence_metadata={
+                    "dim1": dim1,
+                    "dim2": dim2,
+                    "measure": meas_col
+                },
+                statement=stmt,
+                reliability_status=ReliabilityStatus.RELIABLE
+            )
+            facts.append(fact)
+            cur_idx += 1
+
+        # 2. Intra-Segment Contrast (Within top Dim 1 category, find biggest spread across Dim 2)
+        if len(facts) < max_facts and cohort_candidates:
+            by_d1: dict[str, list[dict[str, Any]]] = {}
+            for c in cohort_candidates:
+                by_d1.setdefault(c["dim1_val"], []).append(c)
+
+            best_d1 = None
+            best_spread = 0.0
+            best_pair = None
+
+            for d1_val, c_list in by_d1.items():
+                if len(c_list) >= 2:
+                    sorted_by_mean = sorted(c_list, key=lambda x: x["cohort_mean"], reverse=True)
+                    hi, lo = sorted_by_mean[0], sorted_by_mean[-1]
+                    spread = hi["cohort_mean"] - lo["cohort_mean"]
+                    ratio = (hi["cohort_mean"] / lo["cohort_mean"]) if lo["cohort_mean"] > 0 else 1.0
+                    if spread > best_spread and ratio >= 1.5:
+                        best_spread = spread
+                        best_d1 = d1_val
+                        best_pair = (hi, lo, ratio)
+
+            if best_pair and best_d1:
+                hi, lo, ratio = best_pair
+                v2_hi = hi["dim2_val"]
+                v2_lo = lo["dim2_val"]
+                hi_val_str = cls._format_value_str(round(hi["cohort_mean"], 2), unit)
+                lo_val_str = cls._format_value_str(round(lo["cohort_mean"], 2), unit)
+
+                stmt = (
+                    f"Within {dim1} '{best_d1}', the '{v2_hi}' cohort averaged {hi_val_str} for {meas_col}, "
+                    f"which is {ratio:.1f}x higher than the '{v2_lo}' cohort ({lo_val_str}; internal disparity = {round(best_spread, 2):+g} {unit}; n = {hi['cohort_n'] + lo['cohort_n']})."
+                )
+
+                contrast_fact = CandidateFact(
+                    fact_id=f"FACT-{cur_idx:03d}",
+                    fact_type=OpportunityType.MULTI_FACTOR_SEGMENT_DISPARITY.value,
+                    metric=f"{meas_col}_intra_{dim1}_spread",
+                    dimensions={dim1: best_d1, f"{dim2}_high": v2_hi, f"{dim2}_low": v2_lo},
+                    value=round(hi["cohort_mean"], 2),
+                    baseline_value=round(lo["cohort_mean"], 2),
+                    absolute_difference=round(best_spread, 2),
+                    relative_difference=round(((ratio - 1.0) * 100.0), 1),
+                    sample_size=hi["cohort_n"] + lo["cohort_n"],
+                    statistical_info={
+                        "dimension_1": dim1,
+                        "dimension_1_value": best_d1,
+                        "dimension_2_high": v2_hi,
+                        "dimension_2_low": v2_lo,
+                        "high_mean": round(hi["cohort_mean"], 2),
+                        "low_mean": round(lo["cohort_mean"], 2),
+                        "ratio": round(ratio, 2),
+                        "spread": round(best_spread, 2)
+                    },
+                    source_columns=[dim1, dim2, meas_col],
+                    polarity=polarity,
+                    semantic_confidence=0.90,
+                    calculation_method="intra_segment_contrast_ratio",
+                    evidence_metadata={
+                        "dim1": dim1,
+                        "dim2": dim2,
+                        "measure": meas_col
+                    },
+                    statement=stmt,
+                    reliability_status=ReliabilityStatus.RELIABLE
+                )
+                facts.append(contrast_fact)
+
+        return facts

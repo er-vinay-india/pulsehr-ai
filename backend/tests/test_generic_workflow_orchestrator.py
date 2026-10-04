@@ -6,10 +6,23 @@ Verifies full generic pipeline from arbitrary DataFrame to validated slide deck:
 3. Ambiguous Masked Dataset
 """
 
+from unittest.mock import patch
 import pytest
 import pandas as pd
 
 from app.services.reporting.workflow_orchestrator import WorkflowOrchestrator
+from app.services.gateway.model_gateway import GatewayResult
+from app.core.models_config import ModelRole
+
+
+@pytest.fixture(autouse=True)
+def mock_gateway_offline():
+    """Ensure tests run purely offline without hanging on external LLM / Ollama connection."""
+    with patch(
+        "app.services.gateway.model_gateway.ModelGateway.generate",
+        return_value=GatewayResult(raw_text="", success=False, error="Mocked offline", role=ModelRole.ANALYST)
+    ):
+        yield
 
 
 @pytest.fixture
