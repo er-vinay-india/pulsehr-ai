@@ -442,6 +442,7 @@ class SlideMutator:
                     deltas.append(round(abs(st_val), 2))
 
             existing_chart["chart_type"] = "waterfall"
+            existing_chart["type"] = "waterfall"
             existing_chart["waterfall_steps"] = steps
             existing_chart["categories"] = [s["label"] for s in steps]
             existing_chart["series"] = [
@@ -467,6 +468,7 @@ class SlideMutator:
                 ]
             }
             existing_chart["chart_type"] = "breakdown_tree"
+            existing_chart["type"] = "breakdown_tree"
             existing_chart["tree_data"] = tree_root
             existing_chart["title"] = f"{existing_chart.get('title', 'Metric')} Decomposition Tree"
             target_slide["chart"] = existing_chart
@@ -475,22 +477,26 @@ class SlideMutator:
 
         elif target_type in ("donut", "pie"):
             existing_chart["chart_type"] = "donut"
+            existing_chart["type"] = "donut"
             existing_chart["title"] = f"{existing_chart.get('title', 'Share')} Distribution"
             target_slide["chart"] = existing_chart
             diff_summary = f"Converted Slide #{idx+1} chart to Donut Chart."
 
         elif target_type in ("bar", "horizontal_bar"):
             existing_chart["chart_type"] = "horizontal_bar"
+            existing_chart["type"] = "horizontal_bar"
             target_slide["chart"] = existing_chart
             diff_summary = f"Converted Slide #{idx+1} chart to Horizontal Bar Chart."
 
         elif target_type in ("line", "trend"):
             existing_chart["chart_type"] = "line"
+            existing_chart["type"] = "line"
             target_slide["chart"] = existing_chart
             diff_summary = f"Converted Slide #{idx+1} chart to Line Chart."
 
         else:
             existing_chart["chart_type"] = "column"
+            existing_chart["type"] = "column"
             target_slide["chart"] = existing_chart
             diff_summary = f"Converted Slide #{idx+1} chart to Column Chart."
 
