@@ -220,4 +220,40 @@ console.log('6. Testing Label Humanization & Underscore Auto-Repair...');
 }
 console.log('   ✅ Label Humanization & Underscore Auto-Repair tests passed.');
 
+// 7. Breakdown Tree Visual Guard Tests
+console.log('7. Testing Breakdown Tree Visual Guard & Label Deconfliction...');
+{
+  const treeSpec = {
+    title: 'Writing Score Over Math Score + Reading Score Driver Decomposition Tree',
+    type: 'breakdown_tree',
+    tree_data: {
+      name: 'Overall Writing Score Over Math Score + Reading Score',
+      value: 0.49,
+      children: [
+        {
+          name: 'Gender: Female',
+          value: 0.52,
+          children: [
+            { name: 'Group B (Disparity)', value: 0.44 },
+            { name: 'Group C', value: 0.51 }
+          ]
+        }
+      ]
+    }
+  };
+
+  const normTree = normalizeChartSpec(treeSpec);
+  assert.equal(normTree.isValid, true);
+  assert.equal(normTree.meta.cleanType, 'breakdown_tree');
+  // Root node name clamped to clean Overall Population
+  assert.equal(normTree.option.series[0].data[0].name, 'Overall Population');
+  // Non-leaf label positioned on top to avoid bezier collisions and left-canvas clipping
+  assert.equal(normTree.option.series[0].label.position, 'top');
+  assert.equal(normTree.option.series[0].label.align, 'center');
+  // Leaf label positioned on right
+  assert.equal(normTree.option.series[0].leaves.label.position, 'right');
+  assert.equal(normTree.option.series[0].leaves.label.align, 'left');
+}
+console.log('   ✅ Breakdown Tree Visual Guard tests passed.');
+
 console.log('\n🎉 ALL VISUAL GUARD & PRESENTATION ENGINE TESTS PASSED!\n');

@@ -38,13 +38,17 @@ export function normalizeChartSpec(rawSpec, options = {}) {
   // 1. Direct Tree Chart
   if (cleanType === 'breakdown_tree' || rawSpec.tree_data) {
     const rawTree = rawSpec.tree_data || rawSpec.treeData;
-    const sanitizeTree = (node) => {
+    const sanitizeTree = (node, depth = 0) => {
       if (!node) return node;
+      let cleanName = humanizeLabel(node.name);
+      if (depth === 0 && (cleanName.length > 20 || cleanName.toLowerCase().startsWith('overall '))) {
+        cleanName = 'Overall Population';
+      }
       return {
         ...node,
-        name: humanizeLabel(node.name),
+        name: cleanName,
         full_name: humanizeLabel(node.full_name || node.name),
-        children: Array.isArray(node.children) ? node.children.map(sanitizeTree) : undefined
+        children: Array.isArray(node.children) ? node.children.map(c => sanitizeTree(c, depth + 1)) : undefined
       };
     };
     const treeData = sanitizeTree(rawTree);
@@ -69,16 +73,32 @@ export function normalizeChartSpec(rawSpec, options = {}) {
         series: [{
           type: 'tree',
           data: [treeData],
-          top: '8%',
-          left: '12%',
-          bottom: '8%',
-          right: '20%',
+          top: '10%',
+          left: '16%',
+          bottom: '10%',
+          right: '26%',
           symbolSize: 12,
           orient: 'LR',
           initialTreeDepth: 3,
           triggerEvent: true,
-          label: { position: 'left', verticalAlign: 'middle', align: 'right', fontSize: 12 },
-          leaves: { label: { position: 'right', verticalAlign: 'middle', align: 'left', fontSize: 12 } }
+          label: {
+            position: 'top',
+            verticalAlign: 'bottom',
+            align: 'center',
+            distance: 6,
+            fontSize: 11,
+            formatter: p => (p.name && p.name.length > 22 ? p.name.slice(0, 20) + '…' : p.name)
+          },
+          leaves: {
+            label: {
+              position: 'right',
+              verticalAlign: 'middle',
+              align: 'left',
+              distance: 6,
+              fontSize: 11,
+              formatter: p => (p.name && p.name.length > 22 ? p.name.slice(0, 20) + '…' : p.name)
+            }
+          }
         }]
       }
     };

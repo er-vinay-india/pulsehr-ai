@@ -82,6 +82,10 @@ class FactVisualizer:
             parts = [cls._humanize_name(p) for p in s.split("_vs_")]
             s = " vs ".join(parts)
             return s
+        if "_over_" in s:
+            parts = [cls._humanize_name(p) for p in s.split("_over_")]
+            s = " / ".join(parts)
+            return s
         s = s.replace("_", " ").strip()
         acronyms = {"hr", "fte", "kpi", "id", "us", "uk", "cpi", "ols", "usd", "eur", "gbp", "inr", "roi", "ai", "qa", "ceo", "cfo", "vp"}
         words = s.split()
@@ -492,7 +496,8 @@ class FactVisualizer:
         val2_name = cls._humanize_name(str(val2))
         metric_name = cls._humanize_name(fact.metric)
 
-        root_name = f"Overall {metric_name}"
+        root_name = f"Overall {metric_name}" if len(metric_name) <= 16 else "Overall Population"
+        root_full_name = f"Overall Population ({metric_name})"
         root_val = round(fact.baseline_value if fact.baseline_value is not None else 0.0, 2)
         total_n = stat.get("total_records") or (len(df) if df is not None else 100)
 
@@ -531,8 +536,8 @@ class FactVisualizer:
                     clean_name = cls._humanize_name(str(idx_val))[:22]
                     full_name_clean = cls._humanize_name(str(idx_val))
                     dim2_children.append({
-                        "name": f"{dim2_name}: {clean_name}",
-                        "full_name": f"{dim2_name}: {full_name_clean}",
+                        "name": f"{clean_name} (Disparity)" if is_target else clean_name,
+                        "full_name": f"{dim2_name}: {full_name_clean}" + (" (Disparity)" if is_target else ""),
                         "value": round(float(row["mean"]), 2),
                         "sample_size": int(row["count"]),
                         "is_outlier": is_target,
@@ -556,7 +561,7 @@ class FactVisualizer:
         if not dim2_children:
             is_crit = bool(getattr(fact, "business_impact", None) and str(getattr(fact.business_impact, "severity", "")).upper().endswith("CRITICAL"))
             dim2_children.append({
-                "name": f"{dim2_name}: {val2_name} (Disparity)",
+                "name": f"{val2_name} (Disparity)",
                 "full_name": f"{dim2_name}: {val2_name} (Disparity)",
                 "value": round(fact.value or 0.0, 2),
                 "sample_size": fact.sample_size,
@@ -566,7 +571,7 @@ class FactVisualizer:
 
         tree_data = {
             "name": root_name,
-            "full_name": root_name,
+            "full_name": root_full_name,
             "value": root_val,
             "sample_size": total_n,
             "unit": unit,

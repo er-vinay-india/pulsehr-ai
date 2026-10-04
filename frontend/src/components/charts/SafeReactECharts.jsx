@@ -261,20 +261,11 @@ export default function SafeReactECharts({ option = {}, style, onEvents, opts = 
             y: params.event?.offsetY ?? 120
           });
         }
-      } else if (params.componentType === 'series' && params.seriesType === 'tree') {
-        const fullText = params.data?.full_name || params.data?.name || params.name;
-        if (fullText) {
-          setHoverTooltip({
-            text: humanizeLabel(fullText),
-            x: params.event?.offsetX ?? 120,
-            y: params.event?.offsetY ?? 120
-          });
-        }
       }
     };
 
     const handleMouseOut = (params) => {
-      if (!params || params.targetType === 'axisLabel' || params.componentType === 'xAxis' || params.componentType === 'yAxis' || params.componentType === 'legend' || (params.componentType === 'series' && params.seriesType === 'tree')) {
+      if (!params || params.targetType === 'axisLabel' || params.componentType === 'xAxis' || params.componentType === 'yAxis' || params.componentType === 'legend') {
         setHoverTooltip(null);
       }
     };

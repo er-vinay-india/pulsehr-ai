@@ -129,11 +129,14 @@ export default function SlideChart({ chart, chartData, theme, hideImpactCard = f
     };
 
     // Protect against overflowing deep/wide tree nodes by consolidating beyond top 6
-    const sanitizeTreeNode = (node) => {
+    const sanitizeTreeNode = (node, depth = 0) => {
       if (!node) return node;
       const copy = { ...node };
       copy.name = humanizeLabel(copy.name);
       copy.full_name = humanizeLabel(copy.full_name || copy.name);
+      if (depth === 0 && (copy.name.length > 20 || copy.name.toLowerCase().startsWith('overall '))) {
+        copy.name = 'Overall Population';
+      }
       if (Array.isArray(copy.children) && copy.children.length > 6) {
         const topChildren = copy.children.slice(0, 5);
         const remaining = copy.children.slice(5);
@@ -146,13 +149,21 @@ export default function SlideChart({ chart, chartData, theme, hideImpactCard = f
           sample_size: remSample,
           severity: 'normal'
         });
-        copy.children = topChildren.map(sanitizeTreeNode);
+        copy.children = topChildren.map(c => sanitizeTreeNode(c, depth + 1));
       } else if (Array.isArray(copy.children)) {
-        copy.children = copy.children.map(sanitizeTreeNode);
+        copy.children = copy.children.map(c => sanitizeTreeNode(c, depth + 1));
       }
       return copy;
     };
     const treeData = sanitizeTreeNode(rawTreeData);
+
+    const countLeaves = (node) => {
+      if (!node) return 0;
+      if (!Array.isArray(node.children) || node.children.length === 0) return 1;
+      return node.children.reduce((acc, c) => acc + countLeaves(c), 0);
+    };
+    const leafCount = countLeaves(treeData);
+    const dynamicTreeHeight = Math.max(280, Math.min(520, leafCount * 46 + 60));
 
     const treeOption = {
       tooltip: {
@@ -180,30 +191,32 @@ export default function SlideChart({ chart, chartData, theme, hideImpactCard = f
         {
           type: 'tree',
           data: [treeData],
-          top: '8%',
-          left: '18%',
-          bottom: '8%',
+          top: '10%',
+          left: '16%',
+          bottom: '10%',
           right: '28%',
           symbolSize: 12,
           orient: 'LR',
           initialTreeDepth: 3,
           triggerEvent: true,
           label: {
-            position: 'left',
-            verticalAlign: 'middle',
-            align: 'right',
+            position: 'top',
+            verticalAlign: 'bottom',
+            align: 'center',
+            distance: 6,
             fontSize: 11,
             color: isDark ? '#cbd5e1' : '#334155',
-            formatter: p => (p.name && p.name.length > 18 ? p.name.slice(0, 16) + '…' : p.name)
+            formatter: p => (p.name && p.name.length > 20 ? p.name.slice(0, 18) + '…' : p.name)
           },
           leaves: {
             label: {
               position: 'right',
               verticalAlign: 'middle',
               align: 'left',
+              distance: 6,
               fontSize: 11,
               color: isDark ? '#f8fafc' : '#0f172a',
-              formatter: p => (p.name && p.name.length > 20 ? p.name.slice(0, 18) + '…' : p.name)
+              formatter: p => (p.name && p.name.length > 22 ? p.name.slice(0, 20) + '…' : p.name)
             }
           },
           itemStyle: {
@@ -227,11 +240,11 @@ export default function SlideChart({ chart, chartData, theme, hideImpactCard = f
       <div
         role="img"
         aria-label={`${chartLabel} (breakdown tree)`}
-        style={{ width: '100%', minWidth: 0, height: '100%', minHeight: '260px', display: 'flex', flexDirection: 'column' }}
+        style={{ width: '100%', minWidth: 0, height: '100%', minHeight: `${dynamicTreeHeight + 20}px`, display: 'flex', flexDirection: 'column' }}
       >
         {!hideImpactCard && actualChart.impact_card && <SmartImpactCard impact={actualChart.impact_card} compact />}
         {renderHeader()}
-        <SafeReactECharts presentationTheme={theme} option={treeOption} style={{ height: '240px', width: '100%', flex: '1 1 auto' }} />
+        <SafeReactECharts presentationTheme={theme} option={treeOption} style={{ height: `${dynamicTreeHeight}px`, minHeight: '280px', width: '100%', flex: '1 1 auto' }} />
         {actualChart.aggregation_disclosure && (
           <p className="chart-aggregation-note" style={{ fontSize: '11px', marginTop: '4px', color: theme.muted_text || '#64748b', textAlign: 'center' }}>
             {actualChart.aggregation_disclosure}

@@ -126,12 +126,15 @@ export function humanizeLabel(text) {
     s = normalizedS;
   }
 
-  // Handle ' by ' or ' vs '
+  // Handle ' by ' or ' vs ' or ' over '
   if (s.includes(' by ')) {
     return s.split(' by ').map(humanizeLabel).join(' by ');
   }
   if (s.includes(' vs ')) {
     return s.split(' vs ').map(humanizeLabel).join(' vs ');
+  }
+  if (s.includes(' over ')) {
+    return s.split(' over ').map(humanizeLabel).join(' / ');
   }
 
   const acronyms = new Set(['hr', 'fte', 'kpi', 'id', 'us', 'uk', 'cpi', 'ols', 'usd', 'eur', 'gbp', 'inr', 'roi', 'ai', 'qa']);
