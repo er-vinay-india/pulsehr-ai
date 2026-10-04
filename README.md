@@ -1,51 +1,36 @@
 # HighView (PulseHR AI)
 
-**HighView** is a local spreadsheet analytics, industrial workforce intelligence, and executive presentation automation platform powered by **HRIDAY**. Uploaded CSV, Excel, and SQLite tables are the sole source of truth; factual calculations are computed deterministically by code with zero LLM math or hallucinated metrics.
+**HighView** is a local-first enterprise analytics, industrial workforce intelligence, and executive presentation automation platform powered by **HRIDAY**. Uploaded CSV, Excel, and SQLite tables are the sole source of truth; factual calculations are computed deterministically by code with zero LLM math or hallucinated metrics.
 
 ---
 
-## 📚 Documentation Tree (Parent Node)
+## 📚 Integrated Architectural Layers (Parent Node)
 
-All project documentation is modularized into focused, small document nodes for rapid scanning:
+All project documentation is structured into **5 integrated architectural layers**, eliminating artificial separation:
 
 ```
 README.md (Root Parent Node)
 │
-├── docs/architecture/
-│   ├── system-overview.md        # HighView & HRIDAY philosophy, zero LLM math, evidence store
-│   ├── analytics-pipeline.md     # 9-stage generic evidence discovery & claim verification
-│   ├── presentation-engine.md    # 13-phase deck orchestrator, layout standards, native exports
-│   └── decision-intelligence.md  # Sub-millisecond rule classification & finding prioritization
+├── docs/system-architecture.md             # Master Blueprint: End-to-End Layer Integration
 │
-├── docs/features/
-│   ├── adaptive-dashboard.md     # 7 registered domains, 3 progressive disclosure tiers
-│   ├── hriday-copilot.md         # Assistant identity layer, leakage guard, grain invariants
-│   └── visual-analytics.md       # 9-Box matrix, Bradford Factor, Burnout Strain, Forecasting
-│
-├── docs/design-system/
-│   ├── theme-tokens.md           # HighView palette (Navy, Emerald, Ivory), dark mode, WCAG AAA
-│   └── slide-layouts.md          # 16:9 spatial geometry (960×540 pt), typography, table rules
-│
-└── docs/engineering/
-    ├── test-architecture.md      # 3-tier test pyramid, 8 domain modules, pre-push impact runner
-    └── job-recovery.md           # Background process recovery, PID verification, bounded retries
+└── docs/layers/
+    ├── 01-deterministic-truth-engine.md    # Layer 1: Ingestion, Profiling, Candidate Facts & Industrial Models
+    ├── 02-cognitive-routing-governance.md  # Layer 2: Decision Routing, Model Gateway, HRIDAY Identity & Claim Audit
+    ├── 03-consumer-delivery-engine.md      # Layer 3: Adaptive Dashboard, 13-Phase Presentation Studio & Copilot
+    ├── 04-visual-grammar-spatial.md        # Layer 4: Design Tokens, 16:9 Baseline Geometry & Table Wrapping
+    └── 05-platform-reliability-ops.md      # Layer 5: Startup Job Recovery, 3-Tier Test Pyramid & Impact Runner
 ```
 
-### Quick Links by Category
+### Architectural Layer Directory
 
-| Category | Node | Description |
+| Layer | Architecture Specification | Key Responsibilities & Code Modules |
 | :--- | :--- | :--- |
-| **Architecture** | [system-overview.md](docs/architecture/system-overview.md) | Architectural axiom: deterministic computation and zero LLM arithmetic. |
-| | [analytics-pipeline.md](docs/architecture/analytics-pipeline.md) | 9-stage single-source-of-truth pipeline from raw CSV to verified facts. |
-| | [presentation-engine.md](docs/architecture/presentation-engine.md) | 13-phase presentation pipeline with structured speaker notes and native exports. |
-| | [decision-intelligence.md](docs/architecture/decision-intelligence.md) | High-speed rule-based classification (<1ms) and brief prioritization. |
-| **Features** | [adaptive-dashboard.md](docs/features/adaptive-dashboard.md) | 7 detected domains, 3 progressive disclosure tiers (`GLANCE`, `EXPLAIN`, `INSPECT`). |
-| | [hriday-copilot.md](docs/features/hriday-copilot.md) | HRIDAY persona guardrails and analytical query grain integrity. |
-| | [visual-analytics.md](docs/features/visual-analytics.md) | McKinsey 9-Box, Bradford Factor ($B=S^2 \times D$), Burnout Index, Holt forecasting. |
-| **Design System** | [theme-tokens.md](docs/design-system/theme-tokens.md) | HighView color tokens, dark/light mode pairs, and WCAG contrast standards. |
-| | [slide-layouts.md](docs/design-system/slide-layouts.md) | 16:9 stage geometry, typography scale, and table wrapping protection. |
-| **Engineering** | [test-architecture.md](docs/engineering/test-architecture.md) | Unit/Integration/Benchmark tiers, pytest markers, and impact analyzer. |
-| | [job-recovery.md](docs/engineering/job-recovery.md) | Surviving dev server restarts via SQLite PID-aware job claiming. |
+| **Blueprint** | [system-architecture.md](docs/system-architecture.md) | **Master Architectural Blueprint**: End-to-end data flow, system axioms, and inter-layer contracts. |
+| **Layer 1** | [01-deterministic-truth-engine.md](docs/layers/01-deterministic-truth-engine.md) | **Deterministic Truth & Evidence Engine**: Ingestion (`upload.py`), semantic profiling (`semantic_classifier.py`), fact discovery (`FACT-XXX`), industrial models (McKinsey 9-Box, Bradford Factor $B=S^2 \times D$, Burnout Strain, Holt-damped forecast), cryptographic evidence ledger (`EVID-XXX`, SHA-256 seal). |
+| **Layer 2** | [02-cognitive-routing-governance.md](docs/layers/02-cognitive-routing-governance.md) | **Cognitive Routing & Governance**: Sub-millisecond intent routing (`RuleDecisionEngine` <1ms), `ModelRouter` escalation, role-based gateway (`FAST`, `ANALYST`, `REASONER`, `WRITER`, `CRITIC`), `assistant_identity.py` (HRIDAY persona, `identity_leak` guard), and deterministic claim verification. |
+| **Layer 3** | [03-consumer-delivery-engine.md](docs/layers/03-consumer-delivery-engine.md) | **Consumer Delivery Engine**: Adaptive dashboard (7 registered domains, 3 progressive disclosure tiers `GLANCE`/`EXPLAIN`/`INSPECT`), automated 13-phase presentation engine (`PIPELINE_PHASES`), interactive copilot & council war room, and executive decision brief API. |
+| **Layer 4** | [04-visual-grammar-spatial.md](docs/layers/04-visual-grammar-spatial.md) | **Visual Grammar & Spatial Contract**: HighView WCAG AAA tokens (`_tokens.scss`), unified 16:9 baseline geometry (`960 × 540 pt`), typography scale (38pt cover, 30pt header, 18pt body), dense table overflow protection, and native python-pptx / headless PDF exporters. |
+| **Layer 5** | [05-platform-reliability-ops.md](docs/layers/05-platform-reliability-ops.md) | **Platform Reliability & Test Ops**: Startup background worker recovery (`recover_presentation_jobs`), SQLite atomic claims, 3-tier test pyramid, and pre-push impact analyzer (`scripts/run_impacted_tests.py`). |
 
 > *Archived & uncompacted historical documents are preserved in the [trash/](trash/README.md) folder for reference and restoration.*
 
@@ -70,31 +55,16 @@ npm run dev -- --port 5175
 
 ---
 
-## 🏛️ Core Principles & Architecture
+## 🏛️ Core Architectural Axioms
 
-### 1. Unified Generic Analytics Pipeline (`WorkflowOrchestrator`)
-Evidence-grounded analytics pipeline that works across any tabular dataset:
-- **Stage 1: Validation**: `DatasetValidator` performs automated data hygiene and boundary verification.
-- **Stage 2: Semantic Profiling & Grain**: `SemanticClassifier` determines column semantic roles and row-level grain.
-- **Stage 3: Opportunity Mapping**: `OpportunityMapGenerator` identifies admissible mathematical breakdowns.
-- **Stage 4: Deterministic Fact Discovery**: `CandidateFactDiscoveryEngine` computes exact empirical facts (`FACT-XXX`).
-- **Stage 5: Interestingness Ranking**: `FactInterestingnessRanker` scores findings by business impact and surprise magnitude.
-- **Stage 6: Evidence-Grounded Interpretation**: `AnalystAgent` (Qwen 3.5) synthesizes strategic themes bound to verified facts.
-- **Stage 7: Deterministic Claim Audit**: `InterpretationClaimValidator` validates assertions against hallucinated metrics.
-- **Stage 8: Intelligent Visuals**: `FactVisualizer` maps candidate facts directly to interactive chart specifications.
-- **Stage 9: Unified Caching & Consumers**: `WorkflowOrchestrator` caches artifacts via dataset SHA-256 fingerprint (`_GENERIC_WORKFLOW_CACHE`).
-
-### 2. Tiered Local AI Architecture
-The system minimizes local compute by executing tasks through a tiered hierarchy:
-- **`Layer 1: LRU Brief Cache` (< 5ms)**: Instant retrieval of pre-computed decision briefs.
-- **`Layer 2: Pluggable DecisionEngine` (< 1ms)**: `RuleDecisionEngine` and `EmbeddingDecisionEngine` (`nomic-embed-text`) classify business intent, routing deterministic questions (positives, concerns, actions, rankings) directly to code with zero LLM tokens.
-- **`Layer 3: Deterministic Data Engine` (< 15ms)**: Pure Python/Pandas calculates rollups, distributions, and rankings, tagged with cryptographic `FACT-XXX` IDs.
-- **`Layer 4: Central ModelRouter & ModelManager`**: Directs exploratory/narrative tasks to specialized open-weights models running locally on Ollama:
-  - `FAST`: `phi4-mini:latest` (metadata, schemas, edge classification)
-  - `ANALYST`: `qwen3.5:9b` (finding discovery, statistical interpretation)
-  - `REASONER`: `deepseek-r1:7b` (root cause analysis, causal reasoning)
-  - `WRITER`: `gemma4:12b` (executive narratives, slide takeaways)
-  - `CRITIC`: `deepseek-r1:7b` (claim verification, hallucination checks)
+1. **Spreadsheets are Sole Ground Truth**: Uploaded CSV, XLSX, and SQLite tables are the immutable source of analytical facts.
+2. **Zero LLM Arithmetic**: Language models never execute arithmetic calculations, generate statistical percentages, or estimate metric aggregates.
+3. **Dual Evidence Identification**:
+   - `FACT-XXX`: Raw empirical candidate facts discovered by `CandidateFactDiscoveryEngine` (e.g., `FACT-001`).
+   - `EVID-XXX`: Audited evidence claims anchored to presentation slides and decision briefs (e.g., `EVID-EXEC-01`).
+4. **100% Direct Inheritance Guarantee**: Downstream presentation decks, dashboards, and conversational answers inherit directly from the same evidence store.
+5. **Permutation-Only Prioritization**: AI prioritization is restricted to reordering existing finding IDs; models cannot mutate calculations or invent claims.
+6. **Query Grain Invariant**: Retrieving a department-level aggregate is never accepted as an answer for an employee-level calculation.
 
 ---
 
