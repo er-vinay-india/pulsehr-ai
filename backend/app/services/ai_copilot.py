@@ -121,8 +121,13 @@ def build_copilot_context(sheet_id: int | None = None, dataset_id: int | None = 
 
             lines.append("AVAILABLE SPREADSHEETS IN WORKSPACE:")
             temporal_summaries = []
+            default_active_id = sheets[-1]["id"] if (sheet_id is None and dataset_id is None and sheets) else None
             for s in sheets:
-                is_active = (sheet_id is not None and s["id"] == sheet_id) or (sheet_id is None and dataset_id is not None and s["dataset_id"] == dataset_id)
+                is_active = (
+                    (sheet_id is not None and s["id"] == sheet_id)
+                    or (sheet_id is None and dataset_id is not None and s["dataset_id"] == dataset_id)
+                    or (default_active_id is not None and s["id"] == default_active_id)
+                )
                 prefix = "-> [ACTIVE SHEET]" if is_active else "- Sheet:"
                 cols = json.loads(s["columns_json"] or "[]")
                 sample_cols = ", ".join(cols[:10])
@@ -199,6 +204,7 @@ def _build_copilot_prompt(
         "Strictly adhere to the TEMPORAL CADENCE in the context. If the dataset has weekly or periodic intervals, state clearly that it contains discrete weekly aggregations, NOT continuous daily logs. "
         "Dates are formatted in ISO-8601 (YYYY-MM-DD). For example, 2010-03-05 represents March 5, 2010 (the first weekly cycle of March 2010), NOT May 3. "
         "Use only the supplied source records and full-sheet statistics. There is no default workforce or Kaggle baseline. "
+        "The SPREADSHEET CATALOGUE lists all loaded datasets and their authoritative row and column counts. If the user asks about dataset metadata, row counts, record counts, or available sheets/columns, answer authoritatively using the SPREADSHEET CATALOGUE even if RETRIEVED DATA SAMPLES is empty. Never claim that no dataset is loaded if datasets are listed in the SPREADSHEET CATALOGUE. "
         "Cite the filename, sheet and row for factual claims. Rows joined by exact keys retain separate sources; "
         "conflicting values must be reported with their sources, never silently overwritten. "
         "For missing figures explain what specific data is missing and ask a focused question. "

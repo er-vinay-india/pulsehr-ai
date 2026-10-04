@@ -225,3 +225,53 @@ def test_complete_conversation_replay():
     assert any("event: done" in ev for ev in stream_events)
     assert any("3.321928" in ev for ev in stream_events)
 
+
+def test_coordinator_dataset_metadata_routing_and_execution():
+    """Verify natural questions about record count, rows, and columns are fast-gated and deterministic."""
+    df = pd.DataFrame({
+        "math_score": [72, 69, 90, 47, 76],
+        "reading_score": [72, 90, 95, 57, 78],
+        "writing_score": [74, 88, 93, 44, 75],
+        "gender": ["female", "female", "female", "male", "male"]
+    })
+
+    # Record / row count queries
+    count_queries = [
+        "how much records we have here",
+        "how many records we have here",
+        "how many rows in this table",
+        "what is the total records",
+        "total number of records"
+    ]
+    for q in count_queries:
+        decision = CouncilCoordinator.coordinate(q, df=df, sheet_id=99)
+        assert decision.worker_target == WorkerTarget.DATASET_METADATA_INSPECTOR
+        res = CouncilCoordinator.execute_sync(decision, q, df=df, sheet_name="StudentsPerformance", sheet_id=99)
+        assert res["status"] == "success"
+        assert "5 records" in res["answer"]
+        assert "4 columns" in res["answer"]
+        assert res["model_used"] == "Deterministic dataset metadata inspector"
+
+    # Column inspection queries
+    col_queries = [
+        "what columns are in this sheet",
+        "list columns",
+        "what are the column names"
+    ]
+    for q in col_queries:
+        decision = CouncilCoordinator.coordinate(q, df=df, sheet_id=99)
+        assert decision.worker_target == WorkerTarget.DATASET_METADATA_INSPECTOR
+        res = CouncilCoordinator.execute_sync(decision, q, df=df, sheet_name="StudentsPerformance", sheet_id=99)
+        assert res["status"] == "success"
+        assert "`math_score`" in res["answer"]
+        assert "`reading_score`" in res["answer"]
+
+    # SSE streaming test for metadata
+    stream_events = list(CouncilCoordinator.stream_events(
+        decision, "how much records we have here", df=df, sheet_name="StudentsPerformance", sheet_id=99
+    ))
+    assert any("event: status" in ev for ev in stream_events)
+    assert any("5 records" in ev for ev in stream_events)
+    assert any("event: done" in ev for ev in stream_events)
+
+

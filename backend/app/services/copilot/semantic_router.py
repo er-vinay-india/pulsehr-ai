@@ -63,7 +63,14 @@ SEMANTIC_PROTOTYPES: dict[UserIntent, dict[str, Any]] = {
             "sum of sales by region",
             "filter records where status is active",
             "breakdown of attendance by department",
-            "what is the highest score in the sheet"
+            "what is the highest score in the sheet",
+            "how much records we have here",
+            "how many records are in this dataset",
+            "what is the total row count",
+            "how many rows in the sheet",
+            "what columns are in this sheet",
+            "list all columns in the dataset",
+            "how many columns do we have"
         ]
     },
     UserIntent.GREET: {

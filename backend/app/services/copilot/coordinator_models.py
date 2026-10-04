@@ -59,6 +59,8 @@ class WorkerTarget(str, Enum):
     SHEET_QUALITY_INSPECTOR = "sheet_quality_inspector"
     SLIDE_MUTATOR = "slide_mutator"
     ANALYTICAL_PLANNER = "analytical_planner"
+    DATASET_METADATA_INSPECTOR = "dataset_metadata_inspector"
+    EXPLICIT_TOOL = "explicit_tool"
     CHART_LIBRARY = "chart_library"
     SINGLE_SPECIALIST_MODEL = "single_specialist_model"
     UNION_WAR_ROOM = "union_war_room"

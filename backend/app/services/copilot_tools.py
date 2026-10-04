@@ -139,8 +139,7 @@ def arithmetic(expression: str) -> float:
         ast.Sub: operator.sub,
         ast.Mult: operator.mul,
         ast.Div: operator.truediv,
-        ast.Pow: operator.pow,
-        ast.Mod: operator.mod
+        ast.Pow: operator.pow
     }
     allowed_funcs = {
         'sqrt': math.sqrt,

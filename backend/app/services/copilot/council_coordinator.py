@@ -32,7 +32,7 @@ from .coordinator_models import (
     RouteContract
 )
 from .semantic_router import SemanticIntentRouter
-from ..copilot_tools import arithmetic, ToolRequest
+from ..copilot_tools import arithmetic, ToolRequest, execute_tool
 from ..copilot_query_planner import plan_analytical_query, execute_analytical_plan
 from .sheet_quality import is_missing_values_query, answer_missing_values
 from .chat_visuals import answer_chat_visual, is_visual_request
@@ -74,6 +74,26 @@ class CouncilCoordinator:
     # 5. Complex Investigation & Root-Cause Patterns
     STRATEGIC_DELIBERATION_RE = re.compile(
         r'\b(?:why\s+are|why\s+did|what\s+should\s+we\s+do|root\s+cause|interventions?|strategic\s+action|trade[\s\-]offs?|perspectives?|assemble\s+council|war\s+room|recommendations?\s+for\s+action)\b',
+        re.IGNORECASE
+    )
+
+    # 6. Dataset Row Count & Size Patterns
+    METADATA_ROW_COUNT_RE = re.compile(
+        r'\b(?:how\s+(?:many|much)\s+(?:records?|rows?|entries|items?|tuples?|observations?)|'
+        r'(?:total|number\s+of|count\s+of)\s+(?:records?|rows?|entries|items?)|'
+        r'row\s*count|record\s*count|how\s+big\s+is\s+(?:the|this|our)?\s*(?:data|sheet|dataset|file)|'
+        r'size\s+of\s+(?:the|this|our)?\s*(?:data|sheet|dataset))\b',
+        re.IGNORECASE
+    )
+
+    # 7. Dataset Column & Schema Patterns
+    METADATA_COLUMNS_RE = re.compile(
+        r'\b(?:what\s+(?:are\s+)?(?:the\s+)?columns?|'
+        r'what\s+(?:are\s+)?(?:the\s+)?column\s+names?|'
+        r'(?:list|show|get|display|view)\s+(?:all\s+)?(?:the\s+)?(?:columns?|column\s+names?|fields?)|'
+        r'available\s+(?:columns?|fields?)|which\s+columns?|'
+        r'what\s+fields?|'
+        r'how\s+many\s+columns?|column\s*count|column\s+names?)\b',
         re.IGNORECASE
     )
 
@@ -296,6 +316,27 @@ Respond ONLY in valid JSON matching this schema:
         # ---------------------------------------------------------------------
         # LAYER 0: FAST GATES (<1ms)
         # ---------------------------------------------------------------------
+        # L0.0: Explicit Tool Request (e.g. calculation or presentation requested directly)
+        if tool is not None:
+            ctx = dict(prior_context or {})
+            ctx["explicit_tool"] = tool
+            return CoordinatorDecision(
+                assignment=RoutingAssignment.DATASET_CALCULATION,
+                worker_target=WorkerTarget.EXPLICIT_TOOL,
+                timeout_seconds=10.0,
+                max_retries=0,
+                requires_visual=False,
+                resolved_context=ctx,
+                rationale=f"Explicit tool execution request: {getattr(tool, 'name', 'tool')}",
+                confidence=1.0,
+                route_contract=RouteContract(
+                    intent=UserIntent.CALCULATE,
+                    route=ExecutionRoute.DATASET_ENGINE,
+                    context_relation=ContextRelation.NEW_TOPIC,
+                    confidence=1.0
+                )
+            )
+
         # L0.1: Deterministic Arithmetic
         is_math, math_expr = cls._is_arithmetic_request(query)
         if is_math and math_expr:
@@ -348,6 +389,26 @@ Respond ONLY in valid JSON matching this schema:
                 resolved_context=prior_context or {},
                 rationale="Authoritative raw sheet data quality inspection",
                 confidence=1.0
+            )
+
+        # L0.3b: Dataset Record Count & Metadata Fast Path
+        is_metadata_query = bool(cls.METADATA_ROW_COUNT_RE.search(q_low) or cls.METADATA_COLUMNS_RE.search(q_low))
+        if is_metadata_query:
+            return CoordinatorDecision(
+                assignment=RoutingAssignment.DATASET_CALCULATION,
+                worker_target=WorkerTarget.DATASET_METADATA_INSPECTOR,
+                timeout_seconds=1.0,
+                max_retries=0,
+                requires_visual=False,
+                resolved_context=prior_context or {},
+                rationale="Deterministic dataset metadata and row/column count inspection",
+                confidence=1.0,
+                route_contract=RouteContract(
+                    intent=UserIntent.QUERY_DATASET,
+                    route=ExecutionRoute.DATASET_ENGINE,
+                    context_relation=ContextRelation.FOLLOW_UP,
+                    confidence=1.0
+                )
             )
 
         # L0.4: Conversational Slide Mutation
@@ -698,6 +759,19 @@ Respond ONLY in valid JSON matching this schema:
         """Dispatches query to the coordinator's assigned worker synchronously."""
         t0 = time.perf_counter()
 
+        # 0. Explicit Tool Execution
+        if decision.worker_target == WorkerTarget.EXPLICIT_TOOL:
+            tool_obj = decision.resolved_context.get("explicit_tool")
+            if tool_obj:
+                dur = (time.perf_counter() - t0) * 1000
+                tool_res = execute_tool(query, tool_obj, dataset_id=dataset_id, sheet_id=sheet_id, prior_context=prior_context)
+                tool_res["timings"] = {
+                    "total_ms": round(dur, 1),
+                    "tool_ms": round(dur, 1),
+                    "is_deterministic": True
+                }
+                return cls.verify_delivery(decision, finalize_identity_response(tool_res, query), df, sheet_name, sheet_id)
+
         # 1. Deterministic Calculator (MATH_ENGINE)
         if decision.worker_target == WorkerTarget.DETERMINISTIC_CALCULATOR:
             expr = decision.extracted_expression or query
@@ -744,6 +818,67 @@ Respond ONLY in valid JSON matching this schema:
         if decision.worker_target == WorkerTarget.SHEET_QUALITY_INSPECTOR:
             quality_res = answer_missing_values(query, sheet_id, dataset_id)
             return cls.verify_delivery(decision, finalize_identity_response(quality_res, query), df, sheet_name, sheet_id)
+
+        # 3b. Dataset Metadata Inspector
+        if decision.worker_target == WorkerTarget.DATASET_METADATA_INSPECTOR:
+            active_df = df
+            active_name = sheet_name
+            active_sid = sheet_id
+
+            if active_df is None or active_df.empty:
+                from ...routers.copilot import _load_active_sheet_dataframe
+                loaded_df, loaded_name, _, loaded_sid = _load_active_sheet_dataframe(sheet_id, dataset_id)
+                if loaded_df is not None and not loaded_df.empty:
+                    active_df = loaded_df
+                    active_name = loaded_name
+                    active_sid = loaded_sid
+
+            if active_df is not None and not active_df.empty:
+                row_cnt = len(active_df)
+                col_cnt = len(active_df.columns)
+                s_title = active_name or "Uploaded Dataset"
+
+                if cls.METADATA_COLUMNS_RE.search(query):
+                    cols_fmt = ", ".join([f"`{c}`" for c in active_df.columns])
+                    ans = (
+                        f"The active sheet **{s_title}** contains **{col_cnt} columns** across **{row_cnt:,} records**:\n\n"
+                        f"{cols_fmt}"
+                    )
+                else:
+                    ans = (
+                        f"The active sheet **{s_title}** contains **{row_cnt:,} records** (rows) "
+                        f"and **{col_cnt} columns**."
+                    )
+                dur = (time.perf_counter() - t0) * 1000
+                res = {
+                    "query": query,
+                    "answer": ans,
+                    "model_used": "Deterministic dataset metadata inspector",
+                    "status": "success",
+                    "evidence": {
+                        "source_ids": [active_sid] if active_sid else [],
+                        "row_count": row_cnt,
+                        "column_count": col_cnt,
+                        "sheet_name": s_title
+                    },
+                    "suggested_questions": [
+                        "What columns are in this sheet?",
+                        "What is the average attendance rate?",
+                        "Check missing values in raw sheet"
+                    ],
+                    "timings": {"total_ms": round(dur, 1), "is_deterministic": True}
+                }
+                return cls.verify_delivery(decision, finalize_identity_response(res, query), active_df, s_title, active_sid)
+            else:
+                ans = "There are currently no records or spreadsheets loaded in this workspace. Please upload a dataset file (e.g. CSV or Excel) to begin analysis."
+                res = {
+                    "query": query,
+                    "answer": ans,
+                    "model_used": "Deterministic dataset metadata inspector",
+                    "status": "no_data",
+                    "timings": {"total_ms": 0.5, "is_deterministic": True}
+                }
+                return cls.verify_delivery(decision, finalize_identity_response(res, query), None, None, None)
 
         # 4. Chart Library Direct Generator (CHART_ENGINE)
         if decision.worker_target == WorkerTarget.CHART_LIBRARY:
@@ -842,6 +977,15 @@ Respond ONLY in valid JSON matching this schema:
         """Streams live SSE events for the assigned worker with budget protection and delivery verification."""
         t0 = time.perf_counter()
 
+        # 0. Explicit Tool Execution Stream
+        if decision.worker_target == WorkerTarget.EXPLICIT_TOOL:
+            yield f"event: status\ndata: {json.dumps({'phase': 'tool', 'message': 'Executing requested tool…', 'step': 'ready'})}\n\n"
+            sync_res = cls.execute_sync(decision, query, df, sheet_name, context, sheet_id, dataset_id, model, prior_context)
+            if "answer" in sync_res:
+                yield f"event: token\ndata: {json.dumps({'token': sync_res['answer']})}\n\n"
+            yield f"event: done\ndata: {json.dumps(sync_res)}\n\n"
+            return
+
         # 1. Deterministic Safe Calculator Stream (MATH_ENGINE)
         if decision.worker_target == WorkerTarget.DETERMINISTIC_CALCULATOR:
             expr = decision.extracted_expression or query
@@ -907,6 +1051,14 @@ Respond ONLY in valid JSON matching this schema:
             )
             yield f"event: token\ndata: {json.dumps({'token': quality_result['answer']})}\n\n"
             yield f"event: done\ndata: {json.dumps(quality_result)}\n\n"
+            return
+
+        # 3b. Dataset Metadata Inspector Stream
+        if decision.worker_target == WorkerTarget.DATASET_METADATA_INSPECTOR:
+            yield f"event: status\ndata: {json.dumps({'phase': 'tool', 'message': 'Inspecting dataset metadata…', 'step': 'ready'})}\n\n"
+            meta_res = cls.execute_sync(decision, query, df, sheet_name, context, sheet_id, dataset_id, model, prior_context)
+            yield f"event: token\ndata: {json.dumps({'token': meta_res['answer']})}\n\n"
+            yield f"event: done\ndata: {json.dumps(meta_res)}\n\n"
             return
 
         # 4. Chart Library Direct Generator Stream (CHART_ENGINE)
