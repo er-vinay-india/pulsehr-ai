@@ -1,4 +1,6 @@
 import { lightTokens, darkTokens, getThemeTokens } from '../../theme/tokens';
+import { calculateMargins } from '../visualization/layout/calculateMargins';
+import { VISUAL_POLICY } from '../visualization/policy/visualPolicy';
 
 export const lightPalette = lightTokens.chart.palette;
 export const darkPalette = darkTokens.chart.palette;
@@ -42,6 +44,7 @@ export function cartesian(categories, series, horizontal = false, unit = '', the
   const tooltipBg = chartTokens.tooltipBg;
   const tooltipBorder = chartTokens.tooltipBorder;
 
+
   const category = {
     type: 'category',
     data: categories,
@@ -53,7 +56,7 @@ export function cartesian(categories, series, horizontal = false, unit = '', the
       width: horizontal ? 140 : 90,
       overflow: horizontal ? 'break' : 'truncate',
       color: textColor,
-      fontSize: 11
+      fontSize: VISUAL_POLICY.MIN_AXIS_FONT_SIZE
     }
   };
   const value = {
@@ -61,7 +64,7 @@ export function cartesian(categories, series, horizontal = false, unit = '', the
     axisLabel: {
       formatter: v => formatValue(v, unit),
       color: textColor,
-      fontSize: 11
+      fontSize: VISUAL_POLICY.MIN_AXIS_FONT_SIZE
     },
     splitLine: {
       lineStyle: {
@@ -70,9 +73,21 @@ export function cartesian(categories, series, horizontal = false, unit = '', the
       }
     }
   };
+
+  const dynamicGrid = calculateMargins({
+    categories,
+    isVertical: !horizontal,
+    hasLegend: series.length > 1
+  });
+
   return {
     color: activePalette,
-    grid: { left: 12, right: 24, top: series.length > 1 ? 44 : 20, bottom: categories.length > 12 ? 48 : 20, containLabel: true },
+    grid: {
+      ...dynamicGrid,
+      top: series.length > 1 ? 44 : 20,
+      bottom: categories.length > 12 ? Math.max(dynamicGrid.bottom, 48) : dynamicGrid.bottom,
+      containLabel: true
+    },
     tooltip: {
       trigger: 'axis',
       valueFormatter: v => formatFullValue(v, unit),
