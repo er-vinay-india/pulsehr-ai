@@ -364,6 +364,23 @@ export default function SlideChart({ chart, chartData, theme, hideImpactCard = f
     name: humanizeLabel(s.name)
   }));
 
+  const refLines = actualChart.reference_lines || actualChart.referenceLines || [];
+  const markLineData = refLines.map(rl => ({
+    name: rl.label || 'Baseline',
+    yAxis: Number(rl.value),
+    lineStyle: {
+      type: rl.line_style || 'dashed',
+      color: isDark ? '#f59e0b' : '#d97706',
+      width: 1.5
+    },
+    label: {
+      show: true,
+      formatter: `${rl.label || 'Baseline'}: ${format(rl.value)}`,
+      fontSize: 10,
+      position: 'insideEndTop'
+    }
+  }));
+
   const pie = ['pie', 'donut'].includes(type);
   const option = pie ? {
     legend: { show: false },
@@ -398,11 +415,17 @@ export default function SlideChart({ chart, chartData, theme, hideImpactCard = f
       }))
     }],
   } : cartesian(cleanCategories,
-    cleanSeries.map(s => ({
+    cleanSeries.map((s, sIdx) => ({
       name: s.name && s.name.length > 20 ? s.name.slice(0, 18) + '…' : s.name,
       type: type === 'line' ? 'line' : 'bar',
       data: cleanCategories.map((_, i) => numeric(s.values?.[i] ?? s.data?.[i])),
-      label: { show: true, fontSize: 10, position: ['bar', 'horizontal_bar'].includes(type) ? 'right' : 'top', formatter: p => format(p.value) }
+      label: {
+        show: cleanCategories.length <= 16,
+        fontSize: 10,
+        position: ['bar', 'horizontal_bar'].includes(type) ? 'right' : 'top',
+        formatter: p => format(p.value)
+      },
+      ...(sIdx === 0 && markLineData.length > 0 ? { markLine: { data: markLineData, symbol: 'none' } } : {})
     })),
     ['bar', 'horizontal_bar'].includes(type), actualChart.unit, isDark);
 
@@ -426,14 +449,19 @@ export default function SlideChart({ chart, chartData, theme, hideImpactCard = f
       isVertical: !['bar', 'horizontal_bar'].includes(type),
       hasLegend
     });
+    const hasDataZoom = cleanCategories.length > 12;
+    const rotateLabels = !['bar', 'horizontal_bar'].includes(type) && cleanCategories.length > 5;
     option.grid = {
       ...dynamicMargins,
-      top: hasLegend ? 34 : 16,
+      top: hasLegend ? 34 : 20,
+      bottom: hasDataZoom
+        ? Math.max(dynamicMargins.bottom || 0, 56)
+        : (rotateLabels ? Math.max(dynamicMargins.bottom || 0, 46) : dynamicMargins.bottom),
       containLabel: true
     };
     option.tooltip = {
       trigger: 'axis',
-      axisPointer: { type: 'shadow' },
+      axisPointer: { type: type === 'line' ? 'line' : 'shadow' },
       confine: true,
       backgroundColor: isDark ? 'rgba(15, 23, 42, 0.95)' : 'rgba(255, 255, 255, 0.98)',
       borderColor: isDark ? '#334155' : '#cbd5e1',
@@ -458,16 +486,25 @@ export default function SlideChart({ chart, chartData, theme, hideImpactCard = f
       const axis = option[name];
       if (axis && !Array.isArray(axis)) {
         axis.triggerEvent = true;
-        axis.axisLabel = {
-          ...axis.axisLabel,
-          fontSize: 10,
-          hideOverlap: true,
-          ...(axis.type === 'value' ? { formatter: format } : {
-            width: 75,
+        if (axis.type === 'value') {
+          axis.scale = true;
+          axis.axisLabel = {
+            ...axis.axisLabel,
+            fontSize: 10,
+            formatter: format
+          };
+        } else {
+          const rotate = !['bar', 'horizontal_bar'].includes(type) && cleanCategories.length > 5 ? 28 : 0;
+          axis.axisLabel = {
+            ...axis.axisLabel,
+            fontSize: 10,
+            rotate,
+            hideOverlap: false,
+            width: rotate > 0 ? 120 : 85,
             overflow: 'truncate',
             ellipsis: '…'
-          })
-        };
+          };
+        }
       }
     }
   }

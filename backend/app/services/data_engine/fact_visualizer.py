@@ -161,10 +161,29 @@ class FactVisualizer:
                 temp_df["__val"] = temp_df[fact.metric].apply(cls._clean_series_value)
                 temp_df = temp_df.dropna(subset=["__val"])
 
-                # Sort by time_col
-                grp = temp_df.groupby(time_col)["__val"].mean()
-                categories = [cls._humanize_name(str(idx)) for idx in grp.index][:15]
-                values = [round(float(v), 2) for v in grp.values][:15]
+                # Chronological date sorting if parsable
+                try:
+                    temp_df["__dt"] = pd.to_datetime(temp_df[time_col], dayfirst=True, errors="coerce")
+                    if temp_df["__dt"].notna().sum() >= len(temp_df) * 0.7:
+                        temp_df = temp_df.sort_values("__dt")
+                        temp_df["__time_str"] = temp_df["__dt"].dt.strftime("%d %b %Y")
+                        grp = temp_df.groupby("__time_str", sort=False)["__val"].mean()
+                    else:
+                        grp = temp_df.groupby(time_col)["__val"].mean()
+                except Exception:
+                    grp = temp_df.groupby(time_col)["__val"].mean()
+
+                all_indices = list(grp.index)
+                all_vals = list(grp.values)
+                if len(all_indices) > 50:
+                    step = len(all_indices) / 50.0
+                    sampled_indices = [all_indices[int(i * step)] for i in range(50)]
+                    sampled_vals = [all_vals[int(i * step)] for i in range(50)]
+                    categories = [cls._humanize_name(str(idx)) for idx in sampled_indices]
+                    values = [round(float(v), 2) for v in sampled_vals]
+                else:
+                    categories = [cls._humanize_name(str(idx)) for idx in all_indices]
+                    values = [round(float(v), 2) for v in all_vals]
             except Exception as e:
                 logger.warning(f"Failed to group dataframe for period trend: {e}")
 

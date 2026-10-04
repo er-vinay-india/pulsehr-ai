@@ -136,8 +136,9 @@ export function normalizeChartSpec(rawSpec, options = {}) {
     };
     yAxis = {
       type: 'value',
-      min: domain.min,
-      max: domain.max,
+      scale: true,
+      min: cleanType === 'line' ? undefined : domain.min,
+      max: cleanType === 'line' ? undefined : domain.max,
       triggerEvent: true,
       axisLabel: {
         fontSize: VISUAL_POLICY.MIN_AXIS_FONT_SIZE,
@@ -149,6 +150,7 @@ export function normalizeChartSpec(rawSpec, options = {}) {
     // Horizontal Bar
     xAxis = {
       type: 'value',
+      scale: true,
       min: domain.min,
       max: domain.max,
       triggerEvent: true,
@@ -169,6 +171,24 @@ export function normalizeChartSpec(rawSpec, options = {}) {
     };
   }
 
+  // Map reference lines if present
+  const refLines = rawSpec.reference_lines || rawSpec.referenceLines || [];
+  const markLineData = refLines.map(rl => ({
+    name: rl.label || 'Baseline',
+    yAxis: Number(rl.value),
+    lineStyle: {
+      type: rl.line_style || 'dashed',
+      color: '#f59e0b',
+      width: 1.5
+    },
+    label: {
+      show: true,
+      formatter: `${rl.label || 'Baseline'}: ${formatCompactNumber(rl.value, unit)}`,
+      fontSize: 10,
+      position: 'insideEndTop'
+    }
+  }));
+
   // Build Series
   const formattedSeries = series.map((s, idx) => {
     const sType = cleanType === 'line' ? 'line' : 'bar';
@@ -180,7 +200,8 @@ export function normalizeChartSpec(rawSpec, options = {}) {
       barMaxWidth: 36,
       itemStyle: {
         borderRadius: sType === 'bar' ? (isVertical ? [4, 4, 0, 0] : [0, 4, 4, 0]) : 0
-      }
+      },
+      ...(idx === 0 && markLineData.length > 0 ? { markLine: { data: markLineData, symbol: 'none' } } : {})
     };
   });
 
@@ -199,7 +220,7 @@ export function normalizeChartSpec(rawSpec, options = {}) {
       tooltip: {
         trigger: 'axis',
         confine: true,
-        axisPointer: { type: 'shadow' },
+        axisPointer: { type: cleanType === 'line' ? 'line' : 'shadow' },
         valueFormatter: val => formatCompactNumber(val, unit)
       },
       ...(hasLegend ? {

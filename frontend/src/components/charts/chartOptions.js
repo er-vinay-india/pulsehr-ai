@@ -59,8 +59,9 @@ export function cartesian(categories = [], series = [], horizontal = false, unit
     axisTick: { show: false },
     axisLine: { lineStyle: { color: lineColor } },
     axisLabel: {
-      hideOverlap: true,
-      width: horizontal ? 140 : 90,
+      hideOverlap: false,
+      rotate: !horizontal && cleanCategories.length > 6 ? 28 : 0,
+      width: horizontal ? 140 : 100,
       overflow: horizontal ? 'break' : 'truncate',
       color: textColor,
       fontSize: VISUAL_POLICY.MIN_AXIS_FONT_SIZE,
@@ -69,6 +70,7 @@ export function cartesian(categories = [], series = [], horizontal = false, unit
   };
   const value = {
     type: 'value',
+    scale: true,
     axisLabel: {
       formatter: v => formatValue(v, unit),
       color: textColor,
@@ -88,12 +90,15 @@ export function cartesian(categories = [], series = [], horizontal = false, unit
     hasLegend: cleanSeries.length > 1
   });
 
+  const hasDataZoom = cleanCategories.length > 12;
+  const isRotated = !horizontal && cleanCategories.length > 6;
+
   return {
     color: activePalette,
     grid: {
       ...dynamicGrid,
       top: cleanSeries.length > 1 ? 44 : 20,
-      bottom: cleanCategories.length > 12 ? Math.max(dynamicGrid.bottom, 48) : dynamicGrid.bottom,
+      bottom: hasDataZoom ? Math.max(dynamicGrid.bottom, 54) : (isRotated ? Math.max(dynamicGrid.bottom, 46) : dynamicGrid.bottom),
       containLabel: true
     },
     tooltip: {
@@ -116,7 +121,7 @@ export function cartesian(categories = [], series = [], horizontal = false, unit
     },
     xAxis: horizontal ? value : category,
     yAxis: horizontal ? category : value,
-    dataZoom: cleanCategories.length > 12 ? [{ type: 'slider', ...(horizontal ? { yAxisIndex: 0, right: 0, width: 12 } : { xAxisIndex: 0, bottom: 0, height: 18 }), start: 0, end: Math.min(100, 12 / cleanCategories.length * 100) }] : [],
+    dataZoom: hasDataZoom ? [{ type: 'slider', ...(horizontal ? { yAxisIndex: 0, right: 0, width: 12 } : { xAxisIndex: 0, bottom: 4, height: 18 }), start: 0, end: 100 }] : [],
     series: cleanSeries.map(s => ({ barMaxWidth: 20, symbolSize: 5, connectNulls: false, ...s }))
   };
 }

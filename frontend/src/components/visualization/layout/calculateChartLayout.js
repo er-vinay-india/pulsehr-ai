@@ -32,13 +32,19 @@ export function calculateChartLayout({
     }
   }
 
-  // 2. High-cardinality Top-N consolidation (if > 25 categories)
+  // 2. High-cardinality Top-N consolidation (if > 25 categories, ONLY for categorical comparisons, NEVER for line/temporal charts)
   let layoutCategories = [...cleanCategories];
   let layoutSeries = series.map(s => ({ ...s, name: humanizeLabel(s.name), data: [...(s.data || [])] }));
   let isConsolidated = false;
   let hiddenCount = 0;
 
-  if (catCount > VISUAL_POLICY.TOP_N_CONSOLIDATION_THRESHOLD && layoutSeries[0]?.data) {
+  if (
+    cleanType !== 'line' &&
+    cleanType !== 'area' &&
+    cleanType !== 'scatter' &&
+    catCount > VISUAL_POLICY.TOP_N_CONSOLIDATION_THRESHOLD &&
+    layoutSeries[0]?.data
+  ) {
     const topN = VISUAL_POLICY.DEFAULT_TOP_N;
     // Pair categories with primary metric
     const primaryData = layoutSeries[0].data;
