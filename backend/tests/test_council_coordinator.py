@@ -207,3 +207,21 @@ def test_complete_conversation_replay():
     assert r3["tool_used"] == "arithmetic"
     assert r3["timings"]["is_deterministic"] is True
 
+    # Turn 4: What is the log of 10 base 2
+    d4 = CouncilCoordinator.coordinate("what is the log of 10 base 2", prior_context=ctx2, df=students, sheet_id=7)
+    assert d4.assignment == RoutingAssignment.SAFE_CALCULATOR
+    assert d4.worker_target == WorkerTarget.DETERMINISTIC_CALCULATOR
+    assert d4.extracted_expression == "log(10, 2)"
+    assert d4.resolved_context == {}  # Context isolation
+
+    r4 = CouncilCoordinator.execute_sync(d4, "what is the log of 10 base 2", df=students, sheet_name="Students", sheet_id=7, prior_context=d4.resolved_context)
+    assert r4["status"] == "success"
+    assert "3.321928" in r4["answer"]
+    assert r4["tool_used"] == "arithmetic"
+    assert r4["timings"]["is_deterministic"] is True
+
+    # Turn 5: Streaming SSE for log calculation
+    stream_events = list(CouncilCoordinator.stream_events(d4, "what is the log of 10 base 2", df=students, sheet_name="Students", sheet_id=7, prior_context=d4.resolved_context))
+    assert any("event: done" in ev for ev in stream_events)
+    assert any("3.321928" in ev for ev in stream_events)
+

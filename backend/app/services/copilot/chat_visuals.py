@@ -197,7 +197,8 @@ replaced with a full-cohort mean. The existing planner handles richer queries.
     # Only this bounded grammar is eligible for aggregate calculation. In
     # particular, never discard 'female only', a date window, or a threshold.
     source_query = query if metrics else descriptor.get("source_query", query)
-    for text in (query, source_query):
+    texts_to_check = [query] if metrics else ([query, source_query] if source_query else [query])
+    for text in texts_to_check:
         remainder = _normalized(text)
         for col in sorted(columns, key=lambda c: len(_normalized(c)), reverse=True):
             remainder = re.sub(rf"(?<!\w){re.escape(_normalized(col))}(?!\w)", " ", remainder)
@@ -207,7 +208,10 @@ replaced with a full-cohort mean. The existing planner handles richer queries.
                    "chart", "charts", "graph", "plot", "diagram", "format", "visualize", "visualise", "visualization", "visualisation",
                    "draw", "render", "make", "create", "generate", "based", "on", "using", "with",
                    "it", "this", "that", "these", "as", "bar", "horizontal", "column", "line", "pie", "donut",
-                   "by", "across", "breakdown", "group", "grouped", "and", "instead", "now", "again", "to", "convert", "switch", "change"}
+                   "by", "across", "breakdown", "group", "grouped", "and", "instead", "now", "again", "to", "convert", "switch", "change",
+                   "student", "students", "pupil", "pupils", "employee", "employees", "staff", "headcount", "record", "records",
+                   "store", "stores", "customer", "customers", "user", "users", "gender", "metric", "measure", "value", "values",
+                   "available", "dashboard"}
         if any(word not in allowed for word in remainder.split()):
             return clarify("This chart request includes a filter or calculation I couldn’t resolve. Please specify an overall metric and calculation, or a breakdown by one column.")
 

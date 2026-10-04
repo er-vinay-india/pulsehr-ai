@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 class ModelRole(str, Enum):
     """Logical model roles governing AI responsibilities."""
     FAST = "FAST"              # Lightweight classification, schema identification, quick metadata
+    COORDINATOR = "COORDINATOR"  # Control-plane intent routing, context scoping, dispatch contract
     ANALYST = "ANALYST"        # Pattern discovery, statistical interpretation, metric prioritization
     REASONER = "REASONER"      # Multi-step business logic, root cause analysis, strategic trade-offs
     WRITER = "WRITER"          # Executive narrative, slide bullet points, management-friendly synthesis
@@ -25,6 +26,13 @@ class RoleModelConfig(BaseModel):
 
 # Default mappings optimized for the installed local models on Apple Silicon
 DEFAULT_ROLE_CONFIGS: dict[ModelRole, RoleModelConfig] = {
+    ModelRole.COORDINATOR: RoleModelConfig(
+        primary=os.getenv("MODEL_ROLE_COORDINATOR_PRIMARY", "qwen3.5:2b"),
+        fallback=os.getenv("MODEL_ROLE_COORDINATOR_FALLBACK", "phi4-mini:latest"),
+        temperature=0.0,
+        max_tokens=1024,
+        timeout_seconds=float(os.getenv("MODEL_ROLE_COORDINATOR_TIMEOUT", "15.0"))
+    ),
     ModelRole.FAST: RoleModelConfig(
         primary=os.getenv("MODEL_ROLE_FAST_PRIMARY", "phi4-mini:latest"),
         fallback=os.getenv("MODEL_ROLE_FAST_FALLBACK", "llama3.1:8b"),

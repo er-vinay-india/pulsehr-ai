@@ -1,7 +1,45 @@
 """Data contracts for the Council Coordinator routing and dispatch engine."""
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
+
+
+class UserIntent(str, Enum):
+    CALCULATE = "CALCULATE"
+    VISUALIZE = "VISUALIZE"
+    QUERY_DATASET = "QUERY_DATASET"
+    EXPLAIN = "EXPLAIN"
+    DELIBERATE = "DELIBERATE"
+    GREET = "GREET"
+    UNKNOWN = "UNKNOWN"
+
+
+class ExecutionRoute(str, Enum):
+    MATH_ENGINE = "MATH_ENGINE"
+    CHART_ENGINE = "CHART_ENGINE"
+    DATASET_ENGINE = "DATASET_ENGINE"
+    EXPLANATION_WORKER = "EXPLANATION_WORKER"
+    COUNCIL_WAR_ROOM = "COUNCIL_WAR_ROOM"
+
+
+class ContextRelation(str, Enum):
+    NEW_TOPIC = "NEW_TOPIC"
+    FOLLOW_UP = "FOLLOW_UP"
+    CLARIFICATION = "CLARIFICATION"
+
+
+class RouteContract(BaseModel):
+    """Pydantic contract emitted by the Control-Plane Coordinator."""
+    model_config = ConfigDict(extra="ignore")
+
+    intent: UserIntent = UserIntent.UNKNOWN
+    route: ExecutionRoute = ExecutionRoute.EXPLANATION_WORKER
+    context_relation: ContextRelation = ContextRelation.NEW_TOPIC
+    confidence: float = Field(default=1.0, ge=0.0, le=1.0)
+    entities: dict[str, Any] = Field(default_factory=dict)
+    rationale: str = ""
+    extracted_expression: str | None = None
+    suggested_model: str | None = None
 
 
 class RoutingAssignment(str, Enum):
@@ -27,6 +65,7 @@ class WorkerTarget(str, Enum):
 
 
 class CoordinatorDecision(BaseModel):
+    """Execution decision returned by CouncilCoordinator for dispatch and budget management."""
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     assignment: RoutingAssignment
@@ -39,3 +78,4 @@ class CoordinatorDecision(BaseModel):
     is_follow_up: bool = False
     confidence: float = 1.0
     extracted_expression: str | None = None
+    route_contract: RouteContract | None = None

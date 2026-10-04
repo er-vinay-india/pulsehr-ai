@@ -840,14 +840,8 @@ def ask_copilot(req: CopilotQueryRequest):
         engine=req.engine
     )
 
-    # 1a. Fast-path & Specialist dispatch via Coordinator
-    if decision.worker_target in (
-        WorkerTarget.DETERMINISTIC_CALCULATOR,
-        WorkerTarget.IMMEDIATE_IDENTITY,
-        WorkerTarget.SHEET_QUALITY_INSPECTOR,
-        WorkerTarget.CHART_LIBRARY,
-        WorkerTarget.SINGLE_SPECIALIST_MODEL
-    ):
+    # 1a. Fast-path & Specialist dispatch via Coordinator (Binding)
+    if decision.worker_target != WorkerTarget.SLIDE_MUTATOR:
         return CouncilCoordinator.execute_sync(
             decision=decision,
             query=req.query,
@@ -1057,29 +1051,22 @@ def ask_copilot_stream(req: CopilotQueryRequest):
         engine=req.engine
     )
 
-    # 1a. Fast-path & Specialist dispatch via Coordinator stream
-    if decision.worker_target in (
-        WorkerTarget.DETERMINISTIC_CALCULATOR,
-        WorkerTarget.IMMEDIATE_IDENTITY,
-        WorkerTarget.SHEET_QUALITY_INSPECTOR,
-        WorkerTarget.CHART_LIBRARY,
-        WorkerTarget.SINGLE_SPECIALIST_MODEL
-    ):
-        return StreamingResponse(
-            CouncilCoordinator.stream_events(
-                decision=decision,
-                query=req.query,
-                df=df,
-                sheet_name=name,
-                context=ctx,
-                sheet_id=target_sheet_id,
-                dataset_id=req.dataset_id,
-                model=req.model,
-                prior_context=decision.resolved_context
-            ),
-            media_type="text/event-stream",
-            headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"}
-        )
+    # 1a. Fast-path & Specialist dispatch via Coordinator stream (Binding)
+    return StreamingResponse(
+        CouncilCoordinator.stream_events(
+            decision=decision,
+            query=req.query,
+            df=df,
+            sheet_name=name,
+            context=ctx,
+            sheet_id=target_sheet_id,
+            dataset_id=req.dataset_id,
+            model=req.model,
+            prior_context=decision.resolved_context
+        ),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"}
+    )
 
     intent_type = classify_analytical_intent(
         req.query,
