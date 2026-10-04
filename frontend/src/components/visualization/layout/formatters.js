@@ -99,27 +99,39 @@ export function humanizeLabel(text) {
   let s = String(text).trim();
   if (!s) return '';
 
-  // Remove common machine prefixes
+  // Remove common machine prefixes (supporting both underscore and space-separated variants)
   const prefixes = [
     'interact_mean_', 'interact_ratio_', 'interact_sum_', 'interact_count_', 'interact_',
-    'mean_', 'sum_', 'ratio_', 'log_', 'std_', 'diff_', 'pct_'
+    'interact mean ', 'interact ratio ', 'interact sum ', 'interact count ', 'interact ',
+    'mean_', 'sum_', 'ratio_', 'log_', 'std_', 'diff_', 'pct_',
+    'mean ', 'sum ', 'ratio ', 'log ', 'std ', 'diff ', 'pct '
   ];
   for (const prefix of prefixes) {
     if (s.toLowerCase().startsWith(prefix)) {
-      s = s.slice(prefix.length);
+      s = s.slice(prefix.length).trim();
+      break;
     }
   }
 
-  // Handle _by_ or _vs_
-  if (s.includes('_by_')) {
-    return s.split('_by_').map(humanizeLabel).join(' by ');
-  }
-  if (s.includes('_vs_')) {
-    return s.split('_vs_').map(humanizeLabel).join(' vs ');
+  // Normalize underscores to spaces for unified matching
+  const normalizedS = s.replace(/_+/g, ' ').trim();
+
+  // Detect and collapse duplicated metric patterns like:
+  // "math score by test preparation course math score lift" -> "test preparation course math score lift"
+  const duplicateByMatch = normalizedS.match(/^(.+?)\s+by\s+(.+?)\s+\1\s*(.*)$/i);
+  if (duplicateByMatch) {
+    const [, metric, category, remainder] = duplicateByMatch;
+    s = `${category} ${metric} ${remainder}`.trim();
+  } else {
+    s = normalizedS;
   }
 
-  if (s.includes('_')) {
-    s = s.replace(/_+/g, ' ').trim();
+  // Handle ' by ' or ' vs '
+  if (s.includes(' by ')) {
+    return s.split(' by ').map(humanizeLabel).join(' by ');
+  }
+  if (s.includes(' vs ')) {
+    return s.split(' vs ').map(humanizeLabel).join(' vs ');
   }
 
   const acronyms = new Set(['hr', 'fte', 'kpi', 'id', 'us', 'uk', 'cpi', 'ols', 'usd', 'eur', 'gbp', 'inr', 'roi', 'ai', 'qa']);

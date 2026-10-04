@@ -2820,8 +2820,8 @@ def build_explanatory_comparator_element(
                     if not split_metric or not outcome_metric or split_metric not in d_rows[0] or outcome_metric not in d_rows[0]:
                         local_cols = set(manifest.columns)
                         partner_cols = [c for c in d_rows[0].keys() if c not in local_cols]
-                        num_locals = [c for c in manifest.columns if any(isinstance(r.get(c), (int, float)) for r in d_rows)]
-                        num_partners = [c for c in partner_cols if any(isinstance(r.get(c), (int, float)) for r in d_rows)]
+                        num_locals = [c for c in manifest.columns if not c.lower().startswith('interact_') and any(isinstance(r.get(c), (int, float)) for r in d_rows)] or [c for c in manifest.columns if any(isinstance(r.get(c), (int, float)) for r in d_rows)]
+                        num_partners = [c for c in partner_cols if not c.lower().startswith('interact_') and any(isinstance(r.get(c), (int, float)) for r in d_rows)] or [c for c in partner_cols if any(isinstance(r.get(c), (int, float)) for r in d_rows)]
                         if num_locals and num_partners:
                             split_metric = num_locals[0]
                             outcome_metric = num_partners[0]
@@ -2868,9 +2868,18 @@ def build_explanatory_comparator_element(
                                 calc_id = f"CALC-COMP-CROSS-{snapshot[:8]}"
                                 def_id = f"DEF-CROSS-SHEET-COHORT-{dt_id}"
 
-                                title = f"{split_metric} vs. {outcome_metric}"
-                                dimension_name = f"{split_metric} cohort"
-                                metric_name = f"Average {outcome_metric.lower()}"
+                                clean_split = format_display_label(split_metric)
+                                clean_outcome = format_display_label(outcome_metric)
+
+                                if clean_outcome.lower() in clean_split.lower():
+                                    title = clean_split
+                                    glance_label = f"{clean_split} lift"
+                                else:
+                                    title = f"{clean_split} vs. {clean_outcome}"
+                                    glance_label = f"{clean_split} {clean_outcome.lower()} lift"
+
+                                dimension_name = f"{clean_split} cohort"
+                                metric_name = f"Average {clean_outcome.lower()}"
                                 is_days = "day" in outcome_metric.lower() or "absent" in outcome_metric.lower()
                                 is_hrs = "hour" in outcome_metric.lower()
                                 unit = "days" if is_days else ("hours" if is_hrs else "units")
@@ -2883,7 +2892,7 @@ def build_explanatory_comparator_element(
                                 context_qualifier = f"{fmt_mean_a} vs {fmt_mean_b} ({fmt_rel}) across {total_n} employees"
 
                                 glance = GlanceSpec(
-                                    label=f"{split_metric} {outcome_metric.lower()} lift",
+                                    label=glance_label,
                                     value=round(rel_lift_pct, 1),
                                     formatted_value=fmt_rel,
                                     unit="%",
@@ -2998,7 +3007,7 @@ def build_explanatory_comparator_element(
     if primary_meas:
         binary_candidates = []
         for c in candidate_cols:
-            if c == primary_meas or c == contract.date_column:
+            if c == primary_meas or c == contract.date_column or c.lower().startswith("interact_"):
                 continue
             vals = set(str(r.get(c, "")).strip() for r in rows if r.get(c) is not None and str(r.get(c, "")).strip())
             if len(vals) == 2:

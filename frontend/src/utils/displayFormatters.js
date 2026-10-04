@@ -66,6 +66,28 @@ export function formatDisplayLabel(rawName) {
     text = parts.slice(1).join('.');
   }
 
+  // Remove machine synthetic prefixes (both underscore and space/cased variants)
+  const prefixes = [
+    'interact_mean_', 'interact_ratio_', 'interact_sum_', 'interact_count_', 'interact_',
+    'interact mean ', 'interact ratio ', 'interact sum ', 'interact count ', 'interact ',
+    'mean_', 'sum_', 'ratio_', 'log_', 'std_', 'diff_', 'pct_',
+    'mean ', 'sum ', 'ratio ', 'log ', 'std ', 'diff ', 'pct '
+  ];
+  for (const p of prefixes) {
+    if (text.toLowerCase().startsWith(p)) {
+      text = text.slice(p.length).trim();
+      break;
+    }
+  }
+
+  // Detect and collapse duplicated metric patterns like:
+  // "math score by test preparation course math score lift" -> "test preparation course math score lift"
+  const duplicateByMatch = text.match(/^(.+?)\s+(?:by|_by_)\s+(.+?)\s+\1\s*(.*)$/i);
+  if (duplicateByMatch) {
+    const [, metric, category, remainder] = duplicateByMatch;
+    text = `${category} ${metric} ${remainder}`.trim();
+  }
+
   const lowerKey = text.toLowerCase().replace(/[\s-]+/g, '_');
   if (SPECIAL_DISPLAY_OVERRIDES[lowerKey]) {
     return `${prefix}${SPECIAL_DISPLAY_OVERRIDES[lowerKey]}`.trim();

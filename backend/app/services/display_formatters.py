@@ -76,6 +76,23 @@ def format_display_label(raw_name: Any) -> str:
         prefix = parts[0] + ' '
         text = parts[1]
 
+    # Remove machine synthetic prefixes (both underscore and space/cased variants)
+    for p in (
+        'interact_mean_', 'interact_ratio_', 'interact_sum_', 'interact_count_', 'interact_',
+        'interact mean ', 'interact ratio ', 'interact sum ', 'interact count ', 'interact ',
+        'mean_', 'sum_', 'ratio_', 'log_', 'std_', 'diff_', 'pct_',
+        'mean ', 'sum ', 'ratio ', 'log ', 'std ', 'diff ', 'pct ',
+    ):
+        if text.lower().startswith(p):
+            text = text[len(p):].strip()
+            break
+
+    # Collapse duplicated metric patterns like "math score by test preparation course math score lift"
+    dup_match = re.match(r'^(.+?)\s+(?:by|_by_)\s+(.+?)\s+\1\s*(.*)$', text, re.I)
+    if dup_match:
+        metric, cat, remainder = dup_match.groups()
+        text = f"{cat} {metric} {remainder}".strip()
+
     lower_key = text.lower().replace(' ', '_').replace('-', '_')
     if lower_key in SPECIAL_DISPLAY_OVERRIDES:
         result = SPECIAL_DISPLAY_OVERRIDES[lower_key]

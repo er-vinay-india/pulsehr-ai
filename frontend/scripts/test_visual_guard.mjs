@@ -180,6 +180,8 @@ console.log('6. Testing Label Humanization & Underscore Auto-Repair...');
   // Test humanizeLabel transforms
   assert.equal(humanizeLabel('turnover_rate'), 'Turnover Rate');
   assert.equal(humanizeLabel('interact_mean_department_name'), 'Department Name');
+  assert.equal(humanizeLabel('Interact mean math score by test preparation course math score lift'), 'Test Preparation Course Math Score Lift');
+  assert.equal(humanizeLabel('interact_mean_math_score_by_test_preparation_course math_score lift'), 'Test Preparation Course Math Score Lift');
   assert.equal(humanizeLabel('employee_hr_id'), 'Employee HR ID');
   assert.equal(humanizeLabel('annual_fte_count'), 'Annual FTE Count');
   assert.equal(humanizeLabel('turnover_by_department'), 'Turnover by Department');
