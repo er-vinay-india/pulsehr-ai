@@ -69,6 +69,12 @@ class ColumnSemanticProfile(BaseModel):
     polarity_confidence: float = 0.0
     polarity_reason: str = "Insufficient domain evidence to infer optimization direction."
     
+    # Temporal granularity and cadence profiling
+    temporal_cadence: str | None = None   # "daily", "weekly", "monthly", "quarterly", "annual", "discrete"
+    cadence_interval_days: float | None = None # e.g. 7.0 for weekly, 1.0 for daily
+    cadence_anchor: str | None = None      # e.g. "Friday"
+    total_periods: int | None = None       # distinct timestamp count
+
     top_categories: list[tuple[str, int]] = Field(default_factory=list)
     confidence: float = 1.0
     detection_reasons: list[str] = Field(default_factory=list)
@@ -83,6 +89,8 @@ class SemanticDatasetProfile(BaseModel):
     grain_confidence: float = 0.5
     grain_key_columns: list[str] = Field(default_factory=list)
     observation_window: str | None = None
+    temporal_cadence: str | None = None
+    temporal_summary: str | None = None
     
     # Categorized column registries
     identifiers: list[str] = Field(default_factory=list)
@@ -124,6 +132,117 @@ class SemanticClassifier:
     """Classifies columns and dataset structures across arbitrary tabular domains."""
 
     @classmethod
+    def detect_and_parse_datetime_series(cls, series: pd.Series) -> tuple[pd.Series | None, bool, dict[str, Any]]:
+        """Robustly parses datetime series, automatically resolving DD-MM-YYYY vs MM-DD-YYYY and computing cadence."""
+        non_null = series.dropna().astype(str).str.strip()
+        null_markers = {'', 'none', 'nan', 'null', 'n/a', '-', 'na', 'nil', '#n/a'}
+        valid_str = non_null[~non_null.str.casefold().isin(null_markers)]
+        if len(valid_str) < 2:
+            return None, False, {}
+
+        sample = valid_str.head(100)
+        has_sep = sample.str.contains(r'[-/.]').all()
+        parsed = None
+        is_dayfirst = False
+
+        if has_sep:
+            split_parts = sample.str.extract(r'^(\d{1,4})[-/.](\d{1,4})[-/.](\d{2,4})')
+            if not split_parts.isna().any().any():
+                p1_num = pd.to_numeric(split_parts[0], errors='coerce')
+                p2_num = pd.to_numeric(split_parts[1], errors='coerce')
+
+                if (p1_num > 1900).any():
+                    # Format is YYYY-MM-DD
+                    parsed = pd.to_datetime(valid_str, format='%Y-%m-%d', errors='coerce')
+                    if parsed.isna().sum() > 0:
+                        parsed = pd.to_datetime(valid_str, errors='coerce')
+                    is_dayfirst = False
+                elif (p1_num > 12).any():
+                    # First part exceeds 12 -> must be Day-first (DD-MM-YYYY)
+                    parsed = pd.to_datetime(valid_str, dayfirst=True, errors='coerce')
+                    is_dayfirst = True
+                elif (p2_num > 12).any():
+                    # Second part exceeds 12 -> must be Month-first (MM-DD-YYYY)
+                    parsed = pd.to_datetime(valid_str, dayfirst=False, errors='coerce')
+                    is_dayfirst = False
+                else:
+                    # Ambiguous (both <= 12): test dayfirst=True vs False
+                    p_df = pd.to_datetime(valid_str, dayfirst=True, errors='coerce')
+                    p_mf = pd.to_datetime(valid_str, dayfirst=False, errors='coerce')
+                    if p_df.notna().sum() >= p_mf.notna().sum():
+                        parsed = p_df
+                        is_dayfirst = True
+                    else:
+                        parsed = p_mf
+                        is_dayfirst = False
+
+        if parsed is None or parsed.notna().sum() / max(1, len(valid_str)) < 0.75:
+            p_fallback = pd.to_datetime(valid_str, errors='coerce')
+            if p_fallback.notna().sum() / max(1, len(valid_str)) >= 0.75:
+                parsed = p_fallback
+
+        if parsed is None:
+            return None, False, {}
+
+        valid_dt = parsed.dropna()
+        if len(valid_dt) < 2:
+            return parsed, is_dayfirst, {}
+
+        dt_sorted = valid_dt.sort_values().drop_duplicates()
+        min_date = dt_sorted.min().strftime('%Y-%m-%d')
+        max_date = dt_sorted.max().strftime('%Y-%m-%d')
+        total_periods = len(dt_sorted)
+
+        deltas = dt_sorted.diff().dt.total_seconds().dropna() / (24 * 3600)
+        med_delta = float(deltas.median()) if len(deltas) > 0 else 0.0
+
+        cadence = 'discrete'
+        anchor = None
+        day_counts = dt_sorted.dt.day_name().value_counts()
+        if not day_counts.empty and (day_counts.iloc[0] / len(dt_sorted)) >= 0.80:
+            anchor = day_counts.index[0]
+
+        if 0.8 <= med_delta <= 1.2:
+            cadence = 'daily'
+        elif 6.5 <= med_delta <= 7.5:
+            cadence = 'weekly'
+        elif 13.0 <= med_delta <= 15.5:
+            cadence = 'bi-weekly'
+        elif 27.0 <= med_delta <= 32.0:
+            cadence = 'monthly'
+        elif 85.0 <= med_delta <= 95.0:
+            cadence = 'quarterly'
+        elif 360.0 <= med_delta <= 367.0:
+            cadence = 'annual'
+
+        cadence_desc = f'{cadence}'
+        if anchor and cadence == 'weekly':
+            cadence_desc = f'weekly (every {anchor})'
+
+        if cadence in ('weekly', 'bi-weekly', 'monthly', 'quarterly', 'annual', 'discrete'):
+            summary = (
+                f'{cadence_desc.capitalize()} records from {min_date} to {max_date} '
+                f'({total_periods} distinct intervals). '
+                f'NOTE: This dataset has {cadence} cadence and does NOT have continuous daily records.'
+            )
+        else:
+            summary = (
+                f'Daily records from {min_date} to {max_date} ({total_periods} distinct days).'
+            )
+
+        info = {
+            'temporal_cadence': cadence,
+            'cadence_interval_days': round(med_delta, 1),
+            'cadence_anchor': anchor,
+            'min_date': min_date,
+            'max_date': max_date,
+            'total_periods': total_periods,
+            'summary': summary,
+            'is_dayfirst': is_dayfirst
+        }
+        return parsed, is_dayfirst, info
+
+    @classmethod
     def _is_date(cls, series: pd.Series, col_clean: str) -> tuple[bool, float, list[str]]:
         reasons = []
         conf = 0.0
@@ -148,12 +267,14 @@ class SemanticClassifier:
                 return False, 0.0, []
 
             try:
-                # Test date parse
-                parsed = pd.to_datetime(sample, errors='coerce')
-                valid_ratio = parsed.notna().sum() / len(sample)
-                if valid_ratio >= 0.75:
-                    conf += 0.55
-                    reasons.append(f"{int(valid_ratio*100)}% of sampled values successfully parse as valid datetimes")
+                parsed, _, info = cls.detect_and_parse_datetime_series(sample)
+                if parsed is not None:
+                    valid_ratio = parsed.notna().sum() / len(sample)
+                    if valid_ratio >= 0.75:
+                        conf += 0.55
+                        reasons.append(f"{int(valid_ratio*100)}% of sampled values successfully parse as valid datetimes")
+                        if info.get('temporal_cadence'):
+                            reasons.append(f"Inferred {info['temporal_cadence']} cadence (step: ~{info.get('cadence_interval_days')}d)")
             except Exception:
                 pass
 
@@ -186,11 +307,20 @@ class SemanticClassifier:
         if is_dt:
             min_val_str = None
             max_val_str = None
+            t_cadence = None
+            c_interval = None
+            c_anchor = None
+            t_periods = unique_count
             try:
-                dt_parsed = pd.to_datetime(valid_vals, errors='coerce').dropna()
-                if len(dt_parsed) > 0:
-                    min_val_str = dt_parsed.min().strftime('%Y-%m-%d')
-                    max_val_str = dt_parsed.max().strftime('%Y-%m-%d')
+                _, _, info = cls.detect_and_parse_datetime_series(valid_vals)
+                if info:
+                    min_val_str = info.get('min_date')
+                    max_val_str = info.get('max_date')
+                    t_cadence = info.get('temporal_cadence')
+                    c_interval = info.get('cadence_interval_days')
+                    c_anchor = info.get('cadence_anchor')
+                    t_periods = info.get('total_periods', unique_count)
+                    dt_reasons.append(f"Cadence: {info.get('summary', '')}")
             except Exception:
                 pass
 
@@ -208,6 +338,10 @@ class SemanticClassifier:
                 is_unique_key=is_unique_key,
                 min_value=min_val_str,
                 max_value=max_val_str,
+                temporal_cadence=t_cadence,
+                cadence_interval_days=c_interval,
+                cadence_anchor=c_anchor,
+                total_periods=t_periods,
                 unit="date",
                 metric_polarity=MetricPolarity.NEUTRAL,
                 polarity_confidence=1.0,
@@ -726,6 +860,24 @@ class SemanticClassifier:
         if grain_keys and grain_keys not in primary_keys:
             primary_keys.append(grain_keys)
 
+        dataset_cadence = None
+        dataset_temporal_summary = None
+        if temporals:
+            pri_dt = col_profiles.get(temporals[0])
+            if pri_dt:
+                dataset_cadence = pri_dt.temporal_cadence
+                anchor_part = f" (every {pri_dt.cadence_anchor})" if pri_dt.cadence_anchor else ""
+                if pri_dt.temporal_cadence in ('weekly', 'bi-weekly', 'monthly', 'quarterly', 'annual', 'discrete'):
+                    dataset_temporal_summary = (
+                        f"{pri_dt.temporal_cadence.capitalize()}{anchor_part} records from {pri_dt.min_value} to {pri_dt.max_value} "
+                        f"({pri_dt.total_periods} distinct intervals). "
+                        f"NOTE: The dataset has {pri_dt.temporal_cadence} cadence and does NOT have continuous daily records."
+                    )
+                elif pri_dt.temporal_cadence == 'daily':
+                    dataset_temporal_summary = (
+                        f"Daily records from {pri_dt.min_value} to {pri_dt.max_value} ({pri_dt.total_periods} distinct days)."
+                    )
+
         return SemanticDatasetProfile(
             dataset_name=dataset_name,
             row_count=total_rows,
@@ -734,6 +886,8 @@ class SemanticClassifier:
             grain_confidence=round(grain_conf, 2),
             grain_key_columns=grain_keys,
             observation_window=observation_window,
+            temporal_cadence=dataset_cadence,
+            temporal_summary=dataset_temporal_summary,
             identifiers=identifiers,
             temporal_dimensions=temporals,
             categorical_dimensions=categoricals,

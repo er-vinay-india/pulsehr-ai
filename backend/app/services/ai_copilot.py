@@ -105,14 +105,14 @@ def clean_cot_reasoning(text: str) -> str:
 
 
 def build_copilot_context(sheet_id: int | None = None, dataset_id: int | None = None) -> str:
-    """Constructs a high-signal, compact context of workspace sheets and relationships.
+    """Constructs a high-signal, compact context of workspace sheets, temporal cadence, and relationships.
     Reduces prompt token overhead by ~90% compared to monolithic JSON dumps.
     """
     lines = []
     try:
         with get_connection() as conn:
             sheets = conn.execute(
-                "SELECT s.id, s.name, s.row_count, s.columns_json, d.original_name, d.id as dataset_id "
+                "SELECT s.id, s.name, s.row_count, s.columns_json, s.profile_json, d.original_name, d.id as dataset_id "
                 "FROM sheets s JOIN dataset_uploads d ON d.id=s.dataset_id ORDER BY s.id ASC"
             ).fetchall()
 
@@ -120,6 +120,7 @@ def build_copilot_context(sheet_id: int | None = None, dataset_id: int | None = 
                 return "No spreadsheet datasets currently uploaded in workspace."
 
             lines.append("AVAILABLE SPREADSHEETS IN WORKSPACE:")
+            temporal_summaries = []
             for s in sheets:
                 is_active = (sheet_id is not None and s["id"] == sheet_id) or (sheet_id is None and dataset_id is not None and s["dataset_id"] == dataset_id)
                 prefix = "-> [ACTIVE SHEET]" if is_active else "- Sheet:"
@@ -128,6 +129,23 @@ def build_copilot_context(sheet_id: int | None = None, dataset_id: int | None = 
                 if len(cols) > 10:
                     sample_cols += f" (+{len(cols)-10} more)"
                 lines.append(f"  {prefix} '{s['name']}' (Source: '{s['original_name']}', {s['row_count']} rows). Fields: [{sample_cols}]")
+
+                # Extract verified temporal cadence from profile
+                try:
+                    profs = json.loads(s["profile_json"] or "[]")
+                    for p in profs:
+                        if p.get("temporal_summary"):
+                            temporal_summaries.append(f"Sheet '{s['name']}' [{p['column']}]: {p['temporal_summary']}")
+                        elif p.get("temporal_cadence"):
+                            temporal_summaries.append(f"Sheet '{s['name']}' [{p['column']}]: {p['temporal_cadence'].capitalize()} from {p.get('min_date')} to {p.get('max_date')} ({p.get('total_periods', 'multiple')} periods).")
+                except Exception:
+                    pass
+
+            if temporal_summaries:
+                lines.append("\nTEMPORAL CADENCE & GRANULARITY (AUTHORITATIVE GROUND TRUTH):")
+                for ts in temporal_summaries:
+                    lines.append(f"  * {ts}")
+                lines.append("  * CRITICAL TRUTH GUARD: Never claim continuous daily records if the cadence is weekly or discrete intervals. Always accurately disclose the discrete cadence.")
 
             # Connected relationships between sheets
             rels = conn.execute(
@@ -178,6 +196,8 @@ def _build_copilot_prompt(
         f"{labels_context}"
         "When referencing columns or metrics in user-facing explanations, use readable sentence-cased display labels (e.g. 'weekly sales', 'holiday flag', 'fuel price', 'attendance rate') instead of raw underscores or snake_case. Retain raw column names only inside SQL, code blocks, or tool queries. "
         "Write answers in clean, standard GitHub Markdown. Use **bold** for key figures and headings. Do not escape asterisks. Write currency figures like '$80.93M' naturally without LaTeX math delimiters; only use '$$...$$' for legitimate multi-variable mathematical formulas. "
+        "Strictly adhere to the TEMPORAL CADENCE in the context. If the dataset has weekly or periodic intervals, state clearly that it contains discrete weekly aggregations, NOT continuous daily logs. "
+        "Dates are formatted in ISO-8601 (YYYY-MM-DD). For example, 2010-03-05 represents March 5, 2010 (the first weekly cycle of March 2010), NOT May 3. "
         "Use only the supplied source records and full-sheet statistics. There is no default workforce or Kaggle baseline. "
         "Cite the filename, sheet and row for factual claims. Rows joined by exact keys retain separate sources; "
         "conflicting values must be reported with their sources, never silently overwritten. "

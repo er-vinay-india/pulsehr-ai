@@ -263,8 +263,23 @@ def compute_decision_hints(profiles, records):
 
 
 def prepare_sheets(frames, source, embed=True):
+    from .data_engine.semantic_classifier import SemanticClassifier
     prepared = []
     for name, frame in frames.items():
+        frame = frame.copy()
+        
+        # 1. Automatic Datetime Normalization to ISO-8601 (YYYY-MM-DD)
+        temporal_meta = {}
+        for column in frame.columns:
+            is_dt, _, _ = SemanticClassifier._is_date(frame[column], str(column))
+            if is_dt:
+                parsed_dt, is_df, info = SemanticClassifier.detect_and_parse_datetime_series(frame[column])
+                if parsed_dt is not None and info:
+                    # Normalize in-place to unambiguous ISO strings YYYY-MM-DD
+                    frame[column] = parsed_dt.dt.strftime('%Y-%m-%d').fillna('')
+                    temporal_meta[column] = info
+                    logger.info(f"Normalized column '{column}' in '{name}' to ISO-8601: {info.get('summary')}")
+
         records = json.loads(frame.to_json(orient='records', date_format='iso'))
         profiles = []
         for column in frame.columns:
@@ -282,6 +297,16 @@ def prepare_sheets(frames, source, embed=True):
                 'distinct': len({value_key(v) for v in values}),
                 'is_mostly_null': null_pct >= 85.0
             }
+            # Attach temporal metadata if applicable
+            if column in temporal_meta:
+                t_info = temporal_meta[column]
+                profile['temporal_cadence'] = t_info.get('temporal_cadence')
+                profile['cadence_interval_days'] = t_info.get('cadence_interval_days')
+                profile['cadence_anchor'] = t_info.get('cadence_anchor')
+                profile['min_date'] = t_info.get('min_date')
+                profile['max_date'] = t_info.get('max_date')
+                profile['temporal_summary'] = t_info.get('summary')
+
             # IDs, booleans and numeric-looking codes are not measures.
             identifier = canonical(column).endswith('id') or canonical(column).endswith('_id') or 'code' in canonical(column)
             if len(values) and not identifier and numeric.notna().all() and np.isfinite(numeric.astype(float)).all():
@@ -292,26 +317,83 @@ def prepare_sheets(frames, source, embed=True):
             profiles.append(profile)
 
         hints = compute_decision_hints(profiles, records)
+        if temporal_meta:
+            primary_t_info = next(iter(temporal_meta.values()))
+            hints['temporal_cadence'] = primary_t_info.get('temporal_cadence')
+            hints['temporal_summary'] = primary_t_info.get('summary')
+            hints['min_date'] = primary_t_info.get('min_date')
+            hints['max_date'] = primary_t_info.get('max_date')
+
+        # 2. Hierarchical Chunking: Macro-Temporal Chunks + Row Chunks
+        macro_chunks = []
+        if temporal_meta:
+            for t_col, t_info in temporal_meta.items():
+                macro_chunks.append(
+                    f"Source: {source}; Sheet: {name}; Column '{t_col}' Temporal Granularity: {t_info.get('summary')}"
+                )
+                # Compute monthly rollups for macro-retrieval
+                try:
+                    dt_series = pd.to_datetime(frame[t_col], errors='coerce')
+                    valid_mask = dt_series.notna()
+                    if valid_mask.sum() >= 4:
+                        frame_temp = frame[valid_mask].copy()
+                        frame_temp['__month_dt'] = dt_series[valid_mask].dt.to_period('M')
+                        frame_temp['__month_name'] = dt_series[valid_mask].dt.strftime('%B %Y')
+                        
+                        # Find primary numeric columns
+                        num_cols = [p['column'] for p in profiles if p.get('numeric') and not p.get('is_mostly_null')]
+                        pri_num = num_cols[0] if num_cols else None
+                        id_col = next((p['column'] for p in profiles if canonical(p['column']).endswith('id') or 'store' in canonical(p['column'])), None)
+
+                        for _, m_grp in frame_temp.groupby('__month_dt'):
+                            m_label = m_grp['__month_name'].iloc[0]
+                            m_dates = sorted(m_grp[t_col].unique())
+                            if not m_dates:
+                                continue
+                            
+                            cycle_desc = []
+                            for d_val, d_grp in m_grp.groupby(t_col):
+                                if pri_num:
+                                    d_num = pd.to_numeric(d_grp[pri_num].astype(str).str.replace(r'[^\d.-]', '', regex=True), errors='coerce').sum()
+                                    cycle_desc.append(f"{d_val} (total {pri_num}: {d_num:,.2f})")
+                                else:
+                                    cycle_desc.append(f"{d_val} ({len(d_grp)} rows)")
+                            
+                            cycles_str = "; ".join(cycle_desc[:6])
+                            m_summary = f"Source: {source}; Sheet: {name}; Period: {m_label} ({m_dates[0]} to {m_dates[-1]}). Discrete cycles ({len(m_dates)} dates): {cycles_str}."
+                            if pri_num:
+                                total_val = pd.to_numeric(m_grp[pri_num].astype(str).str.replace(r'[^\d.-]', '', regex=True), errors='coerce').sum()
+                                avg_val = pd.to_numeric(m_grp[pri_num].astype(str).str.replace(r'[^\d.-]', '', regex=True), errors='coerce').mean()
+                                entity_count = m_grp[id_col].nunique() if id_col else len(m_grp)
+                                m_summary += f" Monthly total {pri_num}: {total_val:,.2f}, average: {avg_val:,.2f} across {entity_count} entities."
+                            macro_chunks.append(m_summary)
+                except Exception as m_exc:
+                    logger.debug(f"Could not build monthly macro chunks: {m_exc}")
+
+        row_chunks = [f"Source: {source}; Sheet: {name}; Row: {i + 1}. " + '; '.join(f'{k}: {v}' for k, v in row.items() if value_key(v)) for i, row in enumerate(records)]
+        all_chunks = macro_chunks + row_chunks
 
         vectors = model_embeddings([f"Column {p['column']} ({p['canonical']})" for p in profiles]) if embed else []
         for profile, vector in zip(profiles, vectors):
             profile['vector'] = vector
             profile['embedding_model'] = config.OLLAMA_EMBED_MODEL
-        chunks = [f"Source: {source}; Sheet: {name}; Row: {i + 1}. " + '; '.join(f'{k}: {v}' for k, v in row.items() if value_key(v)) for i, row in enumerate(records)]
-        row_vectors = []
+
+        chunk_vectors = []
         if vectors:  # A failed column batch avoids repeatedly contacting an offline model.
-            for start in range(0, len(chunks), 64):
-                batch = model_embeddings(chunks[start:start+64])
+            for start in range(0, len(all_chunks), 64):
+                batch = model_embeddings(all_chunks[start:start+64])
                 if not batch:
                     break
-                row_vectors.extend(batch)
+                chunk_vectors.extend(batch)
+
         prepared.append({
             'name': name,
             'columns': list(frame.columns),
             'profiles': profiles,
             'records': records,
-            'chunks': chunks,
-            'vectors': row_vectors,
+            'macro_chunks_count': len(macro_chunks),
+            'chunks': all_chunks,
+            'vectors': chunk_vectors,
             'decision_hints': hints
         })
     return prepared
@@ -330,6 +412,7 @@ def insert_sheets(conn, dataset_id, prepared, display_name=None):
         chunks = sheet.get('chunks', [])
         vectors = sheet.get('vectors', [])
         total_records = len(records)
+        num_macro = sheet.get('macro_chunks_count', 0)
 
         # High-performance chunked batch insertion (1,000 rows per transaction chunk)
         batch_size = 1000
@@ -351,20 +434,30 @@ def insert_sheets(conn, dataset_id, prepared, display_name=None):
             if cells_batch:
                 conn.executemany('INSERT INTO sheet_cells(sheet_id,row_index,column_name,value_key) VALUES (?,?,?,?)', cells_batch)
 
-            for i in range(b_start, b_end):
-                chunk_txt = chunks[i] if i < len(chunks) else ""
-                metadata = {'dataset_id': dataset_id, 'sheet_id': sid, 'sheet_name': sheet['name'], 'row_index': i}
-                if i < len(vectors):
-                    metadata['embedding_model'] = config.OLLAMA_EMBED_MODEL
-                chunk_id = conn.execute(
-                    'INSERT INTO tabular_chunks(dataset_id,sheet_name,row_index,chunk_text,metadata_json) VALUES (?,?,?,?,?)',
-                    (dataset_id, sheet['name'], i, chunk_txt, json.dumps(metadata))
-                ).lastrowid
-                if i < len(vectors) and vectors[i]:
-                    conn.execute(
-                        'INSERT INTO tabular_vectors(id,embedding) VALUES (?,?)',
-                        (chunk_id, pack_vector(vectors[i]))
-                    )
+        # Insert all chunks (macro summary chunks first with row_index=-1, then row chunks)
+        for c_idx, chunk_txt in enumerate(chunks):
+            is_macro = c_idx < num_macro
+            row_idx = -1 if is_macro else (c_idx - num_macro)
+            metadata = {
+                'dataset_id': dataset_id,
+                'sheet_id': sid,
+                'sheet_name': sheet['name'],
+                'row_index': row_idx,
+                'is_macro_summary': is_macro
+            }
+            if c_idx < len(vectors) and vectors[c_idx]:
+                metadata['embedding_model'] = config.OLLAMA_EMBED_MODEL
+
+            chunk_id = conn.execute(
+                'INSERT INTO tabular_chunks(dataset_id,sheet_name,row_index,chunk_text,metadata_json) VALUES (?,?,?,?,?)',
+                (dataset_id, sheet['name'], row_idx, chunk_txt, json.dumps(metadata))
+            ).lastrowid
+
+            if c_idx < len(vectors) and vectors[c_idx]:
+                conn.execute(
+                    'INSERT INTO tabular_vectors(id,embedding) VALUES (?,?)',
+                    (chunk_id, pack_vector(vectors[c_idx]))
+                )
 
 
 def prepare_existing_column_vectors():

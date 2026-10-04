@@ -205,6 +205,19 @@ def _extract_dataset_summary(df: pd.DataFrame | None, sheet_name: str | None) ->
             except Exception:
                 pass
 
+    # 4. Temporal Cadence & Periodicity Ground Truth
+    from ..data_engine.semantic_classifier import SemanticClassifier
+    for col in cols:
+        is_dt, _, _ = SemanticClassifier._is_date(df[col], str(col))
+        if is_dt:
+            try:
+                _, _, info = SemanticClassifier.detect_and_parse_datetime_series(df[col])
+                if info and info.get('summary'):
+                    summary_lines.append(f"Temporal Cadence & Coverage: {info['summary']}")
+                    break
+            except Exception:
+                pass
+
     return "\n".join(summary_lines)
 
 
@@ -458,7 +471,8 @@ INSTRUCTIONS:
 2. IRRELEVANT / OUT-OF-SCOPE INQUIRIES: If the user asks about external topics outside enterprise/data scope (e.g. weather forecast, recipes, sports, pop culture): politely decline, clarifying that you specialize in enterprise analytics and operational datasets.
 3. DATA & REPORT QUESTIONS: Give direct, concrete, authoritative answers grounded in the dataset context. If no dataset is attached and a report is requested, clearly let the user know they need to upload or select a dataset first.
 4. CONVERSATION CONTINUITY: If CONVERSATION CONTEXT is provided and the user query is a follow-up or refinement (e.g. 'overall', 'which one is worst', 'why', 'what about that'), preserve context and directly address the preceding discussion rather than restarting from scratch.
-5. TONE & STYLE: Speak naturally and authentically in your own distinct perspective. Avoid formulaic filler phrases like 'From a causal logic standpoint' or mechanical boilerplate.
+5. TEMPORAL CADENCE & GRAIN: Strictly adhere to the stated Temporal Cadence & Coverage. If records are weekly or discrete intervals, state that clearly; never claim continuous daily logs. Dates are ISO YYYY-MM-DD (e.g. 2010-03-05 is March 5, 2010).
+6. TONE & STYLE: Speak naturally and authentically in your own distinct perspective. Avoid formulaic filler phrases like 'From a causal logic standpoint' or mechanical boilerplate.
 Draft your proposed complete answer in 2 to 4 clear, high-signal sentences."""
 
         res = ''
