@@ -135,6 +135,26 @@ TOOL_POLICIES: dict[str, MCPToolPermission] = {
         allowed_roles=[AgentRole.HRIDAY_COPILOT, AgentRole.STORY_PLANNER, AgentRole.EXECUTIVE_DECK],
         description="Fetch complete executive briefing, priority insight, and layout specs.",
     ),
+    "discover_dataset_metrics": MCPToolPermission(
+        tool_name="discover_dataset_metrics",
+        allowed_roles=[AgentRole.HRIDAY_COPILOT, AgentRole.COUNCIL_CRITIC, AgentRole.STORY_PLANNER, AgentRole.EXECUTIVE_DECK],
+        description="Discover all governed metrics across all sibling sheets in an uploaded workbook.",
+    ),
+    "query_dataset_insights": MCPToolPermission(
+        tool_name="query_dataset_insights",
+        allowed_roles=[AgentRole.HRIDAY_COPILOT, AgentRole.STORY_PLANNER, AgentRole.EXECUTIVE_DECK],
+        description="Query top global insights across all sheets using slot-budgeted ranking.",
+    ),
+    "get_dataset_relationships": MCPToolPermission(
+        tool_name="get_dataset_relationships",
+        allowed_roles=[AgentRole.HRIDAY_COPILOT, AgentRole.COUNCIL_CRITIC, AgentRole.STORY_PLANNER, AgentRole.EXECUTIVE_DECK],
+        description="Retrieve verified cross-sheet relationship graph and join safety metrics.",
+    ),
+    "query_cross_sheet_insights": MCPToolPermission(
+        tool_name="query_cross_sheet_insights",
+        allowed_roles=[AgentRole.HRIDAY_COPILOT, AgentRole.COUNCIL_CRITIC, AgentRole.STORY_PLANNER, AgentRole.EXECUTIVE_DECK],
+        description="Retrieve cross-sheet interaction evidence and joined cohort insights.",
+    ),
 }
 
 
@@ -181,7 +201,8 @@ class GovernedMCPGateway:
                 error_message=f"Role '{caller_role.value}' is unauthorized to invoke '{tool_name}'. Allowed: {[r.value for r in policy.allowed_roles]}",
             )
 
-        if not dashboard_response:
+        is_dataset_tool = "dataset" in tool_name or "cross_sheet" in tool_name
+        if not dashboard_response and not is_dataset_tool:
             return MCPToolResult(
                 tool_name=tool_name,
                 status="error",
@@ -468,4 +489,69 @@ class GovernedMCPGateway:
                 "briefing_transcript": getattr(briefing, "transcript_text", ""),
                 "run_status": resp.run_status,
             },
+        )
+
+    @classmethod
+    def _tool_discover_dataset_metrics(
+        cls, params: dict[str, Any], role: AgentRole, resp: AdaptiveDashboardResponse | None
+    ) -> MCPToolResult:
+        from .dataset_orchestrator import run_dataset_intelligence
+        dataset_id = params.get("dataset_id") or (resp.manifest.dataset_id if resp and resp.manifest else 1)
+        ds_resp = run_dataset_intelligence(dataset_id=dataset_id)
+        return MCPToolResult(
+            tool_name="discover_dataset_metrics",
+            status="success",
+            caller_role=role,
+            data={"dataset_id": dataset_id, "sheet_count": ds_resp.sheet_count, "relationship_count": ds_resp.relationship_count},
+        )
+
+    @classmethod
+    def _tool_query_dataset_insights(
+        cls, params: dict[str, Any], role: AgentRole, resp: AdaptiveDashboardResponse | None
+    ) -> MCPToolResult:
+        from .dataset_orchestrator import run_dataset_intelligence
+        dataset_id = params.get("dataset_id") or (resp.manifest.dataset_id if resp and resp.manifest else 1)
+        ds_resp = run_dataset_intelligence(dataset_id=dataset_id)
+        return MCPToolResult(
+            tool_name="query_dataset_insights",
+            status="success",
+            caller_role=role,
+            data={
+                "dataset_id": dataset_id,
+                "dataset_name": ds_resp.dataset_name,
+                "selected_dashboard_insights": ds_resp.selected_dashboard_insights,
+                "coverage_warnings": ds_resp.coverage_warnings,
+            },
+        )
+
+    @classmethod
+    def _tool_get_dataset_relationships(
+        cls, params: dict[str, Any], role: AgentRole, resp: AdaptiveDashboardResponse | None
+    ) -> MCPToolResult:
+        from .dataset_orchestrator import run_dataset_intelligence
+        dataset_id = params.get("dataset_id") or (resp.manifest.dataset_id if resp and resp.manifest else 1)
+        ds_resp = run_dataset_intelligence(dataset_id=dataset_id)
+        return MCPToolResult(
+            tool_name="get_dataset_relationships",
+            status="success",
+            caller_role=role,
+            data={"dataset_id": dataset_id, "relationship_graph": ds_resp.relationship_graph.model_dump()},
+        )
+
+    @classmethod
+    def _tool_query_cross_sheet_insights(
+        cls, params: dict[str, Any], role: AgentRole, resp: AdaptiveDashboardResponse | None
+    ) -> MCPToolResult:
+        from .dataset_orchestrator import run_dataset_intelligence
+        dataset_id = params.get("dataset_id") or (resp.manifest.dataset_id if resp and resp.manifest else 1)
+        ds_resp = run_dataset_intelligence(dataset_id=dataset_id)
+        cross_insights = [
+            i for i in (ds_resp.selected_dashboard_insights + ds_resp.suppressed_insights)
+            if i.get("scope") == "CROSS_SHEET"
+        ]
+        return MCPToolResult(
+            tool_name="query_cross_sheet_insights",
+            status="success",
+            caller_role=role,
+            data={"dataset_id": dataset_id, "cross_sheet_insights": cross_insights},
         )
