@@ -15,6 +15,7 @@ import "./styles/hriday-chat.scss";
 import "./styles/explorer-workspace.scss";
 import "./styles/mobile-layout.scss";
 import "./styles/radix-dropdown.scss";
+import "./styles/header-logo.scss";
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
