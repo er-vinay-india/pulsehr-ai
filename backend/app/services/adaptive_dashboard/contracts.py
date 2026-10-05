@@ -453,6 +453,9 @@ class AdaptiveDashboardResponse(BaseModel):
     analytical_tables: list[dict[str, Any]] = Field(default_factory=list)
     group_by_projections: dict[str, Any] = Field(default_factory=dict)
     executive_visuals: list[dict[str, Any]] = Field(default_factory=list)
+    semantic_catalog: dict[str, Any] | None = None
+    evidence_graph: dict[str, Any] | None = None
+    story_plan: dict[str, Any] | None = None
     run_status: Literal["ready", "needs_definition", "failed"] = "ready"
 
 

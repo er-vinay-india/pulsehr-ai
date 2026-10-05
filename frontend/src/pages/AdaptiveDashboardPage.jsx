@@ -12,6 +12,7 @@ import InvestigationDrawer from "../components/InvestigationDrawer";
 import EmployeeDrawer from "../components/EmployeeDrawer";
 import SmartImpactCard from "../components/charts/SmartImpactCard";
 import SlideChart from "../components/presentation/slides/SlideChart";
+import EvidenceStoryCard from "../components/adaptive/EvidenceStoryCard";
 import "../styles/adaptive-dashboard.scss";
 import { useTheme } from "../context/ThemeContext";
 import { getThemeTokens } from "../theme/tokens";
@@ -2167,6 +2168,15 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
               ))}
             </div>
           </section>
+        )}
+
+        {/* Governed AI Story Plan & Evidence Graph */}
+        {!calculating && !calcError && data?.story_plan && (
+          <EvidenceStoryCard
+            storyPlan={data.story_plan}
+            evidenceGraph={data.evidence_graph}
+            snapshot={data.snapshot}
+          />
         )}
 
         {/* Layer 1: Element 7 — Executive Briefing with Voice Orb (Gate 7) */}

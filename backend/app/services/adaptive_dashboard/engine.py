@@ -4875,7 +4875,7 @@ def run_adaptive_dashboard(sheet_id: int | None = None) -> AdaptiveDashboardResp
             logger.warning("Could not synthesize executive visuals for dashboard: %s", ev_err)
 
         # Return atomic response
-        return AdaptiveDashboardResponse(
+        resp = AdaptiveDashboardResponse(
             version="adaptive-v10",
             snapshot=manifest.snapshot,
             sheet_id=sid,
@@ -4899,6 +4899,46 @@ def run_adaptive_dashboard(sheet_id: int | None = None) -> AdaptiveDashboardResp
             executive_visuals=executive_visuals,
             run_status="ready" if spec.kind == "kpi" else "needs_definition",
         )
+
+        # 17. Governed Semantic Layer, Evidence Graph & AI Story Planner
+        try:
+            from .semantic_catalog import infer_semantic_catalog
+            from .evidence_graph import findings_to_evidence_graph
+            from .insight_ranker import InsightRankingEngine
+            from .story_planner import StoryPlanner
+            from .findings import extract_findings_from_response
+
+            sname = getattr(manifest, "sheet_name", None) or getattr(manifest, "name", None) or "Dataset"
+            cat = infer_semantic_catalog(
+                sheet_id=sid,
+                sheet_name=sname,
+                columns=columns,
+                sample_rows=rows[:50] if rows else [],
+                domain=contract.domain,
+            )
+
+            all_findings = extract_findings_from_response(resp)
+            graph = findings_to_evidence_graph(
+                all_findings,
+                sheet_id=sid,
+                snapshot=manifest.snapshot,
+            )
+
+            ranker = InsightRankingEngine()
+            ranked_insights = ranker.rank_graph(graph, top_n=12)
+            plan = StoryPlanner.plan_story(
+                graph=graph,
+                ranked=ranked_insights,
+                domain=contract.domain,
+            )
+
+            resp.semantic_catalog = cat.model_dump()
+            resp.evidence_graph = graph.model_dump()
+            resp.story_plan = plan.model_dump()
+        except Exception as sg_err:
+            logger.warning("Could not assemble semantic evidence graph and story plan: %s", sg_err)
+
+        return resp
 
     finally:
         conn.close()
