@@ -26,6 +26,7 @@ class SheetContext(BaseModel):
 
     sheet_id: int
     sheet_name: str
+    display_name: str | None = None
     row_count: int
     col_count: int
     entity_type: str
@@ -220,7 +221,8 @@ def run_dataset_intelligence(dataset_id: int) -> DatasetIntelligenceResponse:
 
             sheet_ctx = SheetContext(
                 sheet_id=sid,
-                sheet_name=sdisp or sname,
+                sheet_name=sname,
+                display_name=sdisp or sname,
                 row_count=rcount or 0,
                 col_count=len(columns),
                 entity_type=cat.entity_type,
