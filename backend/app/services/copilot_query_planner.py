@@ -76,7 +76,7 @@ class AnalyticalQueryPlan(BaseModel):
     intent: QueryIntent
     metric: str | None = None  # Resolved column name or standard metric key
     secondary_metric: str | None = None  # For correlation/causation questions
-    entity_dimension: str = 'Department'  # Resolved grouping dimension (e.g. Department, Store, Severity)
+    entity_dimension: str | None = 'Department'  # Resolved grouping dimension (e.g. Department, Store, Severity)
     direction: SortDirection = 'lowest'
     time_window: str | None = None  # e.g. 'July', 'August', '2023-08'
     ranking_limit: int = 1
@@ -95,6 +95,7 @@ class AnalyticalQueryPlan(BaseModel):
     additional_fields: list[str] = Field(default_factory=list)
     threshold_operator: str | None = None
     threshold_value: float | None = None
+    response_detail: Literal['brief', 'detailed'] | None = None
 
 
 def resolve_metric_direction(metric_name: str | None, cols: list[str] | None = None, rows: list[dict] | None = None) -> str:
@@ -223,9 +224,12 @@ def plan_with_council_qwen(
     all_dimensions: list[str],
     dataset_id: int | None = None,
     sheet_id: int | None = None,
-    prior_context: dict[str, Any] | None = None
+    prior_context: dict[str, Any] | None = None,
+    allow_model_planning: bool = True
 ) -> AnalyticalQueryPlan | None:
     """Uses Qwen 3.5 via ModelGateway with CouncilPlan Pydantic schema when heuristics fall through."""
+    if not allow_model_planning:
+        return None
     if not all_measures and not all_dimensions and dataset_id is None and sheet_id is None:
         return None
     try:
@@ -285,12 +289,28 @@ Rules:
     return None
 
 
+def is_positive_summary_query(query: str) -> bool:
+    """Recognize requests for dataset strengths before conceptual routing."""
+    q = query.strip().lower()
+    return bool(re.search(r'\b(?:\d+|three|two|four|five|one)\s+(?:good|positive|strength|highlight)', q)) or any(
+        phrase in q for phrase in (
+            'good points', 'positive points', 'positive findings', 'what is going well',
+            "what's going well", 'key strengths', 'highlights', 'positive highlights',
+        )
+    ) or bool(re.search(
+        r"\bwhat(?:\s+is|'s|\s+are)\s+(?:good|positive|the\s+strengths)\s+"
+        r"(?:about|in|of)\s+(?:(?:the|this|that|our|your|my|uploaded|new)\s+)*"
+        r"(?:data|dataset|sheet|table|records)\b", q
+    ))
+
+
 def plan_analytical_query(
     query: str,
     dataset_id: int | None = None,
     sheet_id: int | None = None,
     prior_context: dict[str, Any] | None = None,
-    conn=None
+    conn=None,
+    allow_model_planning: bool = True
 ) -> AnalyticalQueryPlan | None:
     """Parses natural-language analytical questions into an executable, bounded analytical plan.
     
@@ -332,10 +352,7 @@ def plan_analytical_query(
     # Check Business Summary: Positives ("give me 3 good points", "positive points", "highlights", "strengths")
     count_match_pos = re.search(r'\b(\d+|three|two|four|five|one)\s+(?:good|positive|strength|highlight)', q)
     num_map = {'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5}
-    is_summary_pos = bool(count_match_pos) or any(k in q for k in (
-        '3 good points', 'three good points', 'good points', 'positive points', 'positive findings',
-        'what is going well', "what's going well", 'key strengths', 'highlights', 'positive highlights'
-    ))
+    is_summary_pos = is_positive_summary_query(query)
     if is_summary_pos:
         req_count = 3
         if count_match_pos:
@@ -769,7 +786,8 @@ def plan_analytical_query(
             all_dimensions=all_dimensions,
             dataset_id=dataset_id,
             sheet_id=sheet_id,
-            prior_context=active_prior
+            prior_context=active_prior,
+            allow_model_planning=allow_model_planning
         )
         if council_res:
             return council_res
@@ -832,7 +850,8 @@ def plan_analytical_query(
                     all_dimensions=all_dimensions,
                     dataset_id=dataset_id,
                     sheet_id=sheet_id,
-                    prior_context=active_prior
+                    prior_context=active_prior,
+                    allow_model_planning=allow_model_planning
                 )
                 if council_res:
                     return council_res
@@ -844,7 +863,8 @@ def plan_analytical_query(
                 all_dimensions=all_dimensions,
                 dataset_id=dataset_id,
                 sheet_id=sheet_id,
-                prior_context=active_prior
+                prior_context=active_prior,
+                allow_model_planning=allow_model_planning
             )
             if council_res:
                 return council_res
@@ -905,6 +925,14 @@ def execute_analytical_plan(plan: AnalyticalQueryPlan, conn=None) -> dict[str, A
     try:
         candidate_sheets = _resolve_candidate_sheets(conn, plan.dataset_id, plan.sheet_id)
         if not candidate_sheets:
+            if plan.intent == 'summary_positives':
+                return {
+                    'status': 'source_unavailable',
+                    'answer': ('The selected sheet is no longer available. Please select a loaded sheet.'
+                               if plan.sheet_id is not None or plan.dataset_id is not None
+                               else 'No spreadsheet datasets are currently uploaded. Upload a sheet to review its verified findings.'),
+                    'prior_context': {},
+                }
             raise ValueError("No uploaded sheet records found in active scope.")
 
         # 1. HANDLE AMBIGUITY CLARIFICATION INTENT
@@ -975,7 +1003,7 @@ def execute_analytical_plan(plan: AnalyticalQueryPlan, conn=None) -> dict[str, A
 
         # 2. HANDLE SUMMARY POSITIVES INTENT ("give me 3 good points")
         if plan.intent == 'summary_positives':
-            return _execute_summary_positives_query(plan, candidate_sheets, cols, rows, brief, snapshot_hash)
+            return _execute_summary_positives_query(plan, [sheet], cols, rows, brief, snapshot_hash)
 
         # 3. HANDLE SUMMARY CONCERNS INTENT ("main problems", "key risks")
         if plan.intent == 'summary_concerns':
@@ -1004,10 +1032,15 @@ def execute_analytical_plan(plan: AnalyticalQueryPlan, conn=None) -> dict[str, A
             # Enforce grain consistency validation
             if plan.entity_grain == 'employee' and res.get('evidence', {}).get('result_grain') == 'department':
                 raise ValueError("Grain mismatch: Expected employee-level evidence but received department aggregate.")
-            return res
+        else:
+            # 8. GENERAL TABULAR ANALYTICAL EXECUTION (Sales, IT, Marketing, General HR)
+            res = _execute_general_tabular_query(plan, sheet, cols, rows, brief, snapshot_hash)
 
-        # 8. GENERAL TABULAR ANALYTICAL EXECUTION (Sales, IT, Marketing, General HR)
-        return _execute_general_tabular_query(plan, sheet, cols, rows, brief, snapshot_hash)
+        if plan.response_detail and res.get('status') == 'success':
+            from .copilot.response_formatter import format_analytical_response
+            res["answer"] = format_analytical_response(res, plan.response_detail)
+
+        return res
 
     finally:
         if should_close:
@@ -1108,6 +1141,7 @@ def _execute_summary_positives_query(
 
     lines = []
     lines.append("### Executive Overview: Verified Positive Findings")
+    lines.append(f"Source: **{_sanitize_untrusted_text(sheet['original_name'])} / {_sanitize_untrusted_text(sheet['name'])}** — **{len(rows):,} records**.")
     lines.append(f"Evaluated against Decision Brief snapshot `{snapshot_hash}` using full-population data.\n")
 
     if not positives:
@@ -1706,6 +1740,8 @@ def _execute_hr_period_attendance_query(
                 f"Under validated full-population evaluation, {tied_names} tied for the **{label_adjective} {metric_display_name}** "
                 f"at **{top_val:.2f}{unit_suffix}**."
             )
+            if any(d.get('is_small_population') for d in tied_targets):
+                lines.append(f"- **Population Note**: Group headcount is small; individual absences impact the average heavily.")
         else:
             primary_target = dense_ranked[0]
             d_name = _sanitize_untrusted_text(primary_target['department'])
@@ -1777,6 +1813,25 @@ def _execute_hr_period_attendance_query(
         "time_window": period_lbl
     }
 
+    findings = {
+        "status": "success",
+        "metric_key": metric_key,
+        "metric_display_name": metric_display_name,
+        "unit_suffix": unit_suffix,
+        "direction": plan.direction,
+        "period_label": period_lbl,
+        "month": res.get("month", "July"),
+        "ranking_limit": plan.ranking_limit,
+        "distinct_employees": distinct_emp,
+        "total_evaluated_records": res["total_evaluated_records"],
+        "organization_benchmark": org_val,
+        "dense_ranked": dense_ranked,
+        "tied_targets": [d for d in dense_ranked if d["dense_rank"] == 1],
+        "primary_target": dense_ranked[0] if dense_ranked else None,
+        "historical_trend_notice": res['historical_trend_notice'],
+        "denominator_notice": res['denominator_notice']
+    }
+
     return {
         "status": "success",
         "query_plan": {
@@ -1790,6 +1845,8 @@ def _execute_hr_period_attendance_query(
             "sheet_id": sheet["id"]
         },
         "answer": answer_text,
+        "detailed_answer": answer_text,
+        "findings": findings,
         "evidence": {
             "source_ids": [sheet["id"]],
             "snapshot_hash": snapshot_hash,
@@ -2162,6 +2219,7 @@ def _execute_employee_attendance_query(
             "sheet_id": sheet["id"]
         },
         "answer": answer_text,
+        "detailed_answer": answer_text,
         "evidence": {
             "source_ids": [sheet["id"]],
             "snapshot_hash": snapshot_hash,
@@ -2396,6 +2454,17 @@ def _execute_general_tabular_query(
         "time_window": plan.time_window
     }
 
+    findings = {
+        "status": "success",
+        "metric_label": metric_lbl,
+        "direction": plan.direction,
+        "time_window": plan.time_window,
+        "dense_groups": dense_groups,
+        "baseline": baseline,
+        "tied_targets": [g for g in dense_groups if g.get("dense_rank") == 1],
+        "primary_target": dense_groups[0] if dense_groups else None,
+    }
+
     return {
         "status": "success",
         "query_plan": {
@@ -2409,6 +2478,8 @@ def _execute_general_tabular_query(
             "sheet_id": sheet["id"]
         },
         "answer": answer_text,
+        "detailed_answer": answer_text,
+        "findings": findings,
         "evidence": {
             "source_ids": [sheet["id"]],
             "snapshot_hash": snapshot_hash,

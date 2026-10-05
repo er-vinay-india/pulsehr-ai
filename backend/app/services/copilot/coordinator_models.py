@@ -66,6 +66,19 @@ class WorkerTarget(str, Enum):
     UNION_WAR_ROOM = "union_war_room"
 
 
+class EnrichedAnalyticalRequest(BaseModel):
+    """Server-owned, schema-grounded request delivered to the analytical worker."""
+    original_query: str
+    plan: dict[str, Any]
+    field_bindings: dict[str, str] = Field(default_factory=dict)
+    available_measures: list[str] = Field(default_factory=list)
+    resolution_method: Literal['deterministic', 'semantic_catalog', 'coordinator_model', 'clarification']
+    response_detail: Literal['brief', 'detailed'] = 'brief'
+    schema_hash: str | None = None
+    aggregation_basis: str | None = None
+    source_columns: list[str] = Field(default_factory=list)
+
+
 class CoordinatorDecision(BaseModel):
     """Execution decision returned by CouncilCoordinator for dispatch and budget management."""
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -81,3 +94,4 @@ class CoordinatorDecision(BaseModel):
     confidence: float = 1.0
     extracted_expression: str | None = None
     route_contract: RouteContract | None = None
+    analytical_request: EnrichedAnalyticalRequest | None = None
