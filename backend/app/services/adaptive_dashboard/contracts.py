@@ -456,6 +456,8 @@ class AdaptiveDashboardResponse(BaseModel):
     semantic_catalog: dict[str, Any] | None = None
     evidence_graph: dict[str, Any] | None = None
     story_plan: dict[str, Any] | None = None
+    governance_telemetry: dict[str, Any] | None = None
+    executive_integrity: dict[str, Any] | None = None
     run_status: Literal["ready", "needs_definition", "failed"] = "ready"
 
 

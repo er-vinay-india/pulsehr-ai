@@ -2176,6 +2176,8 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
             storyPlan={data.story_plan}
             evidenceGraph={data.evidence_graph}
             snapshot={data.snapshot}
+            executiveIntegrity={data.executive_integrity}
+            governanceTelemetry={data.governance_telemetry}
           />
         )}
 
