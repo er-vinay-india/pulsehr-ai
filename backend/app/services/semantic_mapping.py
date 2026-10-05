@@ -16,6 +16,9 @@ import pandas as pd
 FieldRole = Literal['identity', 'dimension', 'measure', 'period', 'derived_total']
 AggregationRule = Literal['sum', 'distinct_count', 'mean', 'ratio_of_sums', 'do_not_aggregate']
 DirectionOfConcern = Literal['lower_is_worse', 'higher_is_worse', 'neutral']
+ATTENDANCE_ALIASES = ['total attendance', 'attended days', 'monthly attendance', 'attendance',
+                      'office presence', 'present in office', 'present at office',
+                      'work from office', 'working from office', 'in-office attendance', 'wfo']
 
 
 @dataclass
@@ -248,7 +251,7 @@ def infer_semantic_catalog(
                 name=col_clean,
                 field_role='derived_total' if 'total' in c_norm else 'measure',
                 business_label='Total Attended Days',
-                aliases=['total attendance', 'attended days', 'monthly attendance', 'attendance'],
+                aliases=list(ATTENDANCE_ALIASES),
                 units='days',
                 grain='employee_month',
                 valid_range=(0.0, 31.0),

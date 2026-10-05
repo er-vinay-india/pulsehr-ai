@@ -59,6 +59,11 @@ def test_upload_file_sync_mode_backward_compatible():
     assert "job_id" in data
     assert "dataset_id" in data
     assert data["total_rows"] == 2
+    from app.db.database import get_connection
+    with get_connection() as conn:
+        sheets = conn.execute('SELECT id FROM sheets WHERE dataset_id=? ORDER BY id', (data['dataset_id'],)).fetchall()
+    assert data['sheet_ids'] == [s['id'] for s in sheets]
+    assert data['sheets']  # Existing sheet-name contract remains available.
 
     # Verify job manager was populated and finalized
     job = ingestion_job_manager.get_job(data["job_id"])

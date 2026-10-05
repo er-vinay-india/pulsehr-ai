@@ -7,6 +7,7 @@ import AdaptiveDashboardPage from "./pages/AdaptiveDashboardPage.jsx";
 import DataExplorerPage from "./pages/DataExplorerPage.jsx";
 import PresentationPage from "./pages/PresentationPage.jsx";
 import UploadModal from "./components/ingestion/UploadModal.jsx";
+import { activateUploadedSheet } from "./components/hriday/datasetScope.js";
 import { CheckCircle2, X, Table } from "lucide-react";
 
 function parseHash() {
@@ -106,6 +107,7 @@ export default function App() {
   };
 
   const handleUploadSuccess = (res, meta = {}) => {
+    activateUploadedSheet(res);
     setExplorerRefreshKey(prev => prev + 1);
     if (meta.wasBackground) {
       setBgNotification({

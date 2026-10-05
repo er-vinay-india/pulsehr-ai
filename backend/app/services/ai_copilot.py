@@ -1,4 +1,5 @@
 import json
+import sqlite3
 import re
 import time
 import httpx
@@ -122,6 +123,11 @@ def build_copilot_context(sheet_id: int | None = None, dataset_id: int | None = 
             lines.append("AVAILABLE SPREADSHEETS IN WORKSPACE:")
             temporal_summaries = []
             default_active_id = sheets[-1]["id"] if (sheet_id is None and dataset_id is None and sheets) else None
+            # Keep the selected sheet inside the compact prompt's size budget.
+            sheets = sorted(sheets, key=lambda s: not (
+                s['id'] == sheet_id or s['id'] == default_active_id
+                or (sheet_id is None and s['dataset_id'] == dataset_id)
+            ))
             for s in sheets:
                 is_active = (
                     (sheet_id is not None and s["id"] == sheet_id)
@@ -153,10 +159,16 @@ def build_copilot_context(sheet_id: int | None = None, dataset_id: int | None = 
                 lines.append("  * CRITICAL TRUTH GUARD: Never claim continuous daily records if the cadence is weekly or discrete intervals. Always accurately disclose the discrete cadence.")
 
             # Connected relationships between sheets
-            rels = conn.execute(
-                "SELECT left_sheet, left_column, right_sheet, right_column, status "
-                "FROM relationships WHERE status='linked' LIMIT 8"
-            ).fetchall()
+            # Relationships are optional enrichment; losing them must not erase
+            # the authoritative sheet catalogue already collected above.
+            try:
+                rels = conn.execute(
+                    "SELECT l.name AS left_sheet, r.left_column, rr.name AS right_sheet, r.right_column "
+                    "FROM sheet_relationships r JOIN sheets l ON l.id=r.left_sheet "
+                    "JOIN sheets rr ON rr.id=r.right_sheet WHERE r.status='linked' LIMIT 8"
+                ).fetchall()
+            except sqlite3.Error:
+                rels = []
             if rels:
                 lines.append("\nVERIFIED RELATIONSHIPS BETWEEN SHEETS:")
                 for r in rels:
@@ -204,7 +216,7 @@ def _build_copilot_prompt(
         "Strictly adhere to the TEMPORAL CADENCE in the context. If the dataset has weekly or periodic intervals, state clearly that it contains discrete weekly aggregations, NOT continuous daily logs. "
         "Dates are formatted in ISO-8601 (YYYY-MM-DD). For example, 2010-03-05 represents March 5, 2010 (the first weekly cycle of March 2010), NOT May 3. "
         "Use only the supplied source records and full-sheet statistics. There is no default workforce or Kaggle baseline. "
-        "The SPREADSHEET CATALOGUE lists all loaded datasets and their authoritative row and column counts. If the user asks about dataset metadata, row counts, record counts, or available sheets/columns, answer authoritatively using the SPREADSHEET CATALOGUE even if RETRIEVED DATA SAMPLES is empty. Never claim that no dataset is loaded if datasets are listed in the SPREADSHEET CATALOGUE. "
+        "The SPREADSHEET CATALOGUE lists loaded datasets and authoritative row and column counts. RETRIEVED DATA SAMPLES contains query-matched search results, not a dataset availability check. An empty sample list means no text matches for this question; it does not mean zero rows, missing uploads, or inaccessible sheets. Use the catalogue for dataset metadata and available fields even when samples are empty. Never claim that no dataset is loaded if datasets are listed in the catalogue. For findings requiring unavailable statistics, state that specific limitation without asking the user to upload an already loaded sheet. "
         "Cite the filename, sheet and row for factual claims. Rows joined by exact keys retain separate sources; "
         "conflicting values must be reported with their sources, never silently overwritten. "
         "For missing figures explain what specific data is missing and ask a focused question. "
@@ -245,7 +257,7 @@ def query_copilot(
 
     # 2. Retrieval
     t_ret0 = time.perf_counter()
-    evidence = hybrid_search(user_query, top_k=8)
+    evidence = hybrid_search(user_query, top_k=8, dataset_id=dataset_id, sheet_id=sheet_id)
     related = linked_evidence(evidence, limit=12)
     evidence.extend(related)
     retrieval_ms = (time.perf_counter() - t_ret0) * 1000
@@ -330,7 +342,7 @@ def query_copilot(
     if not answer:
         answer = ("The language model is currently unavailable or timed out. Here are relevant source records found in your sheets:\n\n" +
                   '\n'.join('- ' + r['text'] for r in evidence[:8])) if evidence else (
-                  'No matching uploaded records were found. Upload a relevant sheet or specify its filename and the field you need.')
+                  'The language model is currently unavailable or timed out. No source records matched this question; this does not indicate whether a dataset is loaded. Please retry the request.')
     else:
         answer = clean_cot_reasoning(answer)
         if column_mapping:
@@ -425,7 +437,7 @@ def stream_copilot_generator(
     # Stage 2: Search & Retrieval
     yield f"event: status\ndata: {json.dumps({'phase': 'retrieval', 'message': 'Searching uploaded sheets & related records…'})}\n\n"
     t_ret0 = time.perf_counter()
-    evidence = hybrid_search(user_query, top_k=8)
+    evidence = hybrid_search(user_query, top_k=8, dataset_id=dataset_id, sheet_id=sheet_id)
     related = linked_evidence(evidence, limit=12)
     evidence.extend(related)
     retrieval_ms = (time.perf_counter() - t_ret0) * 1000
@@ -560,7 +572,7 @@ def stream_copilot_generator(
             yield f"event: token\ndata: {json.dumps({'token': fallback})}\n\n"
     if not accumulated_chunks:
         fallback = ("The language model is currently unavailable or timed out. Here are relevant source records:\n\n" +
-                    '\n'.join('- ' + r['text'] for r in evidence[:8])) if evidence else "No matching uploaded records were found. Please check your data source."
+                    '\n'.join('- ' + r['text'] for r in evidence[:8])) if evidence else "The language model is currently unavailable or timed out. No source records matched this question; this does not indicate whether a dataset is loaded. Please retry the request."
         accumulated_chunks.append(fallback)
         yield f"event: token\ndata: {json.dumps({'token': fallback})}\n\n"
 

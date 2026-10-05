@@ -122,6 +122,10 @@ export class HRIDAYConversation {
     this.updateMessage(request.id, { phase: 'stopped' }, { loading: false, activity: null, announcement: 'Response stopped.' });
   };
   retry = message => this.send(message.request.query, { ...message.request, retryId: message.id });
+  invalidateDatasetContext = () => {
+    this.stop();
+    this.priorContext = null;
+  };
   newChat = () => {
     this.stop();
     this.priorContext = null;

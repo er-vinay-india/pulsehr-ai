@@ -148,6 +148,9 @@ def execute_ingestion_job(
                     for sid, profiles in column_updates:
                         conn.execute('UPDATE sheets SET profile_json=? WHERE id=?', (json.dumps(profiles), sid))
                     insert_sheets(conn, dataset_id, prepared, display_name=display_name)
+                    uploaded_sheet_ids = [row['id'] for row in conn.execute(
+                        'SELECT id FROM sheets WHERE dataset_id=? ORDER BY id', (dataset_id,)
+                    ).fetchall()]
                     # Persist per-sheet enrichment metadata across all tabs
                     for s_name, s_summary in all_enrichment_summaries.items():
                         conn.execute('UPDATE sheets SET enrichment_json=? WHERE dataset_id=? AND name=?', (json.dumps(s_summary), dataset_id, s_name))
@@ -269,6 +272,7 @@ def execute_ingestion_job(
             'domain': (ws_ctx_dict.get('context_summary', {}).get('domain') if ws_ctx_dict else naming['domain']),
             'description': naming['description'],
             'sheets': list(frames),
+            'sheet_ids': uploaded_sheet_ids,
             'total_rows': total,
             'columns': first['columns'],
             'sample_preview': first['records'][:5],
@@ -588,4 +592,3 @@ def get_dataset_brief(dataset_id: int):
         return json.loads(ctx_json)
     finally:
         conn.close()
-

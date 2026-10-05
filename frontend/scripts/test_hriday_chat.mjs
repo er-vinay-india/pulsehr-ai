@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import * as sass from 'sass';
 import { HRIDAYConversation } from '../src/components/hriday/conversation.js';
+import { activateUploadedSheet } from '../src/components/hriday/datasetScope.js';
 import { presentHRIDAYAnswer, inferHRIDAYTool, presentArtifacts } from '../src/components/hriday/presentation.js';
 import { initialHRIDAYActivity, advanceHRIDAYActivity } from '../src/components/hriday/activity.js';
 import { streamCopilotQuery } from '../src/api/client.js';
@@ -15,6 +16,29 @@ function harness() {
   const c = new HRIDAYConversation((...args) => new Promise(resolve => calls.push({ args, cb: args[5], resolve })));
   return { c, calls };
 }
+test('new upload replaces a deleted source and stops late answers from restoring its context', async () => {
+  const { c, calls } = harness();
+  c.priorContext = { sheet_id: 7, metric: 'Math Score' };
+  const old = c.send('Old question', { scope: { sheetId: 7 } });
+  let updatedUrl;
+  const browser = {
+    location: { href: 'http://localhost/?sheet_id=7&derived_id=10#adaptive' },
+    history: { replaceState: (_a, _b, url) => { updatedUrl = url; } },
+    CustomEvent: class { constructor(type, options) { this.type = type; this.detail = options.detail; } },
+    dispatchEvent: event => { assert.equal(event.type, 'workbook-uploaded'); c.invalidateDatasetContext(); },
+  };
+  activateUploadedSheet({ dataset_id: 12, sheets: ['New Sheet'], sheet_ids: [99, 100] }, browser);
+  assert.equal(updatedUrl.searchParams.get('sheet_id'), '99');
+  assert.equal(updatedUrl.searchParams.get('derived_id'), null);
+  assert(calls[0].args[6].aborted);
+  calls[0].cb.onDone({ answer: 'Old data', prior_context: { sheet_id: 7 } });
+  calls[0].resolve(); await old;
+  assert.equal(c.priorContext, null);
+  const next = c.send('what is good about this data you have', { scope: { sheetId: 99 } });
+  assert.equal(calls[1].args[4], 99);
+  assert.equal(calls[1].args[7], null);
+  calls[1].cb.onDone({ answer: 'New verified findings' }); calls[1].resolve(); await next;
+});
 test('chart payload and calculation context survive completion into the next turn', async () => {
   const { c, calls } = harness();
   const first = c.send('display me Cohort Average: Math Score');

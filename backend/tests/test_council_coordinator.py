@@ -25,6 +25,19 @@ def test_coordinator_greeting_routing():
         assert decision.max_retries == 0
 
 
+@pytest.mark.parametrize('query', ['Hello average Math Score', 'Hi show gender counts', 'Hello explain median', 'Hey missing values'])
+def test_greeting_prefix_does_not_replace_a_real_request(query):
+    decision = CouncilCoordinator.coordinate(query)
+    assert decision.worker_target != WorkerTarget.IMMEDIATE_IDENTITY
+
+
+@pytest.mark.parametrize('query', ['Hi there!', 'Hello HRIDAY!', 'Good morning HRIDAY'])
+def test_pure_greetings_still_use_the_immediate_responder(query):
+    decision = CouncilCoordinator.coordinate(query)
+    assert decision.worker_target == WorkerTarget.IMMEDIATE_IDENTITY
+    assert 'HRIDAY' in CouncilCoordinator.execute_sync(decision, query)['answer']
+
+
 def test_coordinator_concept_explanation_routing():
     """Verify single lightweight specialist routing for conceptual questions."""
     for concept in [
@@ -38,6 +51,16 @@ def test_coordinator_concept_explanation_routing():
         assert decision.assignment == RoutingAssignment.LIGHTWEIGHT_EXPLANATION
         assert decision.worker_target == WorkerTarget.SINGLE_SPECIALIST_MODEL
         assert decision.timeout_seconds <= 6.0
+
+
+@pytest.mark.parametrize('query', [
+    'what is good about this data you have', "what's good about my uploaded data?",
+    'what are the strengths of this sheet', 'give me 3 good points',
+])
+def test_dataset_strengths_precede_conceptual_routing(query):
+    decision = CouncilCoordinator.coordinate(query, prior_context={'metric': 'math_score', 'sheet_id': 1})
+    assert decision.worker_target == WorkerTarget.ANALYTICAL_PLANNER
+    assert decision.resolved_context == {}
 
 
 def test_coordinator_dataset_calculation_routing():
@@ -273,5 +296,3 @@ def test_coordinator_dataset_metadata_routing_and_execution():
     assert any("event: status" in ev for ev in stream_events)
     assert any("5 records" in ev for ev in stream_events)
     assert any("event: done" in ev for ev in stream_events)
-
-

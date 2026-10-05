@@ -239,6 +239,7 @@ def test_public_identity_endpoint_and_generic_boundary(monkeypatch):
     monkeypatch.setattr(copilot, '_execute_generic_copilot', lambda *a, **k: {'answer': 'Data summary', 'model_used': 'generic_copilot_engine'})
     result = client.post('/api/copilot/query', json={'query': 'who are you?', 'engine': 'generic'}).json()
     assert result['answer'] == "I'm HRIDAY, the AI assistant in HighView."
+    prepare_legacy(monkeypatch, [httpx.HTTPError('offline')])
     result = client.post('/api/copilot/query/stream', json={'query': 'Which model powers you?', 'engine': 'generic'})
     events = parse_sse(e for e in result.text.split('\n\n') if e)
     assert 'unavailable' in ''.join(d['token'] for k, d in events if k == 'token')
@@ -263,3 +264,100 @@ def test_unasked_runtime_intro_retries_but_explicit_disclosure_is_preserved():
     calls = []
     result = identity.guarded_completion(lambda system: calls.append(system) or (text if len(calls) == 1 else 'Hello! How can I help?'), query='hi', runtime_model='qwen3.5:9b')
     assert result.text == 'Hello! How can I help?' and result.identity_retry_count == 1
+
+
+REPEATED_PREAMBLE = "Hello! I'm HRIDAY, your analytics assistant inside HighView. I'm ready to help you uncover insights from your business records."
+
+
+def test_task_prompt_does_not_request_unconditional_greetings():
+    system = identity.identity_system_prompt('qwen3.5:9b')
+    assert 'Greet naturally as this assistant' not in system
+    assert 'For questions and task requests, start with the answer' in system
+
+
+def test_intro_cleanup_preserves_answer_and_does_not_add_model_calls():
+    calls = []
+    answer = 'The cohort average is **66.09**, based on 1,000 records. [FACT-001]'
+    result = identity.guarded_completion(lambda system: calls.append(system) or REPEATED_PREAMBLE + '\n\n' + answer,
+                                         query='What is the cohort average?', runtime_model='qwen3.5:9b')
+    assert result.text == answer
+    assert len(calls) == 1 and result.identity_retry_count == 0
+
+
+@pytest.mark.parametrize('prefix', ['', '\n\n', '  '])
+def test_unrequested_preamble_never_streams_at_any_split(prefix):
+    answer = 'A cohort average is the mean for the selected group.'
+    text = prefix + REPEATED_PREAMBLE + '\n\n' + answer
+    for split in range(len(text) + 1):
+        guard = identity.IdentityStreamGuard('qwen3.5:9b', 'What does cohort average mean?')
+        shown = guard.feed(text[:split]) + guard.feed(text[split:]) + guard.finish()
+        assert shown == answer
+        assert not guard.blocked
+
+
+def test_greeting_only_cannot_complete_a_task():
+    calls = []
+    result = identity.guarded_completion(lambda system: calls.append(system) or REPEATED_PREAMBLE,
+                                         query='Explain median', runtime_model='qwen3.5:9b')
+    assert len(calls) == 2 and result.response_blocked
+    assert result.text == identity.safe_identity_fallback('Explain median')
+    assert 'Hello' not in result.text
+    guard = identity.IdentityStreamGuard('qwen3.5:9b', 'Explain median')
+    assert ''.join(guard.feed(c) for c in REPEATED_PREAMBLE) + guard.finish() == ''
+    assert guard.blocked
+
+
+@pytest.mark.parametrize('query,text', [
+    ('hello', REPEATED_PREAMBLE),
+    ('Hello HRIDAY!', REPEATED_PREAMBLE),
+    ('help', REPEATED_PREAMBLE),
+    ('who are you?', "I'm HRIDAY, the AI assistant in HighView."),
+    ('Write a welcome greeting', REPEATED_PREAMBLE),
+    ('Translate hello into English', 'Hello!'),
+    ('Explain the repeated greeting', 'The example is "Hello! I am HRIDAY." This is a greeting.'),
+    ('Explain the repeated greeting', '> Hello!\n> I am HRIDAY.\nThis is a quoted example.'),
+    ('Show the average', "I'm HRIDAY, and the average is 66.09."),
+    ('Check missing values', "I'm HRIDAY, your assistant, and the dataset contains no missing values."),
+])
+def test_explicit_greetings_examples_and_substantive_sentences_are_preserved(query, text):
+    assert identity.strip_response_preamble(text, query) == text
+    guard = identity.IdentityStreamGuard('qwen3.5:9b', query)
+    assert ''.join(guard.feed(c) for c in text) + guard.finish() == text
+    assert not guard.blocked
+
+
+@pytest.mark.parametrize('intro', ["Hello, I'm HRIDAY, your analytics assistant inside HighView.", "Hi! I’m **HRIDAY**, your analytical partner within HighView.", "I am HRIDAY."])
+def test_intro_variants_preserve_the_substantive_answer(intro):
+    answer = 'The median is the middle value.'
+    assert identity.strip_response_preamble(intro + ' ' + answer, 'Explain median') == answer
+    guard = identity.IdentityStreamGuard('qwen3.5:9b', 'Explain median')
+    assert ''.join(guard.feed(c) for c in intro + ' ' + answer) + guard.finish() == answer
+
+
+def test_final_delivery_strips_only_answer_preamble():
+    answer = 'The mean is **66.09**.\n\n| Gender | Count |\n| --- | ---: |\n| female | 518 |'
+    original = {'answer': REPEATED_PREAMBLE + '\n\n' + answer,
+                'visual_charts': [{'chart_id': 'math'}], 'evidence': {'source_ids': [7]},
+                'prior_context': {'metric': 'math score'}}
+    result = identity.finalize_identity_response(original, 'Show the average Math Score')
+    assert result['answer'] == answer
+    for field in ('visual_charts', 'evidence', 'prior_context'):
+        assert result[field] == original[field]
+    assert original['answer'].startswith('Hello!')
+
+
+def test_structured_content_is_not_rewritten():
+    text = json.dumps({'example': REPEATED_PREAMBLE})
+    result = identity.guarded_completion(lambda _: text, query='Analyze this example', runtime_model='qwen3.5:9b', structured=True)
+    assert result.text == text
+
+
+def test_two_streamed_answers_keep_content_without_repeated_introductions(monkeypatch):
+    answers = ['A cohort average is the mean of the selected group.', 'The median is the middle value in sorted data.']
+    payloads = prepare_legacy(monkeypatch, [REPEATED_PREAMBLE + ' ' + answer for answer in answers])
+    for query, answer in zip(['What does cohort average mean?', 'Explain median'], answers):
+        events = parse_sse(ai_copilot.stream_copilot_generator(query, selected_model='qwen3.5:9b', allow_inferred_tools=False))
+        assert ''.join(data['token'] for kind, data in events if kind == 'token') == answer
+        assert next(data for kind, data in events if kind == 'done')['answer'] == answer
+        assert not any(kind == 'answer_reset' for kind, _ in events)
+    assert len(payloads) == 2

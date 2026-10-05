@@ -304,6 +304,8 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
 
   useEffect(() => {
     loadSources();
+    window.addEventListener('workbook-uploaded', loadSources);
+    return () => window.removeEventListener('workbook-uploaded', loadSources);
   }, []);
 
   // 2. Fetch Adaptive Elements for Selected Source
