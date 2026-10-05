@@ -459,6 +459,14 @@ class AdaptiveDashboardResponse(BaseModel):
     governance_telemetry: dict[str, Any] | None = None
     executive_integrity: dict[str, Any] | None = None
     run_status: Literal["ready", "needs_definition", "failed"] = "ready"
+    dataset_id: int | None = None
+    dataset_name: str | None = None
+    sheet_count: int | None = None
+    selected_dashboard_insights: list[dict[str, Any]] = Field(default_factory=list)
+    cross_sheet_candidates_count: int = 0
+    relationship_count: int = 0
+    coverage_warnings: list[str] = Field(default_factory=list)
+    relationship_graph: dict[str, Any] | None = None
 
 
 class UnifiedFinding(BaseModel):

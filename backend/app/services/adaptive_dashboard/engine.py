@@ -4609,16 +4609,29 @@ def build_decision_focus_element(
     return None
 
 
-def run_adaptive_dashboard(sheet_id: int | None = None) -> AdaptiveDashboardResponse:
-    """End-to-end execution of the Adaptive Dashboard for the selected sheet."""
+def run_adaptive_dashboard(
+    sheet_id: int | None = None,
+    dataset_id: int | None = None,
+    include_dataset_intelligence: bool = False,
+) -> AdaptiveDashboardResponse:
+    """End-to-end execution of the Adaptive Dashboard for the selected sheet or dataset."""
     conn = get_connection()
     try:
-        # 1. Resolve sheet
-        if sheet_id is not None:
+        # 1. Resolve sheet and dataset
+        if dataset_id is not None:
+            sheet_row = conn.execute(
+                "SELECT id, dataset_id, name, display_name, columns_json FROM sheets WHERE dataset_id=? ORDER BY id ASC LIMIT 1",
+                (dataset_id,),
+            ).fetchone()
+            if not sheet_row:
+                raise ValueError(f"No uploaded sheet found for dataset_id {dataset_id}.")
+        elif sheet_id is not None:
             sheet_row = conn.execute(
                 "SELECT id, dataset_id, name, display_name, columns_json FROM sheets WHERE id=?",
                 (sheet_id,),
             ).fetchone()
+            if not sheet_row:
+                raise ValueError(f"No uploaded sheet found for sheet_id {sheet_id}.")
         else:
             sheet_row = conn.execute(
                 "SELECT id, dataset_id, name, display_name, columns_json FROM sheets ORDER BY id DESC LIMIT 1"
@@ -4627,13 +4640,14 @@ def run_adaptive_dashboard(sheet_id: int | None = None) -> AdaptiveDashboardResp
         if not sheet_row:
             raise ValueError("No uploaded sheet found. Upload a dataset to view the adaptive dashboard.")
 
-        sid, dataset_id, sheet_name, display_name, cols_json = sheet_row
+        sid, ds_id, sheet_name, display_name, cols_json = sheet_row
+        target_dataset_id = dataset_id if dataset_id is not None else ds_id
         columns = json.loads(cols_json) if cols_json else []
 
         # Get original file name
         dataset_row = conn.execute(
             "SELECT original_name, display_name FROM dataset_uploads WHERE id=?",
-            (dataset_id,),
+            (target_dataset_id,),
         ).fetchone()
         file_name = dataset_row[0] if dataset_row else "dataset.csv"
         final_display_name = display_name or (dataset_row[1] if dataset_row else sheet_name)
@@ -4971,6 +4985,30 @@ def run_adaptive_dashboard(sheet_id: int | None = None) -> AdaptiveDashboardResp
             )
         except Exception as sg_err:
             logger.warning("Could not assemble semantic evidence graph and telemetry: %s", sg_err)
+
+        # 18. Multi-Sheet Dataset Orchestration & Global Candidate Pool Integration (WP-9.6)
+        if include_dataset_intelligence and target_dataset_id:
+            try:
+                from .dataset_orchestrator import run_dataset_intelligence
+                ds_intel = run_dataset_intelligence(dataset_id=target_dataset_id)
+                resp.dataset_id = ds_intel.dataset_id
+                resp.dataset_name = ds_intel.dataset_name
+                resp.sheet_count = ds_intel.sheet_count
+                resp.selected_dashboard_insights = [c if isinstance(c, dict) else c.model_dump() for c in ds_intel.selected_dashboard_insights]
+                resp.cross_sheet_candidates_count = ds_intel.cross_sheet_candidates_count
+                resp.relationship_count = ds_intel.relationship_count
+                resp.coverage_warnings = ds_intel.coverage_warnings
+                resp.relationship_graph = ds_intel.relationship_graph.model_dump() if hasattr(ds_intel.relationship_graph, "model_dump") else ds_intel.relationship_graph
+
+                # Upgrade story plan and evidence graph to dataset-wide context
+                if ds_intel.story_plan:
+                    resp.story_plan = ds_intel.story_plan.model_dump()
+                if ds_intel.evidence_graph:
+                    resp.evidence_graph = ds_intel.evidence_graph.model_dump()
+                if ds_intel.executive_integrity:
+                    resp.executive_integrity = ds_intel.executive_integrity
+            except Exception as ds_err:
+                logger.warning("Could not run unified dataset intelligence for dataset %s: %s", target_dataset_id, ds_err)
 
         return resp
 

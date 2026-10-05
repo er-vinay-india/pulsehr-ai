@@ -65,6 +65,15 @@ class EvidenceGraph(BaseModel):
                 return item
         return None
 
+    def get_node(self, evidence_id: str) -> EvidenceItem | None:
+        """Alias for get_by_id."""
+        return self.get_by_id(evidence_id)
+
+    def add_node(self, item: EvidenceItem) -> None:
+        """Add an evidence item node to the graph."""
+        self.nodes.append(item)
+
+
     def find_by_subject_or_metric(self, query: str) -> list[EvidenceItem]:
         """Find evidence items matching subject or metric."""
         q = query.lower()

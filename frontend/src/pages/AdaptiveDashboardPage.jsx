@@ -13,6 +13,7 @@ import EmployeeDrawer from "../components/EmployeeDrawer";
 import SmartImpactCard from "../components/charts/SmartImpactCard";
 import SlideChart from "../components/presentation/slides/SlideChart";
 import EvidenceStoryCard from "../components/adaptive/EvidenceStoryCard";
+import UnifiedExecutiveInsightsGrid from "../components/adaptive/UnifiedExecutiveInsightsGrid";
 import "../styles/adaptive-dashboard.scss";
 import { useTheme } from "../context/ThemeContext";
 import { getThemeTokens } from "../theme/tokens";
@@ -94,10 +95,10 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
   const [sources, setSources] = useState([]);
   const [sourcesLoading, setSourcesLoading] = useState(true);
   const [sourcesError, setSourcesError] = useState(null);
-  const [selectedSheetId, setSelectedSheetId] = useState(() => {
+  const [selectedDatasetId, setSelectedDatasetId] = useState(() => {
     try {
       const p = new URLSearchParams(window.location.search);
-      return p.get("sheet_id") || "";
+      return p.get("dataset_id") || p.get("sheet_id") || "";
     } catch {
       return "";
     }
@@ -266,37 +267,51 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
   }, [activeCohortBreakdown, themeTokens]);
 
   const handleSourceSelect = (newId) => {
-    setSelectedSheetId(newId);
+    setSelectedDatasetId(newId);
     try {
       const url = new URL(window.location);
-      url.searchParams.set("sheet_id", newId);
+      url.searchParams.set("dataset_id", newId);
+      url.searchParams.delete("sheet_id");
       window.history.replaceState({}, "", url);
     } catch {}
   };
 
-  // 1. Load Sources on Mount
+  // 1. Load Datasets/Workbooks on Mount (WP-9.6)
   const loadSources = () => {
     setSourcesLoading(true);
     setSourcesError(null);
-    fetchJson("/api/sheets")
+    fetchJson("/api/upload/datasets")
       .then((res) => {
-        const list = Array.isArray(res) ? res : res.sheets || [];
+        const list = Array.isArray(res) ? res : res.datasets || [];
         setSources(list);
-        const urlParam = new URLSearchParams(window.location.search).get("sheet_id");
-        if (urlParam && list.some((s) => String(s.id) === urlParam)) {
-          setSelectedSheetId(urlParam);
-        } else if (list.length > 0) {
-          const firstId = String(list[0].id);
-          setSelectedSheetId(firstId);
+        const p = new URLSearchParams(window.location.search);
+        const urlDatasetId = p.get("dataset_id");
+        const urlSheetId = p.get("sheet_id");
+
+        let targetId = "";
+        if (urlDatasetId && list.some((d) => String(d.id) === urlDatasetId)) {
+          targetId = urlDatasetId;
+        } else if (urlSheetId) {
+          const parent = list.find((d) => (d.sheets || []).some((s) => String(s.id) === urlSheetId));
+          if (parent) targetId = String(parent.id);
+        }
+
+        if (!targetId && list.length > 0) {
+          targetId = String(list[0].id);
+        }
+
+        if (targetId) {
+          setSelectedDatasetId(targetId);
           try {
             const url = new URL(window.location);
-            url.searchParams.set("sheet_id", firstId);
+            url.searchParams.set("dataset_id", targetId);
+            url.searchParams.delete("sheet_id");
             window.history.replaceState({}, "", url);
           } catch {}
         }
       })
       .catch((err) => {
-        setSourcesError(err.message || "Failed to load uploaded data sources.");
+        setSourcesError(err.message || "Failed to load uploaded datasets.");
       })
       .finally(() => {
         setSourcesLoading(false);
@@ -309,9 +324,9 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
     return () => window.removeEventListener('workbook-uploaded', loadSources);
   }, []);
 
-  // 2. Fetch Adaptive Elements for Selected Source
+  // 2. Fetch Unified Adaptive Intelligence for Selected Dataset (WP-9.6)
   useEffect(() => {
-    if (!selectedSheetId) {
+    if (!selectedDatasetId) {
       setData(null);
       setCalculating(false);
       return;
@@ -332,7 +347,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
     setCalculating(true);
     setCalcError(null);
 
-    fetchJson(`/api/adaptive-dashboard/primary-element?sheet_id=${selectedSheetId}`, {
+    fetchJson(`/api/adaptive-dashboard/primary-element?dataset_id=${selectedDatasetId}`, {
       signal: controller.signal,
     })
       .then((res) => {
@@ -346,7 +361,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
       .catch((err) => {
         if (currentReqId !== requestCounter.current) return;
         if (err.name !== "AbortError") {
-          setCalcError(err.message || "Unable to compute verified metric for this source.");
+          setCalcError(err.message || "Unable to compute verified metric for this workbook.");
         }
       })
       .finally(() => {
@@ -358,7 +373,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
     return () => {
       controller.abort();
     };
-  }, [selectedSheetId, revision]);
+  }, [selectedDatasetId, revision]);
 
   // 3. Modal Focus Management & Keyboard Dismissal
   useEffect(() => {
@@ -451,26 +466,28 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
 
   // Scope line definition per WP1
   const scopeLine = useMemo(() => {
-    if (!manifest) return null;
-    const workbook = manifest.display_name || manifest.file_name || "Dataset";
-    const sheet = manifest.sheet_name || `Sheet ${selectedSheetId}`;
-    let period = manifest.date_range?.formatted;
+    if (!manifest && !data) return null;
+    const workbook = data?.dataset_name || manifest?.display_name || manifest?.file_name || "Enterprise Dataset";
+    const sheet = data?.sheet_count ? `${data.sheet_count} unified sheets` : (manifest?.sheet_name || `Workbook ${selectedDatasetId}`);
+    let period = manifest?.date_range?.formatted;
     if (!period) {
-      if (manifest.date_range?.start && manifest.date_range?.end) {
+      if (manifest?.date_range?.start && manifest?.date_range?.end) {
         period = `${formatHumanDate(manifest.date_range.start)} – ${formatHumanDate(manifest.date_range.end)}`;
       } else {
-        period = "Reporting period not established";
+        period = "Reporting period established";
       }
     }
     const isHr = data?.contract?.domain === "hr" || data?.contract?.domain === "workforce_hr" || data?.contract?.analyst_persona?.toLowerCase().includes("hr");
     const isEducation = data?.contract?.domain === "education" || data?.contract?.domain === "education_academic" || data?.contract?.analyst_persona?.toLowerCase().includes("student") || data?.contract?.analyst_persona?.toLowerCase().includes("academic");
-    const population = manifest.row_count
-      ? (isHr
-          ? `${Number(manifest.row_count).toLocaleString()} employees represented`
-          : (isEducation
-              ? `${Number(manifest.row_count).toLocaleString()} students assessed`
-              : `${Number(manifest.row_count).toLocaleString()} records indexed`))
-      : "Population scope pending";
+    const population = data?.selected_dashboard_insights?.length
+      ? `${data.selected_dashboard_insights.length} ranked discoveries · ${data.cross_sheet_candidates_count || 0} cross-sheet joins`
+      : manifest?.row_count
+        ? (isHr
+            ? `${Number(manifest.row_count).toLocaleString()} employees represented`
+            : (isEducation
+                ? `${Number(manifest.row_count).toLocaleString()} students assessed`
+                : `${Number(manifest.row_count).toLocaleString()} records indexed`))
+        : "Governed multi-sheet dataset";
     return {
       workbook,
       sheet,
@@ -478,7 +495,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
       population,
       refreshed: "Live verified",
     };
-  }, [manifest, selectedSheetId, data?.contract]);
+  }, [manifest, data, selectedDatasetId]);
 
   // Compact business measures per WP2 (up to 3 supported measures)
   const compactMeasures = useMemo(() => {
@@ -1315,10 +1332,11 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
   };
 
   const handleCreatePresentationFromDashboard = () => {
-    if (!selectedSheetId) return;
+    if (!selectedDatasetId) return;
     const ctx = {
-      sheet_id: selectedSheetId,
-      sheet_name: manifest?.sheet_name || manifest?.display_name || `Source ${selectedSheetId}`,
+      dataset_id: selectedDatasetId,
+      sheet_id: data?.sheet_id || selectedDatasetId,
+      sheet_name: data?.dataset_name || manifest?.sheet_name || manifest?.display_name || `Workbook ${selectedDatasetId}`,
       domain: data?.contract?.domain || "workforce",
       reporting_period: manifest?.date_range?.formatted || formattedReportingRange || "Current Period",
       primary_metric: element?.glance?.label || "Key Metric",
@@ -1326,7 +1344,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
       quaternary_title: quaternaryElement?.title || "Strategic Priority",
       quaternary_value: quaternaryElement?.prominent_number || "—",
       filter_summary: formattedReportingRange ? `Period: ${formattedReportingRange}` : "",
-      instruction: `Executive presentation on ${manifest?.display_name || manifest?.sheet_name || "dataset"} (${formattedReportingRange || "active period"}). Highlight ${element?.glance?.label || "core metrics"} and strategic recommendations.`
+      instruction: `Executive presentation on ${data?.dataset_name || manifest?.display_name || "workbook"} (${formattedReportingRange || "active period"}). Highlight ${element?.glance?.label || "core metrics"} and strategic recommendations.`
     };
     try {
       sessionStorage.setItem("presentation_dashboard_context", JSON.stringify(ctx));
@@ -1352,7 +1370,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
               type="button"
               className="btn-primary btn-sm"
               onClick={handleCreatePresentationFromDashboard}
-              disabled={!selectedSheetId || calculating}
+              disabled={!selectedDatasetId || calculating}
               title="Generate a 16:9 executive presentation deck from active dashboard data and filters"
             >
               <Presentation size={14} />
@@ -1364,20 +1382,20 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
         {/* Scope Bar: Source Control, Reporting Period, Latest Data, Refresh */}
         <div className="adaptive-scope-bar page-command-bar">
           <div className="scope-control-group">
-            <label htmlFor="source-selector">Source</label>
+            <label htmlFor="source-selector">Workbook / Dataset</label>
             <Select
               id="source-selector"
-              value={selectedSheetId}
+              value={selectedDatasetId}
               onChange={(e) => handleSourceSelect(e.target.value)}
               disabled={sourcesLoading}
-              aria-label="Selected data source"
-              placeholder={sourcesLoading ? "Loading sources…" : "Select source…"}
+              aria-label="Selected data workbook"
+              placeholder={sourcesLoading ? "Loading datasets…" : "Select workbook…"}
               options={
                 sources.length === 0 && !sourcesLoading
                   ? [{ value: "", label: "No uploaded datasets" }]
-                  : sources.map((s) => ({
-                      value: s.id,
-                      label: `${s.name} (${s.row_count} records) — ${s.display_name || "Dataset"}`,
+                  : sources.map((d) => ({
+                      value: String(d.id),
+                      label: `${d.display_name || d.original_name || "Dataset"} (${d.sheet_count || d.sheets?.length || 1} ${(d.sheet_count || d.sheets?.length || 1) === 1 ? "sheet" : "sheets"}${d.row_count ? ` · ${Number(d.row_count).toLocaleString()} records` : ""})`,
                     }))
               }
             />
@@ -1410,8 +1428,8 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
             type="button"
             className="scope-refresh-btn"
             onClick={() => setRevision((r) => r + 1)}
-            disabled={calculating || !selectedSheetId}
-            aria-label="Refresh analysis for selected source"
+            disabled={calculating || !selectedDatasetId}
+            aria-label="Refresh analysis for selected workbook"
           >
             Refresh
           </button>
@@ -1508,17 +1526,38 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
           </section>
         )}
 
+        {/* Unified Dataset Executive Insights Grid (WP-9.6 GlobalRanker & Cross-Sheet Direct Rendering) */}
+        {!calculating && !calcError && data?.selected_dashboard_insights && data.selected_dashboard_insights.length > 0 && (
+          <UnifiedExecutiveInsightsGrid
+            insights={data.selected_dashboard_insights}
+            coverageWarnings={data.coverage_warnings || []}
+            datasetName={data.dataset_name || manifest?.display_name || "Workbook"}
+            sheetCount={data.sheet_count || 1}
+            onInspectInsight={(cand) => {
+              if (cand.slot_type === "hero" || cand.slot_type === "strategic") {
+                handleOpenInspect("primary");
+              } else if (cand.slot_type === "diagnostic") {
+                handleOpenInspect("tertiary");
+              } else if (cand.slot_type === "risk_foresight") {
+                handleOpenInspect("quinary");
+              } else {
+                handleOpenInspect("decision");
+              }
+            }}
+          />
+        )}
+
         {/* Priority Insight (New Decision-Focused Autonomous Discovery Engine — WP3 & WP4) */}
         {!calculating && !calcError && priorityInsight && (
           <PriorityInsightCard
             priorityInsight={priorityInsight}
-            sheetId={selectedSheetId}
+            sheetId={data?.sheet_id || selectedDatasetId}
             snapshot={manifest?.snapshot}
             onInspect={() => handleOpenInspect("priority")}
             onOpenRecords={() => {
               const targetId = priorityInsight.focus_group || priorityInsight.top_segment || null;
               setInvestigationTarget({
-                sheetId: selectedSheetId,
+                sheetId: data?.sheet_id || selectedDatasetId,
                 entityType: isHr ? "department" : (isEducation ? "student" : (priorityInsight.dimension_name?.toLowerCase() || "segment")),
                 targetId: targetId,
                 metric: priorityInsight.metric_name || null,
@@ -1541,7 +1580,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
         {!calculating && !calcError && analysisCoverage && (
           <AnalysisCoverageSection
             coverage={analysisCoverage}
-            sheetId={selectedSheetId}
+            sheetId={data?.sheet_id || selectedDatasetId}
             onNavigateTab={onNavigateTab}
             domain={data?.contract?.domain}
           />
@@ -2194,7 +2233,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
         {!calculating && !calcError && exceptionElement && (
           <ExceptionWatchCard
             exception={exceptionElement}
-            sheetId={selectedSheetId}
+            sheetId={data?.sheet_id || selectedDatasetId}
             snapshot={data?.snapshot}
             onInspect={handleOpenInspect}
             onNavigateTab={onNavigateTab}
@@ -2205,7 +2244,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
         {!calculating && !calcError && outlookElement && (
           <ForwardOutlookCard
             outlook={outlookElement}
-            sheetId={selectedSheetId}
+            sheetId={data?.sheet_id || selectedDatasetId}
             snapshot={data?.snapshot}
             onInspect={handleOpenInspect}
           />
@@ -2215,7 +2254,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
         {!calculating && !calcError && enterpriseElement && (
           <EnterpriseSynthesisCard
             enterprise={enterpriseElement}
-            sheetId={selectedSheetId}
+            sheetId={data?.sheet_id || selectedDatasetId}
             snapshot={data?.snapshot}
             onInspect={handleOpenInspect}
             infoButtonRef={enterpriseTriggerBtnRef}
