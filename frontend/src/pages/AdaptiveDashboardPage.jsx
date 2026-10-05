@@ -2104,7 +2104,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
           <section className="executive-impact-visuals-section" aria-labelledby="executive-visuals-title" style={{ marginTop: "1.5rem", marginBottom: "1.5rem" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                <div style={{ background: "rgba(14, 165, 233, 0.15)", color: "#0ea5e9", padding: "8px", borderRadius: "8px" }}>
+                <div style={{ background: "var(--hv-info-bg, var(--color-bg-soft-blue))", color: "var(--hv-info, var(--color-info))", padding: "8px", borderRadius: "8px" }}>
                   <Sparkles size={20} />
                 </div>
                 <div>
@@ -2148,11 +2148,11 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
                 <div
                   key={`lens-${v.chart_id || idx}`}
                   style={{
-                    background: isDark ? "rgba(15, 23, 42, 0.75)" : "#ffffff",
-                    border: isDark ? "1px solid rgba(255, 255, 255, 0.1)" : "1px solid var(--border-subtle, #e2e8f0)",
+                    background: "var(--surface-card, var(--color-bg-surface))",
+                    border: "1px solid var(--border-subtle, var(--color-divider))",
                     borderRadius: "12px",
                     padding: "16px",
-                    boxShadow: isDark ? "0 4px 14px rgba(0, 0, 0, 0.3)" : "0 4px 12px rgba(0, 0, 0, 0.05)",
+                    boxShadow: "var(--shadow-sm, 0 4px 12px rgba(0, 0, 0, 0.05))",
                     overflow: "hidden",
                     minWidth: 0,
                     display: "flex",

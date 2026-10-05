@@ -43,6 +43,11 @@ ATTR_CAUSAL_VIOLATIONS = "grounding.causal_violations_count"
 
 ATTR_VISUAL_TYPE = "visual.type"
 ATTR_VISUAL_QA_PASSED = "visual.qa_passed"
+ATTR_VISUAL_THEME_INTEGRITY_PASSED = "visual.theme_integrity_passed"
+ATTR_VISUAL_THEME_MODE = "visual.theme_mode"
+ATTR_VISUAL_THEME_VIOLATION_COUNT = "visual.theme_violation_count"
+ATTR_VISUAL_CONTRAST_VIOLATION_COUNT = "visual.contrast_violation_count"
+EVENT_THEME_INTEGRITY_VIOLATION = "theme_integrity_violation"
 
 ATTR_BUDGET_LATENCY_MAX = "budget.latency_budget_ms"
 ATTR_BUDGET_STATUS = "budget.status"

@@ -488,12 +488,12 @@ export default function DataExplorerPage() {
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: '6px',
-                background: showEnrichmentReview ? 'rgba(224, 86, 36, 0.22)' : 'rgba(224, 86, 36, 0.08)',
-                border: '1px solid rgba(224, 86, 36, 0.4)',
+                background: showEnrichmentReview ? 'var(--color-bg-soft-gold)' : 'var(--color-bg-subtle)',
+                border: '1px solid var(--color-border-strong)',
                 borderRadius: '8px',
                 padding: '0 10px',
                 minHeight: '38px',
-                color: 'var(--brand-400)',
+                color: 'var(--color-gold)',
                 fontSize: '0.82rem',
                 fontWeight: 600,
                 cursor: 'pointer'
@@ -660,8 +660,8 @@ export default function DataExplorerPage() {
                         gap: '8px',
                         padding: '6px 8px',
                         borderRadius: '6px',
-                        background: d.id === selectedSheet?.dataset_id ? 'rgba(255, 176, 137, 0.08)' : 'transparent',
-                        border: d.id === selectedSheet?.dataset_id ? '1px solid rgba(255, 176, 137, 0.25)' : '1px solid transparent'
+                        background: d.id === selectedSheet?.dataset_id ? 'var(--color-bg-soft-blue)' : 'transparent',
+                        border: d.id === selectedSheet?.dataset_id ? '1px solid var(--color-border)' : '1px solid transparent'
                       }}
                     >
                       <input id={`workbook-select-${d.id}`} type="checkbox" aria-label={`Select ${d.original_name}`} disabled={deleting}
@@ -752,9 +752,9 @@ export default function DataExplorerPage() {
                 fontSize: '0.78rem',
                 minHeight: '34px',
                 borderRadius: '8px',
-                background: 'rgba(255, 107, 129, 0.08)',
-                border: '1px solid rgba(255, 107, 129, 0.25)',
-                color: 'var(--rose-tier)',
+                background: 'var(--color-bg-soft-error)',
+                border: '1px solid var(--color-error)',
+                color: 'var(--color-error)',
                 cursor: 'pointer',
                 transition: 'all 0.2s ease'
               }}
@@ -814,11 +814,11 @@ export default function DataExplorerPage() {
             <div
               style={{
                 background: activeDerivedTable.join_keys?.type === 'scientific_enrichment_rollup'
-                  ? 'rgba(16, 185, 129, 0.08)'
-                  : 'rgba(255, 176, 137, 0.1)',
+                  ? 'var(--color-bg-soft-teal)'
+                  : 'var(--color-bg-soft-gold)',
                 border: activeDerivedTable.join_keys?.type === 'scientific_enrichment_rollup'
-                  ? '1px solid rgba(16, 185, 129, 0.3)'
-                  : '1px solid rgba(255, 176, 137, 0.3)',
+                  ? '1px solid var(--hv-status-success-border, var(--color-border-strong))'
+                  : '1px solid var(--color-border-strong)',
                 borderRadius: '8px',
                 padding: '0.6rem 0.9rem',
                 marginBottom: '0.75rem',

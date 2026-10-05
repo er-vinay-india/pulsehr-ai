@@ -15,6 +15,7 @@
     "test:slides": "node scripts/test_slide_contrast.mjs",
     "test:surface": "node scripts/test_surface_guard.mjs",
     "test:visual": "node scripts/test_visual_guard.mjs && node scripts/test_surface_guard.mjs",
+    "test:theme-integrity": "node scripts/test_theme_integrity.mjs",
     "pretest:slides": "node scripts/generate_slide_tokens.mjs"
   },
   "dependencies": {

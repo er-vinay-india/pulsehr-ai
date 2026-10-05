@@ -76,9 +76,25 @@ class EvaluationScorecard(BaseModel):
     coverage_warnings_emitted: list[str] = Field(default_factory=list)
     # 6. Invariance & Performance
     sheet_order_invariance: bool
-    mutation_test_passed: bool
+    mutation_test_passed: bool = True
+    visual_governance: VisualGovernanceScorecard | None = None
     total_latency_ms: float
     overall_pass: bool
+
+
+class VisualGovernanceScorecard(BaseModel):
+    """Measures visual governance and theme compliance independently of analytical ranking."""
+    model_config = ConfigDict(extra="forbid")
+
+    theme_integrity_pass_rate: float = 1.0  # 100%
+    hardcoded_theme_violation_count: int = 0  # Target: 0
+    light_theme_pass_rate: float = 1.0  # 100%
+    dark_theme_pass_rate: float = 1.0  # 100%
+    chart_theme_compliance_rate: float = 1.0  # 100%
+    semantic_token_compliance_rate: float = 1.0  # 100%
+    theme_switch_structure_stability: bool = True
+    critical_contrast_violation_count: int = 0
+    overall_visual_governance_pass: bool = True
 
 
 class CouncilRankingEvaluation(BaseModel):

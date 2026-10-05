@@ -1,12 +1,32 @@
 import React, { useState } from "react";
-import { Sparkles, ShieldCheck, Database, CheckCircle2, ChevronDown, ChevronUp, Clock, Terminal, Activity, ArrowRight } from "lucide-react";
+import { Sparkles, ShieldCheck, Database, ChevronDown, ChevronUp, Activity, ArrowRight } from "lucide-react";
 import { SurfaceGuard } from "../guard";
 
+/**
+ * Causal badge styles mapped strictly into Highview's centralized theme tokens.
+ * Zero hardcoded hex literals — conforms automatically to Light & Dark modes.
+ */
 const CAUSAL_COLORS = {
-  OBSERVED: { bg: "rgba(16, 185, 129, 0.12)", text: "#10b981", border: "rgba(16, 185, 129, 0.3)" },
-  ASSOCIATED: { bg: "rgba(6, 182, 212, 0.12)", text: "#06b6d4", border: "rgba(6, 182, 212, 0.3)" },
-  INFERRED: { bg: "rgba(99, 102, 241, 0.12)", text: "#6366f1", border: "rgba(99, 102, 241, 0.3)" },
-  HYPOTHESIS: { bg: "rgba(245, 158, 11, 0.12)", text: "#f59e0b", border: "rgba(245, 158, 11, 0.3)" },
+  OBSERVED: {
+    bg: "var(--hv-status-success-bg, var(--color-bg-soft-teal))",
+    text: "var(--hv-status-success, var(--color-success))",
+    border: "var(--hv-border-focus, var(--color-border-strong))",
+  },
+  ASSOCIATED: {
+    bg: "var(--hv-info-bg, var(--color-bg-soft-blue))",
+    text: "var(--hv-info, var(--color-info))",
+    border: "var(--hv-border-subtle, var(--color-divider))",
+  },
+  INFERRED: {
+    bg: "var(--color-bg-soft-gold)",
+    text: "var(--color-gold)",
+    border: "var(--hv-border-strong)",
+  },
+  HYPOTHESIS: {
+    bg: "var(--color-bg-soft-error)",
+    text: "var(--color-error)",
+    border: "var(--hv-border-strong)",
+  },
 };
 
 export default function EvidenceStoryCard({ storyPlan, evidenceGraph, snapshot, executiveIntegrity, governanceTelemetry }) {
@@ -34,20 +54,21 @@ export default function EvidenceStoryCard({ storyPlan, evidenceGraph, snapshot, 
       style={{
         marginTop: "1.5rem",
         padding: "1.5rem",
-        background: "var(--card-bg, #1e293b)",
+        background: "var(--surface-card, var(--color-bg-surface))",
         borderRadius: "12px",
-        border: "1px solid var(--border-color, #334155)",
+        border: "1px solid var(--border, var(--color-border))",
+        boxShadow: "var(--shadow-sm, 0 1px 3px rgba(0, 0, 0, 0.05))",
       }}
     >
       {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "1rem", marginBottom: "1rem" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-          <div style={{ background: "rgba(99, 102, 241, 0.15)", color: "#818cf8", padding: "10px", borderRadius: "10px" }}>
+          <div style={{ background: "var(--hv-info-bg, var(--color-bg-soft-blue))", color: "var(--hv-info, var(--color-info))", padding: "10px", borderRadius: "10px" }}>
             <Sparkles size={22} />
           </div>
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
-              <h3 style={{ margin: 0, fontSize: "1.15rem", fontWeight: 700, color: "var(--fg-primary, #f8fafc)" }}>
+              <h3 style={{ margin: 0, fontSize: "1.15rem", fontWeight: 700, color: "var(--fg-primary, var(--color-text-primary))" }}>
                 {storyPlan.narrative_angle || "Governed Decision Storyboard"}
               </h3>
               <span
@@ -56,9 +77,9 @@ export default function EvidenceStoryCard({ storyPlan, evidenceGraph, snapshot, 
                   fontWeight: 600,
                   padding: "2px 8px",
                   borderRadius: "12px",
-                  background: "rgba(16, 185, 129, 0.15)",
-                  color: "#34d399",
-                  border: "1px solid rgba(16, 185, 129, 0.3)",
+                  background: "var(--hv-status-success-bg, var(--color-bg-soft-teal))",
+                  color: "var(--hv-status-success, var(--color-success))",
+                  border: "1px solid var(--hv-border-subtle, var(--color-divider))",
                   display: "inline-flex",
                   alignItems: "center",
                   gap: "4px",
@@ -67,29 +88,40 @@ export default function EvidenceStoryCard({ storyPlan, evidenceGraph, snapshot, 
                 <ShieldCheck size={12} /> Governed Runtime
               </span>
             </div>
-            <p style={{ margin: "4px 0 0 0", fontSize: "0.85rem", color: "var(--fg-muted, #94a3b8)" }}>
+            <p style={{ margin: "4px 0 0 0", fontSize: "0.85rem", color: "var(--fg-muted, var(--color-text-muted))" }}>
               {storyPlan.executive_summary}
             </p>
           </div>
         </div>
 
         {/* Executive Integrity Indicators Strip */}
-        <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap", background: "rgba(15, 23, 42, 0.7)", padding: "6px 12px", borderRadius: "8px", border: "1px solid rgba(255, 255, 255, 0.08)" }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "10px",
+            flexWrap: "wrap",
+            background: "var(--color-bg-subtle, var(--hv-bg-surface-hover))",
+            padding: "6px 12px",
+            borderRadius: "8px",
+            border: "1px solid var(--color-border, var(--hv-border))",
+          }}
+        >
           <div style={{ fontSize: "0.75rem", display: "flex", alignItems: "center", gap: "4px" }}>
-            <span style={{ color: "#64748b" }}>Grounding:</span>
-            <span style={{ color: "#34d399", fontWeight: 600 }}>{integrity.grounding}</span>
+            <span style={{ color: "var(--color-text-muted)" }}>Grounding:</span>
+            <span style={{ color: "var(--color-success)", fontWeight: 600 }}>{integrity.grounding}</span>
           </div>
           <div style={{ fontSize: "0.75rem", display: "flex", alignItems: "center", gap: "4px" }}>
-            <span style={{ color: "#64748b" }}>Coverage:</span>
-            <span style={{ color: "#38bdf8", fontWeight: 600 }}>{integrity.evidence_coverage}</span>
+            <span style={{ color: "var(--color-text-muted)" }}>Coverage:</span>
+            <span style={{ color: "var(--color-info)", fontWeight: 600 }}>{integrity.evidence_coverage}</span>
           </div>
           <div style={{ fontSize: "0.75rem", display: "flex", alignItems: "center", gap: "4px" }}>
-            <span style={{ color: "#64748b" }}>Unsupported:</span>
-            <span style={{ color: "#a5b4fc", fontWeight: 600 }}>{integrity.unsupported_claims}</span>
+            <span style={{ color: "var(--color-text-muted)" }}>Unsupported:</span>
+            <span style={{ color: "var(--color-brand-primary)", fontWeight: 600 }}>{integrity.unsupported_claims}</span>
           </div>
           <div style={{ fontSize: "0.75rem", display: "flex", alignItems: "center", gap: "4px" }}>
-            <span style={{ color: "#64748b" }}>Budget:</span>
-            <span style={{ color: integrity.budget_status === "WITHIN_BUDGET" ? "#34d399" : "#f59e0b", fontWeight: 600 }}>
+            <span style={{ color: "var(--color-text-muted)" }}>Budget:</span>
+            <span style={{ color: integrity.budget_status === "WITHIN_BUDGET" ? "var(--color-success)" : "var(--color-warning)", fontWeight: 600 }}>
               {integrity.budget_status === "WITHIN_BUDGET" ? "<1.5s OK" : "Exceeded"}
             </span>
           </div>
@@ -104,15 +136,15 @@ export default function EvidenceStoryCard({ storyPlan, evidenceGraph, snapshot, 
             <div
               key={claim.claim_id}
               style={{
-                background: "rgba(15, 23, 42, 0.6)",
-                border: "1px solid var(--border-color, #334155)",
+                background: "var(--color-bg-elevated, var(--color-bg-surface))",
+                border: "1px solid var(--color-border-subtle, var(--color-divider))",
                 borderRadius: "8px",
                 padding: "1rem",
               }}
             >
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                  <span style={{ fontSize: "0.75rem", fontWeight: 700, color: "#818cf8", fontFamily: "monospace" }}>
+                  <span style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--color-brand-primary)", fontFamily: "monospace" }}>
                     {claim.claim_id}
                   </span>
                   <span
@@ -135,9 +167,9 @@ export default function EvidenceStoryCard({ storyPlan, evidenceGraph, snapshot, 
                       key={evid}
                       onClick={() => setSelectedEvidId(selectedEvidId === evid ? null : evid)}
                       style={{
-                        background: selectedEvidId === evid ? "#4f46e5" : "rgba(79, 70, 229, 0.15)",
-                        color: selectedEvidId === evid ? "#ffffff" : "#a5b4fc",
-                        border: "1px solid rgba(79, 70, 229, 0.4)",
+                        background: selectedEvidId === evid ? "var(--color-brand-primary)" : "var(--color-bg-subtle)",
+                        color: selectedEvidId === evid ? "var(--color-text-on-dark)" : "var(--color-text-primary)",
+                        border: "1px solid var(--color-border)",
                         borderRadius: "4px",
                         fontSize: "0.72rem",
                         fontWeight: 600,
@@ -154,18 +186,18 @@ export default function EvidenceStoryCard({ storyPlan, evidenceGraph, snapshot, 
                 </div>
               </div>
 
-              <div style={{ fontSize: "0.92rem", color: "var(--fg-primary, #f1f5f9)", lineHeight: 1.45, fontWeight: 500 }}>
+              <div style={{ fontSize: "0.92rem", color: "var(--color-text-primary)", lineHeight: 1.45, fontWeight: 500 }}>
                 {claim.rendered_text}
               </div>
 
               {claim.strategic_implication && (
-                <div style={{ marginTop: "6px", fontSize: "0.8rem", color: "var(--fg-muted, #94a3b8)", display: "flex", alignItems: "center", gap: "6px" }}>
-                  <span style={{ fontWeight: 600, color: "#cbd5e1" }}>Operational Implication:</span> {claim.strategic_implication}
+                <div style={{ marginTop: "6px", fontSize: "0.8rem", color: "var(--color-text-muted)", display: "flex", alignItems: "center", gap: "6px" }}>
+                  <span style={{ fontWeight: 600, color: "var(--color-text-secondary)" }}>Operational Implication:</span> {claim.strategic_implication}
                 </div>
               )}
 
               {claim.recommended_action && (
-                <div style={{ marginTop: "4px", fontSize: "0.8rem", color: "#38bdf8", display: "flex", alignItems: "center", gap: "6px" }}>
+                <div style={{ marginTop: "4px", fontSize: "0.8rem", color: "var(--color-info)", display: "flex", alignItems: "center", gap: "6px" }}>
                   <ArrowRight size={13} /> <span style={{ fontWeight: 600 }}>Action:</span> {claim.recommended_action}
                 </div>
               )}
@@ -180,38 +212,38 @@ export default function EvidenceStoryCard({ storyPlan, evidenceGraph, snapshot, 
           style={{
             marginTop: "1rem",
             padding: "1rem",
-            background: "rgba(30, 41, 59, 0.95)",
-            border: "1px solid #4f46e5",
+            background: "var(--color-bg-subtle)",
+            border: "1px solid var(--color-border-strong)",
             borderRadius: "8px",
           }}
         >
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-            <span style={{ fontWeight: 700, color: "#a5b4fc", fontSize: "0.85rem", display: "flex", alignItems: "center", gap: "6px" }}>
+            <span style={{ fontWeight: 700, color: "var(--color-brand-primary)", fontSize: "0.85rem", display: "flex", alignItems: "center", gap: "6px" }}>
               <Database size={14} /> Provenance for {selectedNode.evidence_id}: {selectedNode.subject}
             </span>
             <button
               onClick={() => setSelectedEvidId(null)}
-              style={{ background: "transparent", border: "none", color: "#94a3b8", cursor: "pointer", fontSize: "0.8rem" }}
+              style={{ background: "transparent", border: "none", color: "var(--color-text-muted)", cursor: "pointer", fontSize: "0.8rem" }}
             >
               Close
             </button>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "0.75rem", fontSize: "0.8rem" }}>
             <div>
-              <span style={{ color: "#64748b" }}>Calculation:</span>
-              <div style={{ color: "#f8fafc", fontFamily: "monospace", marginTop: "2px" }}>{selectedNode.calculation}</div>
+              <span style={{ color: "var(--color-text-muted)" }}>Calculation:</span>
+              <div style={{ color: "var(--color-text-primary)", fontFamily: "monospace", marginTop: "2px" }}>{selectedNode.calculation}</div>
             </div>
             <div>
-              <span style={{ color: "#64748b" }}>Source Table:</span>
-              <div style={{ color: "#f8fafc", marginTop: "2px" }}>{selectedNode.source_table}</div>
+              <span style={{ color: "var(--color-text-muted)" }}>Source Table:</span>
+              <div style={{ color: "var(--color-text-primary)", marginTop: "2px" }}>{selectedNode.source_table}</div>
             </div>
             <div>
-              <span style={{ color: "#64748b" }}>Sample Size:</span>
-              <div style={{ color: "#f8fafc", marginTop: "2px" }}>{selectedNode.population} records</div>
+              <span style={{ color: "var(--color-text-muted)" }}>Sample Size:</span>
+              <div style={{ color: "var(--color-text-primary)", marginTop: "2px" }}>{selectedNode.population} records</div>
             </div>
             <div>
-              <span style={{ color: "#64748b" }}>Confidence:</span>
-              <div style={{ color: selectedNode.confidence === "HIGH" ? "#34d399" : "#f59e0b", fontWeight: 600, marginTop: "2px" }}>
+              <span style={{ color: "var(--color-text-muted)" }}>Confidence:</span>
+              <div style={{ color: selectedNode.confidence === "HIGH" ? "var(--color-success)" : "var(--color-warning)", fontWeight: 600, marginTop: "2px" }}>
                 {selectedNode.confidence}
               </div>
             </div>
@@ -220,14 +252,14 @@ export default function EvidenceStoryCard({ storyPlan, evidenceGraph, snapshot, 
       )}
 
       {/* Bottom Controls: Evidence Nodes & Developer Diagnostics */}
-      <div style={{ marginTop: "1rem", paddingTop: "0.75rem", borderTop: "1px solid rgba(255, 255, 255, 0.08)", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.75rem" }}>
+      <div style={{ marginTop: "1rem", paddingTop: "0.75rem", borderTop: "1px solid var(--color-divider)", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.75rem" }}>
         {nodes.length > 0 && (
           <button
             onClick={() => setShowAllNodes(!showAllNodes)}
             style={{
               background: "transparent",
               border: "none",
-              color: "#94a3b8",
+              color: "var(--color-text-muted)",
               cursor: "pointer",
               fontSize: "0.78rem",
               display: "flex",
@@ -245,9 +277,9 @@ export default function EvidenceStoryCard({ storyPlan, evidenceGraph, snapshot, 
           <button
             onClick={() => setShowDevTrace(!showDevTrace)}
             style={{
-              background: "rgba(15, 23, 42, 0.8)",
-              border: "1px solid rgba(255, 255, 255, 0.12)",
-              color: "#a5b4fc",
+              background: "var(--color-bg-subtle)",
+              border: "1px solid var(--color-border)",
+              color: "var(--color-brand-primary)",
               cursor: "pointer",
               fontSize: "0.75rem",
               padding: "4px 10px",
@@ -272,18 +304,18 @@ export default function EvidenceStoryCard({ storyPlan, evidenceGraph, snapshot, 
               onClick={() => setSelectedEvidId(n.evidence_id)}
               style={{
                 padding: "6px 10px",
-                background: selectedEvidId === n.evidence_id ? "rgba(79, 70, 229, 0.25)" : "rgba(15, 23, 42, 0.5)",
-                border: `1px solid ${selectedEvidId === n.evidence_id ? "#6366f1" : "rgba(255, 255, 255, 0.08)"}`,
+                background: selectedEvidId === n.evidence_id ? "var(--color-bg-soft-blue)" : "var(--color-bg-subtle)",
+                border: `1px solid ${selectedEvidId === n.evidence_id ? "var(--color-brand-primary)" : "var(--color-border)"}`,
                 borderRadius: "6px",
                 cursor: "pointer",
                 fontSize: "0.75rem",
               }}
             >
               <div style={{ display: "flex", justifyContent: "space-between" }}>
-                <span style={{ fontWeight: 700, color: "#818cf8" }}>{n.evidence_id}</span>
-                <span style={{ color: "#34d399", fontWeight: 600 }}>{n.formatted_value}</span>
+                <span style={{ fontWeight: 700, color: "var(--color-brand-primary)" }}>{n.evidence_id}</span>
+                <span style={{ color: "var(--color-success)", fontWeight: 600 }}>{n.formatted_value}</span>
               </div>
-              <div style={{ color: "var(--fg-muted, #94a3b8)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginTop: "2px" }}>
+              <div style={{ color: "var(--color-text-muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginTop: "2px" }}>
                 {n.subject}
               </div>
             </div>
@@ -297,33 +329,33 @@ export default function EvidenceStoryCard({ storyPlan, evidenceGraph, snapshot, 
           style={{
             marginTop: "1rem",
             padding: "1rem",
-            background: "#090d16",
-            border: "1px solid #1e293b",
+            background: "var(--color-bg-inset, var(--color-bg-page))",
+            border: "1px solid var(--color-border)",
             borderRadius: "8px",
             fontFamily: "monospace",
             fontSize: "0.75rem",
-            color: "#cbd5e1",
+            color: "var(--color-text-secondary)",
           }}
         >
-          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px", borderBottom: "1px solid #1e293b", paddingBottom: "6px" }}>
-            <span style={{ color: "#38bdf8", fontWeight: 600 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px", borderBottom: "1px solid var(--color-divider)", paddingBottom: "6px" }}>
+            <span style={{ color: "var(--color-info)", fontWeight: 600 }}>
               Trace: {governanceTelemetry?.trace_id} ({rootSpan.duration_ms}ms total)
             </span>
-            <span style={{ color: "#10b981" }}>OTel Semantic Conventions: Compliant</span>
+            <span style={{ color: "var(--color-success)" }}>OTel Semantic Conventions: Compliant</span>
           </div>
 
           <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-            <div style={{ color: "#818cf8" }}>
+            <div style={{ color: "var(--color-brand-primary)" }}>
               HIGHVIEW_REQUEST [{rootSpan.duration_ms}ms]
             </div>
             {rootSpan.children?.map((child) => (
-              <div key={child.span_id} style={{ paddingLeft: "1.25rem", borderLeft: "1px dashed #334155" }}>
+              <div key={child.span_id} style={{ paddingLeft: "1.25rem", borderLeft: "1px dashed var(--color-border-strong)" }}>
                 <div style={{ display: "flex", justifyContent: "space-between" }}>
-                  <span style={{ color: "#f1f5f9" }}>├── {child.name}</span>
-                  <span style={{ color: "#64748b" }}>{child.duration_ms}ms</span>
+                  <span style={{ color: "var(--color-text-primary)" }}>├── {child.name}</span>
+                  <span style={{ color: "var(--color-text-muted)" }}>{child.duration_ms}ms</span>
                 </div>
                 {child.events && child.events.length > 0 && (
-                  <div style={{ paddingLeft: "1rem", color: "#f59e0b", fontSize: "0.7rem" }}>
+                  <div style={{ paddingLeft: "1rem", color: "var(--color-warning)", fontSize: "0.7rem" }}>
                     {child.events.map((e, idx) => (
                       <div key={idx}>⚡ event: {e.name} ({JSON.stringify(e.attributes)})</div>
                     ))}

@@ -37,25 +37,23 @@ class VisualIntent(BaseModel):
     highlight_categories: list[str] = Field(default_factory=list)
 
 
-class VisualQAResult(BaseModel):
-    """Results of deterministic visual layout and accessibility QA."""
-    model_config = ConfigDict(extra="forbid")
-
-    passed: bool
-    warnings: list[str] = Field(default_factory=list)
-    remediations: list[str] = Field(default_factory=list)
+from .theme_validator import (
+    GateAuditResult,
+    ThemeIntegrityValidator,
+    VisualQAResult,
+)
 
 
 class VisualCompiler:
     """Compiles declarative visual intents into safe ECharts options."""
 
     PALETTE = [
-        "#4f46e5",  # Primary Indigo
-        "#06b6d4",  # Cyan
-        "#10b981",  # Emerald / Benchmark
-        "#f59e0b",  # Amber / Warning
-        "#ef4444",  # Rose / Critical
-        "#8b5cf6",  # Violet
+        "var(--color-brand-primary, #183B56)",
+        "var(--color-brand-secondary, #075443)",
+        "var(--color-brand-blue, #234E70)",
+        "var(--color-gold, #65470C)",
+        "var(--color-error, #8E1938)",
+        "var(--color-violet, #513B72)",
     ]
 
     @classmethod
@@ -76,7 +74,7 @@ class VisualCompiler:
             is_highlight = cat in intent.highlight_categories
             item: dict[str, Any] = {"value": val}
             if is_highlight:
-                item["itemStyle"] = {"color": "#ef4444"}
+                item["itemStyle"] = {"color": "var(--color-error, #8E1938)"}
             series_data.append(item)
 
         option: dict[str, Any] = {
@@ -84,8 +82,8 @@ class VisualCompiler:
             "tooltip": {
                 "trigger": "axis",
                 "axisPointer": {"type": "shadow"},
-                "backgroundColor": "#1e293b",
-                "textStyle": {"color": "#f8fafc", "fontSize": 12},
+                "backgroundColor": "var(--chart-tooltip-bg, #FFFFFF)",
+                "textStyle": {"color": "var(--chart-tooltip-text, #172B3A)", "fontSize": 12},
                 "formatter": f"{{b}}: {{c}} {intent.unit}".strip(),
             },
             "grid": {
@@ -98,16 +96,16 @@ class VisualCompiler:
             "xAxis": {
                 "type": "value",
                 "name": intent.unit,
-                "nameTextStyle": {"fontSize": 11, "color": "#64748b"},
-                "axisLabel": {"fontSize": 11, "color": "#64748b"},
-                "splitLine": {"lineStyle": {"type": "dashed", "color": "#334155"}},
+                "nameTextStyle": {"fontSize": 11, "color": "var(--chart-title, #172B3A)"},
+                "axisLabel": {"fontSize": 11, "color": "var(--chart-text, #334B57)"},
+                "splitLine": {"lineStyle": {"type": "dashed", "color": "var(--chart-split-line, rgba(23, 43, 58, 0.1))"}},
             },
             "yAxis": {
                 "type": "category",
                 "data": sorted_cats,
                 "axisLabel": {
                     "fontSize": 11,
-                    "color": "#94a3b8",
+                    "color": "var(--chart-text, #334B57)",
                     "formatter": "{value}",
                 },
                 "axisTick": {"alignWithLabel": True},
@@ -118,12 +116,12 @@ class VisualCompiler:
                     "type": "bar",
                     "data": series_data,
                     "barMaxWidth": 24,
-                    "itemStyle": {"borderRadius": [0, 4, 4, 0], "color": "#6366f1"},
+                    "itemStyle": {"borderRadius": [0, 4, 4, 0], "color": "var(--color-brand-primary, #183B56)"},
                     "label": {
                         "show": True,
                         "position": "right",
                         "fontSize": 11,
-                        "color": "#cbd5e1",
+                        "color": "var(--chart-text, #334B57)",
                     },
                 }
             ],
@@ -139,10 +137,10 @@ class VisualCompiler:
                         "name": "Benchmark",
                         "label": {
                             "formatter": f"Benchmark: {intent.benchmark_value:.1f}",
-                            "color": "#10b981",
+                            "color": "var(--color-success, #075443)",
                             "fontSize": 11,
                         },
-                        "lineStyle": {"color": "#10b981", "type": "dashed", "width": 2},
+                        "lineStyle": {"color": "var(--color-success, #075443)", "type": "dashed", "width": 2},
                     }
                 ],
             }
@@ -175,12 +173,12 @@ class VisualCompiler:
         option: dict[str, Any] = {
             "tooltip": {
                 "trigger": "axis",
-                "backgroundColor": "#1e293b",
-                "textStyle": {"color": "#f8fafc", "fontSize": 12},
+                "backgroundColor": "var(--chart-tooltip-bg, #FFFFFF)",
+                "textStyle": {"color": "var(--chart-tooltip-text, #172B3A)", "fontSize": 12},
             },
             "legend": {
                 "data": ["Observed History", "Projected Trend", "80% Confidence Cone"],
-                "textStyle": {"color": "#94a3b8", "fontSize": 11},
+                "textStyle": {"color": "var(--chart-text, #334B57)", "fontSize": 11},
                 "top": "2%",
             },
             "grid": {
@@ -193,20 +191,20 @@ class VisualCompiler:
             "xAxis": {
                 "type": "category",
                 "data": all_x,
-                "axisLabel": {"fontSize": 11, "color": "#64748b"},
+                "axisLabel": {"fontSize": 11, "color": "var(--chart-text, #334B57)"},
             },
             "yAxis": {
                 "type": "value",
                 "name": intent.unit,
-                "axisLabel": {"fontSize": 11, "color": "#64748b"},
-                "splitLine": {"lineStyle": {"type": "dashed", "color": "#334155"}},
+                "axisLabel": {"fontSize": 11, "color": "var(--chart-text, #334B57)"},
+                "splitLine": {"lineStyle": {"type": "dashed", "color": "var(--chart-split-line, rgba(23, 43, 58, 0.1))"}},
             },
             "series": [
                 {
                     "name": "Observed History",
                     "type": "line",
                     "data": hist_series,
-                    "itemStyle": {"color": "#6366f1"},
+                    "itemStyle": {"color": "var(--color-brand-primary, #183B56)"},
                     "lineStyle": {"width": 2.5},
                     "symbol": "circle",
                     "symbolSize": 6,
@@ -215,7 +213,7 @@ class VisualCompiler:
                     "name": "Projected Trend",
                     "type": "line",
                     "data": fc_series,
-                    "itemStyle": {"color": "#06b6d4"},
+                    "itemStyle": {"color": "var(--color-info, #234E70)"},
                     "lineStyle": {"width": 2, "type": "dashed"},
                     "symbol": "emptyCircle",
                     "symbolSize": 5,
@@ -233,7 +231,7 @@ class VisualCompiler:
                     "type": "line",
                     "data": band_diff,
                     "lineStyle": {"opacity": 0},
-                    "areaStyle": {"color": "rgba(6, 182, 212, 0.18)"},
+                    "areaStyle": {"color": "var(--color-bg-soft-blue, rgba(35, 78, 112, 0.18))"},
                     "stack": "confidence-band",
                     "symbol": "none",
                 },
@@ -243,26 +241,5 @@ class VisualCompiler:
 
     @staticmethod
     def audit_visual_qa(option: dict[str, Any]) -> VisualQAResult:
-        """Audits an ECharts option dictionary against deterministic visual QA constraints."""
-        warnings: list[str] = []
-        remediations: list[str] = []
-
-        # 1. Axis check
-        if "xAxis" not in option or "yAxis" not in option:
-            warnings.append("Missing explicit X or Y axis definition.")
-            remediations.append("Injected standard cartesian axes.")
-
-        # 2. Grid check
-        grid = option.get("grid", {})
-        if not grid.get("containLabel"):
-            warnings.append("Grid missing containLabel=True, risking label clipping.")
-            remediations.append("Applied containLabel: True.")
-
-        # 3. Label font check
-        x_label = option.get("xAxis", {}).get("axisLabel", {})
-        if x_label.get("fontSize", 12) < 11:
-            warnings.append("X-axis font size below 11px accessibility threshold.")
-            remediations.append("Upgraded font size to 11px.")
-
-        passed = len(warnings) == 0
-        return VisualQAResult(passed=passed, warnings=warnings, remediations=remediations)
+        """Audits an ECharts option dictionary against the Three Permanent Visual Gates."""
+        return ThemeIntegrityValidator.evaluate_three_visual_gates(option)
