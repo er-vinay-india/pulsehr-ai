@@ -16,3 +16,16 @@ Use case: productivity-visual. Asset type: reusable 16:9 PowerPoint slide backgr
 ## Title font
 
 Kalam Regular is bundled from the [Google Fonts repository](https://github.com/google/fonts/tree/main/ofl/kalam) under the included SIL Open Font License. It is used in studio, PDF and offline HTML headings. Native PowerPoint headings use Comic Sans MS, available on standard Office installations, to keep the title text editable without requiring a font installation.
+
+
+## Companion brush themes
+
+`teal-brush.png` and `coral-brush.png` are original backgrounds made with the built-in ImageGen tool. They share Amber Brush's handwritten title font and editable checklist, chart, and table layouts. Teal Brush uses a charcoal botanical desk header and mint teal body. Coral Brush uses a charcoal plum office header and soft coral body. Both are bundled for studio, PowerPoint, PDF, and offline HTML exports.
+
+### Teal Brush generation prompt
+
+Use case: productivity-visual. Asset type: reusable 16:9 PowerPoint slide background, landscape 1536x864. Primary request: a Teal Brush companion to an amber brush business presentation. Upper 24 percent: extremely subdued charcoal-green (#243431) monochrome overhead office desk photograph with a laptop, blank planner and a small leafy plant under a heavy dark overlay. Lower 76 percent: perfectly flat solid mint teal (#79D6C5). Broad natural irregular dry paint brush boundary at 21 to 28 percent height, slightly rising in the middle, tiny paint flecks only near boundary. Keep every pixel below 30 percent height uniform flat teal for editable slide content. White handwritten titles will be added separately in top region. Full bleed, premium professional employee-report presentation. No writing, text, logos, icons, circles, checkmarks, graphs, watermark, border or shading in the body.
+
+### Coral Brush generation prompt
+
+Use case: productivity-visual. Asset type: reusable 16:9 PowerPoint slide background, landscape 1536x864. Primary request: a Coral Brush companion to an amber brush business presentation. Upper 24 percent: very dark charcoal-plum (#342A30) monochrome overhead office desk photograph with faint blank paperwork, a pen, laptop corner and coffee under a heavy dark overlay. Lower 76 percent: perfectly flat solid soft coral (#F4AB96). Broad naturally irregular dry paint brush boundary at 21 to 28 percent height, slightly rising toward the right, sparse little paint flecks restricted to boundary. Keep every pixel below 30 percent height uniform flat coral for editable text and charts. White handwritten headings added separately in upper region. Edge-to-edge full bleed, clean empty content space, premium employee-report presentation backdrop. No writing, text, logos, icons, circles, checkmarks, graphs, watermark, borders, gradients or body texture.

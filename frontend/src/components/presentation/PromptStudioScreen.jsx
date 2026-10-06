@@ -28,6 +28,8 @@ const DEFAULT_THEMES = Object.values(SLIDE_THEMES);
 
 const THEME_PRIORITY = [
   "amber_brush",
+  "teal_brush",
+  "coral_brush",
   "executive_dark",
   "bold_signal",
   "clean_light",
@@ -151,8 +153,7 @@ export default function PromptStudioScreen({
         if (idxA !== -1) return -1;
         if (idxB !== -1) return 1;
         return 0;
-      })
-      .slice(0, 7);
+      });
   }, [availableThemes]);
 
   const currentThemeObj = useMemo(
@@ -933,14 +934,14 @@ export default function PromptStudioScreen({
                     }}
                   >
                     <Palette size={14} />
-                    <span>{currentThemeObj?.background_asset ? "Amber Brush Background" : "Clean Minimal Solid"}</span>
+                    <span>{currentThemeObj?.background_asset ? `${currentThemeObj.name} Background` : "Clean Minimal Solid"}</span>
                   </button>
 
                   <button
                     type="button"
                     role="radio"
                     disabled={Boolean(currentThemeObj?.background_asset)}
-                    title={currentThemeObj?.background_asset ? "Amber Brush includes its own office-photo background" : undefined}
+                    title={currentThemeObj?.background_asset ? `${currentThemeObj.name} includes its own office-photo background` : undefined}
                     aria-checked={!currentThemeObj?.background_asset && backgroundMode === "image"}
                     className={`polish-pill ${!currentThemeObj?.background_asset && backgroundMode === "image" ? "active" : ""}`}
                     onClick={() => {

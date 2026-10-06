@@ -16,7 +16,7 @@ def add_theme_background(slide, theme, width, height):
     path = theme_background_path(theme)
     if path:
         picture = slide.shapes.add_picture(str(path), 0, 0, width=width, height=height)
-        picture.name = 'Theme background: Amber Brush'
+        picture.name = f"Theme background: {slide_theme_preset(theme)['name']}"
 
 
 def theme_font_path(theme):

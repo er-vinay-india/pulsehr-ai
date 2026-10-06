@@ -58,7 +58,7 @@ export async function exportStandaloneHtmlPresentation(deck, selectedTheme = "bo
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(slide),
       });
       const { plan, detail } = await response.json();
-      if (!response.ok || !plan) throw new Error(detail || 'This slide needs a supported layout for Amber Brush HTML export.');
+      if (!response.ok || !plan) throw new Error(detail || `This slide needs a supported layout for ${currentTheme.name} HTML export.`);
       for (let part = 0; part < plan.pages.length; part++) {
         pages.push(buildResolvedSlideHtml({ ...slide, order: idx+1 }, pages.length, slides.length, currentTheme, plan, part, background));
       }

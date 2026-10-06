@@ -157,7 +157,7 @@ export default function DeckStudioView({
         mutationParams = { chart_type: "donut" };
       } else if (pLow.includes("theme")) {
         mutationAction = "change_theme";
-        mutationParams = { theme_id: /amber|brush/.test(pLow) ? "amber_brush" : pLow.includes("dark") ? "executive_dark" : "corporate_navy" };
+        mutationParams = { theme_id: pLow.includes("teal") ? "teal_brush" : pLow.includes("coral") ? "coral_brush" : /amber|brush/.test(pLow) ? "amber_brush" : pLow.includes("dark") ? "executive_dark" : "corporate_navy" };
       } else if (pLow.includes("group by") || pLow.includes("slice by") || pLow.includes("by location")) {
         mutationAction = "reslice_slide";
         const dimMatch = prompt.match(/(?:group\s+by|slice\s+by|by)\s+([A-Za-z0-9_\s]+?)(?:\s+instead|\s*$|\.)/i);

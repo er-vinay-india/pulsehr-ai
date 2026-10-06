@@ -255,3 +255,49 @@
   --font-mono: 'Space Mono', monospace;
   --accent-gradient: linear-gradient(135deg, #28251D, #2A2416);
 }
+
+.theme-teal_brush,
+[data-slide-theme="teal_brush"] {
+  --stage-bg: #243431;
+  --slide-bg: #79D6C5;
+  --card-bg: #79D6C5;
+  --card-bg-alt: #79D6C5;
+  --card-border: #34413C;
+  --grid-border: #34413C;
+  --text-primary: #202328;
+  --text-secondary: #25282D;
+  --text-muted: #25282D;
+  --brand-color: #28251D;
+  --accent-color: #2A2416;
+  --success-color: #102C1A;
+  --danger-color: #411820;
+  --warning-color: #2A2416;
+  --chart-primary: #28251D;
+  --font-display: 'Kalam', 'Comic Sans MS', cursive;
+  --font-body: Arial, Helvetica, sans-serif;
+  --font-mono: 'Space Mono', monospace;
+  --accent-gradient: linear-gradient(135deg, #28251D, #2A2416);
+}
+
+.theme-coral_brush,
+[data-slide-theme="coral_brush"] {
+  --stage-bg: #342A30;
+  --slide-bg: #F4AB96;
+  --card-bg: #F4AB96;
+  --card-bg-alt: #F4AB96;
+  --card-border: #563A37;
+  --grid-border: #563A37;
+  --text-primary: #202328;
+  --text-secondary: #25282D;
+  --text-muted: #25282D;
+  --brand-color: #28251D;
+  --accent-color: #2A2416;
+  --success-color: #102C1A;
+  --danger-color: #411820;
+  --warning-color: #2A2416;
+  --chart-primary: #28251D;
+  --font-display: 'Kalam', 'Comic Sans MS', cursive;
+  --font-body: Arial, Helvetica, sans-serif;
+  --font-mono: 'Space Mono', monospace;
+  --accent-gradient: linear-gradient(135deg, #28251D, #2A2416);
+}

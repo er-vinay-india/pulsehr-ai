@@ -489,8 +489,8 @@ def parse_slide_mutation_intent(query: str, prior_context: dict | None = None) -
         return "revert_mutation", {"snapshot": snapshot}, s_idx
 
     # 3. Change Theme
-    if "theme" in q_low or any(t in q_low for t in ("executive dark", "corporate navy", "bold signal", "clean light", "emerald slate", "amber brush")):
-        for t in ("executive_dark", "corporate_navy", "bold_signal", "clean_light", "emerald_slate", "electric_studio", "swiss_modern", "amber_brush"):
+    if "theme" in q_low or any(t in q_low for t in ("executive dark", "corporate navy", "bold signal", "clean light", "emerald slate", "amber brush", "teal brush", "coral brush")):
+        for t in ("executive_dark", "corporate_navy", "bold_signal", "clean_light", "emerald_slate", "electric_studio", "swiss_modern", "amber_brush", "teal_brush", "coral_brush"):
             if t in q_low or t.replace("_", " ") in q_low:
                 return "change_theme", {"theme_id": t}, s_idx
         return "change_theme", {"theme_id": "executive_dark"}, s_idx

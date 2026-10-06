@@ -24,7 +24,7 @@ def export_resolved_pdf(deck, output, *, canvas=None, page_offset=0, total=None)
         from reportlab.pdfbase import pdfmetrics
         from reportlab.pdfbase.ttfonts import TTFont
         from .theme_background import theme_font_path
-        title_font = 'AmberBrushTitle'
+        title_font = f"PresentationTitle_{theme['id']}"
         if title_font not in pdfmetrics.getRegisteredFontNames():
             pdfmetrics.registerFont(TTFont(title_font, str(theme_font_path(theme))))
 
