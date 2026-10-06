@@ -20,19 +20,14 @@ import {
   FileText,
   Sliders,
 } from "lucide-react";
+import { SLIDE_THEMES } from "../../theme/slideTokens.js";
 import SlideImagePickerModal from "./SlideImagePickerModal.jsx";
 import Select from "../common/Select.jsx";
 
-const DEFAULT_THEMES = [
-  { id: "executive_dark", name: "Executive Obsidian", bg_color: "#08111F", card_bg: "#0F1B2D", card_border: "#26384D", accent_color: "#5EEAD4", brand_color: "#60A5FA" },
-  { id: "bold_signal", name: "Bold Signal", bg_color: "#131418", card_bg: "#1c1e24", card_border: "#2c2f38", accent_color: "#ff8a65", brand_color: "#ff5722" },
-  { id: "electric_studio", name: "Electric Studio", bg_color: "#0a0c10", card_bg: "#141820", card_border: "#232b3a", accent_color: "#4cc9f0", brand_color: "#4361ee" },
-  { id: "clean_light", name: "Clean Modern Light", bg_color: "#ffffff", card_bg: "#f8fafc", card_border: "#e2e8f0", accent_color: "#0284c7", brand_color: "#2563eb" },
-  { id: "corporate_navy", name: "Corporate Navy", bg_color: "#0b1329", card_bg: "#131f42", card_border: "#23335e", accent_color: "#38bdf8", brand_color: "#2563eb" },
-  { id: "creative_voltage", name: "Creative Voltage", bg_color: "#090914", card_bg: "#111126", card_border: "#21214a", accent_color: "#0055ff", brand_color: "#00f0ff" },
-];
+const DEFAULT_THEMES = Object.values(SLIDE_THEMES);
 
 const THEME_PRIORITY = [
+  "amber_brush",
   "executive_dark",
   "bold_signal",
   "clean_light",
@@ -135,7 +130,7 @@ export default function PromptStudioScreen({
   const setSourceScope = (value) => updatePathDraft("sourceScope", value);
 
   const [slideCount, setSlideCount] = useState(null); // null = Adaptive auto
-  const [selectedThemeId, setSelectedThemeId] = useState("executive_dark");
+  const [selectedThemeId, setSelectedThemeId] = useState("amber_brush");
   const [backgroundMode, setBackgroundMode] = useState("solid"); // "solid" | "image"
   const [selectedImage, setSelectedImage] = useState(null);
   const [isImagePickerOpen, setIsImagePickerOpen] = useState(false);
@@ -157,7 +152,7 @@ export default function PromptStudioScreen({
         if (idxB !== -1) return 1;
         return 0;
       })
-      .slice(0, 6);
+      .slice(0, 7);
   }, [availableThemes]);
 
   const currentThemeObj = useMemo(
@@ -180,13 +175,14 @@ export default function PromptStudioScreen({
       targetLength: slideCount,
       themeId: selectedThemeId,
       deckStyle: "standard",
-      backgroundMode,
-      selectedImageUrl: selectedImage?.url || null,
+      backgroundMode: currentThemeObj?.background_asset ? "solid" : backgroundMode,
+      selectedImageUrl: currentThemeObj?.background_asset ? null : selectedImage?.url || null,
       transitionStyle,
       animation,
       scrimOpacity: selectedImage?.scrimOpacity ?? 70,
     });
   }, [
+    currentThemeObj,
     onGenerateDeck,
     sourceMode,
     audience,
@@ -886,7 +882,7 @@ export default function PromptStudioScreen({
                     >
                       <span
                         className="theme-swatch"
-                        style={{ backgroundColor: th.bg_color || th.color || "#0F1B2D" }}
+                        style={{ backgroundColor: th.bg_color || th.color || "#0F1B2D", ...(th.background_asset ? { backgroundImage: `url(/api/presentations/theme-assets/${th.id}/background)`, backgroundSize: "100% 100%" } : {}) }}
                       >
                         <span
                           className="swatch-card"
@@ -929,22 +925,24 @@ export default function PromptStudioScreen({
                   <button
                     type="button"
                     role="radio"
-                    aria-checked={backgroundMode === "solid"}
-                    className={`polish-pill ${backgroundMode === "solid" ? "active" : ""}`}
+                    aria-checked={Boolean(currentThemeObj?.background_asset) || backgroundMode === "solid"}
+                    className={`polish-pill ${currentThemeObj?.background_asset || backgroundMode === "solid" ? "active" : ""}`}
                     onClick={() => {
                       setBackgroundMode("solid");
                       setSelectedImage(null);
                     }}
                   >
                     <Palette size={14} />
-                    <span>Clean Minimal Solid</span>
+                    <span>{currentThemeObj?.background_asset ? "Amber Brush Background" : "Clean Minimal Solid"}</span>
                   </button>
 
                   <button
                     type="button"
                     role="radio"
-                    aria-checked={backgroundMode === "image"}
-                    className={`polish-pill ${backgroundMode === "image" ? "active" : ""}`}
+                    disabled={Boolean(currentThemeObj?.background_asset)}
+                    title={currentThemeObj?.background_asset ? "Amber Brush includes its own office-photo background" : undefined}
+                    aria-checked={!currentThemeObj?.background_asset && backgroundMode === "image"}
+                    className={`polish-pill ${!currentThemeObj?.background_asset && backgroundMode === "image" ? "active" : ""}`}
                     onClick={() => {
                       setBackgroundMode("image");
                       if (!selectedImage) setIsImagePickerOpen(true);
@@ -956,7 +954,7 @@ export default function PromptStudioScreen({
                     </span>
                   </button>
                 </div>
-                {backgroundMode === "image" && (
+                {backgroundMode === "image" && !currentThemeObj?.background_asset && (
                   <button
                     type="button"
                     className="btn-browse-photos"

@@ -289,6 +289,43 @@ export const SLIDE_THEMES = {
     "font_display": "'Space Grotesk', system-ui, sans-serif",
     "font_body": "'Plus Jakarta Sans', system-ui, sans-serif",
     "font_mono": "'Space Mono', monospace"
+  },
+  "amber_brush": {
+    "id": "amber_brush",
+    "name": "Amber Brush",
+    "description": "Charcoal photo header, handwritten titles and amber checklists",
+    "bg_color": "#F5A900",
+    "card_bg": "#F5A900",
+    "card_border": "#59400E",
+    "primary_text": "#202328",
+    "secondary_text": "#25282D",
+    "brand_color": "#28251D",
+    "accent_color": "#2A2416",
+    "success_color": "#102C1A",
+    "danger_color": "#411820",
+    "chart_palette": [
+      "#202328",
+      "#174436",
+      "#183C5B",
+      "#522749",
+      "#59320C",
+      "#2A3652"
+    ],
+    "is_dark": false,
+    "stage_bg": "#292C31",
+    "surface_alt": "#F5A900",
+    "muted_text": "#25282D",
+    "warning_color": "#2A2416",
+    "font_display": "'Kalam', 'Comic Sans MS', cursive",
+    "font_body": "Arial, Helvetica, sans-serif",
+    "font_mono": "'Space Mono', monospace",
+    "header_bg": "#292C31",
+    "header_text": "#FFFFFF",
+    "body_start": 190,
+    "background_asset": "amber-brush.png",
+    "checklist": true,
+    "font_pptx_display": "Comic Sans MS",
+    "font_asset": "Kalam-Regular.ttf"
   }
 };
 export const SLIDE_THEME_ALIASES = {"executive_studio":"executive_dark","minimal_stark":"clean_light"};

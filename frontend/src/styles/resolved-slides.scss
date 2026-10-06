@@ -1,3 +1,11 @@
+@font-face {
+  font-family: 'Kalam';
+  src: url('/api/presentations/theme-assets/amber_brush/font') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
 .resolved-slide-view { width: 100%; height: 100%; position: relative; }
 .resolved-slide {
   width: 100%; aspect-ratio: 16 / 9; position: relative; overflow: hidden;
@@ -12,6 +20,11 @@
   th { color: var(--brand-color); text-align: left; }
   .resolved-page-number { text-align: right; color: var(--text-secondary); }
   .resolved-text-editor { padding: 0; border: 1px solid var(--card-border); background: var(--card-bg); resize: none; font-family: inherit; }
+  .resolved-text-editor[aria-label="Edit slide title"] { background: transparent; }
+  .resolved-checklist { display: flex; align-items: flex-start; gap: 10px; line-height: 1.22; }
+  .resolved-checklist-icon { box-sizing: border-box; border: 2px solid currentColor; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font: 700 22px/1 Arial, sans-serif; margin-top: 2px; }
+  .resolved-checklist > div { min-width: 0; flex: 1; }
+  .resolved-checklist p { line-height: inherit; }
 }
 .resolved-layout-message { padding: 32px; color: var(--hv-text-primary); background: var(--hv-bg-surface); }
 .resolved-table-pages {

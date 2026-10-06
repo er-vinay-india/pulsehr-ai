@@ -14,11 +14,12 @@
 import { getSlideTheme } from "../theme/slideTokens.js";
 import { buildSlideHtml } from "./exporter/slideHtmlBuilder";
 import { generateFullPresentationHtml } from "./exporter/exportTemplate";
+import { buildResolvedSlideHtml } from "./exporter/resolvedSlideHtml.js";
 
 /**
  * Exports a full presentation deck as a self-contained single HTML file.
  */
-export function exportStandaloneHtmlPresentation(deck, selectedTheme = "bold_signal", printPdf = false) {
+export async function exportStandaloneHtmlPresentation(deck, selectedTheme = "bold_signal", printPdf = false) {
   if (!deck || !deck.slides || deck.slides.length === 0) {
     alert("No slides found in the presentation to export.");
     return;
@@ -28,8 +29,46 @@ export function exportStandaloneHtmlPresentation(deck, selectedTheme = "bold_sig
   const slides = deck.slides;
   const currentTheme = getSlideTheme(deck.theme?.id || deck.metadata?.theme_id || selectedTheme);
 
-  const slidesHtml = slides.map((s, idx) => buildSlideHtml(s, idx, slides.length, currentTheme)).join("\n");
-  const fullHtml = generateFullPresentationHtml(title, slidesHtml, slides.length, currentTheme);
+  let slidesHtml;
+  let exportedSlideCount = slides.length;
+  if (currentTheme.background_asset) {
+    const imageResponse = await fetch(`/api/presentations/theme-assets/${encodeURIComponent(currentTheme.id)}/background`);
+    if (!imageResponse.ok) throw new Error('The presentation theme artwork could not be loaded.');
+    const blob = await imageResponse.blob();
+    const background = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(new Error('The presentation theme artwork could not be embedded.'));
+      reader.readAsDataURL(blob);
+    });
+    if (currentTheme.font_asset) {
+      const fontResponse = await fetch(`/api/presentations/theme-assets/${encodeURIComponent(currentTheme.id)}/font`);
+      if (!fontResponse.ok) throw new Error('The presentation title font could not be loaded.');
+      const fontBlob = await fontResponse.blob();
+      currentTheme.font_data_uri = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error('The presentation title font could not be embedded.'));
+        reader.readAsDataURL(fontBlob);
+      });
+    }
+    const pages = [];
+    for (const [idx, slide] of slides.entries()) {
+      const response = await fetch(`/api/presentations/layout-preview?theme_id=${encodeURIComponent(currentTheme.id)}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(slide),
+      });
+      const { plan, detail } = await response.json();
+      if (!response.ok || !plan) throw new Error(detail || 'This slide needs a supported layout for Amber Brush HTML export.');
+      for (let part = 0; part < plan.pages.length; part++) {
+        pages.push(buildResolvedSlideHtml({ ...slide, order: idx+1 }, pages.length, slides.length, currentTheme, plan, part, background));
+      }
+    }
+    slidesHtml = pages.join('\n');
+    exportedSlideCount = pages.length;
+  } else {
+    slidesHtml = slides.map((s, idx) => buildSlideHtml(s, idx, slides.length, currentTheme)).join("\n");
+  }
+  const fullHtml = generateFullPresentationHtml(title, slidesHtml, exportedSlideCount, currentTheme);
 
   if (printPdf) {
     const printWindow = window.open("", "_blank");

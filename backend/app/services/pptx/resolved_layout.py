@@ -11,6 +11,40 @@ from .pptx_styles import hex_to_rgb
 def render_resolved_slide(slide, plan, theme, colors, page, total):
     font = theme.get('font_body', 'Arial').split(',')[0].strip(" '\"")
     for block in plan['blocks']:
+        if block['kind'] == 'checklist':
+            icon = block['icon_size']
+            circle = slide.shapes.add_shape(MSO_SHAPE.OVAL, Pt(block['x']), Pt(block['y']+2), Pt(icon), Pt(icon))
+            circle.name = 'Checklist icon'
+            circle.fill.background()
+            circle.line.color.rgb = colors['primary']
+            circle.line.width = Pt(2)
+            from pptx.oxml.xmlchemy import OxmlElement
+            circle._element.spPr.append(OxmlElement('a:effectLst'))
+            tf = circle.text_frame
+            tf.margin_left = tf.margin_right = tf.margin_top = tf.margin_bottom = 0
+            tf.vertical_anchor = MSO_ANCHOR.MIDDLE
+            p = tf.paragraphs[0]
+            p.text, p.alignment = '\u2713', PP_ALIGN.CENTER
+            p.font.name, p.font.size = 'Arial', Pt(22)
+            p.font.color.rgb = colors['primary']
+            xx, ww = block['x']+icon+10, block['width']-icon-10
+            yy = block['y']
+            for value, bold, height in [(block['title'], True, block['title_height']),
+                                        (block['text'], False, block['height']-block['title_height']-(8 if block['title'] and block['text'] else 0))]:
+                if not value:
+                    continue
+                shape = slide.shapes.add_textbox(Pt(xx), Pt(yy), Pt(ww), Pt(height))
+                shape.name = 'Checklist heading' if bold else 'Checklist detail'
+                tf = shape.text_frame
+                tf.margin_left = tf.margin_right = tf.margin_top = tf.margin_bottom = 0
+                tf.word_wrap = True
+                p = tf.paragraphs[0]
+                p.text = value
+                p.font.name, p.font.size, p.font.bold = font, Pt(block['title_size'] if bold else block['size']), bold
+                p.font.color.rgb = colors['primary']
+                p.line_spacing = GEOMETRY['type']['line_height']
+                yy += height+8
+            continue
         if block['kind'] == 'chart':
             data = block['chart']
             composition = str(data.get('type') or data.get('chart_type') or '').lower() in {'pie', 'donut', 'doughnut'}
@@ -73,7 +107,8 @@ def render_resolved_slide(slide, plan, theme, colors, page, total):
         tf.word_wrap = True
         p = tf.paragraphs[0]
         p.text = block['text']
-        p.font.name, p.font.size = font, Pt(block['size'])
+        display_font = theme.get('font_pptx_display') if block.get('role') == 'header_text' else None
+        p.font.name, p.font.size = display_font or block.get('font') or font, Pt(block['size'])
         p.font.bold = block['bold']
         p.font.color.rgb = hex_to_rgb(theme[block['role']])
         p.space_before = p.space_after = Pt(0)
@@ -97,4 +132,3 @@ def render_resolved_slide(slide, plan, theme, colors, page, total):
     )
     if sum(s.has_table for s in slide.shapes) != expected_tables or sum(s.has_chart for s in slide.shapes) != expected_excel_charts:
         raise ValueError('Export is missing a required chart or table.')
-

@@ -1,3 +1,4 @@
+import { getSlideTheme } from "../../theme/slideTokens.js";
 import { useState, useEffect, useRef, useCallback } from "react";
 import {
   getPresentationThemes,
@@ -61,7 +62,7 @@ export function usePresentationWorkflow({
   const [motionPreference, setMotionPreference] = useState("none");
   const [targetLength, setTargetLength] = useState(null);
   const [deckStyle, setDeckStyle] = useState("standard");
-  const [selectedThemeId, setSelectedThemeId] = useState("executive_dark");
+  const [selectedThemeId, setSelectedThemeId] = useState("amber_brush");
   const [selectedSheetId, setSelectedSheetId] = useState("");
   const [instructions, setInstructions] = useState("");
   const [autoDownload, setAutoDownload] = useState(false);
@@ -671,7 +672,11 @@ export function usePresentationWorkflow({
   const handleExportHtml = useCallback(async () => {
     const latest = deckRef.current;
     if (latest) {
-      exportStandaloneHtmlPresentation(latest, selectedThemeId);
+      try {
+        await exportStandaloneHtmlPresentation(latest, selectedThemeId);
+      } catch (err) {
+        setJobError(`HTML export failed: ${err.message}`);
+      }
       return;
     }
     if (currentJobId) {
@@ -681,7 +686,7 @@ export function usePresentationWorkflow({
         if (did) {
           const res = await getPresentationDeck(did);
           const d = res.deck || res;
-          if (d) exportStandaloneHtmlPresentation(d, selectedThemeId);
+          if (d) await exportStandaloneHtmlPresentation(d, selectedThemeId);
         }
       } catch (err) {
         setJobError(`HTML export failed: ${err.message}`);
@@ -689,15 +694,7 @@ export function usePresentationWorkflow({
     }
   }, [selectedThemeId, currentJobId]);
 
-  const currentTheme = deckSpec?.theme || themes.find(t => t.id === selectedThemeId) || {
-    bg_color: "#171412",
-    card_bg: "#201b18",
-    card_border: "#3d362f",
-    primary_text: "#fff9f2",
-    secondary_text: "#beb2a6",
-    brand_color: "#ff8a62",
-    accent_color: "#7ee7d9"
-  };
+  const currentTheme = getSlideTheme(deckSpec?.theme || deckSpec?.metadata?.theme_id || selectedThemeId);
 
   return {
     configSession,

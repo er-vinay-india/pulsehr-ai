@@ -37,13 +37,16 @@ def lines(text, width, size):
     return count
 
 
-def resolve_slide(slide):
+def resolve_slide(slide, theme=None):
+    from .visual.design_tokens import slide_theme_preset
+    palette = slide_theme_preset(theme)
+    brush = bool(palette.get('checklist'))
     layout = slide.get('layout') or ('chart_narrative' if slide.get('chart') or slide.get('chart_data') else 'table_detail' if slide.get('table') or slide.get('table_data') else 'comparison_split')
     if layout not in GEOMETRY['supported_layouts'] or slide.get('image_url') or slide.get('talent_9box_data') or slide.get('burnout_strain_data'):
         return None
     c, t, spacing = GEOMETRY['canvas'], GEOMETRY['type'], GEOMETRY['spacing']
     x, width, bottom = c['margin'], c['width']-2*c['margin'], c['body_bottom']
-    blocks, notes, continuation_tables = [], [], []
+    blocks, notes, continuation_tables, continuation_checklists = [], [], [], []
 
     def text(value, xx, yy, ww, size, role='primary_text', bold=False, field=None):
         if value in (None, ''):
@@ -54,9 +57,20 @@ def resolve_slide(slide):
                            size=size, role=role, bold=bold, field=field))
         return yy + height
 
-    text(slide.get('category', ''), x, 20, width, t['source'], 'brand_color', True)
-    y = text(slide.get('title', ''), x, 42, width, t['cover'] if layout == 'title_cover' else t['title'], bold=True, field='title') + spacing['section']
-    if y > 155:
+    if brush:
+        if slide.get('category'):
+            notes.append(plain(slide['category']))
+        y = text(slide.get('title', ''), x, 24, width, 34 if layout == 'title_cover' else 30,
+                 'header_text', False, 'title')
+        if y > 112:
+            raise SlideLayoutError('The brush theme needs a heading of at most two lines. Shorten the slide title.')
+        if blocks and blocks[-1].get('field') == 'title':
+            blocks[-1]['font'] = palette['font_display'].split(',')[0].strip(" '\"")
+        y = palette['body_start']
+    else:
+        text(slide.get('category', ''), x, 20, width, t['source'], 'brand_color', True)
+        y = text(slide.get('title', ''), x, 42, width, t['cover'] if layout == 'title_cover' else t['title'], bold=True, field='title') + spacing['section']
+    if not brush and y > 155:
         raise SlideLayoutError('The slide title needs a shorter heading or a separate cover.')
     subtitle, narrative = slide.get('subtitle') or '', slide.get('narrative') or ''
     bullets = [plain(b.get('text', '') if isinstance(b, dict) else b) for b in (slide.get('bullets') or [])]
@@ -74,6 +88,37 @@ def resolve_slide(slide):
             notes.append(plain(subtitle))
         notes.extend(bullets)
         notes.extend(f"{m.get('label', '')}: {m.get('value', '')} {m.get('unit') or ''}. {m.get('subtext') or ''}".strip() for m in metrics)
+
+    def checklist(items, start):
+        # Pagination preserves every item without shrinking text to fit the grid.
+        cols = 4 if len(items) >= 4 else max(1, len(items))
+        gap, icon, size, title_size = 20, 30, 14, 15
+        cw = (width-gap*(cols-1))/cols
+        text_width = cw-icon-10
+        yy, page, pages = start, [], []
+        for offset in range(0, len(items), cols):
+            row, height = [], 0
+            for column, item in enumerate(items[offset:offset+cols]):
+                title, detail = plain(item.get('title')), plain(item.get('text'))
+                title_height = math.ceil(lines(title, text_width, title_size)*title_size*t['line_height'])+2 if title else 0
+                body_height = math.ceil(lines(detail, text_width, size)*size*t['line_height'])+2 if detail else 0
+                hh = max(icon, title_height+(8 if title and detail else 0)+body_height)
+                if hh > bottom-start:
+                    raise SlideLayoutError('A checklist item is too long. Shorten the item or use a table layout.')
+                row.append(dict(kind='checklist', title=title, text=detail, x=x+column*(cw+gap), y=yy,
+                                width=cw, height=hh, size=size, title_size=title_size, icon_size=icon, title_height=title_height))
+                height = max(height, hh)
+            if yy+height > bottom and page:
+                pages.append(page)
+                page, yy = [], start
+                for item in row:
+                    item['y'] = yy
+            page.extend(row)
+            yy += height+28
+        pages.append(page)
+        blocks.extend(pages[0])
+        continuation_checklists.extend(pages[1:])
+        return yy
 
     def render_table(data, start):
         headers, rows = data.get('headers') or [], data.get('rows') or []
@@ -112,7 +157,11 @@ def resolve_slide(slide):
     if charts:
         if len(charts) > 2:
             raise SlideLayoutError('Use at most two charts per slide.')
-        y = text(narrative or subtitle, x, y, width, t['body'], field='narrative' if narrative else 'subtitle') + spacing['paragraph']
+        introduction = narrative or subtitle
+        if brush and lines(introduction, width, t['body'])*t['body']*t['line_height']+spacing['paragraph']+2 > bottom-y-230:
+            notes.append(plain(introduction))
+        else:
+            y = text(introduction, x, y, width, t['body'], field='narrative' if narrative else 'subtitle') + spacing['paragraph']
         if bottom-y < 230:
             raise SlideLayoutError('Shorten the chart introduction to leave room for readable labels.')
         cw = (width-spacing['section']*(len(charts)-1))/len(charts)
@@ -140,8 +189,14 @@ def resolve_slide(slide):
         rows = [[a.get('title') or a.get('proposed_response') or a.get('response') or '',
                  '\n'.join(action_text(v) for v in [a.get('owner') or a.get('owner_role') or 'Owner to confirm', a.get('status'), a.get('due_date') or a.get('timeline')] if v),
                  '\n'.join(action_text(v) for v in [a.get('metric') or a.get('success_metric'), a.get('dependency') or a.get('dependencies')] if v) or 'To confirm'] for a in actions]
-        render_table({'headers': ['Action', 'Owner / status', 'Success measure / dependency'], 'rows': rows,
-                      'column_weights': [.38, .24, .38]}, y)
+        if brush:
+            checklist([{'title': row[0], 'text': '\n'.join(v for v in [
+                plain(a.get('finding') or a.get('motivating_finding') or ''),
+                'Owner / status: '+row[1], 'Success measure / dependency: '+row[2]] if v)}
+                for a, row in zip(actions, rows)], y)
+        else:
+            render_table({'headers': ['Action', 'Owner / status', 'Success measure / dependency'], 'rows': rows,
+                          'column_weights': [.38, .24, .38]}, y)
         notes.extend(plain(a.get('finding') or a.get('motivating_finding') or '') for a in actions)
         notes.extend(f"Priority: {a['priority']}" for a in actions if a.get('priority'))
         visible_keys = {'title', 'proposed_response', 'response', 'owner', 'owner_role', 'status', 'due_date', 'timeline', 'metric', 'success_metric', 'dependency', 'dependencies', 'finding', 'motivating_finding', 'priority'}
@@ -166,8 +221,18 @@ def resolve_slide(slide):
                     my = text(m.get('subtext') or m.get('unit'), xx, my+4, cw, t['caption'], 'secondary_text')
                     end = max(end, my)
                 y = end+spacing['section']
-        for bullet in bullets:
-            y = text('• '+bullet, x, y, width, t['body']) + spacing['paragraph']
+        if brush and bullets:
+            items = []
+            for bullet in bullets:
+                heading, separator, detail = bullet.partition(':')
+                if separator and len(heading) <= 64:
+                    items.append({'title': heading, 'text': detail.strip()})
+                else:
+                    items.append({'title': bullet if len(bullet) <= 64 else '', 'text': bullet if len(bullet) > 64 else ''})
+            checklist(items, y)
+        else:
+            for bullet in bullets:
+                y = text('• '+bullet, x, y, width, t['body']) + spacing['paragraph']
         if y-spacing['paragraph'] > bottom:
             raise SlideLayoutError('Text exceeds the readable slide area. Split the content over more slides.')
     notes = list(dict.fromkeys(plain(n) for n in notes if n))
@@ -177,6 +242,7 @@ def resolve_slide(slide):
     if text(source, x, c['footer_y'], width-170, t['source'], 'secondary_text') > c['height']:
         raise SlideLayoutError('The source note is too long. Use a short source label and keep full details in notes.')
     pages = [blocks] + [[table if b['kind'] == 'table' else b for b in blocks] for table in continuation_tables]
+    pages.extend([[b for b in blocks if b['kind'] != 'checklist']+items for items in continuation_checklists])
     return dict(version=GEOMETRY['version'], width=c['width'], height=c['height'], blocks=blocks, pages=pages, supporting_notes=notes)
 
 

@@ -19,10 +19,18 @@ def export_resolved_pdf(deck, output, *, canvas=None, page_offset=0, total=None)
     owns_canvas = canvas is None
     canvas = canvas or Canvas(str(output), pagesize=(960, 540))
     canvas.setTitle(deck.get('metadata', {}).get('title') or 'HighView presentation')
+    title_font = None
+    if theme.get('font_asset'):
+        from reportlab.pdfbase import pdfmetrics
+        from reportlab.pdfbase.ttfonts import TTFont
+        from .theme_background import theme_font_path
+        title_font = 'AmberBrushTitle'
+        if title_font not in pdfmetrics.getRegisteredFontNames():
+            pdfmetrics.registerFont(TTFont(title_font, str(theme_font_path(theme))))
 
     def paragraph(value, width, size, color='primary_text', bold=False):
         text = escape(str(value or '')).replace('\n', '<br/>')
-        return Paragraph(text, ParagraphStyle('slide', fontName='Helvetica-Bold' if bold else 'Helvetica',
+        return Paragraph(text, ParagraphStyle('slide', fontName=title_font if color == 'header_text' and title_font else 'Helvetica-Bold' if bold else 'Helvetica',
                          fontSize=size, leading=size*GEOMETRY['type']['line_height'], textColor=HexColor(theme[color])))
 
     def label(value, x, y, size=14, align='left', color='primary_text'):
@@ -127,14 +135,37 @@ def export_resolved_pdf(deck, output, *, canvas=None, page_offset=0, total=None)
 
     slides = deck.get('slides') or []
     for index, slide in enumerate(slides, 1):
-        plan = resolve_slide(slide)
+        plan = resolve_slide(slide, theme)
         if plan is None:
             raise ValueError(f"PDF layout '{slide.get('layout')}' needs a supported readable layout.")
         for part, blocks in enumerate(plan['pages'], 1):
             canvas.setFillColor(HexColor(theme['bg_color']))
             canvas.rect(0, 0, 960, 540, fill=1, stroke=0)
+            from .theme_background import theme_background_path
+            background = theme_background_path(theme)
+            if background:
+                canvas.drawImage(str(background), 0, 0, width=960, height=540)
             for block in blocks:
-                if block['kind'] == 'chart':
+                if block['kind'] == 'checklist':
+                    size = block['icon_size']
+                    xx, yy = block['x'], 540-block['y']-2
+                    canvas.setStrokeColor(HexColor(theme['primary_text']))
+                    canvas.setLineWidth(2)
+                    canvas.circle(xx+size/2, yy-size/2, size/2, fill=0, stroke=1)
+                    canvas.line(xx+size*.24, yy-size*.52, xx+size*.43, yy-size*.7)
+                    canvas.line(xx+size*.43, yy-size*.7, xx+size*.78, yy-size*.3)
+                    text_width = block['width']-size-10
+                    top = 540-block['y']
+                    for value, bold in [(block['title'], True), (block['text'], False)]:
+                        if not value:
+                            continue
+                        p = paragraph(value, text_width, block['title_size'] if bold else block['size'], bold=bold)
+                        _, height = p.wrap(text_width, block['height'])
+                        if height > block['height']+1:
+                            raise ValueError('Checklist text exceeds its readable region.')
+                        p.drawOn(canvas, xx+size+10, top-height)
+                        top -= height+8
+                elif block['kind'] == 'chart':
                     chart(block)
                 elif block['kind'] == 'text':
                     p = paragraph(block['text'], block['width'], block['size'], block['role'], block['bold'])

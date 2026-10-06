@@ -264,6 +264,7 @@ def test_export_theme_contrast_invariants(theme_id, tmp_path, monkeypatch):
                 if color is None:
                     continue
                 foreground = '#' + color.attrib['val']
-                for bg in (theme['bg_color'], theme['card_bg']):
+                surfaces = [theme['header_bg']] if foreground.upper() == theme.get('header_text') else [theme['bg_color'], theme['card_bg']]
+                for bg in surfaces:
                     ratio = _contrast(foreground, bg)
                     assert ratio >= 7.0, f"Contrast {ratio:.2f}:1 failed for {foreground} on {bg} in {theme_id}"

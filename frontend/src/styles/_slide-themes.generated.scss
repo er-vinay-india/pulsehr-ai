@@ -232,3 +232,26 @@
   --font-mono: 'Space Mono', monospace;
   --accent-gradient: linear-gradient(135deg, #53CDA5, #6EE7B7);
 }
+
+.theme-amber_brush,
+[data-slide-theme="amber_brush"] {
+  --stage-bg: #292C31;
+  --slide-bg: #F5A900;
+  --card-bg: #F5A900;
+  --card-bg-alt: #F5A900;
+  --card-border: #59400E;
+  --grid-border: #59400E;
+  --text-primary: #202328;
+  --text-secondary: #25282D;
+  --text-muted: #25282D;
+  --brand-color: #28251D;
+  --accent-color: #2A2416;
+  --success-color: #102C1A;
+  --danger-color: #411820;
+  --warning-color: #2A2416;
+  --chart-primary: #28251D;
+  --font-display: 'Kalam', 'Comic Sans MS', cursive;
+  --font-body: Arial, Helvetica, sans-serif;
+  --font-mono: 'Space Mono', monospace;
+  --accent-gradient: linear-gradient(135deg, #28251D, #2A2416);
+}

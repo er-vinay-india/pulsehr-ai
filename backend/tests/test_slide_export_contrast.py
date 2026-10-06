@@ -35,7 +35,8 @@ def test_native_export_contrast(theme_id, tmp_path, monkeypatch):
                 color=properties.find('a:solidFill/a:srgbClr',NS)
                 if color is None: continue
                 foreground='#'+color.attrib['val'];text_count+=1
-                for bg in (theme['bg_color'],theme['card_bg']): assert _contrast(foreground,bg)>=7,(theme_id,name,foreground,bg)
+                surfaces = [theme['header_bg']] if foreground.upper() == theme.get('header_text') else [theme['bg_color'], theme['card_bg']]
+                for bg in surfaces: assert _contrast(foreground,bg)>=7,(theme_id,name,foreground,bg)
             if name.startswith('ppt/charts/chart'):
                 fills=root.findall('c:spPr/a:solidFill/a:srgbClr',NS)+root.findall('c:chart/c:plotArea/c:spPr/a:solidFill/a:srgbClr',NS)
                 assert len(fills)==2

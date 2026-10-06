@@ -16,10 +16,11 @@ def export_pdf(deck, output: Path):
     canvas = Canvas(str(output), pagesize=(960, 540))
     canvas.setTitle(deck.get('metadata', {}).get('title') or 'HighView presentation')
     slides = deck.get('slides') or []
+    theme = slide_theme_preset(deck.get('theme') or deck.get('metadata', {}).get('theme_id'))
     for index, slide in enumerate(slides):
         # A specialized slide must not send every ordinary table/chart back
         # through the older geometry adapter.
-        adapter = export_resolved_pdf if resolve_slide(slide) else _export_legacy_pdf
+        adapter = export_resolved_pdf if resolve_slide(slide, theme) else _export_legacy_pdf
         adapter({**deck, 'slides': [slide]}, output, canvas=canvas, page_offset=index, total=len(slides))
     canvas.save()
     return output

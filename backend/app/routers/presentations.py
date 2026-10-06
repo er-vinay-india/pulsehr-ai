@@ -48,13 +48,35 @@ def _serialize_deck_write(function):
 
 
 @router.post("/layout-preview")
-def preview_slide_layout(slide: dict[str, Any]):
+def preview_slide_layout(slide: dict[str, Any], theme_id: str | None = None):
     """Resolve one slide locally using the same geometry as PPTX/PDF exports."""
     from ..services.presentation.slide_layout import resolve_slide, SlideLayoutError
     try:
-        return {"plan": resolve_slide(slide)}
+        return {"plan": resolve_slide(slide, theme_id)}
     except SlideLayoutError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.get("/theme-assets/{theme_id}/background")
+def presentation_theme_background(theme_id: str):
+    from ..services.presentation.theme_background import theme_background_path
+    if theme_id not in THEMES:
+        raise HTTPException(status_code=404, detail="Unknown presentation theme.")
+    path = theme_background_path(theme_id)
+    if not path or not path.is_file():
+        raise HTTPException(status_code=404, detail="This theme has no background artwork.")
+    return FileResponse(path, media_type="image/png")
+
+
+@router.get("/theme-assets/{theme_id}/font")
+def presentation_theme_font(theme_id: str):
+    from ..services.presentation.theme_background import theme_font_path
+    if theme_id not in THEMES:
+        raise HTTPException(status_code=404, detail="Unknown presentation theme.")
+    path = theme_font_path(theme_id)
+    if not path or not path.is_file():
+        raise HTTPException(status_code=404, detail="This theme has no bundled title font.")
+    return FileResponse(path, media_type="font/ttf")
 
 
 class GeneratePresentationRequest(BaseModel):

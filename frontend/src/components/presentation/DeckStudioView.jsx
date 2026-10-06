@@ -120,7 +120,15 @@ export default function DeckStudioView({
 
   const evidenceLocked = false; // Factual boundary: Editorial content freely editable; metrics tracked with USER_OVERRIDE
   const currentSlide = deckSpec.slides[activeSlideIndex] || deckSpec.slides[0];
-  const { plan: currentLayout } = useSlideLayout(currentSlide);
+  const { plan: currentLayout } = useSlideLayout(currentSlide, currentTheme);
+  const handleExportHtml = async () => {
+    setPdfError('');
+    try {
+      await exportStandaloneHtmlPresentation(deckSpec, selectedThemeId);
+    } catch (error) {
+      setPdfError(`HTML: ${error.message}`);
+    }
+  };
 
   // Handle Copilot Slide Curation & Deterministic Mutations
   const handleApplyCopilotCuration = async (promptText) => {
@@ -149,7 +157,7 @@ export default function DeckStudioView({
         mutationParams = { chart_type: "donut" };
       } else if (pLow.includes("theme")) {
         mutationAction = "change_theme";
-        mutationParams = { theme_id: pLow.includes("dark") ? "executive_dark" : "corporate_navy" };
+        mutationParams = { theme_id: /amber|brush/.test(pLow) ? "amber_brush" : pLow.includes("dark") ? "executive_dark" : "corporate_navy" };
       } else if (pLow.includes("group by") || pLow.includes("slice by") || pLow.includes("by location")) {
         mutationAction = "reslice_slide";
         const dimMatch = prompt.match(/(?:group\s+by|slice\s+by|by)\s+([A-Za-z0-9_\s]+?)(?:\s+instead|\s*$|\.)/i);
@@ -468,7 +476,7 @@ export default function DeckStudioView({
         </div>
       </fieldset>
 
-      {pdfError && <p role="alert" className="resolved-layout-message">PDF export failed: {pdfError}</p>}
+      {pdfError && <p role="alert" className="resolved-layout-message">Export failed: {pdfError}</p>}
 
       <fieldset className="studio-main-grid pres-editor-fieldset" disabled={isBusy}>
         {/* LEFT: SLIDE THUMBNAIL RAIL */}
@@ -583,7 +591,7 @@ export default function DeckStudioView({
             isEditable={!evidenceLocked}
             onUpdateSlide={onUpdateSlide}
             onViewEvidence={onOpenEvidence}
-            onExportHtml={() => exportStandaloneHtmlPresentation(deckSpec, selectedThemeId)}
+            onExportHtml={handleExportHtml}
           />}
 
           {/* HRIDAY CURATION PROMPT BAR (Below Active Slide) */}
@@ -734,7 +742,7 @@ export default function DeckStudioView({
               isEditable={false}
               onUpdateSlide={onUpdateSlide}
               onViewEvidence={onOpenEvidence}
-              onExportHtml={() => exportStandaloneHtmlPresentation(deckSpec, selectedThemeId)}
+              onExportHtml={handleExportHtml}
             />
             <AcousticOrbPresenter
               deckId={deckSpec.id}

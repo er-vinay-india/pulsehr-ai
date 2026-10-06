@@ -15,6 +15,7 @@ export function generateFullPresentationHtml(title, slidesHtml, totalSlides, cur
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Fraunces:ital,opsz,wght@0,9..144,400..900;1,9..144,400..900&family=Manrope:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&family=Syne:wght@600;700;800&display=swap" rel="stylesheet">
   <style>
+    ${currentTheme.font_data_uri ? `@font-face { font-family: 'Kalam'; src: url('${currentTheme.font_data_uri}') format('truetype'); font-weight: 400; font-style: normal; }` : ''}
     /* ===========================================
        FRONTEND SLIDES: FIXED 16:9 STAGE ARCHITECTURE
        Based on zarazhangrui/frontend-slides

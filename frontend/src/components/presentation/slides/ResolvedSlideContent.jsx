@@ -5,12 +5,13 @@ import SlideChart from './SlideChart.jsx';
 import '../../../styles/resolved-slides.scss';
 
 const requests = new Map();
-export function loadSlideLayout(slide) {
-  const key = JSON.stringify(slide);
+export function loadSlideLayout(slide, theme) {
+  const themeId = getSlideTheme(theme).id;
+  const key = JSON.stringify([themeId, slide]);
   if (!requests.has(key)) {
     if (requests.size >= 64) requests.delete(requests.keys().next().value);
-    const request = fetch('/api/presentations/layout-preview', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: key,
+    const request = fetch(`/api/presentations/layout-preview?theme_id=${encodeURIComponent(themeId)}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(slide),
     }).then(async response => {
       const body = await response.json();
       if (!response.ok) throw new Error(body.detail || 'Unable to lay out this slide.');
@@ -21,13 +22,13 @@ export function loadSlideLayout(slide) {
   return requests.get(key);
 }
 
-export function useSlideLayout(slide) {
-  const key = JSON.stringify(slide);
+export function useSlideLayout(slide, theme) {
+  const key = JSON.stringify([getSlideTheme(theme).id, slide]);
   const [state, setState] = useState({ key: null, plan: null, error: null });
   useEffect(() => {
     if (!slide) return;
     let current = true;
-    loadSlideLayout(slide).then(plan => {
+    loadSlideLayout(slide, theme).then(plan => {
       if (current) setState({ key, plan, error: null });
     }).catch(error => {
       if (current) setState({ key, plan: null, error: error.message });
@@ -49,10 +50,20 @@ export function ResolvedCanvas({ plan, theme, slideIndex, totalSlides, part = 0,
   const pages = plan.pages || [plan.blocks];
   const blocks = pages[part] || pages[0];
   const styles = { ...slideCssVariables(theme), ...slideBackground(slide || {}, theme), color: theme.primary_text };
-  return <div ref={host} className={`resolved-slide ${reflow ? 'resolved-slide-reflow' : ''}`} style={styles}>
+  if (reflow && theme.background_asset) {
+    styles.backgroundImage = 'none';
+  }
+  return <div ref={host} className={`resolved-slide ${reflow ? 'resolved-slide-reflow' : ''}`} data-slide-theme={theme.id} style={styles}>
     <div className="resolved-slide-canvas" style={reflow ? undefined : { width: plan.width, height: plan.height, transform: `scale(${scale})` }}>
       {blocks.map((block, index) => {
         const box = reflow ? {} : { position: 'absolute', left: block.x, top: block.y, width: block.width, height: block.height };
+        if (block.kind === 'checklist') return <div key={index} className="resolved-checklist" style={{ ...box, fontSize: block.size }}>
+          <span className="resolved-checklist-icon" aria-hidden="true" style={{ width: block.icon_size, height: block.icon_size }}>✓</span>
+          <div>
+            {block.title && <strong style={{ display: 'block', fontSize: block.title_size, marginBottom: block.text ? 8 : 0 }}>{block.title}</strong>}
+            {block.text && <p style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{block.text}</p>}
+          </div>
+        </div>;
         if (block.kind === 'chart') return <div key={index} className="resolved-chart" style={box}>
           <SlideChart chart={block.chart} theme={theme} />
           <table className="resolved-chart-data">
@@ -70,7 +81,7 @@ export function ResolvedCanvas({ plan, theme, slideIndex, totalSlides, part = 0,
             </tr>)}</tbody>
           </table>
         </div>;
-        const textStyle = { ...box, margin: 0, fontSize: block.size, lineHeight: 1.22, fontWeight: block.bold ? 700 : 400, color: theme[block.role], whiteSpace: 'pre-wrap' };
+        const textStyle = { ...box, margin: 0, fontSize: block.size, fontFamily: block.font || undefined, lineHeight: 1.22, fontWeight: block.bold ? 700 : 400, color: reflow && block.role === 'header_text' ? theme.primary_text : theme[block.role], whiteSpace: 'pre-wrap' };
         if (isEditable && block.field && onUpdate) return <textarea key={`${slide?.id}-${index}`} aria-label={`Edit slide ${block.field}`} className="resolved-text-editor"
           defaultValue={block.text} style={textStyle} onBlur={event => {
             if (event.target.value !== block.text) onUpdate({ ...slide, [block.field]: event.target.value });
@@ -85,7 +96,7 @@ export function ResolvedCanvas({ plan, theme, slideIndex, totalSlides, part = 0,
 }
 
 export default function ResolvedSlideContent(props) {
-  const { plan, error } = useSlideLayout(props.slide);
+  const { plan, error } = useSlideLayout(props.slide, props.theme);
   const [part, setPart] = useState(0);
   useEffect(() => { setPart(0); }, [props.slide.id, plan]);
   const theme = getSlideTheme(props.theme);

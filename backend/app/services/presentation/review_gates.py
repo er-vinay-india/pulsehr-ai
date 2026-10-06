@@ -253,7 +253,7 @@ def evaluate_automated_gates(
     layout_errors, unresolved = [], 0
     for index, slide in enumerate(slides, 1):
         try:
-            plan = resolve_slide(slide)
+            plan = resolve_slide(slide, deck_spec.get("theme") or (deck_spec.get("metadata") or {}).get("theme_id"))
             if plan is None:
                 unresolved += 1
             elif any(b['x'] < 0 or b['y'] < 0 or b['x'] + b['width'] > plan['width'] + .1 or

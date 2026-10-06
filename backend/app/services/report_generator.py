@@ -101,7 +101,7 @@ def export_spec_to_pptx(deck_spec: dict, *, diagnostic_layout_only: bool = False
     prepared = []
     for idx, slide_data in enumerate(slides):
         try:
-            resolved = resolve_slide(slide_data)
+            resolved = resolve_slide(slide_data, theme)
         except SlideLayoutError as exc:
             raise ChartExportError(f"Slide {idx + 1}: {exc}") from exc
         if resolved:
@@ -112,9 +112,13 @@ def export_spec_to_pptx(deck_spec: dict, *, diagnostic_layout_only: bool = False
     for idx, slide_data, plan in prepared:
         slide = prs.slides.add_slide(prs.slide_layouts[6])
         set_slide_background(slide, colors["bg"])
+        from .presentation.theme_background import add_theme_background
+        if plan:
+            add_theme_background(slide, theme, prs.slide_width, prs.slide_height)
         try:
             from .presentation.photo_background import add_photo_background
-            add_photo_background(slide, slide_data, prs.slide_width, prs.slide_height, theme)
+            if not theme.get('background_asset'):
+                add_photo_background(slide, slide_data, prs.slide_width, prs.slide_height, theme)
         except Exception as photo_err:
             logger.warning(f"Could not apply slide photo background: {photo_err}")
         if plan:

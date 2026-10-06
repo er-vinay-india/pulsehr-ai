@@ -17,7 +17,7 @@ from app.services.report_generator import export_spec_to_pdf, export_spec_to_ppt
 from test_presentation_hr_report import fixture_context
 
 
-@pytest.mark.parametrize('theme', ['clean_light', 'executive_dark'])
+@pytest.mark.parametrize('theme', ['clean_light', 'executive_dark', 'amber_brush'])
 def test_business_exports_keep_native_values_tables_notes_and_theme(theme):
     deck = build_hr_report({'theme_id': theme}, fixture_context())
     pptx = export_spec_to_pptx(deck)
@@ -55,13 +55,14 @@ def test_export_rechecks_changed_notes_and_values(exporter):
         exporter(deck)
 
 
-def test_actual_attendance_job_reaches_ready_and_persists_report(monkeypatch):
+@pytest.mark.parametrize('theme', ['clean_light', 'amber_brush'])
+def test_actual_attendance_job_reaches_ready_and_persists_report(monkeypatch, theme):
     client = TestClient(app)
     csv = 'Emp ID,Department,1st to 5th July 2026,6th to 12th July 2026,Total Attendance,Approved Leaves,Final Attendance\nLB001,Design,0,3,3,2,1\nLB002,Operations,2,4,6,1,5\n'
     response = client.post('/api/upload/file', files={'file': ('wfo.csv', csv.encode(), 'text/csv')})
     assert response.status_code == 200
     sid = client.get('/api/sheets').json()['sheets'][0]['id']
-    scope = {'scope_type': 'single_sheet', 'sheet_id': sid, 'theme_id': 'clean_light', 'deliverable': 'both',
+    scope = {'scope_type': 'single_sheet', 'sheet_id': sid, 'theme_id': theme, 'deliverable': 'both',
              'objective': 'Attendance review', 'audience': 'HR managers'}
     manager = PresentationJobManager()
     jid = manager.create_job(scope)
