@@ -18,6 +18,7 @@ from __future__ import annotations
 import collections
 import json
 import logging
+import re
 import sqlite3
 from abc import ABC, abstractmethod
 from typing import Any

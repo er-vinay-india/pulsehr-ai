@@ -114,6 +114,13 @@ class VisualQuestionBuilder:
         "headcount": ("employee", "employees", "COUNT_DISTINCT"),
         "hours": ("work_hour", "hrs", "SUM"),
         "days": ("calendar_day", "days", "SUM"),
+        "units": ("unit_record", "units", "SUM"),
+        "unit": ("unit_record", "units", "SUM"),
+        "score": ("student_record", "pts", "MEAN"),
+        "points": ("score_record", "pts", "MEAN"),
+        "µg/m³": ("air_sample", "µg/m³", "MEAN"),
+        "ug/m3": ("air_sample", "µg/m³", "MEAN"),
+        "ppm": ("air_sample", "ppm", "MEAN"),
     }
 
     @classmethod
@@ -190,14 +197,15 @@ class VisualQuestionBuilder:
                 is_resolved=True,
             )
 
-        if provided_unit and provided_grain:
+        if provided_unit and (provided_grain or provided_unit not in ("unresolved", "unknown", "")):
+            resolved_grain = provided_grain or f"{provided_unit}_record"
             return MetricSemantics(
                 metric_name=metric_name,
                 semantic_role="MEASURE",
                 unit=provided_unit,
                 display_unit=provided_unit,
                 aggregation="SUM",
-                grain=provided_grain,
+                grain=resolved_grain,
                 is_resolved=True,
             )
 
