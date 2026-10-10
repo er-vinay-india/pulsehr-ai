@@ -27,14 +27,20 @@ export const RepairAction = {
  * @returns {{ repairedOption: object, repairsApplied: Array<{ action: string, reason: string }> }}
  */
 export function repairChartLayout(option, qaIssues = {}) {
-  if (!option || typeof option !== 'object') {
-    return { repairedOption: option, repairsApplied: [] };
-  }
-
-  const repaired = JSON.parse(JSON.stringify(option));
+  // Clone option while preserving function references
+  const repaired = {
+    ...option,
+    grid: option.grid ? { ...option.grid } : { top: 36, right: 24, bottom: 40, left: 48 },
+    xAxis: Array.isArray(option.xAxis)
+      ? option.xAxis.map(ax => ({ ...ax, axisLabel: ax?.axisLabel ? { ...ax.axisLabel } : {} }))
+      : option.xAxis ? { ...option.xAxis, axisLabel: option.xAxis?.axisLabel ? { ...option.xAxis.axisLabel } : {} } : undefined,
+    yAxis: Array.isArray(option.yAxis)
+      ? option.yAxis.map(ax => ({ ...ax, axisLabel: ax?.axisLabel ? { ...ax.axisLabel } : {} }))
+      : option.yAxis ? { ...option.yAxis, axisLabel: option.yAxis?.axisLabel ? { ...option.yAxis.axisLabel } : {} } : undefined,
+  };
   const repairsApplied = [];
 
-  const grid = repaired.grid || { top: 36, right: 24, bottom: 40, left: 48 };
+  const grid = repaired.grid;
 
   // 1. Repair Y-Axis Clipping
   if (qaIssues.yAxisClipped || (qaIssues.hasHorizontalOverflow && grid.left < 70)) {

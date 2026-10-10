@@ -260,6 +260,14 @@ def profile_source(
                 entity_col = col
                 entity_type = "ticket"
                 break
+            elif any(k in col_clean for k in ("city", "town", "municipality")):
+                entity_col = col
+                entity_type = "city"
+                break
+            elif any(k in col_clean for k in ("state", "province", "region", "territory")):
+                entity_col = col
+                entity_type = "state"
+                break
             elif any(k in col_clean for k in ("store", "storeid", "branch", "branchid", "location", "shop", "site")):
                 entity_col = col
                 entity_type = "store"
@@ -286,7 +294,11 @@ def profile_source(
         measure_unit = "units"
         for col in columns:
             col_clean = str(col).lower().replace("_", "").replace(" ", "")
-            if any(k in col_clean for k in ("weeklysales", "sales", "revenue", "amount", "profit", "turnover", "payroll", "salary", "spend", "cost")):
+            if any(k in col_clean for k in ("pm10", "pm25", "pm2.5", "so2", "no2", "aqi", "emission", "pollutant")):
+                primary_measure_col = col
+                measure_unit = "µg/m³"
+                break
+            elif any(k in col_clean for k in ("weeklysales", "sales", "revenue", "amount", "profit", "turnover", "payroll", "salary", "spend", "cost")):
                 primary_measure_col = col
                 measure_unit = "$"
                 break
@@ -307,6 +319,12 @@ def profile_source(
         if not primary_measure_col:
             for col in columns:
                 if col == entity_col or col == date_col:
+                    continue
+                col_clean = str(col).lower().replace("_", "").replace(" ", "")
+                is_ord = bool(re.match(r'^(sr|sl|s)\.?\s*no\.?$', str(col).strip(), re.I)) or str(col).strip().lower() in (
+                    'sr_no', 's_no', 'srno', 'sno', 'slno', 'serial_no', 'row_num', 'rownum', 'row_number'
+                )
+                if is_ord or col_clean in ('srno', 'sno', 'slno', 'serialno', 'rownum') or col_clean.endswith("id"):
                     continue
                 num_hits = 0
                 sample = rows[:30]
@@ -542,6 +560,18 @@ def evaluate_and_select_primary_metric(
 
         clean_measure_name = format_display_label(primary_measure_col)
         is_education = contract.entity_type == "student" or contract.domain in ("education", "education_academic")
+        non_additive_terms = (
+            "average", "avg", "rate", "ratio", "mean", "pct", "percent", "%",
+            "so2", "no2", "pm10", "pm2.5", "pm 2.5", "aqi", "concentration",
+            "index", "score", "temperature", "humidity", "ph"
+        )
+        is_environmental = contract.domain == "environmental" or any(p in primary_measure_col.lower() for p in ("so2", "no2", "pm10", "pm2.5", "aqi"))
+        is_non_additive = (
+            is_education
+            or is_environmental
+            or contract.domain in ("environmental", "healthcare", "education", "education_academic")
+            or any(term in primary_measure_col.lower() for term in non_additive_terms)
+        )
 
         if is_education:
             label = f"Average {clean_measure_name.lower()}"
@@ -563,6 +593,27 @@ def evaluate_and_select_primary_metric(
             cov_label = "Cohort Enrollment"
             cov_val = f"{entity_count} students"
             sel_reason = "Core academic benchmark indicator representing aggregate cohort achievement across the assessed subject."
+        elif is_non_additive:
+            metric_unit = "µg/m³" if is_environmental else (unit if unit != "$" else "")
+            label = f"Average {clean_measure_name.lower()}"
+            business_concept = f"{contract.domain or 'metric'}.average_{primary_measure_col.lower()}"
+            metric_val = round(avg_val, 1)
+            formatted_val = f"{metric_val:.1f} {metric_unit}".strip()
+            context_qualifier = f"Across {entity_count} {entity_name}s · {period_years}" if period_years else f"Across {entity_count} {entity_name}s"
+            evidence_agg = "average"
+            evidence_val = metric_val
+            evidence_denom = valid_count
+            evidence_calc_method = f"Deterministic mean average of '{primary_measure_col}' across all valid rows."
+            evidence_limitations = [
+                f"Represents recorded average {clean_measure_name.lower()} across {entity_count} reporting {entity_name}s.",
+                "Non-additive metric: arithmetic mean computed instead of cumulative sum.",
+            ]
+            short_def = f"Mean {clean_measure_name.lower()} recorded across all {entity_count} {entity_name}s in the observation set."
+            exact_val_text = f"Observation average: {metric_val:.1f} {metric_unit} across {valid_count:,} valid observations."
+            what_counts = f"Arithmetic mean of '{primary_measure_col}' across {valid_count:,} recorded observations."
+            cov_label = f"{entity_name.capitalize()} Coverage"
+            cov_val = f"{entity_count} {entity_name}s represented in the reporting network."
+            sel_reason = f"Authoritative average benchmark. Represents mean {clean_measure_name.lower()} across reporting entities."
         else:
             if "sales" in primary_measure_col.lower():
                 label = "Total sales"
@@ -595,10 +646,10 @@ def evaluate_and_select_primary_metric(
         evidence = EvidenceResult(
             calculation_id=f"CALC-{calc_id}",
             snapshot=snapshot,
-            definition_id=f"DEF-{primary_measure_col.upper()}-AVG" if is_education else f"DEF-{primary_measure_col.upper()}-SUM",
+            definition_id=f"DEF-{primary_measure_col.upper()}-AVG" if is_non_additive else f"DEF-{primary_measure_col.upper()}-SUM",
             status="available",
             value=evidence_val,
-            unit=unit if not is_education else "points",
+            unit="points" if is_education else ("µg/m³" if is_environmental else unit),
             aggregation=evidence_agg,
             numerator=round(total_sum, 2),
             denominator=evidence_denom,
@@ -614,8 +665,8 @@ def evaluate_and_select_primary_metric(
 
         request = MetricRequest(
             recipe_id=business_concept,
-            target_construct=f"{'Average' if is_education else 'Total'} {clean_measure_name.lower()} representation",
-            operation="mean_measure" if is_education else "sum_measure",
+            target_construct=f"{'Average' if is_non_additive else 'Total'} {clean_measure_name.lower()} representation",
+            operation="mean_measure" if is_non_additive else "sum_measure",
             target_role=entity_name,
             grain=contract.grain_description,
             rationale=f"Primary benchmark measure. Verifiably grounded by '{primary_measure_col}' observations.",
@@ -625,8 +676,8 @@ def evaluate_and_select_primary_metric(
             label=label,
             value=metric_val,
             formatted_value=formatted_val,
-            unit=unit if not is_education else "points",
-            unit_display="currency_prefix" if unit == "$" else "explicit_suffix",
+            unit="points" if is_education else ("µg/m³" if is_environmental else unit),
+            unit_display="currency_prefix" if unit == "$" and not is_non_additive else "explicit_suffix",
             context_qualifier=context_qualifier,
             has_info_control=True,
         )
@@ -4999,6 +5050,14 @@ def run_adaptive_dashboard(
                 resp.relationship_count = ds_intel.relationship_count
                 resp.coverage_warnings = ds_intel.coverage_warnings
                 resp.relationship_graph = ds_intel.relationship_graph.model_dump() if hasattr(ds_intel.relationship_graph, "model_dump") else ds_intel.relationship_graph
+                source_sids = sorted(list(set([sid for c in resp.selected_dashboard_insights for sid in c.get("source_sheet_ids", [])])))
+                resp.source_sheet_ids = source_sids if source_sids else ([sheet_id] if sheet_id else [])
+                resp.source_sheet_count = ds_intel.sheet_count
+                resp.candidate_count = ds_intel.total_evidence_count
+                resp.selected_insight_count = len(resp.selected_dashboard_insights)
+                resp.executive_topics = [t if isinstance(t, dict) else t.model_dump() for t in getattr(ds_intel, "executive_topics", [])]
+                resp.executive_kpis = [k if isinstance(k, dict) else k.model_dump() for k in getattr(ds_intel, "executive_kpis", [])]
+                resp.domain_profile = getattr(ds_intel, "domain_profile", {})
 
                 # Upgrade story plan and evidence graph to dataset-wide context
                 if ds_intel.story_plan:

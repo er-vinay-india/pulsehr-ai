@@ -1,0 +1,7 @@
+Corporate Treasury - Foreign Currency Forward Contracts
+Contract Ref,Counterparty,Currency Pair,Notional Amount,Settlement Rate
+FX-881,JPMorgan Chase,USD/EUR,25000000,1.0850
+FX-882,Barclays Capital,USD/GBP,18000000,1.2720
+FX-883,BNP Paribas,USD/JPY,40000000,TBD
+FX-884,Deutsche Bank,USD/CHF,12000000,0.8910
+Note: 'TBD' : Settlement rate not available pending Asian fix

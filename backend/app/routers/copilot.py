@@ -21,6 +21,7 @@ from ..services.copilot.sheet_quality import is_missing_values_query, answer_mis
 from ..services.copilot.union_war_room import UnionWarRoomEngine, COUNCIL_DELEGATES
 from ..services.copilot.coordinator_models import RoutingAssignment, WorkerTarget, CoordinatorDecision
 from ..services.copilot.council_coordinator import CouncilCoordinator
+from ..services.copilot.control_plane import HighviewAI, HighviewAIRequest
 from ..services.data_engine.analysis_context import AnalysisContext
 from ..services.presentation.slide_mutator import (
     SlideMutator,
@@ -829,7 +830,23 @@ def ask_copilot(req: CopilotQueryRequest):
     df, name, ctx, sid = _load_active_sheet_dataframe(req.sheet_id, req.dataset_id)
     target_sheet_id = req.sheet_id or sid
 
-    # 1. Authoritative Council Coordinator routing
+    # 1. Authoritative Highview AI Control Plane Routing (Phase 12 Mandatory Gateway)
+    control_response = HighviewAI.execute(
+        HighviewAIRequest(
+            query=req.query,
+            surface="hriday",
+            dataset_id=req.dataset_id,
+            sheet_id=target_sheet_id,
+            user_id="analyst",
+            user_role="analyst",
+            context=req.prior_context or {},
+            force_council=getattr(req, "force_council", False),
+        )
+    )
+    if control_response.is_blocked:
+        return {"answer": control_response.answer, "error": control_response.block_reason}
+
+    # 1a. Authoritative Council Coordinator routing
     decision = CouncilCoordinator.coordinate(
         query=req.query,
         prior_context=req.prior_context,
@@ -840,9 +857,9 @@ def ask_copilot(req: CopilotQueryRequest):
         engine=req.engine
     )
 
-    # 1a. Fast-path & Specialist dispatch via Coordinator (Binding)
+    # 1b. Fast-path & Specialist dispatch via Coordinator (Binding)
     if decision.worker_target != WorkerTarget.SLIDE_MUTATOR:
-        return CouncilCoordinator.execute_sync(
+        res = CouncilCoordinator.execute_sync(
             decision=decision,
             query=req.query,
             df=df,
@@ -853,6 +870,10 @@ def ask_copilot(req: CopilotQueryRequest):
             model=req.model,
             prior_context=decision.resolved_context
         )
+        if isinstance(res, dict):
+            res["control_plane_audit"] = control_response.audit_record.to_dict()
+            res["provenance"] = control_response.provenance.to_dict()
+        return res
 
     intent_type = classify_analytical_intent(
         req.query,
@@ -1040,7 +1061,21 @@ def ask_copilot_stream(req: CopilotQueryRequest):
     df, name, ctx, sid = _load_active_sheet_dataframe(req.sheet_id, req.dataset_id)
     target_sheet_id = req.sheet_id or sid
 
-    # 1. Authoritative Council Coordinator routing
+    # 1. Authoritative Highview AI Control Plane Routing (Phase 12 Mandatory Gateway)
+    control_response = HighviewAI.execute(
+        HighviewAIRequest(
+            query=req.query,
+            surface="hriday",
+            dataset_id=req.dataset_id,
+            sheet_id=target_sheet_id,
+            user_id="analyst",
+            user_role="analyst",
+            context=req.prior_context or {},
+            force_council=getattr(req, "force_council", False),
+        )
+    )
+
+    # 1a. Authoritative Council Coordinator routing
     decision = CouncilCoordinator.coordinate(
         query=req.query,
         prior_context=req.prior_context,
@@ -1376,7 +1411,25 @@ def get_council_delegates():
 def ask_union_war_room(req: CopilotQueryRequest):
     """Executes multi-model AI Union War Room deliberation synchronously."""
     df, name, ctx, sid = _load_active_sheet_dataframe(req.sheet_id, req.dataset_id)
-    return UnionWarRoomEngine.execute_deliberation(
+    target_sheet_id = req.sheet_id or sid
+
+    # Mandatory Phase 12 AI Control Plane Gateway
+    control_response = HighviewAI.execute(
+        HighviewAIRequest(
+            query=req.query,
+            surface="hriday",
+            dataset_id=req.dataset_id,
+            sheet_id=target_sheet_id,
+            user_id="analyst",
+            user_role="analyst",
+            context=req.prior_context or {},
+            force_council=True,
+        )
+    )
+    if control_response.is_blocked:
+        return {"answer": control_response.answer, "error": control_response.block_reason}
+
+    res = UnionWarRoomEngine.execute_deliberation(
         user_query=req.query,
         df=df,
         sheet_name=name,
@@ -1384,12 +1437,32 @@ def ask_union_war_room(req: CopilotQueryRequest):
         timeout_seconds=req.timeout_seconds or 60.0,
         prior_context=req.prior_context
     )
+    if isinstance(res, dict):
+        res["control_plane_audit"] = control_response.audit_record.to_dict()
+        res["provenance"] = control_response.provenance.to_dict()
+    return res
 
 
 @router.post("/war-room/stream")
 def stream_union_war_room(req: CopilotQueryRequest):
     """Streams live countdown timer, delegate perspectives, votes, and final consensus via SSE."""
     df, name, ctx, sid = _load_active_sheet_dataframe(req.sheet_id, req.dataset_id)
+    target_sheet_id = req.sheet_id or sid
+
+    # Mandatory Phase 12 AI Control Plane Gateway
+    HighviewAI.execute(
+        HighviewAIRequest(
+            query=req.query,
+            surface="hriday",
+            dataset_id=req.dataset_id,
+            sheet_id=target_sheet_id,
+            user_id="analyst",
+            user_role="analyst",
+            context=req.prior_context or {},
+            force_council=True,
+        )
+    )
+
     return StreamingResponse(
         UnionWarRoomEngine.stream_war_room_deliberation(
             user_query=req.query,

@@ -120,7 +120,15 @@ class GateAuditResult(BaseModel):
     """Result of an individual visual governance gate."""
     model_config = ConfigDict(extra="forbid")
 
-    gate_name: Literal["LayoutIntegrity", "AccessibilityIntegrity", "ThemeIntegrity"]
+    gate_name: Literal[
+        "LayoutIntegrity",
+        "AccessibilityIntegrity",
+        "ThemeIntegrity",
+        "FormatterIntegrity",
+        "RenderIntegrity",
+        "ReadabilityIntegrity",
+        "DataBindingIntegrity",
+    ]
     passed: bool
     details: str
     violations: list[str] = Field(default_factory=list)
@@ -154,13 +162,17 @@ class ThemeValidationReport(BaseModel):
 
 
 class VisualQAResult(BaseModel):
-    """Comprehensive evaluation of the Three Permanent Visual Gates."""
+    """Comprehensive evaluation of the Seven Permanent Visual Gates (Layout, Accessibility, Theme, Formatter, Render, Readability, DataBinding)."""
     model_config = ConfigDict(extra="forbid")
 
     passed: bool
     layout_integrity: GateAuditResult
     accessibility_integrity: GateAuditResult
     theme_integrity: GateAuditResult
+    formatter_integrity: GateAuditResult | None = None
+    render_integrity: GateAuditResult | None = None
+    readability_integrity: GateAuditResult | None = None
+    data_binding_integrity: GateAuditResult | None = None
     warnings: list[str] = Field(default_factory=list)
     remediations: list[str] = Field(default_factory=list)
 
@@ -299,14 +311,197 @@ class ThemeIntegrityValidator:
             violations=theme_violations,
         )
 
-        all_passed = gate_layout.passed and gate_access.passed and gate_theme.passed
-        warnings.extend(layout_violations + access_violations + theme_violations)
+        # 4. Gate 4: Formatter Integrity
+        from .formatter_validator import ChartFormatterValidator
+        fmt_report = ChartFormatterValidator.validate_option(option)
+        gate_formatter = GateAuditResult(
+            gate_name="FormatterIntegrity",
+            passed=fmt_report.passed,
+            details="Zero unresolved template tokens verified." if fmt_report.passed else "; ".join(fmt_report.violations),
+            violations=fmt_report.violations,
+        )
+        remediations.extend(fmt_report.remediations)
+
+        # 5. Gate 5: Render Integrity (Plot area ratio & containment safety)
+        render_violations: list[str] = []
+        grid_obj = option.get("grid", {})
+        if grid_obj:
+            # Check left margin vs category axis
+            y_axis = option.get("yAxis", {})
+            if isinstance(y_axis, dict) and y_axis.get("type") == "category":
+                cats = y_axis.get("data", [])
+                max_len = max([len(str(c)) for c in cats], default=0)
+                left_val = grid_obj.get("left")
+                if isinstance(left_val, (int, float)) and left_val < (max_len * 5 + 10):
+                    render_violations.append(f"Left margin {left_val}px insufficient for {max_len}-character Y-axis labels.")
+                    remediations.append("Expanded grid.left margin.")
+
+        gate_render = GateAuditResult(
+            gate_name="RenderIntegrity",
+            passed=len(render_violations) == 0,
+            details="Rendered geometry, margins, and plot containment safe." if not render_violations else "; ".join(render_violations),
+            violations=render_violations,
+        )
+
+        # 6. Gate 6: Readability Integrity (Tick spacing, label density, legend overhead)
+        readability_violations: list[str] = []
+        container_w = float(option.get("_container_width", 800.0))
+        container_h = float(option.get("_planned_height", option.get("_container_height", 320.0)))
+        x_axis = option.get("xAxis", {})
+        
+        # Check X-axis tick spacing vs estimated label width
+        if isinstance(x_axis, dict) and x_axis.get("type") == "category":
+            categories = x_axis.get("data", [])
+            cat_count = len(categories)
+            if cat_count > 0:
+                left_val = grid_obj.get("left", 50)
+                if isinstance(left_val, str) and "%" in left_val:
+                    left_px = float(left_val.replace("%", "")) * container_w / 100.0
+                elif isinstance(left_val, (int, float)):
+                    left_px = float(left_val)
+                else:
+                    left_px = 50.0
+
+                right_val = grid_obj.get("right", 30)
+                if isinstance(right_val, str) and "%" in right_val:
+                    right_px = float(right_val.replace("%", "")) * container_w / 100.0
+                elif isinstance(right_val, (int, float)):
+                    right_px = float(right_val)
+                else:
+                    right_px = 30.0
+
+                plot_w = max(100.0, container_w - left_px - right_px)
+                available_tick_spacing = plot_w / cat_count
+                max_chars = max([len(str(c)) for c in categories], default=0)
+                estimated_label_width = max_chars * 7.5
+                min_gap = 12.0
+                required_spacing = estimated_label_width + min_gap
+
+                # Verbose period strings like "1st–5th Jul" or "6th to 12th July" flag warning if spacing tight
+                has_verbose_dates = any(re.search(r"\b(1st|2nd|3rd|\d+th|July)\b", str(c)) for c in categories)
+                if has_verbose_dates:
+                    readability_violations.append(
+                        "Time axis contains verbose period labels risking crowding; require compact format (e.g. '1–5 Jul')."
+                    )
+                    remediations.append("Apply compact period labels (e.g. '1–5 Jul', '6–12 Jul').")
+
+                if available_tick_spacing < required_spacing:
+                    readability_violations.append(
+                        f"Tick spacing {available_tick_spacing:.1f}px < required clearance {required_spacing:.1f}px for {max_chars}-character labels."
+                    )
+                    remediations.append("Increase chart dimensions, shorten labels, or switch to line chart.")
+
+        # Check legend overhead on vertical plot area
+        legend_obj = option.get("legend", {})
+        if legend_obj and isinstance(legend_obj, dict):
+            series_list = option.get("series", [])
+            if len(series_list) >= 2 and legend_obj.get("bottom") == 0 and container_h <= 250:
+                readability_violations.append(
+                    "Bottom legend in shallow container (<=250px) compresses plot height and conflicts with X-axis."
+                )
+                remediations.append("Reposition legend above chart plot area (e.g. top: 4, right: 10).")
+
+        gate_readability = GateAuditResult(
+            gate_name="ReadabilityIntegrity",
+            passed=len(readability_violations) == 0,
+            details="Tick spacing, label density, and legend headroom optimal." if not readability_violations else "; ".join(readability_violations),
+            violations=readability_violations,
+        )
+
+        # 7. Gate 7: Data Binding Integrity (Traceable evidence, non-empty governed data, policy-bound benchmarks)
+        data_violations: list[str] = []
+        series_list = option.get("series", [])
+        if not series_list:
+            data_violations.append("Chart option missing series definition.")
+        else:
+            for s_idx, s in enumerate(series_list):
+                s_data = s.get("data", [])
+                if not s_data:
+                    data_violations.append(f"Series[{s_idx}] ('{s.get('name', 'unnamed')}') has empty data binding.")
+                # Verify reference lines (markLine) have explicit policy or evidence grounding
+                mark_line = s.get("markLine", {})
+                if mark_line:
+                    ml_data = mark_line.get("data", [])
+                    for ml_item in ml_data:
+                        ml_name = ml_item.get("name", "")
+                        if not ml_name or not any(kw in ml_name.lower() for kw in ("policy", "target", "benchmark", "baseline", "evid-")):
+                            data_violations.append(f"Reference line '{ml_name}' missing explicit policy or evidence contract.")
+
+        # If evidence binding metadata is attached, verify valid EVID- pattern
+        evidence_ids = option.get("_evidence_ids", [])
+        if evidence_ids:
+            for evid in evidence_ids:
+                if not str(evid).startswith("EVID-"):
+                    data_violations.append(f"Evidence identifier '{evid}' does not conform to EVID- standard.")
+
+        gate_data_binding = GateAuditResult(
+            gate_name="DataBindingIntegrity",
+            passed=len(data_violations) == 0,
+            details="Series values, policy reference lines, and evidence bindings verified." if not data_violations else "; ".join(data_violations),
+            violations=data_violations,
+        )
+
+        all_passed = (
+            gate_layout.passed
+            and gate_access.passed
+            and gate_theme.passed
+            and gate_formatter.passed
+            and gate_render.passed
+            and gate_readability.passed
+            and gate_data_binding.passed
+        )
+        warnings.extend(
+            layout_violations
+            + access_violations
+            + theme_violations
+            + fmt_report.violations
+            + render_violations
+            + readability_violations
+            + data_violations
+        )
 
         return VisualQAResult(
             passed=all_passed,
             layout_integrity=gate_layout,
             accessibility_integrity=gate_access,
             theme_integrity=gate_theme,
+            formatter_integrity=gate_formatter,
+            render_integrity=gate_render,
+            readability_integrity=gate_readability,
+            data_binding_integrity=gate_data_binding,
             warnings=warnings,
             remediations=remediations,
         )
+
+    @classmethod
+    def audit_data_binding_integrity(cls, source_code: str, file_name: str = "") -> list[str]:
+        """Scans frontend component source code to disallow hardcoded business metric data arrays."""
+        violations: list[str] = []
+
+        # Disallow hardcoded numeric arrays in series/data options: e.g. data: [128, 142, 136, 145, 138]
+        # or data: [21.2, 18.5, 16.4, 14.1, 8.2]
+        numeric_array_pattern = re.compile(r"""(?:data|values)\s*:\s*\[\s*(?:[0-9]+(?:\.[0-9]+)?\s*,\s*){2,}[0-9]+(?:\.[0-9]+)?\s*\]""")
+        for match in numeric_array_pattern.finditer(source_code):
+            violations.append(f"{file_name}: Hardcoded numeric business data literal: '{match.group(0)}'")
+
+        # Disallow hardcoded object literal data: e.g. [{ value: 8.2, itemStyle: ... }, { value: 14.1, ... }]
+        object_array_pattern = re.compile(r"""data\s*:\s*\[\s*\{\s*value\s*:\s*[0-9]+(?:\.[0-9]+)?""")
+        for match in object_array_pattern.finditer(source_code):
+            violations.append(f"{file_name}: Hardcoded object-array business data literal: '{match.group(0)}'")
+
+        return violations
+
+    @classmethod
+    def evaluate_seven_visual_gates(cls, option: dict[str, Any]) -> VisualQAResult:
+        """Evaluates all Seven Permanent Visual Gates (Theme, Access, Layout, Formatter, Render, Readability, DataBinding)."""
+        return cls.evaluate_three_visual_gates(option)
+
+    @classmethod
+    def evaluate_six_visual_gates(cls, option: dict[str, Any]) -> VisualQAResult:
+        """Alias supporting callers of the six visual gates."""
+        return cls.evaluate_three_visual_gates(option)
+
+    @classmethod
+    def evaluate_five_visual_gates(cls, option: dict[str, Any]) -> VisualQAResult:
+        """Alias for visual QA evaluation supporting legacy five-gate callers."""
+        return cls.evaluate_three_visual_gates(option)

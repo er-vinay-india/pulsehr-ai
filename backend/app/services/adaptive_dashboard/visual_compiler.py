@@ -77,8 +77,22 @@ class VisualCompiler:
                 item["itemStyle"] = {"color": "var(--color-error, #8E1938)"}
             series_data.append(item)
 
+        from .layout_engine import AdaptiveChartLayoutEngine
+        longest_chars = max([len(str(c)) for c in sorted_cats], default=10)
+        annotations_list = [{"xAxis": intent.benchmark_value}] if intent.benchmark_value is not None else []
+        layout_plan = AdaptiveChartLayoutEngine.plan(
+            chart_type="horizontal_bar",
+            container_width=800,
+            container_height=350,
+            category_count=len(sorted_cats),
+            longest_label_chars=longest_chars,
+            annotations=annotations_list,
+        )
+
         option: dict[str, Any] = {
             "color": cls.PALETTE,
+            "_planned_height": layout_plan.chart_height,
+            "_plot_area_ratio": layout_plan.plot_area_ratio,
             "tooltip": {
                 "trigger": "axis",
                 "axisPointer": {"type": "shadow"},
@@ -87,10 +101,10 @@ class VisualCompiler:
                 "formatter": f"{{b}}: {{c}} {intent.unit}".strip(),
             },
             "grid": {
-                "left": "15%",
-                "right": "8%",
-                "top": "12%",
-                "bottom": "10%",
+                "left": f"{layout_plan.grid_left}px",
+                "right": f"{layout_plan.grid_right}px",
+                "top": f"{layout_plan.grid_top}px",
+                "bottom": f"{layout_plan.grid_bottom}px",
                 "containLabel": True,
             },
             "xAxis": {
@@ -106,7 +120,6 @@ class VisualCompiler:
                 "axisLabel": {
                     "fontSize": 11,
                     "color": "var(--chart-text, #334B57)",
-                    "formatter": "{value}",
                 },
                 "axisTick": {"alignWithLabel": True},
             },
@@ -237,7 +250,153 @@ class VisualCompiler:
                 },
             ],
         }
-        return option
+    @classmethod
+    def compile_100_percent_stacked_bar(
+        cls,
+        categories: list[str],
+        series_list: list[dict[str, Any]],
+        unit: str = "employee-days",
+    ) -> dict[str, Any]:
+        """Compiles a proportional 100% stacked bar chart eliminating magnitude scale flattening."""
+        n_cats = len(categories)
+        totals = [0.0] * n_cats
+        for s in series_list:
+            vals = s.get("values", [])
+            for i in range(min(n_cats, len(vals))):
+                totals[i] += float(vals[i] or 0.0)
+
+        compiled_series = []
+        palette = [
+            "var(--color-brand-primary, #0284c7)",
+            "var(--color-warning, #d97706)",
+            "var(--color-success, #059669)",
+            "var(--color-violet, #7c3aed)",
+        ]
+
+        for s_idx, s in enumerate(series_list):
+            s_name = s.get("name", f"Series {s_idx + 1}")
+            vals = s.get("values", [])
+            pcts = []
+            for i in range(n_cats):
+                tot = totals[i]
+                raw_val = float(vals[i] if i < len(vals) else 0.0)
+                pct = round((raw_val / tot) * 100.0, 1) if tot > 0 else 0.0
+                pcts.append(pct)
+
+            compiled_series.append({
+                "name": s_name,
+                "type": "bar",
+                "stack": "capacity",
+                "barMaxWidth": 30,
+                "data": pcts,
+                "itemStyle": {
+                    "color": palette[s_idx % len(palette)],
+                    "borderRadius": [4, 4, 0, 0] if s_idx == len(series_list) - 1 else [0, 0, 0, 0],
+                },
+            })
+
+        return {
+            "tooltip": {
+                "trigger": "axis",
+                "axisPointer": {"type": "shadow"},
+                "backgroundColor": "var(--chart-tooltip-bg, #FFFFFF)",
+                "textStyle": {"color": "var(--chart-tooltip-text, #172B3A)", "fontSize": 12},
+            },
+            "legend": {
+                "data": [s.get("name") for s in series_list],
+                "top": "2%",
+                "textStyle": {"color": "var(--chart-text, #334B57)", "fontSize": 11},
+            },
+            "grid": {
+                "left": "8%",
+                "right": "4%",
+                "top": "16%",
+                "bottom": "12%",
+                "containLabel": True,
+            },
+            "xAxis": {
+                "type": "category",
+                "data": categories,
+                "axisLabel": {"fontSize": 11, "color": "var(--chart-text, #334B57)"},
+            },
+            "yAxis": {
+                "type": "value",
+                "name": "% of Capacity",
+                "max": 100,
+                "axisLabel": {"fontSize": 11, "color": "var(--chart-text, #334B57)", "formatter": "{value}%"},
+                "splitLine": {"lineStyle": {"type": "dashed", "color": "var(--chart-split-line, rgba(23, 43, 58, 0.1))"}},
+            },
+            "series": compiled_series,
+        }
+
+    @classmethod
+    def compile_waterfall(
+        cls,
+        steps: list[str],
+        values: list[float],
+        unit: str = "employee-days",
+    ) -> dict[str, Any]:
+        """Compiles a stepwise waterfall bridge chart explaining gap delta."""
+        base_stack = []
+        delta_vals = []
+        curr = 0.0
+        for idx, val in enumerate(values):
+            if idx == 0:
+                base_stack.append(0.0)
+                delta_vals.append(round(val, 2))
+                curr = val
+            elif idx == len(values) - 1:
+                base_stack.append(0.0)
+                delta_vals.append(round(curr, 2))
+            else:
+                if val >= 0:
+                    base_stack.append(round(curr, 2))
+                    delta_vals.append(round(val, 2))
+                    curr += val
+                else:
+                    base_stack.append(round(curr + val, 2))
+                    delta_vals.append(round(abs(val), 2))
+                    curr += val
+
+        return {
+            "tooltip": {
+                "trigger": "axis",
+                "axisPointer": {"type": "shadow"},
+            },
+            "grid": {
+                "left": "8%",
+                "right": "4%",
+                "top": "12%",
+                "bottom": "12%",
+                "containLabel": True,
+            },
+            "xAxis": {
+                "type": "category",
+                "data": steps,
+                "axisLabel": {"fontSize": 11, "color": "var(--chart-text, #334B57)"},
+            },
+            "yAxis": {
+                "type": "value",
+                "name": unit,
+                "axisLabel": {"fontSize": 11, "color": "var(--chart-text, #334B57)"},
+            },
+            "series": [
+                {
+                    "name": "Base",
+                    "type": "bar",
+                    "stack": "waterfall",
+                    "itemStyle": {"borderColor": "transparent", "color": "transparent"},
+                    "data": base_stack,
+                },
+                {
+                    "name": "Step Value",
+                    "type": "bar",
+                    "stack": "waterfall",
+                    "data": delta_vals,
+                    "itemStyle": {"color": "var(--color-brand-primary, #0284c7)"},
+                },
+            ],
+        }
 
     @staticmethod
     def audit_visual_qa(option: dict[str, Any]) -> VisualQAResult:

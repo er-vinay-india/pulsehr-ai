@@ -148,6 +148,20 @@ def execute_ingestion_job(
                     for sid, profiles in column_updates:
                         conn.execute('UPDATE sheets SET profile_json=? WHERE id=?', (json.dumps(profiles), sid))
                     insert_sheets(conn, dataset_id, prepared, display_name=display_name)
+                    persisted_rows = conn.execute(
+                        'SELECT COUNT(*) FROM sheet_rows WHERE sheet_id IN (SELECT id FROM sheets WHERE dataset_id=?)',
+                        (dataset_id,)
+                    ).fetchone()[0]
+                    recon_rows = sum(len(f) for f in frames.values())
+                    if recon_rows != total or total != persisted_rows:
+                        raise ValueError(
+                            f"Hard Invariant Violation: reconstructed_row_count ({recon_rows}) != "
+                            f"prepared_records ({total}) != persisted_rows ({persisted_rows})"
+                        )
+                    logger.info(
+                        "Reconstruction-to-persistence invariant verified: %d == %d == %d",
+                        recon_rows, total, persisted_rows
+                    )
                     uploaded_sheet_ids = [row['id'] for row in conn.execute(
                         'SELECT id FROM sheets WHERE dataset_id=? ORDER BY id', (dataset_id,)
                     ).fetchall()]

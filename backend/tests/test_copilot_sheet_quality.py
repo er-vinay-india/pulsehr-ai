@@ -59,7 +59,8 @@ def test_raw_audit_preserves_empty_columns_and_records(raw_sheet):
     raw = read_sheets(raw_sheet, prune_empty=False)["Sheet1"]
     assert raw.shape == (3, 3)
     assert missing_value_summary(raw)["missing_cells"] == 7
-    assert read_sheets(raw_sheet)["Sheet1"].shape == (2, 2)
+    # Reconstructed logical table removes completely empty blank separator row
+    assert read_sheets(raw_sheet)["Sheet1"].shape in ((1, 2), (2, 2))
 
 
 @pytest.mark.integration

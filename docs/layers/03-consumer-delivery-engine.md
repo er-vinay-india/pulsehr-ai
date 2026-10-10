@@ -2,100 +2,77 @@
 
 > **Parent:** [README.md](../../README.md) &rsaquo; [System Architecture](../system-architecture.md) &rsaquo; **Layer 3**
 
-## 1. Architectural Mission: Direct Visual Parity
+---
 
-Layer 3 delivers the verified analytical findings (Layer 1) and audited cognitive insights (Layer 2) across 4 unified consumer surfaces. **Core Guarantee: 100% direct inheritance.** A KPI, percentage, or ranking displayed on a presentation slide is identical to the value on the adaptive dashboard, in the decision brief, and in copilot chat.
+## 1. Architectural Mission: Direct Visual Parity & Surface Separation
+
+Layer 3 delivers verified analytical findings (Layer 1) and audited cognitive insights (Layer 2) across 5 unified consumer surfaces. 
+
+**Core Guarantees:**
+1. **100% Direct Inheritance:** A KPI, percentage, or ranking displayed on a presentation slide is identical to the value on the executive dashboard, in the data explorer, in the decision brief, and in copilot chat.
+2. **Clear Responsibility Boundary:** The Executive Dashboard answers *"What requires my attention?"* with compact, curated signals. The Data Explorer answers *"Show me the analysis behind it."* with deep, multi-tab technical and statistical modules.
+3. **Capability Entitlement Gating:** Specialized analytical tools (such as workforce scenario simulations) are strictly gated by domain governance.
 
 ```mermaid
 flowchart TD
     In[Layer 1 Evidence + Layer 2 Insights] --> Router{Consumer Delivery Engine}
-    Router --> C1[3A: Adaptive Multi-Domain Dashboard]
-    Router --> C2[3B: 13-Phase Presentation Studio & PPTX]
-    Router --> C3[3C: HRIDAY Copilot & Council War Room]
-    Router --> C4[3D: Executive Decision Brief API]
+    Router --> C1[3A: Executive Dashboard 'What requires attention?']
+    Router --> C2[3B: Data Explorer 'Show me the analysis']
+    Router --> C3[3C: Capability Entitlement & Scenario Gating]
+    Router --> C4[3D: 13-Phase Presentation Studio & PPTX]
+    Router --> C5[3E: HRIDAY Copilot & Council War Room]
 ```
 
 ---
 
-## 2. The 4 Consumer Delivery Subsystems
+## 2. The Consumer Delivery Subsystems
 
-### Consumer 3A: Adaptive Multi-Domain Dashboard
-Implemented in `backend/app/services/adaptive_dashboard/` and `backend/app/routers/adaptive_dashboard.py`:
-- **7 Registered Business Domains**:
-  - `commercial_retail`: Commercial Retail Revenue Analyst (AOV, conversion, margin)
-  - `workforce_hr`: People Analytics Business Partner (headcount, turnover, Bradford factor)
-  - `demographics_public`: Public Policy Demographer (population cohorts, socioeconomic indices)
-  - `household_budget`: Household Financial Specialist (burn rate, discretionary spend)
-  - `operations_support`: Operations & Logistics Engineer (latency, defect rate, throughput)
-  - `education_academic`: Academic Performance Specialist (completion rates, test trends)
-  - `general_tabular`: Senior Quantitative Analyst (distributions, quantiles, correlations)
-- **3 Progressive Disclosure Tiers**:
-  1. `GLANCE`: Immediate render; dominant number, familiar label, short badge.
-  2. `EXPLAIN`: Non-interactive tooltip on hover/focus with plain-language definition.
-  3. `INSPECT`: Clickable accessible modal containing exact formula, excluded null rows, and source coordinates.
-- **Initial Load Invariant**: Every sheet displays exactly **2 primary dashboard elements** on load to prevent cognitive overload.
-- **Endpoints**:
-  - `GET /api/adaptive-dashboard/primary-element?sheet_id=...`
-  - `GET /api/adaptive-dashboard/findings?sheet_id=...`
+### Consumer 3A: Executive Dashboard ("What requires my attention?")
+Implemented in `backend/app/services/adaptive_dashboard/` and `frontend/src/pages/AdaptiveDashboardPage.jsx`:
+- **Core Purpose**: Compact executive decision surface designed for rapid situational awareness without information overload.
+- **Strict Composition Grammar**:
+  1. **Dataset Context & Briefing Card**: High-level provenance, entity count, and high-impact executive summary.
+  2. **Governed 5-KPI Strip**: Single-line summary metrics with domain-appropriate aggregation (e.g. Mean $\text{PM}_{10}$, Mean $\text{PM}_{2.5}$, Station Coverage) and explicit units ($\mu\text{g/m}^3$). Additive `SUM`/`Total` operations are strictly banned on rates and concentrations.
+  3. **3 Curated Executive Visual Stories**:
+     - *Story 1 (Hero)*: Primary benchmark ranking (e.g. Ambient air quality vs NAAQS standard).
+     - *Story 2 (Outlier)*: Anomaly concentration variance bars (e.g. Jharia $281\ \mu\text{g/m}^3$ finding).
+     - *Story 3 (Relationship)*: True ECharts scatter plot with monitored station points ($X = \text{SO}_2, Y = \text{NO}_2$).
+  4. **Top 3 / Bottom 3 Ranking Card**: Compact ranking overview with polarity awareness (`HIGHER_IS_BETTER` vs `LOWER_IS_BETTER`). Enforces a maximum of 6 unique entities and avoids duplicate entries on small cohorts ($N \le 6$). Deep-links via `"Explore full ranking →"`.
+  5. **Compact Scenario Summary**: High-level simulation impact card, strictly gated to entitled domains.
+- **Redundancy Suppression (`VisualStoryRedundancyIntegrity`)**: Standalone scalar cards that duplicate values in the KPI strip are suppressed from the visual stories grid.
 
-### Consumer 3B: Automated 13-Phase Presentation Engine
+### Consumer 3B: Data Explorer ("Show me the analysis behind it.")
+Implemented in `frontend/src/pages/DataExplorerPage.jsx` and `frontend/src/components/explorer/`:
+- **Core Purpose**: Unrestricted deep analytical workbench preserving dataset, sheet, and entity context across 7 specialized tabs:
+  1. `Overview`: Dataset summary, column data types, null distribution, and dataset-level hygiene.
+  2. `Rankings`: Generic entity ranking workbench (`GenericRankingExplorer.jsx`) with dynamic entity switcher, metric selector, polarity controls (`HIGHER_IS_BETTER`, `LOWER_IS_BETTER`), distribution histogram, and virtualized data table.
+  3. `Trends`: Chronological series, Holt-damped forecast projections, and seasonality decompositions.
+  4. `Relationships`: Bivariate correlation matrices, scatter plots, and cross-source reconciliations.
+  5. `Distributions`: Quantile spans (min, p25, median, p75, p90, max), box plots, and frequency bins.
+  6. `Evidence`: Cryptographic audit ledger displaying `FACT-XXX` and `EVID-XXX` items with source cell coordinates.
+  7. `Technical`: Reconstruction safety telemetry, 3D confidence scores (Structural, Semantic, Fidelity), model escalation proposals, and complete row-by-row provenance logs.
+- **Deep-Link Navigation**: The Executive Dashboard deep-links into specific Explorer tabs with context preserved:
+  - `Explore full ranking →` &rarr; `#explorer?tab=rankings&metric=...`
+  - `Explore relationship →` &rarr; `#explorer?tab=relationships&x=...&y=...`
+
+### Consumer 3C: Capability Entitlement & Scenario Gating
+Implemented in `backend/app/services/adaptive_dashboard/scenario_engine.py` and `frontend/src/pages/AdaptiveDashboardPage.jsx`:
+- **Gated Header Action**: The `Scenario Explorer` button in the top navigation header is conditionally rendered based on `domain_profile.governed_scenario_domain == "workforce"` or `domain == "workforce"`.
+- **Domain Suppression**: For environmental air quality, commercial retail, operations, or education datasets, the scenario explorer button and the scenario summary card are cleanly hidden.
+
+### Consumer 3D: Automated 13-Phase Presentation Engine
 Implemented in `backend/app/services/presentation/pipeline_orchestrator.py`:
 - **13 Discrete Phases (`PIPELINE_PHASES`)**:
   `0: brief_setup` &rarr; `1: evidence_audit` &rarr; `2: narrative_arc` &rarr; `3: headlines` &rarr; `4: layout_selection` &rarr; `5: math_reconciliation` &rarr; `6: graphics_charts` &rarr; `7: executive_polish` &rarr; `8: visual_qa` &rarr; `9: animation` &rarr; `10: speaker_notes` &rarr; `11: export_qa` &rarr; `12: ready`.
-- **7 Standard Slide Layout Primitives**:
-  - `title_hero`: Full-width title, metadata tags, narrative block (deck cover).
-  - `kpi_summary`: 3 or 4 metric cards with labels, deltas, and trends (executive summary).
-  - `full_chart_takeaway`: Full-width high-resolution chart + takeaway callout (macro trends).
-  - `chart_narrative`: 66% visual chart (col-8) + 33% strategic facts panel (col-4) (core deep-dives).
-  - `comparison_split`: 50/50 paired cards (9-Box matrix, Strengths vs Headwinds).
-  - `table_detail`: Multi-column structured data table with multi-page continuation (audit ledgers).
-  - `action_plan`: 3 prioritized initiatives with owners and timelines (strategic roadmap).
-- **Structured 5-Part Speaker Notes Contract**:
-  Every slide includes notes generated by `generate_structured_speaker_notes()`:
-  1. *WHAT TO NOTICE*: Highlighted title focus and key metric values.
-  2. *WHY IT MATTERS*: Executive operational context and strategic implications.
-  3. *SUPPORTING EVIDENCE*: Provenance sheet label and `EVID-XXX` audit citations.
-  4. *TIME BUDGET*: Estimated speaking seconds evaluated against presentation time target.
-  5. *TRANSITION*: Logical narrative bridge connecting to the next slide.
-- **Conversational Co-Pilot Slide Mutation & Re-Slicing Engine**:
-  Implemented in `backend/app/services/presentation/slide_mutator.py` and `backend/app/routers/presentations.py` (`POST /api/presentations/mutate-slide`):
-  - Enables live structural modification of generated slides via HRIDAY natural language or quick action prompts:
-    - `RESLICE_SLIDE`: Regroups and aggregates underlying sheet tabular records deterministically via pandas in <15ms.
-    - `RETYPE_CHART`: Instant transformation to `variance_waterfall`, `breakdown_tree`, `donut`, `line`, or `column`.
-    - `FILTER_COHORT`: Slices slide visuals by category/department/region without altering source files.
-    - `CHANGE_THEME`: Live switching of palette styling (`midnight_navy`, `executive_platinum`, `emerald_growth`, `sunset_amber`, `crimson_alert`).
-    - `REVERT_MUTATION`: Instant 100% rollback to pre-mutation snapshot.
-  - Zero LLM Math Guarantee: Intent classification only yields action contracts; all metrics recalculate through pandas aggregations against verified sheet records.
-- **Endpoints**:
-  - `POST /api/presentations/generate`: Trigger background generation pipeline.
-  - `POST /api/presentations/scope-preview`: Preflight slide count, evidence items, and layouts.
-  - `POST /api/presentations/mutate-slide`: Programmatic slide mutation engine with snapshotting.
-  - `GET /api/reports/presentation/latest`: Download latest generated 16:9 PowerPoint deck.
+- **7 Slide Primitives**: `title_hero`, `kpi_summary`, `full_chart_takeaway`, `chart_narrative`, `comparison_split`, `table_detail`, `action_plan`.
+- **Conversational Slide Mutator (`slide_mutator.py`)**: Enables live natural language modification (`RESLICE_SLIDE`, `RETYPE_CHART`, `FILTER_COHORT`, `CHANGE_THEME`, `REVERT_MUTATION`) with 1-click snapshot rollback and zero LLM arithmetic.
 
-### Consumer 3C: HRIDAY Copilot & Council War Room
+### Consumer 3E: HRIDAY Copilot & Multi-Model Council
 Implemented in `backend/app/services/copilot/` and `backend/app/routers/copilot.py`:
-- **0-LLM Math Factual Q&A**: `GenericCopilotEngine` resolves numerical queries directly in code with zero LLM math hallucinations.
-- **Conversational Slide Mutation Routing**: Intent classification recognizes slide transformation commands ("group by department", "convert to waterfall", "switch to midnight navy theme"), mutates the active slide spec, attaches a visual mutation badge, and synchronizes live with the presentation studio via window events.
-- **Multi-Model Council War Room**: `union_war_room.py` gathers candidate answers across multiple local models, executing internal peer election to surface consensus recommendations.
-- **Direct Answer Delivery**: Shared identity instructions request greetings only for greeting/identity requests. JSON delivery and the sentence-level SSE guard remove leading unsolicited greetings, HRIDAY introductions, and readiness boilerplate while retaining substantive answers, evidence, and chart payloads. Greeting-only task responses receive a bounded corrective retry. Pure greetings and explicitly requested greeting examples remain valid; short task requests prefixed with “hello” do not become welcome-only responses.
-- **Upload-to-Chat Grounding**: Completed uploads return stored `sheet_ids`; the browser selects the first uploaded sheet and invalidates preceding analytical context and in-flight answers. Dataset strengths (including “what is good about this data you have”) route to verified decision-brief findings before conceptual explanation. The catalogue uses `sheet_relationships`; optional relationship failures preserve loaded sheet metadata. Empty text retrieval and model timeouts never imply that an uploaded dataset is absent.
-- **Coordinator Context Enrichment**: Analytical routing is followed by a coordinator-owned `EnrichedAnalyticalRequest`. It binds active source IDs, business measure, grouping, direction, period, field provenance and comparison basis using the semantic catalogue and relevant source-scoped history. Office presence is a business alias for recorded attendance days; department attendance rankings use average days per employee and retain ties. Unresolved measure wording permits one bounded Qwen 2B mapping against available definitions. Invented, identity and generated interaction measures are rejected; unspecified performance remains ambiguous. Both JSON and SSE analytical workers execute the prepared plan without reparsing the question or calling a second planning model. Diagnostics expose the mapping method, schema hash and validated plan without raw records.
-- **Query Grain Invariant**: Employee queries calculate at employee row grain; department queries calculate at department grain. Follow-ups preserve scope.
-- **Grounded Chat Charts**: `copilot/chat_visuals.py` resolves simple named aggregates and chart follow-ups before model generation in both JSON and SSE routes. It stores metric, operation, grouping, and source sheet in conversation context, recomputes values from source records, and emits `VisualChartSpec` through `visual_charts`. The chat uses the shared `SlideChart` / ECharts renderer with the current app theme and a readable data table. Missing or non-finite values are excluded; unknown metrics and unsupported filters require clarification instead of ASCII art or guessed series. Chart-only payloads are valid completed responses. Bar charts retain a zero baseline.
-- **Source Sheet Quality**: `copilot/sheet_quality.py` intercepts missing-value questions before ranking and model dispatch. Audits reread the original upload with `read_sheets(..., prune_empty=False)` so empty source fields and records remain visible, derived fields are excluded, and real nulls are counted once. Raw audits preserve non-empty text categories such as `none` (no test preparation) instead of applying ingestion sentinel normalization. Results include cell counts, affected rows, and per-column counts; unavailable originals are reported explicitly. A new sheet-quality question clears preceding metric/ranking context, and unrelated questions cannot inherit a metric merely because it exists in history.
-- **Endpoints**:
-  - `POST /api/copilot/generic`: Factual Q&A.
-  - `POST /api/copilot/query/stream`: Server-Sent Events (SSE) streaming chat with slide mutation event payload.
-  - `POST /api/copilot/war-room`: Multi-model council consensus.
-  - `GET /api/copilot/identity`: Frontend identity hydration.
-
-### Consumer 3D: Executive Decision Brief API
-Implemented in `backend/app/routers/decision_brief.py`:
-- **Sub-Second Executive Briefing**:
-  - `GET /api/analytics/decision-brief?sheet_id=...`: Computes highlights, concerns, and actions without LLM latency.
-  - `POST /api/analytics/decision-brief/prioritize`: Reorders findings via `RuleDecisionEngine` (<1ms) or LLM reasoning.
-  - `POST /api/analytics/decision-brief/voiceover`: Produces presenter voiceover script.
-  - `POST /api/reports/orchestrate`: Full generic workflow orchestration (Validation &rarr; Profiling &rarr; Opportunities &rarr; Facts &rarr; Ranking &rarr; Interpretation &rarr; Audit &rarr; Visuals &rarr; Deck Spec).
+- **0-LLM Math Factual Q&A**: `GenericCopilotEngine` executes queries via deterministic Python code.
+- **Multi-Model War Room**: Multi-model consensus generation across local LLMs.
+- **Grounded Chat Visuals**: Resolves charts dynamically into ECharts specifications.
+- **Query Grain Invariant**: Maintains requested grain (employee vs department vs city) across conversation turns.
 
 ---
 
@@ -103,6 +80,7 @@ Implemented in `backend/app/routers/decision_brief.py`:
 
 | Exposed Artifact | Contract Model | Downstream Consumers | Invariant Guarantee |
 | :--- | :--- | :--- | :--- |
-| **Slide Deck Spec** | `dict[str, Any]` | Layer 4 PPTX, PDF, and React Studio | Uses standardized 16:9 baseline geometry (`960 × 540 pt`). |
+| **Visual Stories** | `list[ExecutiveStory]` | Layer 4 ECharts Renderer | Truthful visual types: scatter for correlation, bars for ranking. |
+| **Slide Deck Spec** | `dict[str, Any]` | Layer 4 PPTX, PDF, React Studio | Standardized 16:9 spatial baseline (`960 × 540 pt`). |
 | **Chart Specifications** | `list[VisualChartSpec]` | Layer 4 `echarts` / `python-pptx` | Bound to verified `FACT-XXX` data points. |
 | **Data Tables** | `dict[str, Any]` | Layer 4 Table Wrapper | Weighted column widths with multi-page continuation. |

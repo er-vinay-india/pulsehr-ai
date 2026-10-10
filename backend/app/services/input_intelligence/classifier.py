@@ -61,6 +61,10 @@ class SemanticClassifier:
             "teacher", "instructor", "enrollment", "gpa", "semester", "academic", "parental",
             "math", "reading", "writing", "school", "lunch"
         ],
+        InferredDomain.ENVIRONMENTAL: [
+            "pollution", "air_quality", "cpcb", "pm2_5", "pm10", "so2", "no2", "pollutant",
+            "aqi", "emission", "particulate", "ambient", "monitored", "environmental"
+        ],
     }
 
     CURRENCY_SYMBOLS = {"$", "€", "£", "¥", "₹", "usd", "eur", "gbp"}
@@ -114,18 +118,20 @@ class SemanticClassifier:
             col_prof.semantic_role = SemanticColumnRole.BENCHMARK
             return col_prof
 
-        # 5. Identifier / Key
-        if col_prof.is_identifier_candidate or name_lower.endswith("_id") or name_lower == "id" or name_lower.endswith("code"):
+        # 5. Identifier / Key / Ordinal (row numbers and serials are identifiers, never metrics)
+        is_ordinal = bool(re.match(r'^(sr|s|seq|row)[\._\s]?no\.?', col_prof.name, re.I)) or name_lower in (
+            "sr_no", "s_no", "srno", "sno", "serial_no", "row_num", "row_no", "row_id", "seq_no"
+        )
+        if col_prof.is_identifier_candidate or name_lower.endswith("_id") or name_lower == "id" or name_lower.endswith("code") or is_ordinal:
             col_prof.semantic_role = SemanticColumnRole.IDENTIFIER
             return col_prof
 
-        # 6. Status / State
-        if any(k in name_lower for k in ("status", "state", "flag", "stage", "phase")):
-            col_prof.semantic_role = SemanticColumnRole.STATUS
-            col_prof.semantic_unit = SemanticUnit.COUNT
+        # 6. Geographic Location (prioritized before generic status keywords to prevent 'State / Union Territory' becoming STATUS)
+        if any(k in name_lower for k in ("region", "country", "city", "town", "location", "territory", "zone", "facility", "site", "hub", "state")):
+            col_prof.semantic_role = SemanticColumnRole.LOCATION
             return col_prof
 
-        # 7. Person / Organization / Location
+        # 7. Person / Organization
         if any(k in name_lower for k in ("employee", "customer", "user", "author", "manager", "lead", "person", "name")):
             col_prof.semantic_role = SemanticColumnRole.PERSON
             return col_prof
@@ -134,8 +140,10 @@ class SemanticClassifier:
             col_prof.semantic_role = SemanticColumnRole.ORGANIZATION
             return col_prof
 
-        if any(k in name_lower for k in ("region", "country", "city", "location", "territory", "zone", "facility", "site", "hub")):
-            col_prof.semantic_role = SemanticColumnRole.LOCATION
+        # 8. Status / Workflow State
+        if any(k in name_lower for k in ("status", "flag", "stage", "phase")) or name_lower.endswith("_status"):
+            col_prof.semantic_role = SemanticColumnRole.STATUS
+            col_prof.semantic_unit = SemanticUnit.COUNT
             return col_prof
 
         # 8. Numeric Metric or Dimension

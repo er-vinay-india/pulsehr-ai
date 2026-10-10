@@ -132,9 +132,25 @@ class ColumnRelationshipEngine:
             if not prof1 or not prof2:
                 continue
 
+            is_id1 = SemanticRole.IDENTIFIER in prof1.roles or SemanticRole.ORDINAL in prof1.roles or prof1.semantic_type == "identifier"
+            is_id2 = SemanticRole.IDENTIFIER in prof2.roles or SemanticRole.ORDINAL in prof2.roles or prof2.semantic_type == "identifier"
+            if (is_id1 and SemanticRole.MEASURE in prof2.roles) or (is_id2 and SemanticRole.MEASURE in prof1.roles) or (is_id1 and is_id2):
+                continue
+
             rel = cls.evaluate_pair(df[col1], df[col2], prof1, prof2)
             if rel.relationship_score >= config.min_relationship_score:
                 relationships.append(rel)
+
+        # Multiple-testing correction (Benjamini-Hochberg False Discovery Rate control)
+        if len(relationships) >= 4:
+            m = len(relationships)
+            relationships.sort(key=lambda r: r.statistical_dependency, reverse=True)
+            fdr_passed = []
+            for rank, r in enumerate(relationships, 1):
+                bh_threshold = max(0.15, 0.50 * (rank / m))
+                if r.statistical_dependency >= bh_threshold or r.semantic_similarity >= 0.65 or r.unit_compatibility >= 0.80 or r.domain_relationship >= 0.80:
+                    fdr_passed.append(r)
+            relationships = fdr_passed
 
         # Sort by relationship score descending
         relationships.sort(key=lambda r: r.relationship_score, reverse=True)
@@ -179,6 +195,21 @@ class ColumnRelationshipEngine:
                 stat_dep = max(p_val, s_val)
                 if stat_dep > 0.5:
                     reasons.append(f"Strong quantitative correlation: {stat_dep:.2f} (Pearson={p_val:.2f}, Spearman={s_val:.2f})")
+
+                # Temporal Alignment & Lag-Aware Analysis (lag-1 and lead-1)
+                if len(aligned) >= 6:
+                    v1_vals = aligned["v1"].values
+                    v2_vals = aligned["v2"].values
+                    lag1_corr = np.corrcoef(v1_vals[:-1], v2_vals[1:])[0, 1]
+                    lead1_corr = np.corrcoef(v1_vals[1:], v2_vals[:-1])[0, 1]
+                    lag1_val = abs(lag1_corr) if not np.isnan(lag1_corr) else 0.0
+                    lead1_val = abs(lead1_corr) if not np.isnan(lead1_corr) else 0.0
+                    if (lag1_val > stat_dep + 0.05 and lag1_val >= 0.40) or (lag1_val >= 0.65 and lag1_val > stat_dep):
+                        reasons.append(f"Lag-1 temporal alignment: r={lag1_val:.2f} (leads {col2})")
+                        stat_dep = max(stat_dep, lag1_val * 0.95)
+                    elif (lead1_val > stat_dep + 0.05 and lead1_val >= 0.40) or (lead1_val >= 0.65 and lead1_val > stat_dep):
+                        reasons.append(f"Lead-1 temporal alignment: r={lead1_val:.2f} (lagged by {col2})")
+                        stat_dep = max(stat_dep, lead1_val * 0.95)
         elif (valid_nums1 and not valid_nums2) or (valid_nums2 and not valid_nums1):
             # Correlation Ratio (continuous vs categorical)
             cat_s = s2 if valid_nums1 else s1
@@ -191,6 +222,14 @@ class ColumnRelationshipEngine:
             stat_dep = compute_cramers_v(s1.tolist(), s2.tolist())
             if stat_dep > 0.4:
                 reasons.append(f"Categorical Cramér's V association: {stat_dep:.2f}")
+
+        # Statistical Effect Size Grading (Cohen standards)
+        if stat_dep >= 0.50:
+            reasons.append(f"Large statistical effect size ({stat_dep:.2f})")
+        elif stat_dep >= 0.30:
+            reasons.append(f"Medium statistical effect size ({stat_dep:.2f})")
+        elif stat_dep >= 0.15:
+            reasons.append(f"Small statistical effect size ({stat_dep:.2f})")
 
         # 3. Structural Compatibility (Functional dependency / null alignment)
         struct_compat = 0.0

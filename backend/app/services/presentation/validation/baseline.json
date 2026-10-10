@@ -3,7 +3,7 @@
   "framework_version": "5.0-hardened",
   "scenarios_evaluated": 8,
   "summary": {
-    "avg_generation_time_ms": 126.64,
+    "avg_generation_time_ms": 111.77,
     "avg_overall_score": 9.8,
     "theme_integrity_pass_rate": 1.0,
     "evidence_accuracy_pass_rate": 1.0,
@@ -14,7 +14,7 @@
       "scenario_name": "Workforce Operational Attendance & Risk Review",
       "domain": "Workforce Operations",
       "slide_count": 6,
-      "generation_time_ms": 135.42,
+      "generation_time_ms": 124.47,
       "overall_score": 9.8,
       "metrics": {
         "evidence_accuracy": 1.0,
@@ -26,17 +26,17 @@
         "pptx_parity": 1.0
       },
       "stage_latencies_ms": {
-        "phase1_memory_ms": 86.72,
-        "phase2_director_ms": 2.46,
-        "phase3_orchestrator_ms": 6.59,
-        "phase4_visual_ms": 0.23,
-        "phase5_qa_ms": 0.18,
-        "pptx_export_ms": 38.56
+        "phase1_memory_ms": 81.36,
+        "phase2_director_ms": 2.17,
+        "phase3_orchestrator_ms": 4.16,
+        "phase4_visual_ms": 0.16,
+        "phase5_qa_ms": 0.32,
+        "pptx_export_ms": 35.63
       },
       "model_observability": {
         "qwen": {
           "calls": 1,
-          "planning_latency_ms": 2.46,
+          "planning_latency_ms": 2.17,
           "retry_count": 0,
           "schema_failures": 0,
           "mode": "deterministic_guaranteed"
@@ -46,13 +46,13 @@
           "task_count": 30,
           "routing_accuracy": 1.0,
           "retries": 0,
-          "synthesis_latency_ms": 6.59
+          "synthesis_latency_ms": 4.16
         },
         "phi": {
           "verification_calls": 0,
           "skipped_calls": 6,
           "discrepancies": 0,
-          "latency_ms": 0.99
+          "latency_ms": 0.62
         },
         "deepseek": {
           "escalation_frequency": 0,
@@ -63,7 +63,7 @@
         "gemma": {
           "qa_calls": 6,
           "skipped_title_calls": 0,
-          "latency_ms": 0.18,
+          "latency_ms": 0.32,
           "issue_count": 0,
           "repair_success_rate": 1.0
         }
@@ -73,7 +73,7 @@
       "scenario_name": "Commercial Sales Performance & Regional Margin Review",
       "domain": "Commercial Sales",
       "slide_count": 6,
-      "generation_time_ms": 139.04,
+      "generation_time_ms": 108.95,
       "overall_score": 9.8,
       "metrics": {
         "evidence_accuracy": 1.0,
@@ -85,17 +85,17 @@
         "pptx_parity": 1.0
       },
       "stage_latencies_ms": {
-        "phase1_memory_ms": 93.98,
-        "phase2_director_ms": 3.16,
-        "phase3_orchestrator_ms": 1.45,
-        "phase4_visual_ms": 0.22,
-        "phase5_qa_ms": 0.16,
-        "pptx_export_ms": 39.43
+        "phase1_memory_ms": 67.61,
+        "phase2_director_ms": 2.2,
+        "phase3_orchestrator_ms": 1.29,
+        "phase4_visual_ms": 0.15,
+        "phase5_qa_ms": 0.14,
+        "pptx_export_ms": 36.93
       },
       "model_observability": {
         "qwen": {
           "calls": 1,
-          "planning_latency_ms": 3.16,
+          "planning_latency_ms": 2.2,
           "retry_count": 0,
           "schema_failures": 0,
           "mode": "deterministic_guaranteed"
@@ -105,13 +105,13 @@
           "task_count": 30,
           "routing_accuracy": 1.0,
           "retries": 0,
-          "synthesis_latency_ms": 1.45
+          "synthesis_latency_ms": 1.29
         },
         "phi": {
           "verification_calls": 0,
           "skipped_calls": 6,
           "discrepancies": 0,
-          "latency_ms": 0.22
+          "latency_ms": 0.19
         },
         "deepseek": {
           "escalation_frequency": 0,
@@ -122,7 +122,7 @@
         "gemma": {
           "qa_calls": 6,
           "skipped_title_calls": 0,
-          "latency_ms": 0.16,
+          "latency_ms": 0.14,
           "issue_count": 0,
           "repair_success_rate": 1.0
         }
@@ -132,7 +132,7 @@
       "scenario_name": "Fiscal Variance & EBITDA Margin Review",
       "domain": "Corporate Finance",
       "slide_count": 5,
-      "generation_time_ms": 101.21,
+      "generation_time_ms": 72.48,
       "overall_score": 9.8,
       "metrics": {
         "evidence_accuracy": 1.0,
@@ -144,17 +144,17 @@
         "pptx_parity": 1.0
       },
       "stage_latencies_ms": {
-        "phase1_memory_ms": 59.52,
-        "phase2_director_ms": 1.75,
-        "phase3_orchestrator_ms": 1.06,
-        "phase4_visual_ms": 0.16,
+        "phase1_memory_ms": 36.39,
+        "phase2_director_ms": 1.49,
+        "phase3_orchestrator_ms": 1.02,
+        "phase4_visual_ms": 0.12,
         "phase5_qa_ms": 0.12,
-        "pptx_export_ms": 37.99
+        "pptx_export_ms": 32.75
       },
       "model_observability": {
         "qwen": {
           "calls": 1,
-          "planning_latency_ms": 1.75,
+          "planning_latency_ms": 1.49,
           "retry_count": 0,
           "schema_failures": 0,
           "mode": "deterministic_guaranteed"
@@ -164,13 +164,13 @@
           "task_count": 25,
           "routing_accuracy": 1.0,
           "retries": 0,
-          "synthesis_latency_ms": 1.06
+          "synthesis_latency_ms": 1.02
         },
         "phi": {
           "verification_calls": 0,
           "skipped_calls": 5,
           "discrepancies": 0,
-          "latency_ms": 0.16
+          "latency_ms": 0.15
         },
         "deepseek": {
           "escalation_frequency": 0,
@@ -191,7 +191,7 @@
       "scenario_name": "Microservices Architecture Latency & SLA Review",
       "domain": "Cloud Engineering & Distributed Systems",
       "slide_count": 6,
-      "generation_time_ms": 139.8,
+      "generation_time_ms": 106.69,
       "overall_score": 9.8,
       "metrics": {
         "evidence_accuracy": 1.0,
@@ -203,17 +203,17 @@
         "pptx_parity": 1.0
       },
       "stage_latencies_ms": {
-        "phase1_memory_ms": 99.92,
-        "phase2_director_ms": 2.1,
-        "phase3_orchestrator_ms": 1.13,
-        "phase4_visual_ms": 0.14,
+        "phase1_memory_ms": 63.82,
+        "phase2_director_ms": 2.27,
+        "phase3_orchestrator_ms": 1.03,
+        "phase4_visual_ms": 0.15,
         "phase5_qa_ms": 0.11,
-        "pptx_export_ms": 35.74
+        "pptx_export_ms": 38.56
       },
       "model_observability": {
         "qwen": {
           "calls": 1,
-          "planning_latency_ms": 2.1,
+          "planning_latency_ms": 2.27,
           "retry_count": 0,
           "schema_failures": 0,
           "mode": "deterministic_guaranteed"
@@ -223,13 +223,13 @@
           "task_count": 30,
           "routing_accuracy": 1.0,
           "retries": 0,
-          "synthesis_latency_ms": 1.13
+          "synthesis_latency_ms": 1.03
         },
         "phi": {
           "verification_calls": 0,
           "skipped_calls": 6,
           "discrepancies": 0,
-          "latency_ms": 0.17
+          "latency_ms": 0.15
         },
         "deepseek": {
           "escalation_frequency": 0,
@@ -250,7 +250,7 @@
       "scenario_name": "Introduction to Transformer Attention & Scalable Sequence Models",
       "domain": "Artificial Intelligence Education",
       "slide_count": 5,
-      "generation_time_ms": 100.75,
+      "generation_time_ms": 98.37,
       "overall_score": 9.8,
       "metrics": {
         "evidence_accuracy": 1.0,
@@ -262,17 +262,17 @@
         "pptx_parity": 1.0
       },
       "stage_latencies_ms": {
-        "phase1_memory_ms": 65.78,
-        "phase2_director_ms": 1.58,
-        "phase3_orchestrator_ms": 0.93,
+        "phase1_memory_ms": 58.21,
+        "phase2_director_ms": 1.49,
+        "phase3_orchestrator_ms": 0.92,
         "phase4_visual_ms": 0.13,
         "phase5_qa_ms": 0.11,
-        "pptx_export_ms": 31.58
+        "pptx_export_ms": 36.87
       },
       "model_observability": {
         "qwen": {
           "calls": 1,
-          "planning_latency_ms": 1.58,
+          "planning_latency_ms": 1.49,
           "retry_count": 0,
           "schema_failures": 0,
           "mode": "deterministic_guaranteed"
@@ -282,7 +282,7 @@
           "task_count": 25,
           "routing_accuracy": 1.0,
           "retries": 0,
-          "synthesis_latency_ms": 0.93
+          "synthesis_latency_ms": 0.92
         },
         "phi": {
           "verification_calls": 0,
@@ -309,7 +309,7 @@
       "scenario_name": "Empirical Research Study: Intervention Efficacy & Methodological Protocol",
       "domain": "Academic & Clinical Research",
       "slide_count": 6,
-      "generation_time_ms": 140.56,
+      "generation_time_ms": 143.77,
       "overall_score": 9.8,
       "metrics": {
         "evidence_accuracy": 1.0,
@@ -321,17 +321,17 @@
         "pptx_parity": 1.0
       },
       "stage_latencies_ms": {
-        "phase1_memory_ms": 94.88,
-        "phase2_director_ms": 3.13,
-        "phase3_orchestrator_ms": 1.39,
-        "phase4_visual_ms": 0.21,
-        "phase5_qa_ms": 0.16,
-        "pptx_export_ms": 40.12
+        "phase1_memory_ms": 100.13,
+        "phase2_director_ms": 2.08,
+        "phase3_orchestrator_ms": 1.15,
+        "phase4_visual_ms": 0.14,
+        "phase5_qa_ms": 0.12,
+        "pptx_export_ms": 39.39
       },
       "model_observability": {
         "qwen": {
           "calls": 1,
-          "planning_latency_ms": 3.13,
+          "planning_latency_ms": 2.08,
           "retry_count": 0,
           "schema_failures": 0,
           "mode": "deterministic_guaranteed"
@@ -341,13 +341,13 @@
           "task_count": 30,
           "routing_accuracy": 1.0,
           "retries": 0,
-          "synthesis_latency_ms": 1.39
+          "synthesis_latency_ms": 1.15
         },
         "phi": {
           "verification_calls": 0,
           "skipped_calls": 6,
           "discrepancies": 0,
-          "latency_ms": 0.21
+          "latency_ms": 0.17
         },
         "deepseek": {
           "escalation_frequency": 0,
@@ -358,7 +358,7 @@
         "gemma": {
           "qa_calls": 6,
           "skipped_title_calls": 0,
-          "latency_ms": 0.16,
+          "latency_ms": 0.12,
           "issue_count": 0,
           "repair_success_rate": 1.0
         }
@@ -368,7 +368,7 @@
       "scenario_name": "Alpha Pilot Feasibility: Sparse Sample Evaluation",
       "domain": "Product Exploratory Research",
       "slide_count": 4,
-      "generation_time_ms": 87.31,
+      "generation_time_ms": 134.33,
       "overall_score": 9.8,
       "metrics": {
         "evidence_accuracy": 1.0,
@@ -380,17 +380,17 @@
         "pptx_parity": 1.0
       },
       "stage_latencies_ms": {
-        "phase1_memory_ms": 56.39,
-        "phase2_director_ms": 1.19,
-        "phase3_orchestrator_ms": 0.88,
-        "phase4_visual_ms": 0.12,
-        "phase5_qa_ms": 0.12,
-        "pptx_export_ms": 28.05
+        "phase1_memory_ms": 104.29,
+        "phase2_director_ms": 1.16,
+        "phase3_orchestrator_ms": 0.78,
+        "phase4_visual_ms": 0.1,
+        "phase5_qa_ms": 0.11,
+        "pptx_export_ms": 27.35
       },
       "model_observability": {
         "qwen": {
           "calls": 1,
-          "planning_latency_ms": 1.19,
+          "planning_latency_ms": 1.16,
           "retry_count": 0,
           "schema_failures": 0,
           "mode": "deterministic_guaranteed"
@@ -400,13 +400,13 @@
           "task_count": 20,
           "routing_accuracy": 1.0,
           "retries": 0,
-          "synthesis_latency_ms": 0.88
+          "synthesis_latency_ms": 0.78
         },
         "phi": {
           "verification_calls": 0,
           "skipped_calls": 4,
           "discrepancies": 0,
-          "latency_ms": 0.13
+          "latency_ms": 0.12
         },
         "deepseek": {
           "escalation_frequency": 0,
@@ -417,7 +417,7 @@
         "gemma": {
           "qa_calls": 4,
           "skipped_title_calls": 0,
-          "latency_ms": 0.12,
+          "latency_ms": 0.11,
           "issue_count": 0,
           "repair_success_rate": 1.0
         }
@@ -427,7 +427,7 @@
       "scenario_name": "Global Enterprise Supply Chain & Inventory Triage",
       "domain": "Supply Chain & Logistics",
       "slide_count": 7,
-      "generation_time_ms": 169.07,
+      "generation_time_ms": 105.12,
       "overall_score": 9.8,
       "metrics": {
         "evidence_accuracy": 1.0,
@@ -439,17 +439,17 @@
         "pptx_parity": 1.0
       },
       "stage_latencies_ms": {
-        "phase1_memory_ms": 117.76,
-        "phase2_director_ms": 4.25,
-        "phase3_orchestrator_ms": 3.69,
-        "phase4_visual_ms": 0.21,
-        "phase5_qa_ms": 0.15,
-        "pptx_export_ms": 42.16
+        "phase1_memory_ms": 56.32,
+        "phase2_director_ms": 3.42,
+        "phase3_orchestrator_ms": 2.99,
+        "phase4_visual_ms": 0.17,
+        "phase5_qa_ms": 0.13,
+        "pptx_export_ms": 41.36
       },
       "model_observability": {
         "qwen": {
           "calls": 1,
-          "planning_latency_ms": 4.25,
+          "planning_latency_ms": 3.42,
           "retry_count": 0,
           "schema_failures": 0,
           "mode": "deterministic_guaranteed"
@@ -459,13 +459,13 @@
           "task_count": 35,
           "routing_accuracy": 1.0,
           "retries": 0,
-          "synthesis_latency_ms": 3.69
+          "synthesis_latency_ms": 2.99
         },
         "phi": {
           "verification_calls": 0,
           "skipped_calls": 7,
           "discrepancies": 0,
-          "latency_ms": 0.55
+          "latency_ms": 0.45
         },
         "deepseek": {
           "escalation_frequency": 0,
@@ -476,7 +476,7 @@
         "gemma": {
           "qa_calls": 7,
           "skipped_title_calls": 0,
-          "latency_ms": 0.15,
+          "latency_ms": 0.13,
           "issue_count": 0,
           "repair_success_rate": 1.0
         }

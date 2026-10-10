@@ -97,6 +97,7 @@ CREATE TABLE IF NOT EXISTS sheets (
     columns_json TEXT NOT NULL,
     profile_json TEXT NOT NULL,
     row_count INTEGER NOT NULL,
+    header_geometry_json TEXT,
     UNIQUE(dataset_id, name)
 );
 CREATE TABLE IF NOT EXISTS sheet_rows (

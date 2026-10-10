@@ -4,6 +4,7 @@ import logging
 import math
 import re
 from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import httpx
 import numpy as np
@@ -28,7 +29,7 @@ def canonical(column):
     return ALIASES.get(key, key)
 
 
-NULL_STRINGS = {'', 'none', 'null', 'nan', 'na', 'n/a', '-', 'undefined', 'nil', '#n/a', '#null!', 'n.a.', 'n.a'}
+NULL_STRINGS = {'', 'none', 'null', 'nan', 'na', 'n/a', '-', 'undefined', 'nil', '#n/a', '#null!', 'n.a.', 'n.a', 'nm'}
 
 
 def is_null_value(value):
@@ -99,44 +100,85 @@ def sniff_delimiter_and_header(sample_text: str, default_sep: str = ',') -> tupl
 
 
 def read_sheets(path, *, prune_empty=True):
+    path = Path(path) if isinstance(path, str) else path
     suffix = path.suffix.lower()
     if suffix in ('.csv', '.tsv', '.txt'):
-        default_sep = '\t' if suffix == '.tsv' else ','
         frames = None
-        for encoding in ('utf-8-sig', 'utf-8', 'cp1252', 'latin1'):
+        if prune_empty:
             try:
-                with open(path, 'r', encoding=encoding, errors='replace') as f:
-                    sample = f.read(65536)
-                sep, skip = sniff_delimiter_and_header(sample, default_sep=default_sep)
-                df = pd.read_csv(
-                    path,
-                    sep=sep,
-                    skiprows=skip if skip > 0 else None,
-                    dtype=str,
-                    encoding=encoding,
-                    keep_default_na=False,
-                    skip_blank_lines=prune_empty,
-                )
+                from .adaptive_table_reconstruction import AdaptiveTableReconstructionEngine
+                recon_res = AdaptiveTableReconstructionEngine.reconstruct(path)
+                df = recon_res.reconstructed_df
+                df.attrs['reconstruction_metadata'] = {
+                    'complexity': recon_res.complexity.model_dump(),
+                    'sentinels': [s.model_dump() for s in recon_res.sentinels],
+                    'provenance': [p.model_dump() for p in recon_res.provenance],
+                    'metadata_extracted': recon_res.metadata_extracted,
+                }
                 frames = {'Sheet1': df}
-                break
-            except (UnicodeDecodeError, Exception):
-                continue
+            except Exception as exc:
+                logger.warning(f"AdaptiveTableReconstructionEngine fallback on {path}: {exc}")
+                frames = None
+
         if frames is None:
-            frames = {'Sheet1': pd.read_csv(path, dtype=str, encoding='latin1', keep_default_na=False, skip_blank_lines=prune_empty)}
-    elif path.suffix.lower() == '.xls':
-        try:
-            with pd.ExcelFile(path, engine='xlrd') as book:
-                frames = {name: pd.read_excel(book, sheet_name=name, dtype=str, keep_default_na=False) for name in book.sheet_names}
-        except ImportError:
-            raise ValueError("Missing 'xlrd' library required for older .xls spreadsheets. Please install xlrd>=2.0.1.")
-        except Exception as exc:
-            raise ValueError(f"Failed to parse Excel .xls spreadsheet: {exc}")
-    else:
-        try:
-            with pd.ExcelFile(path) as book:
-                frames = {name: pd.read_excel(book, sheet_name=name, dtype=str, keep_default_na=False) for name in book.sheet_names}
-        except Exception as exc:
-            raise ValueError(f"Failed to parse Excel spreadsheet: {exc}")
+            default_sep = '\t' if suffix == '.tsv' else ','
+            for encoding in ('utf-8-sig', 'utf-8', 'cp1252', 'latin1'):
+                try:
+                    with open(path, 'r', encoding=encoding, errors='replace') as f:
+                        sample = f.read(65536)
+                    sep, skip = sniff_delimiter_and_header(sample, default_sep=default_sep)
+                    df = pd.read_csv(
+                        path,
+                        sep=sep,
+                        skiprows=skip if (skip > 0 and prune_empty) else None,
+                        dtype=str,
+                        encoding=encoding,
+                        keep_default_na=False,
+                        skip_blank_lines=prune_empty,
+                    )
+                    frames = {'Sheet1': df}
+                    break
+                except (UnicodeDecodeError, Exception):
+                    continue
+            if frames is None:
+                frames = {'Sheet1': pd.read_csv(path, dtype=str, encoding='latin1', keep_default_na=False, skip_blank_lines=prune_empty)}
+    elif suffix in ('.xlsx', '.xls'):
+        frames = None
+        if prune_empty:
+            try:
+                from .adaptive_table_reconstruction import AdaptiveTableReconstructionEngine
+                engine = 'xlrd' if suffix == '.xls' else None
+                excel_book = pd.ExcelFile(path, engine=engine) if engine else pd.ExcelFile(path)
+                frames = {}
+                for name in excel_book.sheet_names:
+                    recon_res = AdaptiveTableReconstructionEngine.reconstruct(path, sheet_name=name)
+                    df = recon_res.reconstructed_df
+                    df.attrs['reconstruction_metadata'] = {
+                        'complexity': recon_res.complexity.model_dump(),
+                        'sentinels': [s.model_dump() for s in recon_res.sentinels],
+                        'provenance': [p.model_dump() for p in recon_res.provenance],
+                        'metadata_extracted': recon_res.metadata_extracted,
+                    }
+                    frames[name] = df
+            except Exception as exc:
+                logger.warning(f"AdaptiveTableReconstructionEngine Excel fallback on {path}: {exc}")
+                frames = None
+
+        if frames is None:
+            if suffix == '.xls':
+                try:
+                    with pd.ExcelFile(path, engine='xlrd') as book:
+                        frames = {name: pd.read_excel(book, sheet_name=name, dtype=str, keep_default_na=False) for name in book.sheet_names}
+                except ImportError:
+                    raise ValueError("Missing 'xlrd' library required for older .xls spreadsheets. Please install xlrd>=2.0.1.")
+                except Exception as e:
+                    raise ValueError(f"Failed to parse Excel .xls spreadsheet: {e}")
+            else:
+                try:
+                    with pd.ExcelFile(path) as book:
+                        frames = {name: pd.read_excel(book, sheet_name=name, dtype=str, keep_default_na=False) for name in book.sheet_names}
+                except Exception as e:
+                    raise ValueError(f"Failed to parse Excel spreadsheet: {e}")
     if sum(len(f) for f in frames.values()) > 20000:
         raise ValueError('Upload at most 20,000 rows per file. Split larger files before uploading.')
 
@@ -268,11 +310,272 @@ def compute_decision_hints(profiles, records):
     }
 
 
+def infer_hierarchical_headers(frame: pd.DataFrame) -> tuple[pd.DataFrame, dict[str, Any]]:
+    """
+    Infers hierarchical header geometry (1, 2, or 3-tier headers) while preserving
+    exact source fidelity. Maps raw multi-level headers (e.g. 'Revenue' -> 'Q1' -> 'Actual')
+    to normalized snake_case columns (e.g. 'revenue_q1_actual') and returns a structured geometry
+    mapping so the original multi-level hierarchy is 100% recoverable.
+    
+    Also distinguishes outer margin padding from interior blank rows/separators.
+    """
+    if frame is None or len(frame.columns) == 0:
+        return frame, {"has_hierarchical_header": False, "levels_count": 1, "mappings": {}}
+
+    # Case 1: MultiIndex columns (loaded via Excel multi-header or tuple columns)
+    if isinstance(frame.columns, pd.MultiIndex):
+        n_levels = frame.columns.nlevels
+        mappings = {}
+        new_cols = []
+        for idx, col_tuple in enumerate(frame.columns):
+            levels = [str(x).strip() for x in col_tuple if str(x).strip() and not str(x).lower().startswith('unnamed:')]
+            if not levels:
+                levels = [f"col_{idx}"]
+            norm_name = re.sub(r'[^a-zA-Z0-9]+', '_', "_".join(levels)).strip('_').lower()
+            if not norm_name:
+                norm_name = f"col_{idx}"
+            display_hierarchy = " → ".join(levels)
+            mappings[norm_name] = {
+                "levels": levels,
+                "display_hierarchy": display_hierarchy,
+                "raw_header_text": display_hierarchy,
+                "col_index": idx
+            }
+            new_cols.append(norm_name)
+        new_frame = frame.copy()
+        new_frame.columns = new_cols
+        return new_frame, {
+            "has_hierarchical_header": True,
+            "levels_count": n_levels,
+            "mappings": mappings,
+            "table_regions": [{"region_id": "table_1", "start_row": 0, "end_row": len(new_frame)}]
+        }
+
+    # Case 2: Inspect top rows for multi-tier header patterns
+    if len(frame) >= 3:
+        is_range_cols = all(isinstance(c, (int, np.integer)) for c in frame.columns)
+        has_unnamed_in_cols = any(str(c).lower().startswith('unnamed:') for c in frame.columns)
+
+        row0 = frame.iloc[0].astype(str).str.strip()
+        row0_non_empty = sum(1 for v in row0 if v and not is_null_value(v))
+        row0_is_text = all(not re.match(r'^-?\d+(?:\.\d+)?$', v) for v in row0 if v and not is_null_value(v))
+
+        row1 = frame.iloc[1].astype(str).str.strip()
+        row1_non_empty = sum(1 for v in row1 if v and not is_null_value(v))
+        row1_is_text = all(not re.match(r'^-?\d+(?:\.\d+)?$', v) for v in row1 if v and not is_null_value(v))
+
+        # Subcase 2a: Integer range columns and first 2 rows are stacked text headers
+        if is_range_cols and row0_is_text and row1_is_text and row0_non_empty >= 2 and row1_non_empty >= 2:
+            top_level = []
+            curr_top = ""
+            for v in row0:
+                v_str = str(v).strip()
+                if v_str and not is_null_value(v_str):
+                    curr_top = v_str
+                top_level.append(curr_top or "")
+            
+            mappings = {}
+            new_cols = []
+            for idx in range(len(frame.columns)):
+                lvl0 = top_level[idx]
+                lvl1 = str(row1.iloc[idx]).strip() if not is_null_value(row1.iloc[idx]) else ""
+                parts = [p for p in [lvl0, lvl1] if p] or [f"col_{idx}"]
+                norm_name = re.sub(r'[^a-zA-Z0-9]+', '_', "_".join(parts)).strip('_').lower() or f"col_{idx}"
+                base_name = norm_name
+                uniq_count = 1
+                while norm_name in new_cols:
+                    uniq_count += 1
+                    norm_name = f"{base_name}_{uniq_count}"
+                display_hierarchy = " → ".join(parts)
+                mappings[norm_name] = {
+                    "levels": parts,
+                    "display_hierarchy": display_hierarchy,
+                    "raw_header_text": display_hierarchy,
+                    "col_index": idx
+                }
+                new_cols.append(norm_name)
+            new_frame = frame.iloc[2:].reset_index(drop=True).copy()
+            new_frame.columns = new_cols
+            return new_frame, {
+                "has_hierarchical_header": True,
+                "levels_count": 2,
+                "mappings": mappings,
+                "table_regions": [{"region_id": "table_1", "start_row": 0, "end_row": len(new_frame)}]
+            }
+
+        # Subcase 2b: frame.columns has top level headers and row 0 has sub-headers
+        if row0_is_text and (has_unnamed_in_cols or (row0_non_empty >= 2 and row0_non_empty < len(frame.columns) * 0.95)):
+            is_3_tier = False
+            if len(frame) >= 4 and row1_is_text and row1_non_empty >= 2:
+                row2 = frame.iloc[2].astype(str).str.strip()
+                row2_is_text = all(not re.match(r'^-?\d+(?:\.\d+)?$', v) for v in row2 if v and not is_null_value(v))
+                if row2_is_text and sum(1 for v in row2 if v and not is_null_value(v)) >= 2:
+                    is_3_tier = True
+
+            # Forward-fill top-level headers across horizontal spans
+            top_level = []
+            curr_top = ""
+            for c in frame.columns:
+                c_str = str(c).strip()
+                if c_str and not c_str.lower().startswith('unnamed:'):
+                    curr_top = c_str
+                top_level.append(curr_top or "")
+
+            mappings = {}
+            new_cols = []
+            n_levels = 3 if is_3_tier else 2
+            
+            for idx in range(len(frame.columns)):
+                lvl0 = top_level[idx]
+                lvl1 = str(row0.iloc[idx]).strip() if not is_null_value(row0.iloc[idx]) else ""
+                lvl2 = str(frame.iloc[1].iloc[idx]).strip() if is_3_tier and not is_null_value(frame.iloc[1].iloc[idx]) else ""
+                
+                parts = [p for p in ([lvl0, lvl1, lvl2] if is_3_tier else [lvl0, lvl1]) if p]
+                if not parts:
+                    parts = [f"col_{idx}"]
+                
+                norm_name = re.sub(r'[^a-zA-Z0-9]+', '_', "_".join(parts)).strip('_').lower()
+                if not norm_name:
+                    norm_name = f"col_{idx}"
+                base_name = norm_name
+                uniq_count = 1
+                while norm_name in new_cols:
+                    uniq_count += 1
+                    norm_name = f"{base_name}_{uniq_count}"
+                    
+                display_hierarchy = " → ".join(parts)
+                mappings[norm_name] = {
+                    "levels": parts,
+                    "display_hierarchy": display_hierarchy,
+                    "raw_header_text": display_hierarchy,
+                    "col_index": idx
+                }
+                new_cols.append(norm_name)
+
+            slice_start = 2 if is_3_tier else 1
+            new_frame = frame.iloc[slice_start:].reset_index(drop=True).copy()
+            new_frame.columns = new_cols
+            return new_frame, {
+                "has_hierarchical_header": True,
+                "levels_count": n_levels,
+                "mappings": mappings,
+                "table_regions": [{"region_id": "table_1", "start_row": 0, "end_row": len(new_frame)}]
+            }
+
+    # Case 3: Flat single-level header
+    mappings = {}
+    for idx, c in enumerate(frame.columns):
+        c_str = str(c).strip()
+        mappings[c_str] = {
+            "levels": [c_str],
+            "display_hierarchy": c_str,
+            "raw_header_text": c_str,
+            "col_index": idx
+        }
+    return frame, {
+        "has_hierarchical_header": False,
+        "levels_count": 1,
+        "mappings": mappings,
+        "table_regions": [{"region_id": "table_1", "start_row": 0, "end_row": len(frame)}]
+    }
+
+
+def decompose_header_semantics(
+    column: str,
+    header_mapping: Optional[Dict[str, Any]] = None,
+    unit: Optional[str] = None
+) -> Dict[str, Any]:
+    """Decomposes a table header into structured semantic sub-components:
+    - physical_header_path: original raw multi-tier header path or column name
+    - normalized_display_label: clean, human-readable display label
+    - metric_identity: core metric/dimension name without dates, units, or status qualifiers
+    - qualifiers: operational or status modifiers (e.g. 'Already approved', 'Annual Average', 'Actual')
+    - dates: temporal expressions or calendar dates extracted from header text
+    - units: physical or financial units of measure
+    """
+    if header_mapping and header_mapping.get('levels'):
+        physical_path = [str(lvl).strip() for lvl in header_mapping['levels'] if str(lvl).strip()]
+    elif header_mapping and header_mapping.get('raw_header_text'):
+        physical_path = [str(header_mapping['raw_header_text']).strip()]
+    else:
+        physical_path = [str(column).strip()]
+
+    full_text = ' '.join(physical_path) if physical_path else str(column).strip()
+
+    # Dates: match compound dates first, then isolated years / quarters / months
+    date_patterns = [
+        r'\b\d{1,2}[./-]\d{1,2}[./-]\d{2,4}\b',
+        r'\b\d{4}[./-]\d{1,2}[./-]\d{1,2}\b',
+        r'\b(?:19|20)\d{2}\b',
+        r'\b(?:Q[1-4]|H[1-2])\b',
+        r'\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember))\b'
+    ]
+    dates = []
+    for pat in date_patterns:
+        for m in re.finditer(pat, full_text, flags=re.IGNORECASE):
+            val = m.group(0).strip()
+            if val and not any(val in d for d in dates):
+                dates.append(val)
+
+    # Units
+    units = []
+    if unit:
+        units.append(str(unit).strip())
+    unit_regex = r'(?:µg/m³|ug/m3|mg/m3|mg/l|ppm|ppb|f[t-]?e|%|\$|€|£|₹|USD|EUR|GBP|INR)'
+    for m in re.finditer(unit_regex, full_text, flags=re.IGNORECASE):
+        u = m.group(0).strip()
+        if u and not any(u.lower() == existing.lower() for existing in units):
+            units.append(u)
+
+    # Qualifiers sorted by length descending to match longest phrases first
+    qualifier_candidates = sorted([
+        'already approved on', 'already approved', 'approved on', 'approved',
+        'annual average', 'monthly average', 'daily average',
+        'prior year', 'year to date', 'quarter to date',
+        'target', 'actual', 'budget', 'forecast', 'provisional',
+        'preliminary', 'revised', 'baseline', 'variance'
+    ], key=len, reverse=True)
+
+    qualifiers = []
+    for q in qualifier_candidates:
+        if re.search(r'\b' + re.escape(q) + r'\b', full_text, flags=re.IGNORECASE):
+            if not any(q.lower() in existing.lower() for existing in qualifiers):
+                matched = next((m.group(0) for m in re.finditer(r'\b' + re.escape(q) + r'\b', full_text, flags=re.IGNORECASE)), q)
+                qualifiers.append(matched)
+
+    # Metric identity
+    cleaned = full_text
+    for d in dates:
+        cleaned = re.sub(r'\b' + re.escape(d) + r'\b', '', cleaned, flags=re.IGNORECASE)
+    for q in qualifiers:
+        cleaned = re.sub(r'\b' + re.escape(q) + r'\b', '', cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r'\([^)]*\)', '', cleaned)
+    cleaned = re.sub(r'\b(?:on|as of|for|in|at)\b', '', cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r'[_\s]+', ' ', cleaned).strip(' -_/:,')
+    if not cleaned:
+        cleaned = str(column).strip()
+
+    norm_display = format_display_label(cleaned)
+
+    return {
+        'physical_header_path': physical_path,
+        'normalized_display_label': norm_display,
+        'metric_identity': cleaned,
+        'qualifiers': qualifiers,
+        'dates': dates,
+        'units': units
+    }
+
+
 def prepare_sheets(frames, source, embed=True):
     from .data_engine.semantic_classifier import SemanticClassifier
     prepared = []
     for name, frame in frames.items():
+        recon_meta = getattr(frame, 'attrs', {}).get('reconstruction_metadata')
         frame = frame.copy()
+        frame, header_geometry = infer_hierarchical_headers(frame)
+        if recon_meta:
+            header_geometry['reconstruction'] = recon_meta
         
         # 1. Automatic Datetime Normalization to ISO-8601 (YYYY-MM-DD)
         temporal_meta = {}
@@ -301,7 +604,12 @@ def prepare_sheets(frames, source, embed=True):
                 'missing': len(records) - len(values),
                 'null_percentage': null_pct,
                 'distinct': len({value_key(v) for v in values}),
-                'is_mostly_null': null_pct >= 85.0
+                'is_mostly_null': null_pct >= 85.0,
+                'semantic_components': decompose_header_semantics(
+                    column,
+                    header_mapping=header_geometry.get('mappings', {}).get(column),
+                    unit=unit
+                )
             }
             # Attach temporal metadata if applicable
             if column in temporal_meta:
@@ -313,8 +621,13 @@ def prepare_sheets(frames, source, embed=True):
                 profile['max_date'] = t_info.get('max_date')
                 profile['temporal_summary'] = t_info.get('summary')
 
-            # IDs, booleans and numeric-looking codes are not measures.
-            identifier = canonical(column).endswith('id') or canonical(column).endswith('_id') or 'code' in canonical(column)
+            # IDs, booleans, row ordinals, and numeric-looking codes are not measures.
+            is_ordinal = bool(re.match(r'^(sr|s|seq|row)[\._\s]?no\.?', str(column), re.I)) or canonical(column) in (
+                'sr_no', 's_no', 'srno', 'sno', 'serial_no', 'row_num', 'row_no', 'row_id', 'seq_no'
+            )
+            identifier = canonical(column).endswith('id') or canonical(column).endswith('_id') or 'code' in canonical(column) or is_ordinal
+            if is_ordinal:
+                profile['semantic_role'] = 'IDENTIFIER'
             if len(values) and not identifier and numeric.notna().all() and np.isfinite(numeric.astype(float)).all():
                 profile['numeric'] = {k: float(getattr(numeric.astype(float), k)()) for k in ('min', 'max', 'mean', 'sum')}
                 profile['unit'] = unit
@@ -400,6 +713,7 @@ def prepare_sheets(frames, source, embed=True):
             'macro_chunks_count': len(macro_chunks),
             'chunks': all_chunks,
             'vectors': chunk_vectors,
+            'header_geometry': header_geometry,
             'decision_hints': hints
         })
     return prepared
@@ -409,9 +723,10 @@ def insert_sheets(conn, dataset_id, prepared, display_name=None):
     from .rag_service import pack_vector
     for sheet in prepared:
         sheet_disp = display_name or sheet.get('display_name') or sheet['name']
+        geom_json = json.dumps(sheet.get('header_geometry') or {})
         sid = conn.execute(
-            'INSERT INTO sheets(dataset_id,name,display_name,columns_json,profile_json,row_count) VALUES (?,?,?,?,?,?)',
-            (dataset_id, sheet['name'], sheet_disp, json.dumps(sheet['columns']), json.dumps(sheet['profiles']), len(sheet['records']))
+            'INSERT INTO sheets(dataset_id,name,display_name,columns_json,profile_json,row_count,header_geometry_json) VALUES (?,?,?,?,?,?,?)',
+            (dataset_id, sheet['name'], sheet_disp, json.dumps(sheet['columns']), json.dumps(sheet['profiles']), len(sheet['records']), geom_json)
         ).lastrowid
 
         records = sheet.get('records', [])
@@ -536,9 +851,22 @@ def rebuild_relationships(conn):
                     keylike = lp_canon not in ('id', 'paid', 'valid') and (lp_canon in ('employee_id', 'employee_name', 'department', 'department_id', 'email') or lp_canon.endswith('id') or lp_canon.endswith('code'))
                     status = 'linked' if exact and keylike and (lu or ru) else 'suggested'
                     method = ('exact' if lc.casefold() == rc.casefold() else 'alias') if exact else 'vector'
-                    reason = 'Matching keys with a unique side; exact equality join.' if status == 'linked' else 'Review before use: similarity or shared values alone do not establish identity.'
+
+                    # Join cardinality & grain validation
+                    left_grain = "unique_entity" if lu else "event_or_cohort"
+                    right_grain = "unique_entity" if ru else "event_or_cohort"
+                    matching_pairs = sum(lv[k]*rv[k] for k in overlap)
+                    fanout_factor = round(matching_pairs / max(1, len(overlap)), 2)
+
+                    if status == 'linked':
+                        reason = f'Validated {cardinality} grain ({left_grain} to {right_grain}); exact equality join.'
+                    elif not lu and not ru:
+                        reason = f'Many-to-many grain ({left_grain} to {right_grain}) with fan-out ratio {fanout_factor}x. Grain aggregation recommended before join.'
+                    else:
+                        reason = f'Candidate relationship ({cardinality}): review before use. Similarity or shared values alone do not establish identity.'
+
                     conn.execute('''INSERT INTO sheet_relationships(left_sheet,right_sheet,left_column,right_column,method,status,cardinality,matching_keys,matching_pairs,similarity,reason)
-                                    VALUES (?,?,?,?,?,?,?,?,?,?,?)''', (left['id'], right['id'], lc, rc, method, status, cardinality, len(overlap), sum(lv[k]*rv[k] for k in overlap), similarity, reason))
+                                    VALUES (?,?,?,?,?,?,?,?,?,?,?)''', (left['id'], right['id'], lc, rc, method, status, cardinality, len(overlap), matching_pairs, similarity, reason))
 
 
 def catalogue(conn):
@@ -547,6 +875,7 @@ def catalogue(conn):
         entry = dict(row)
         entry['display_name'] = entry.get('display_name') or entry.get('dataset_display_name') or entry.get('original_name') or entry.get('name')
         entry['columns'] = json.loads(entry.pop('columns_json'))
+        entry['header_geometry'] = json.loads(entry.pop('header_geometry_json', None) or '{}')
         profiles = json.loads(entry.pop('profile_json') or '[]')
         for p in profiles:
             if 'display_name' not in p and 'column' in p:

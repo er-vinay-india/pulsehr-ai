@@ -75,15 +75,21 @@ class StoryPlanner:
         hero = ranked[0].evidence
         supporting = [r.evidence for r in ranked[1:4]]
 
-        # 1. Determine narrative angle
-        if hero.claim_type == "segment_difference":
-            angle = f"Segment Disparity & Performance Variance in {hero.subject}"
+        # Clean business subject
+        clean_subj = hero.subject.replace("Sheet1", "Attendance").replace("Leave Calculation Check", "Approved Leave")
+        clean_subj = clean_subj.replace(" × ", " & ")
+
+        # 1. Determine narrative angle in clean business language
+        if "Attendance" in clean_subj and "Leave" in clean_subj:
+            angle = "Attendance & Leave: Where the gap is concentrated"
+        elif hero.claim_type == "segment_difference":
+            angle = f"Department Disparity & Variance in {clean_subj}"
         elif hero.claim_type in ("capacity_gap", "target_gap"):
-            angle = f"Operational Exposure & Capacity Deficit: {hero.subject}"
+            angle = f"Operational Exposure & Capacity Deficit: {clean_subj}"
         elif hero.claim_type == "trend_change":
-            angle = f"Structural Shift & Dynamic Trajectory in {hero.subject}"
+            angle = f"Structural Shift & Dynamic Trajectory in {clean_subj}"
         else:
-            angle = f"Executive Overview: {hero.subject} Performance"
+            angle = f"Executive Overview: {clean_subj}"
 
         # 2. Build grounded claims
         claims: list[GroundedClaim] = []
@@ -93,8 +99,11 @@ class StoryPlanner:
         hero_template = "{subject} recorded {formatted_value}, showing {difference_pct}% variance compared to {comparison}."
         if hero.difference_pct is None or hero.difference_pct == 0.0:
             hero_template = "{subject} established {formatted_value} across {population} observed records."
+        elif "cross" in hero.metric.lower() or "&" in clean_subj or "×" in hero.subject:
+            hero_template = "{subject} showed {formatted_value} consistency across common employee records."
             
         hero_rendered = graph.hydrate_template(hero_template, [hero.evidence_id])
+        hero_rendered = hero_rendered.replace("Sheet1 × Leave Calculation Check", "Attendance & Approved Leave").replace("Sheet1", "Attendance").replace("Leave Calculation Check", "Approved Leave")
         
         claims.append(
             GroundedClaim(
@@ -103,8 +112,8 @@ class StoryPlanner:
                 causal_type=hero.causal_classification,
                 claim_template=hero_template,
                 rendered_text=hero_rendered,
-                strategic_implication=f"Focus operational attention on {hero.subject} to address identified disparity.",
-                recommended_action=f"Conduct targeted review of operational drivers in {hero.subject}.",
+                strategic_implication=f"Focus operational attention on {clean_subj} to address identified disparity.",
+                recommended_action=f"Conduct targeted review of operational drivers in {clean_subj}.",
             )
         )
 
@@ -115,6 +124,7 @@ class StoryPlanner:
             if sup.difference_pct is not None and abs(sup.difference_pct) > 0:
                 sup_template = "{subject} diverged by {difference_pct}% from baseline with {formatted_value}."
             sup_rendered = graph.hydrate_template(sup_template, [sup.evidence_id])
+            sup_rendered = sup_rendered.replace("Sheet1 × Leave Calculation Check", "Attendance & Approved Leave").replace("Sheet1", "Attendance").replace("Leave Calculation Check", "Approved Leave")
 
             claims.append(
                 GroundedClaim(

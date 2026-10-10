@@ -16,6 +16,10 @@
     "test:surface": "node scripts/test_surface_guard.mjs",
     "test:visual": "node scripts/test_visual_guard.mjs && node scripts/test_surface_guard.mjs",
     "test:theme-integrity": "node scripts/test_theme_integrity.mjs",
+    "test:e2e": "node scripts/test_unified_executive_dashboard_e2e.mjs",
+    "test:ux": "node scripts/test_ux_governance.mjs",
+    "test:visual-qa": "node scripts/test_rendered_visual_qa.mjs",
+    "test:scenario": "node scripts/test_scenario_explorer_governance.mjs",
     "pretest:slides": "node scripts/generate_slide_tokens.mjs"
   },
   "dependencies": {

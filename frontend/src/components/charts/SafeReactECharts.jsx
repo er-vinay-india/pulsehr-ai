@@ -5,6 +5,9 @@ import { lightPalette, darkPalette, isCurrentThemeDark } from './chartOptions';
 import { getThemeTokens } from '../../theme/tokens';
 import { useTheme } from '../../context/ThemeContext';
 import { humanizeLabel } from '../visualization/layout/formatters';
+import { resolveAxisFormatter, sanitizeOptionFormatters, validateChartFormatters } from '../visualization/layout/chartFormatterValidator';
+import { inspectRenderedChartGeometry } from '../visualization/repair/postRenderValidator';
+import { repairChartLayout } from '../visualization/repair/repairChartLayout';
 import '../../styles/minimal-charts.scss';
 
 const LEGACY_COLORS = new Set([
@@ -56,12 +59,30 @@ function minimalOptions(option, isDark = false) {
         fontSize: 11,
         ...a?.axisLabel,
         color: sanitizeColor(a?.axisLabel?.color, labelColor),
-        formatter: a?.axisLabel?.formatter
-          ? (val, idx) => {
-              const res = typeof a.axisLabel.formatter === 'function' ? a.axisLabel.formatter(val, idx) : a.axisLabel.formatter;
-              return typeof res === 'string' && res.includes('_') ? humanizeLabel(res) : res;
+        formatter: (val, idx) => {
+          const rawFmt = a?.axisLabel?.formatter;
+          let res;
+          if (typeof rawFmt === 'function') {
+            res = rawFmt(val, idx);
+          } else if (typeof rawFmt === 'string') {
+            if (rawFmt.includes('{value}')) {
+              res = rawFmt.replace(/\{value\}/g, val != null ? String(val) : '');
+            } else if (/^(\(.*\)|function|[a-zA-Z0-9_]+)\s*=>/.test(rawFmt)) {
+              res = val != null ? `${Math.round(val)}%` : '';
+            } else if (/\{[a-zA-Z0-9_]+\}/.test(rawFmt)) {
+              res = val != null ? String(val) : '';
+            } else if (rawFmt.startsWith('%')) {
+              res = `${val != null ? val : ''}${rawFmt}`;
+            } else {
+              res = `${val != null ? val : ''} ${rawFmt}`.trim();
             }
-          : (val => (typeof val === 'string' && val.includes('_') ? humanizeLabel(val) : val)),
+          } else if (a?.axisLabel?._unit_suffix) {
+            res = `${val != null ? val : ''}${a.axisLabel._unit_suffix}`;
+          } else {
+            res = val;
+          }
+          return typeof res === 'string' && res.includes('_') ? humanizeLabel(res) : res;
+        },
       },
       nameTextStyle: {
         fontSize: 11,
@@ -241,6 +262,10 @@ export default function SafeReactECharts({ option = {}, style, onEvents, opts = 
     if (!node) return;
     const chart = echarts.init(node, null, { renderer: opts.renderer || 'canvas' });
     instance.current = chart;
+    node._chartInstance = chart;
+    if (typeof window !== 'undefined') {
+      window.echarts = echarts;
+    }
 
     const handleMouseOver = (params) => {
       if (!params) return;
@@ -298,18 +323,47 @@ export default function SafeReactECharts({ option = {}, style, onEvents, opts = 
     };
   }, []);
 
+  const [repairedOption, setRepairedOption] = useState(null);
+  const [visualSafetyReport, setVisualSafetyReport] = useState(null);
+
   useEffect(() => {
     try {
       if (instance.current) {
-        instance.current.setOption(presentationTheme ? slideChartOptions(option, presentationTheme) : minimalOptions(option, isDark), true);
+        // Pre-render sanitization
+        const safeInput = sanitizeOptionFormatters(repairedOption || option);
+        const resolved = presentationTheme
+          ? slideChartOptions(safeInput, presentationTheme)
+          : minimalOptions(safeInput, isDark);
+
+        instance.current.setOption(resolved, true);
         instance.current.resize();
         setError(false);
+
+        // Post-render geometry inspection & adaptive repair loop
+        const timer = setTimeout(() => {
+          if (!container.current) return;
+          const report = inspectRenderedChartGeometry(container.current);
+          setVisualSafetyReport(report);
+
+          // If unresolved tokens or overflow detected and not already repaired
+          if (!report.passed && !repairedOption) {
+            const { repairedOption: nextOption, repairsApplied } = repairChartLayout(safeInput, {
+              hasHorizontalOverflow: report.visualSafetyScore.axis_clipping > 0,
+              hasVerticalOverflow: report.visualSafetyScore.container_overflow > 0,
+            });
+            if (repairsApplied.length > 0) {
+              setRepairedOption(nextOption);
+            }
+          }
+        }, 60);
+
+        return () => clearTimeout(timer);
       }
     } catch (err) {
       console.warn('Chart rendering failed', err);
       setError(true);
     }
-  }, [option, isDark, presentationTheme]);
+  }, [option, repairedOption, isDark, presentationTheme]);
 
   const eventNames = Object.keys(onEvents || {}).sort().join('|');
   useEffect(() => {
@@ -321,9 +375,19 @@ export default function SafeReactECharts({ option = {}, style, onEvents, opts = 
     return () => bindings.forEach(([name, callback]) => chart.off(name, callback));
   }, [eventNames]);
 
+  const effectiveHeight = (repairedOption || option)?._planned_height || (style && style.height) || 300;
+
   return (
-    <div className="minimal-chart" style={{ position: 'relative', minWidth: 0, width: '100%', maxWidth: '100%', overflow: 'visible' }}>
-      <div ref={container} style={{ height: 300, width: '100%', maxWidth: '100%', overflow: 'hidden', ...style }} />
+    <div
+      className="minimal-chart"
+      data-visual-safety-score={visualSafetyReport?.safetyScore ?? 100}
+      style={{ position: 'relative', minWidth: 0, width: '100%', maxWidth: '100%', height: effectiveHeight, overflow: 'visible' }}
+    >
+      <div
+        ref={container}
+        data-categories={JSON.stringify(option?.xAxis?.data || (Array.isArray(option?.xAxis) ? option?.xAxis[0]?.data : []) || [])}
+        style={{ height: '100%', width: '100%', maxWidth: '100%', overflow: 'hidden' }}
+      />
       {hoverTooltip && hoverTooltip.text && (
         <div
           role="tooltip"

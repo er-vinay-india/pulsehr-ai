@@ -151,3 +151,68 @@ def test_live_engine_governed_pipeline_integration(seeded_attendance_sheet):
         assert claim["evidence_ids"][0].startswith("EVID-")
         assert "{" not in claim["rendered_text"]
         assert "}" not in claim["rendered_text"]
+
+
+@pytest.fixture
+def seeded_environmental_dataset():
+    from pathlib import Path
+    from app.services import sheet_catalog
+    conn = get_connection()
+    fixture_path = Path("backend/data/uploads/821964a8914147299f27c790eb371f54.csv")
+    conn.execute(
+        "INSERT OR REPLACE INTO dataset_uploads (id, filename, original_name, display_name, file_type) VALUES (?, ?, ?, ?, ?)",
+        (100, "Location_data_2022.csv", "Location_data_2022.csv", "CPCB Air Quality 2022", "csv"),
+    )
+    sheets_prep = sheet_catalog.prepare_sheets(sheet_catalog.read_sheets(fixture_path), "Location_data_2022.csv", embed=False)
+    sheet_catalog.insert_sheets(conn, 100, sheets_prep)
+    conn.commit()
+    conn.close()
+    return 100
+
+
+def test_environmental_semantic_qa_and_visual_integrity(seeded_environmental_dataset):
+    """Verify all 4 environmental semantic & visual integrity contracts on real reconstructed data."""
+    from app.services.adaptive_dashboard.dataset_orchestrator import run_dataset_intelligence
+
+    res = run_dataset_intelligence(seeded_environmental_dataset)
+    assert res.domain_profile["domain"] == "environmental"
+    assert res.domain_profile["governed_scenario_domain"] is None
+
+    # 1. AggregationSemanticsIntegrity & VisualStoryRedundancyIntegrity
+    # No "Total SO2 annual average" or additive sum of concentration metrics in topics
+    for topic in res.executive_topics:
+        title_lower = topic["title"].lower()
+        assert "total so2" not in title_lower, f"Invalid additive aggregation in topic: {topic['title']}"
+        assert "total no2" not in title_lower
+        assert "total pm10" not in title_lower
+
+    # 2. TemporalLabelIntegrity: No synthetic temporal categories when temporal_column is None
+    assert res.domain_profile.get("temporal_column") is None
+    for topic in res.executive_topics:
+        cats = topic["visual_spec"].get("categories") or []
+        for cat in cats:
+            cat_str = str(cat).lower()
+            assert not cat_str.startswith("week"), f"Synthetic week label found in non-temporal dataset: {cat}"
+            assert not cat_str.startswith("quarter"), f"Synthetic quarter label found: {cat}"
+
+    # 3. Intent & Visual Contract for Relationship Story
+    rel_topics = [t for t in res.executive_topics if t["analytical_intent"] == "RELATIONSHIP"]
+    assert len(rel_topics) >= 1, "Expected at least 1 RELATIONSHIP story (SO2 vs NO2)"
+    so2_no2_rel = rel_topics[0]
+    assert so2_no2_rel["visual_spec"]["chart_type"] == "scatter"
+    assert "scatter_points" in so2_no2_rel["visual_spec"]
+    scatter_pts = so2_no2_rel["visual_spec"]["scatter_points"]
+    assert len(scatter_pts) >= 10, "Expected empirical scatter points"
+    assert "x" in scatter_pts[0] and "y" in scatter_pts[0]
+    assert "name" in scatter_pts[0]
+
+    # 4. DomainNarrativeIntegrity: No workforce terminology in environmental outlier story
+    anomaly_topics = [t for t in res.executive_topics if t["analytical_intent"] == "ANOMALY"]
+    assert len(anomaly_topics) >= 1, "Expected at least 1 ANOMALY story (PM10 Outliers)"
+    pm10_outlier = anomaly_topics[0]
+    assert "pm10" in pm10_outlier["title"].lower() or "pollution" in pm10_outlier["title"].lower()
+    combined_text = (pm10_outlier["primary_takeaway"] + " " + pm10_outlier["recommended_action"]).lower()
+    assert "policy adherence" not in combined_text, "Workforce jargon leaked into environmental narrative"
+    assert "logging discrepancies" not in combined_text, "Workforce jargon leaked into environmental narrative"
+
+

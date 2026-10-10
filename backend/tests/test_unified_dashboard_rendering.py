@@ -175,3 +175,106 @@ def test_story_planner_uses_dataset_context(multisheet_workforce_dataset):
         assert len(claim["evidence_ids"]) >= 1
         assert claim["rendered_text"] != ""
 
+
+def test_multisheet_candidate_pool_and_budget_governance(multisheet_workforce_dataset):
+    """Verify that multiple sibling sheets contribute to candidate pool and budget limits hold."""
+    client = TestClient(app)
+    resp = client.get(f"/api/adaptive-dashboard/primary-element?dataset_id={multisheet_workforce_dataset}")
+    assert resp.status_code == 200
+    data = resp.json()
+
+    # Diagnostic metadata assertions
+    assert data["dataset_id"] == multisheet_workforce_dataset
+    assert data["source_sheet_count"] == 3
+    assert len(data["source_sheet_ids"]) >= 2
+    assert data["relationship_count"] >= 2
+    assert data["candidate_count"] >= 2
+    assert data["selected_insight_count"] <= 9
+
+    insights = data["selected_dashboard_insights"]
+    assert len(insights) <= 9
+
+    # Slot budget checks
+    hero_count = sum(1 for i in insights if i["slot_type"] == "hero")
+    strat_count = sum(1 for i in insights if i["slot_type"] == "strategic")
+    diag_count = sum(1 for i in insights if i["slot_type"] == "diagnostic")
+    risk_count = sum(1 for i in insights if i["slot_type"] == "risk_foresight")
+    action_count = sum(1 for i in insights if i["slot_type"] == "action_scenario")
+
+    assert hero_count <= 1
+    assert strat_count <= 3
+    assert diag_count <= 2
+    assert risk_count <= 2
+    assert action_count <= 1
+
+
+def test_unresolved_template_token_validator():
+    """Verify that UnresolvedTemplateTokenValidator eliminates all {variable} tokens."""
+    from app.services.adaptive_dashboard.evidence_graph import UnresolvedTemplateTokenValidator
+
+    raw_text = "{subject} recorded {formatted_value}, showing {difference_pct}% variance compared to {comparison}."
+    clean = UnresolvedTemplateTokenValidator.validate_and_sanitize(raw_text, fallback="Safe operational fallback")
+    assert "{" not in clean
+    assert "}" not in clean
+
+    no_token_text = "Attendance remains stable across all divisions."
+    assert UnresolvedTemplateTokenValidator.validate_and_sanitize(no_token_text) == no_token_text
+
+
+def test_business_titles_and_visual_specs(multisheet_workforce_dataset):
+    """Verify that selected insights have natural business titles and visual specs (no raw sheet join names)."""
+    client = TestClient(app)
+    resp = client.get(f"/api/adaptive-dashboard/primary-element?dataset_id={multisheet_workforce_dataset}")
+    data = resp.json()
+
+    insights = data["selected_dashboard_insights"]
+    assert len(insights) > 0
+
+    for cand in insights:
+        # Business titles
+        assert "Sheet1 × Leave Calculation Check" not in cand["title"]
+        # Presentation type and visual spec
+        assert cand.get("presentation_type") in ("comparison_bar", "ranked_bar", "trend_line", "kpi_card", "variance_chart", "distribution", "action_card")
+        assert "visual_spec" in cand
+        v_spec = cand["visual_spec"]
+        assert "categories" in v_spec
+        assert len(v_spec["categories"]) > 0
+
+    # Story plan business language
+    story_plan = data["story_plan"]
+    assert "Sheet1 × Leave Calculation Check" not in story_plan["narrative_angle"]
+    for claim in story_plan["claims"]:
+        assert "{" not in claim["rendered_text"]
+        assert "}" not in claim["rendered_text"]
+
+
+def test_related_period_insights_merge_into_one_topic(multisheet_workforce_dataset):
+    """Verify that multiple time-slice insights are merged into a single ExecutiveTopic."""
+    from app.services.adaptive_dashboard.composition_planner import ExecutiveCompositionPlanner
+    from app.services.adaptive_dashboard.dataset_orchestrator import run_dataset_intelligence
+
+    intel = run_dataset_intelligence(multisheet_workforce_dataset)
+    assert len(intel.executive_topics) >= 3
+    assert len(intel.executive_topics) <= 5
+
+    # Check for merged time-series attendance vs leave topic
+    merged_topic = next((t for t in intel.executive_topics if "trend" in t["title"].lower() or "leave" in t["title"].lower()), None)
+    assert merged_topic is not None
+    assert len(merged_topic["periods"]) >= 2
+    assert merged_topic["recommended_visual"] in ("100_percent_stacked_bar", "multi_series_trend", "grouped_bar", "ranked_bar")
+    assert "visual_spec" in merged_topic
+
+
+def test_max_main_visuals_is_five(multisheet_workforce_dataset):
+    """Verify that the executive composition budget limits total topics to at most 5."""
+    client = TestClient(app)
+    resp = client.get(f"/api/adaptive-dashboard/primary-element?dataset_id={multisheet_workforce_dataset}")
+    data = resp.json()
+
+    assert "executive_topics" in data
+    topics = data["executive_topics"]
+    assert len(topics) >= 1
+    assert len(topics) <= 5
+
+
+

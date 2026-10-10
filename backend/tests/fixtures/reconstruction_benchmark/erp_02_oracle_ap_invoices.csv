@@ -1,0 +1,8 @@
+Oracle Fusion Cloud Payables - Invoice Register
+Invoice Num,Supplier Name,Invoice Date,Invoice Amount,Hold Status
+INV-7701,Acme Industrial Supplies,2026-02-10,14250.00,RELEASED
+,International,
+INV-7702,Logistics Corp,2026-02-12,8920.50,HOLD
+INV-7703,Nordic Components AB,2026-02-14,31000.00,RELEASED
+INV-7704,Pacific Freight Services,2026-02-15,5400.00,RELEASED
+Note: 'HOLD' : Payment information not available pending matching

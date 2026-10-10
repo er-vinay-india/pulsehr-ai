@@ -1,0 +1,8 @@
+Clinical Trial Protocol CT-2026-X
+Patient ID,Cohort,Biomarker Alpha,Biomarker Beta,Efficacy Score
+P-001,Control,14.2,45.0,78
+P-002,Treatment A,NE,52.1,84
+P-003,Treatment B,18.5,ND,91
+P-004,Treatment A,16.0,48.2,88
+Note: 'NE' : Not evaluated due to sample hemolysis
+Note: 'ND' : Not reported by laboratory

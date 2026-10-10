@@ -1,0 +1,7 @@
+Datacenter Row 3 - Power Distribution Unit Metrics
+Rack ID,PDU Feed,Voltage V,Current A,Active Power kW
+RACK-301,PDU-A,208,24.5,5.1
+RACK-302,PDU-A,208,28.2,5.9
+RACK-303,PDU-B,OFFLINE,OFFLINE,OFFLINE
+RACK-304,PDU-B,208,22.0,4.6
+Note: 'OFFLINE' : Depowered rack; telemetry not monitored

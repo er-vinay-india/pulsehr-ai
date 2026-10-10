@@ -101,7 +101,7 @@ def test_insert_sheets_batching():
     conn.row_factory = sqlite3.Row
     conn.executescript("""
         CREATE TABLE dataset_uploads (id INTEGER PRIMARY KEY);
-        CREATE TABLE sheets (id INTEGER PRIMARY KEY AUTOINCREMENT, dataset_id INTEGER, name TEXT, display_name TEXT, columns_json TEXT, profile_json TEXT, row_count INTEGER);
+        CREATE TABLE sheets (id INTEGER PRIMARY KEY AUTOINCREMENT, dataset_id INTEGER, name TEXT, display_name TEXT, columns_json TEXT, profile_json TEXT, row_count INTEGER, header_geometry_json TEXT);
         CREATE TABLE sheet_rows (id INTEGER PRIMARY KEY AUTOINCREMENT, sheet_id INTEGER, row_index INTEGER, data_json TEXT);
         CREATE TABLE sheet_cells (sheet_id INTEGER, row_index INTEGER, column_name TEXT, value_key TEXT);
         CREATE TABLE tabular_chunks (id INTEGER PRIMARY KEY AUTOINCREMENT, dataset_id INTEGER, sheet_name TEXT, row_index INTEGER, chunk_text TEXT, metadata_json TEXT);

@@ -30,3 +30,22 @@
     }
   }
 }
+
+.data-explorer-nav-container {
+  .explorer-desktop-tab-bar {
+    display: flex;
+  }
+  .explorer-mobile-tab-dropdown {
+    display: none;
+  }
+
+  @media (max-width: 640px) {
+    .explorer-desktop-tab-bar {
+      display: none !important;
+    }
+    .explorer-mobile-tab-dropdown {
+      display: block !important;
+    }
+  }
+}
+

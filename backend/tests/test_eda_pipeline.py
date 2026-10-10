@@ -243,8 +243,8 @@ def test_adaptive_dashboard_cross_sheet_cohort_comparator():
     resp = run_adaptive_dashboard(sid)
     assert resp.quaternary_element is not None
     assert resp.quaternary_element.kind == "cohort_comparator"
-    assert "Overtime Hours" in resp.quaternary_element.title
-    assert "Absent" in resp.quaternary_element.title
+    assert "overtime hours" in resp.quaternary_element.title.lower()
+    assert "absent" in resp.quaternary_element.title.lower()
     assert resp.quaternary_element.glance.value == -60.0
 
 

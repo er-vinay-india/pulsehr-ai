@@ -100,6 +100,7 @@ class InferredDomain(str, Enum):
     INFRASTRUCTURE = "Cloud Infrastructure & SRE"
     RESEARCH = "Academic & Clinical Research"
     EDUCATION = "Education & Training"
+    ENVIRONMENTAL = "Environmental & Public Health"
     GENERIC_ANALYTICS = "Generic Analytics"
 
 

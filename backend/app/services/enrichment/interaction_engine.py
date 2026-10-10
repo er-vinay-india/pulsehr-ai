@@ -44,16 +44,43 @@ class InteractionFeatureEngine:
             and not c.endswith("_id")
             and not c.endswith("_year")
             and not c.endswith("_day")
+            and not (
+                profiles.get(c) and (
+                    SemanticRole.IDENTIFIER in profiles[c].roles
+                    or SemanticRole.ORDINAL in profiles[c].roles
+                    or profiles[c].semantic_type == "identifier"
+                )
+            )
         ]
 
-        categorical_cols = [
-            c for c in enriched_df.columns
-            if 2 <= enriched_df[c].nunique() <= 30
-            and not c.endswith("_id")
-        ]
+        total_rows = len(enriched_df)
+        categorical_cols: list[str] = []
+        for c in enriched_df.columns:
+            if c.endswith("_id") or c.endswith("_uuid"):
+                continue
+            prof = profiles.get(c)
+            if prof and (SemanticRole.IDENTIFIER in prof.roles or prof.semantic_type == "identifier"):
+                continue
+
+            nunique = enriched_df[c].nunique()
+            if nunique < 2:
+                continue
+
+            cardinality_ratio = nunique / max(1, total_rows)
+            # Dynamic cardinality: genuine categories don't have unique ratio >= 0.70
+            is_cat_dtype = (
+                isinstance(enriched_df[c].dtype, pd.CategoricalDtype)
+                or pd.api.types.is_object_dtype(enriched_df[c])
+                or pd.api.types.is_string_dtype(enriched_df[c])
+                or pd.api.types.is_bool_dtype(enriched_df[c])
+            )
+            has_cat_role = prof and (SemanticRole.CATEGORY in prof.roles or SemanticRole.ORDINAL in prof.roles or SemanticRole.DIMENSION in prof.roles)
+
+            if has_cat_role or (is_cat_dtype and cardinality_ratio < 0.70) or (nunique <= 50 and cardinality_ratio < 0.50):
+                categorical_cols.append(c)
 
         # 1. Group-Level Categorical Aggregation Features (e.g. Mean(Sales) by Department)
-        for cat_col in categorical_cols[:5]:
+        for cat_col in categorical_cols[:6]:
             for num_col in numeric_cols[:5]:
                 if not budget_guard.can_derive_column():
                     break
@@ -62,7 +89,14 @@ class InteractionFeatureEngine:
                 if feat_name in enriched_df.columns:
                     continue
 
-                group_means = enriched_df.groupby(cat_col)[num_col].transform("mean")
+                # For high cardinality (> 20 distinct), bin infrequent categories to top 15 + other
+                cat_nunique = enriched_df[cat_col].nunique()
+                if cat_nunique > 20:
+                    top_cats = set(enriched_df[cat_col].value_counts().nlargest(15).index)
+                    binned_cat = enriched_df[cat_col].apply(lambda v: v if v in top_cats else "__other__")
+                    group_means = enriched_df.groupby(binned_cat)[num_col].transform("mean")
+                else:
+                    group_means = enriched_df.groupby(cat_col)[num_col].transform("mean")
                 if group_means.std() > 0:
                     enriched_df[feat_name] = np.round(group_means, 4)
                     budget_guard.record_derived_columns(1)
@@ -97,9 +131,8 @@ class InteractionFeatureEngine:
                 if (s2 > 0).sum() / max(1, len(enriched_df)) >= 0.7:
                     ratio_name = f"interact_ratio_{c1}_over_{c2}"
                     if ratio_name not in enriched_df.columns:
-                        valid_mask = s2 > 0
-                        res = pd.Series(np.nan, index=enriched_df.index, dtype=float)
-                        res.loc[valid_mask] = np.round(s1.loc[valid_mask] / s2.loc[valid_mask], 4)
+                        ratio_val = (s1 / s2).where(s2 > 0).round(4)
+                        res = pd.Series(ratio_val.to_numpy(dtype=float, na_value=np.nan), index=enriched_df.index, dtype="float64")
 
                         # Verify standard deviation > 0
                         if res.std() > 0:

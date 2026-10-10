@@ -46,7 +46,16 @@ class ScientificFormulaEngine:
             if not budget_guard.can_derive_column():
                 break
 
-            group_cols = [c for c in group.columns if c in enriched_df.columns]
+            group_cols = [
+                c for c in group.columns
+                if c in enriched_df.columns and not (
+                    profiles.get(c) and (
+                        SemanticRole.IDENTIFIER in profiles[c].roles
+                        or SemanticRole.ORDINAL in profiles[c].roles
+                        or profiles[c].semantic_type == "identifier"
+                    )
+                )
+            ]
             if len(group_cols) < 2:
                 continue
 

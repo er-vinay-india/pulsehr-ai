@@ -1,0 +1,7 @@
+Q1 Post-Support Customer Satisfaction Survey
+Ticket ID,Customer Tier,Product Satisfaction,Ease of Resolution,NPS Rating
+TCK-5501,Enterprise,9,10,10
+TCK-5502,SMB,8,8,8
+TCK-5503,Trial,N/A,9,9
+TCK-5504,Enterprise,10,10,10
+Note: 'N/A' : Question not applicable to onboarding tier accounts

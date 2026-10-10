@@ -236,11 +236,16 @@ class EnrichmentProfiler:
         # Multi-Role Assignment (IDENTIFIER, DIMENSION, MEASURE, TIME, GEO, CATEGORY, ORDINAL, BOOLEAN, TEXT, UNIT, QUANTITY, SCIENTIFIC_MEASURE)
         roles: list[SemanticRole] = []
 
-        # Identifier
-        clean_name_key = col_name.lower().replace("_", "").replace("-", "")
-        if clean_name_key.endswith("id") or clean_name_key == "id" or clean_name_key.endswith("code") or clean_name_key.endswith("key"):
-            if unique_count > 0 and cardinality_ratio >= 0.8:
+        # Identifier & Ordinal
+        clean_name_key = col_name.lower().replace("_", "").replace("-", "").replace(".", "").replace(" ", "")
+        is_ordinal_name = bool(re.match(r'^(sr|s|seq|row)[\._\s]?no\.?', col_name, re.I)) or clean_name_key in (
+            "srno", "sno", "sr_no", "s_no", "serialno", "serialnumber", "rowno", "rownum", "rowid", "index", "seq", "sequence"
+        )
+        if clean_name_key.endswith("id") or clean_name_key == "id" or clean_name_key.endswith("code") or clean_name_key.endswith("key") or is_ordinal_name:
+            if is_ordinal_name or (unique_count > 0 and cardinality_ratio >= 0.8):
                 roles.append(SemanticRole.IDENTIFIER)
+                if is_ordinal_name:
+                    roles.append(SemanticRole.ORDINAL)
 
         # Boolean
         if non_nulls and all(str(v).lower() in ("true", "false", "0", "1", "yes", "no", "t", "f") for v in non_nulls[:50]):
@@ -268,8 +273,8 @@ class EnrichmentProfiler:
             if detected_unit:
                 roles.append(SemanticRole.UNIT)
 
-        # Measure (General numeric)
-        if (is_clean_numeric or num_floats) and SemanticRole.IDENTIFIER not in roles:
+        # Measure (General numeric - never assign to identifiers or ordinals)
+        if (is_clean_numeric or num_floats) and SemanticRole.IDENTIFIER not in roles and SemanticRole.ORDINAL not in roles:
             if SemanticRole.MEASURE not in roles:
                 roles.append(SemanticRole.MEASURE)
             if SemanticRole.QUANTITY not in roles:

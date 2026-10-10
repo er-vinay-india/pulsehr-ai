@@ -1,0 +1,7 @@
+SAP ECC 6.0 - Transaction MB51 Material Document List
+Client: 100 Company Code: 1000 Plant: US10
+Mat Doc,Item,Material,Movement Type,Quantity,Base Unit
+50001890,1,MAT-9001,101,500,PC
+50001891,1,MAT-9002,101,250,PC
+50001892,1,MAT-9003,261,-50,PC
+50001893,1,MAT-9004,301,120,PC

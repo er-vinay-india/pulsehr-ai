@@ -467,6 +467,30 @@ class AdaptiveDashboardResponse(BaseModel):
     relationship_count: int = 0
     coverage_warnings: list[str] = Field(default_factory=list)
     relationship_graph: dict[str, Any] | None = None
+    source_sheet_ids: list[int] = Field(default_factory=list)
+    source_sheet_count: int = 0
+    candidate_count: int = 0
+    selected_insight_count: int = 0
+    executive_topics: list[dict[str, Any]] = Field(default_factory=list)
+    executive_kpis: list[dict[str, Any]] = Field(default_factory=list)
+    domain_profile: dict[str, Any] = Field(default_factory=dict)
+
+
+class ExecutiveKPISpec(BaseModel):
+    """Governed Executive KPI contract with explicit evidence, definition, and population bindings."""
+    model_config = ConfigDict(extra="forbid")
+
+    kpi_id: str
+    label: str
+    value: float | int | str
+    formatted_value: str
+    subtext: str = ""
+    status: Literal["success", "info", "warning", "danger", "neutral"] = "neutral"
+    definition: str
+    population: str
+    period: str
+    calculation: str
+    evidence_id: str
 
 
 class UnifiedFinding(BaseModel):

@@ -11,7 +11,7 @@ import { activateUploadedSheet } from "./components/hriday/datasetScope.js";
 import { CheckCircle2, X, Table } from "lucide-react";
 
 function parseHash() {
-  const hash = window.location.hash.replace(/^#\/?/, "").trim();
+  const hash = window.location.hash.replace(/^#\/?/, "").split("?")[0].trim();
   const valid = ["adaptive", "explorer", "presentation"];
   if (valid.includes(hash)) return hash;
   if (hash === "data" || hash === "dataset" || hash === "sheets" || hash === "tables") return "explorer";
@@ -58,7 +58,7 @@ export default function App() {
 
   useEffect(() => {
     const handleHashChange = () => {
-      const h = window.location.hash.replace(/^#\/?/, "").trim();
+      const h = window.location.hash.replace(/^#\/?/, "").split("?")[0].trim();
       if (h === "copilot") {
         setCopilotOpen(true);
         setActiveTab("adaptive");

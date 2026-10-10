@@ -1,0 +1,7 @@
+Supplier Evaluation Matrix
+Vendor ID,Supplier Name,Quality Score,On-Time Delivery
+V-101,Apex Packaging,94.5,98.2%
+V-102,Zenith Logistics,UNK,91.0%
+V-103,Prime Raw Materials,88.0,UNK
+V-104,Global Freight,92.0,96.5%
+Footnote: 'UNK' : Vendor status subject to audit inquiry

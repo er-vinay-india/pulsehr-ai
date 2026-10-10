@@ -50,6 +50,24 @@ class EvidenceItem(BaseModel):
     limitations: list[str] = Field(default_factory=list)
 
 
+class UnresolvedTemplateTokenValidator:
+    """Permanent QA guard preventing raw template tokens from ever reaching the UI."""
+
+    PATTERN = re.compile(r"\{[a-zA-Z0-9_]+\}")
+
+    @classmethod
+    def validate_and_sanitize(cls, text: str, fallback: str = "") -> str:
+        """Sanitizes text by eliminating any residual placeholders and cleaning whitespace."""
+        if not text:
+            return fallback
+        if not cls.PATTERN.search(text):
+            return text
+        cleaned = cls.PATTERN.sub("", text).strip()
+        cleaned = re.sub(r"\s+", " ", cleaned)
+        cleaned = re.sub(r"\s+([.,;:!?])", r"\1", cleaned)
+        return cleaned if cleaned else fallback
+
+
 class EvidenceGraph(BaseModel):
     """Governed graph of verified evidence objects for a dataset sheet."""
     model_config = ConfigDict(extra="forbid")
@@ -89,18 +107,34 @@ class EvidenceGraph(BaseModel):
         Example template: "{subject} recorded {value} {unit}, which is {difference_pct}% above baseline."
         """
         if not evidence_ids:
-            return template
+            return UnresolvedTemplateTokenValidator.validate_and_sanitize(template)
 
         primary = self.get_by_id(evidence_ids[0])
         if not primary:
-            return template
+            return UnresolvedTemplateTokenValidator.validate_and_sanitize(template)
+
+        token_dict: dict[str, Any] = {
+            "subject": primary.subject,
+            "metric": primary.metric,
+            "value": primary.value,
+            "formatted_value": primary.formatted_value,
+            "difference_pct": f"{primary.difference_pct:+.1f}" if primary.difference_pct is not None else "0",
+            "population": f"{primary.population:,}" if isinstance(primary.population, (int, float)) else str(primary.population),
+            "calculation": primary.calculation,
+            "confidence": primary.confidence,
+            "comparison": primary.tokens.get("comparison", "organization baseline"),
+            **primary.tokens,
+        }
 
         rendered = template
-        for k, v in primary.tokens.items():
+        for k, v in token_dict.items():
             placeholder = f"{{{k}}}"
             if placeholder in rendered:
-                rendered = rendered.replace(placeholder, str(v))
-        return rendered
+                rendered = rendered.replace(placeholder, str(v) if v is not None else "")
+        return UnresolvedTemplateTokenValidator.validate_and_sanitize(
+            rendered,
+            fallback=f"{primary.subject} established at {primary.formatted_value}",
+        )
 
 
 def findings_to_evidence_graph(

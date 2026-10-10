@@ -48,6 +48,8 @@ def init_db(conn: sqlite3.Connection | None = None) -> None:
             conn.execute("ALTER TABLE sheets ADD COLUMN analysis_context_json TEXT")
         if "enrichment_json" not in s_cols:
             conn.execute("ALTER TABLE sheets ADD COLUMN enrichment_json TEXT")
+        if "header_geometry_json" not in s_cols:
+            conn.execute("ALTER TABLE sheets ADD COLUMN header_geometry_json TEXT")
 
         # Backfill display names for existing datasets
         try:

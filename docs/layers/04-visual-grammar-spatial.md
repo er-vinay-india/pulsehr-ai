@@ -2,17 +2,20 @@
 
 > **Parent:** [README.md](../../README.md) &rsaquo; [System Architecture](../system-architecture.md) &rsaquo; **Layer 4**
 
+---
+
 ## 1. Architectural Mission: Spatial & Visual Invariants
 
-Layer 4 governs the visual presentation layer across all rendering targets (React browser studio, headless PDF exporter, and native Microsoft PowerPoint files). It enforces strict WCAG AAA contrast standards, an immutable 16:9 spatial layout contract, a cohesive typography scale, and intelligent table overflow protection.
+Layer 4 governs the visual presentation layer across all rendering surfaces (React browser components, headless PDF exporter, and native Microsoft PowerPoint decks). It enforces strict WCAG AAA contrast standards, an immutable 16:9 spatial layout contract, a cohesive typography scale, and a **truthful visual intent grammar** where chart types strictly mirror analytical intent.
 
 ```mermaid
 flowchart TD
-    DeckSpec[Layer 3 Deck Specification] --> Layout[1. 16:9 Baseline Geometry 960x540]
+    DeckSpec[Layer 3 Deck & Dashboard Specs] --> Layout[1. 16:9 Baseline Geometry 960x540]
     Layout --> Tokens[2. HighView Design Tokens _tokens.scss]
     Tokens --> Type[3. Standardized Typography Scale]
-    Type --> TableGuard[4. Dense Table Wrapping & Multi-Page]
-    TableGuard --> Target1[React Web Studio]
+    Type --> VisualGrammar[4. Truthful Visual Intent Grammar & ECharts]
+    VisualGrammar --> TableGuard[5. Dense Table Wrapping & Continuation]
+    TableGuard --> Target1[React Web Studio & Dashboard]
     TableGuard --> Target2[Native Python-PPTX Exporter]
     TableGuard --> Target3[Headless Chrome PDF Exporter]
 ```
@@ -44,14 +47,28 @@ Defined canonically in SCSS; JavaScript chart tokens and presentation themes inh
 | `--color-warning` | `#65470C` | `#E8C675` | Restrained gold; caution & moderate volatility |
 | `--color-error` | `#8E1938` | `#FFB3C0` | Deep crimson; critical headwinds, high turnover |
 
-### B. Unified 16:9 Spatial Baseline
+### B. Truthful Visual Intent Grammar & ECharts Renderers
+Implemented in `backend/app/services/adaptive_dashboard/composition_planner.py` and `frontend/src/components/adaptive/VisualSpecRenderer.jsx`:
+1. **`RELATIONSHIP` Intent &rarr; True Scatter Plots**:
+   - Correlation and bivariate measures render as native **ECharts scatter plots**.
+   - Plotted coordinates: $X$-axis = measure 1, $Y$-axis = measure 2.
+   - Point metadata: Carries entity identifier (e.g. city name) into interactive tooltips.
+   - Strictly replaces legacy synthetic categorical bar charts.
+2. **`TemporalLabelIntegrity`**:
+   - Synthetic time labels (`Week 1...5`, `Month 1...`, `Quarter 1...`) are permanently banned when the source table lacks a true `temporal_point` column.
+3. **`RANKING` Intent &rarr; Directional Bar Charts**:
+   - Polarity-aware color rendering (`HIGHER_IS_BETTER` vs `LOWER_IS_BETTER`).
+   - Benchmark reference lines (e.g. NAAQS statutory $60\ \mu\text{g/m}^3$ annual standard).
+4. **`ANOMALY` / `OUTLIER` Intent &rarr; Variance Bars**:
+   - Diverging or baseline-anchored variance bars highlighting statistical outlier distance.
+
+### C. Unified 16:9 Spatial Baseline
 Implemented in `backend/app/services/presentation/slide_layout.py`, `resolved_slides.scss`, and `resolved_pdf.py`:
 - **Baseline Resolution**: `960 × 540 pt` (scaled $2\times$ to `1920 × 1080 px` for high-DPI displays).
 - **Usable Content Area**: `864 pt` width ($48\mathrm{pt}$ left/right margins), `460 pt` height ($40\mathrm{pt}$ top header, $40\mathrm{pt}$ footer).
 - **Full-Width Hero Reclamation**: Text and cover layouts reclaim the full 864 pt width; side metrics only allocate space when explicitly present.
 
-### C. Standardized Typography Hierarchy
-To prevent awkward line wrapping and font clipping across presentation formats:
+### D. Standardized Typography Hierarchy
 
 | Element | Size | Weight | Line Height | Usage Target |
 | :--- | :---: | :---: | :---: | :--- |
@@ -63,25 +80,13 @@ To prevent awkward line wrapping and font clipping across presentation formats:
 | **Chart Labels** | `14 pt` | Medium (500) | `1.20` | Category axis labels, legend keys, datalabels |
 | **Footnotes & Provenance** | `11 pt` | Regular (400) | `1.20` | `EVID-XXX` evidence citations & source labels |
 
-### D. Dense Table Protection & Overflow Handling
+### E. Dense Table Protection & Overflow Handling
 Implemented in `backend/app/services/presentation/slide_layout.py` and `resolved-slides.scss`:
-1. **Weighted Column Widths**: Column widths are dynamically allocated based on semantic content types (compact for IDs, currencies, dates; wide for descriptive strings).
-2. **Multi-Page Continuation**: Tables exceeding the 460 pt content boundary automatically generate continuation slides with repeated column headers.
-3. **Accessible Page Controls**: Keyboard-accessible page navigation appears outside the slide canvas (`.resolved-table-pages`), preserving slide screenshot cleanliness.
-4. **Hard Row Safety**: Any single row exceeding maximum allowable height fails gracefully with an actionable diagnostic rather than clipping off-slide.
+1. **Weighted Column Widths**: Allocated based on semantic content types (compact for IDs, currencies, dates; wide for strings).
+2. **Multi-Page Continuation**: Tables exceeding the 460 pt content boundary generate continuation slides with repeated column headers.
+3. **Hard Row Safety**: Single rows exceeding maximum allowable height fail gracefully with actionable diagnostics rather than clipping off-slide.
 
-### E. Native Multi-Format Exporters
+### F. Native Multi-Format Exporters
 - **Native PowerPoint (`python-pptx`)**: Generates real editable shape tables and native vector chart objects—never low-resolution screenshots.
 - **Executive PDF (`resolved_pdf.py`)**: Headless browser render enforcing identical 960×540 pt geometry and print CSS rules.
 - **Interactive Web Studio (`FrontendSlidesDeck.jsx`, `DeckStudioView.jsx`)**: Responsive slider navigation, live conversational slide mutation with rollback, and speaker notes drawer.
-
-### F. Multi-Surface Visual Intelligence Grammar
-- **6 Supported Analytical Chart Primitives**:
-  - `variance_waterfall`: Stepped baseline delta bars calculating positive vs negative variance contributions.
-  - `breakdown_tree`: Hierarchical parent-to-child horizontal/vertical breakdown trees.
-  - `donut`: Proportional distribution with center stat callout.
-  - `column`: Discrete categorical metric comparison.
-  - `line`: Longitudinal chronological trends with confidence bands.
-  - `metric_distribution`: Min/median/p90/max quantile distribution spans.
-- **Direct Visual Parity Invariant**: Every chart primitive rendered in React ECharts has an identical native vector equivalent in `python-pptx` and headless PDF.
-- **Native PPTX Contrast Guarantee**: Audited by `tests/test_slide_export_contrast.py` across all themes (`SLIDE_THEME_PRESETS`) ensuring all text and chart labels maintain &ge; 7:1 contrast against slide and card backgrounds.

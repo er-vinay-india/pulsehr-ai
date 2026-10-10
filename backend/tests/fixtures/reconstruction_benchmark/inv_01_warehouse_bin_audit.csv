@@ -1,0 +1,7 @@
+Facility B-14 Cycle Count Audit Log
+Bin Location,Item SKU,Expected Qty,Actual Qty,Discrepancy
+BIN-A01,SKU-9901,100,100,0
+BIN-A02,SKU-9902,50,45,-5
+BIN-A03,SKU-9903,20,-,-
+BIN-A04,SKU-9904,75,75,0
+Note: '-' : Insufficient data pending manager recount

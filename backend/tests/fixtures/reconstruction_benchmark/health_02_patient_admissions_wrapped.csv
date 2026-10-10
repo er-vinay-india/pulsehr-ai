@@ -1,0 +1,7 @@
+Hospital Inpatient Census
+Admission ID,Patient Age,Primary Diagnosis,Length of Stay
+ADM-101,64,Congestive Heart Failure,5
+,Acute Bronchial,
+ADM-102,42,Asthma exacerbation,3
+ADM-103,58,Type 2 Diabetes Complication,4
+ADM-104,71,Pneumonia secondary infection,7

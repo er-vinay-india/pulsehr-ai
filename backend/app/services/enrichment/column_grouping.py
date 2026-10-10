@@ -8,6 +8,7 @@ and eliminate combinatorial cartesian explosion.
 from __future__ import annotations
 
 import collections
+import itertools
 import logging
 from typing import Any
 
@@ -68,7 +69,7 @@ class ColumnGroupingEngine:
         for comp_cols in components:
             # If component is very large (> 8 columns), partition by strongest mutual connections
             if len(comp_cols) > 8:
-                clusters = cls._partition_large_component(comp_cols, edge_weights)
+                clusters = cls._partition_large_component(comp_cols, edge_weights, profiles, min_relationship_score)
             else:
                 clusters = [comp_cols]
 
@@ -98,15 +99,74 @@ class ColumnGroupingEngine:
                 )
                 group_counter += 1
 
+        recall_stats = cls.measure_relationship_recall(semantic_groups, relationships, min_relationship_score)
+        logger.info(
+            "Semantic grouping complete: %d groups created. Relationship recall: %.2f (%d/%d edges preserved)",
+            len(semantic_groups),
+            recall_stats["recall"],
+            recall_stats["captured_edges"],
+            recall_stats["total_eligible_edges"],
+        )
+
         return semantic_groups
+
+    @classmethod
+    def measure_relationship_recall(
+        cls,
+        semantic_groups: list[SemanticColumnGroup],
+        relationships: list[ColumnRelationship],
+        min_relationship_score: float = 0.60
+    ) -> dict[str, Any]:
+        """Measures the candidate relationship recall preserved within the semantic groups.
+
+        Recall is the fraction of eligible relationships (relationship_score >= min_relationship_score)
+        where both endpoint columns appear together in at least one semantic column group.
+        """
+        eligible = [
+            rel for rel in relationships
+            if rel.relationship_score >= min_relationship_score
+        ]
+        if not eligible:
+            return {
+                "recall": 1.0,
+                "total_eligible_edges": 0,
+                "captured_edges": 0,
+                "missed_edges": [],
+            }
+
+        group_col_sets = [set(g.columns) for g in semantic_groups]
+
+        captured = 0
+        missed = []
+        for rel in eligible:
+            u, v = rel.left_column, rel.right_column
+            if any(u in s and v in s for s in group_col_sets):
+                captured += 1
+            else:
+                missed.append({
+                    "left_column": u,
+                    "right_column": v,
+                    "score": rel.relationship_score,
+                    "type": rel.relationship_type,
+                })
+
+        recall = captured / len(eligible)
+        return {
+            "recall": round(float(recall), 4),
+            "total_eligible_edges": len(eligible),
+            "captured_edges": captured,
+            "missed_edges": missed,
+        }
 
     @classmethod
     def _partition_large_component(
         cls,
         columns: list[str],
-        edge_weights: dict[tuple[str, str], float]
+        edge_weights: dict[tuple[str, str], float],
+        profiles: dict[str, EnrichmentColumnProfile] | None = None,
+        min_relationship_score: float = 0.60,
     ) -> list[list[str]]:
-        """Partitions large components into tighter subclusters using greedy edge aggregation."""
+        """Partitions large components into tighter subclusters while preserving bridge pathways."""
         clusters: list[list[str]] = []
         unassigned = set(columns)
 
@@ -124,6 +184,20 @@ class ColumnGroupingEngine:
                     cluster.append(cand)
                     unassigned.remove(cand)
             clusters.append(cluster)
+
+        # Bridge preservation: identify strong edges cut across clusters and bridge them
+        cluster_sets = [set(c) for c in clusters]
+        for (u, v), w in edge_weights.items():
+            if w >= min_relationship_score and u in columns and v in columns:
+                u_in = [i for i, cs in enumerate(cluster_sets) if u in cs]
+                v_in = [i for i, cs in enumerate(cluster_sets) if v in cs]
+                shared = set(u_in).intersection(set(v_in))
+                if not shared and u_in and v_in:
+                    c_idx = u_in[0] if len(clusters[u_in[0]]) <= len(clusters[v_in[0]]) else v_in[0]
+                    target_to_add = v if c_idx == u_in[0] else u
+                    if len(clusters[c_idx]) < 12 and target_to_add not in cluster_sets[c_idx]:
+                        clusters[c_idx].append(target_to_add)
+                        cluster_sets[c_idx].add(target_to_add)
 
         return clusters
 
