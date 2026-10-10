@@ -33,13 +33,18 @@ Implemented in `backend/app/services/adaptive_dashboard/` and `frontend/src/page
 - **Strict Composition Grammar**:
   1. **Dataset Context & Briefing Card**: High-level provenance, entity count, and high-impact executive summary.
   2. **Governed 5-KPI Strip**: Single-line summary metrics with domain-appropriate aggregation (e.g. Mean $\text{PM}_{10}$, Mean $\text{PM}_{2.5}$, Station Coverage) and explicit units ($\mu\text{g/m}^3$). Additive `SUM`/`Total` operations are strictly banned on rates and concentrations.
-  3. **3 Curated Executive Visual Stories**:
-     - *Story 1 (Hero)*: Primary benchmark ranking (e.g. Ambient air quality vs NAAQS standard).
-     - *Story 2 (Outlier)*: Anomaly concentration variance bars (e.g. Jharia $281\ \mu\text{g/m}^3$ finding).
-     - *Story 3 (Relationship)*: True ECharts scatter plot with monitored station points ($X = \text{SO}_2, Y = \text{NO}_2$).
+  3. **Executive Visual Diversity & Density Engine (Governed 8–15 Visual Envelope, Target 10–12)**:
+     - *Governed Portfolio Optimization*: Evaluated by `VisualPortfolioOptimizer` using multi-factor portfolio scoring (importance + confidence + business relevance + diversity bonuses - redundancy penalties).
+     - *Intent & Family Diversity Quotas*: Enforces $\ge 4$ distinct analytical intents (max 3 per intent) and $\ge 5$ distinct chart families (max 2 per family).
+     - *Gated Visual Archetypes*:
+       - `HERO / LARGE (span 12)`: Primary benchmark ranking (e.g. Ambient air quality vs NAAQS standard, or Department Attendance vs Policy Benchmark).
+       - `MEDIUM (span 6)`: Distribution box plots (`box_plot`), bivariate relationship scatter plots (`scatter`), capacity composition (`100_percent_stacked_bar`), and statistical anomaly variance bars (`variance_bar`).
+       - `COMPACT (span 4) / MICRO (span 3)`: Olympic Top 3 podium (`podium_top_3` with gold/silver/bronze pedestals and strict $\le 20$ character label truncation), target vs actual bullet charts (`bullet`), metric comparisons (`lollipop`), and disparity range spreads (`dumbbell`).
+     - *Truth > Quota Invariant*: HighView never synthesizes artificial stories, fabricated entities, or fake temporal dimensions to satisfy a count quota.
   4. **Top 3 / Bottom 3 Ranking Card**: Compact ranking overview with polarity awareness (`HIGHER_IS_BETTER` vs `LOWER_IS_BETTER`). Enforces a maximum of 6 unique entities and avoids duplicate entries on small cohorts ($N \le 6$). Deep-links via `"Explore full ranking →"`.
   5. **Compact Scenario Summary**: High-level simulation impact card, strictly gated to entitled domains.
 - **Redundancy Suppression (`VisualStoryRedundancyIntegrity`)**: Standalone scalar cards that duplicate values in the KPI strip are suppressed from the visual stories grid.
+- **Responsive Sizing & Zero Overflow**: 12-column grid system collapses compact/micro cards to 6-span on tablets (max-width 1024px) and 12-span single-column on mobile (<768px), guaranteeing zero horizontal clipping or overflow.
 
 ### Consumer 3B: Data Explorer ("Show me the analysis behind it.")
 Implemented in `frontend/src/pages/DataExplorerPage.jsx` and `frontend/src/components/explorer/`:

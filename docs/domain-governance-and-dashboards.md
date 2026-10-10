@@ -21,10 +21,16 @@ HighView enforces a strict division of responsibility between the Executive Dash
 └────────────────────────────────────────────────────────┘
   • Dataset Context & Compact Briefing
   • Governed 5-KPI Strip (Single-line metrics)
-  • 3 Executive Visual Stories:
-      - Story 1: Hero Benchmark Ranking (Bar chart)
-      - Story 2: Outlier / Anomaly Concentration (Variance bars)
-      - Story 3: Bivariate Relationship (True Scatter plot)
+  • Governed 8–15 Executive Visual Portfolio (Target 10–12):
+      - Hero Benchmark Ranking (Bar chart, span 12)
+      - Statistical Distribution (Box plot, span 6)
+      - Bivariate Association (True scatter plot, span 6)
+      - Capacity & Cohort Composition (100% stacked bar, span 6)
+      - Target vs Actual Benchmark (Bullet chart, span 4)
+      - Metric Entity Comparison (Lollipop chart, span 4)
+      - Olympic Top 3 Podium (Gold/Silver/Bronze pedestals, span 4)
+      - Disparity Range Spread (Dumbbell chart, span 4)
+      - Statistical Anomaly Concentration (Variance bars, span 6)
   • Compact Top 3 / Bottom 3 Ranking Overview
   • Compact Scenario Summary (Gated to entitled domains)
   • Contextual Deep-Links (Explore full ranking →, Explore relationship →)
@@ -178,3 +184,35 @@ In [`backend/app/services/dataset_deletion.py`](file:///Users/vinayksharma/Devel
 - **Cache Invalidation**: Clears `SnapshotManager._SNAPSHOT_CACHE`, `_GENERIC_WORKFLOW_CACHE`, `_facts_by_snapshot`, and embedding memory caches.
 - **Post-Deletion Orphan Verification**: Verifies zero residual rows across all tables (`orphan_check = "PASS"`).
 - **Regression Contract**: Tested via `backend/tests/test_dataset_isolation_and_deletion_cascade.py` across A &rarr; Delete &rarr; B, B &rarr; Delete &rarr; A, and simultaneous co-existence scenarios.
+
+---
+
+## 9. Executive Visual Diversity & Density Engine Governance
+
+### A. The 8–15 Visual Envelope & Portfolio Optimization
+HighView's composition planner operates under an explicit visual budget:
+- **Minimum visuals:** 8
+- **Target visuals:** 10–12
+- **Maximum visuals:** 15
+- **Intent diversity:** $\ge 4$ distinct intents, max 3 per intent.
+- **Chart family diversity:** $\ge 5$ distinct chart families, max 2 per family.
+
+The portfolio is selected greedily by `VisualPortfolioOptimizer` using multi-factor scoring:
+$$\text{Score} = 0.40 \cdot \text{importance} + 0.35 \cdot \text{confidence} + 0.25 \cdot \text{business\_relevance} + \text{Diversity Bonuses} - \text{Redundancy Penalties}$$
+
+### B. Truth > Quota Invariant
+HighView prioritizes factual mathematical truth over visual quantity:
+1. **Never Fabricate Entities or Stories:** The optimizer will gladly return 8 high-confidence visuals rather than forcing 15 low-confidence or synthetic charts.
+2. **Never Fabricate Temporal Dimensions:** Cross-sectional tables never receive line charts, slope charts, or synthetic date buckets.
+3. **Strict Archetype Gating (`ChartCapabilityRegistry`):**
+   - `BOX_PLOT`: numeric measure with grouping, $\ge 5$ observations.
+   - `SCATTER`: 2 continuous numeric measures, $N \ge 3$ points.
+   - `PODIUM_TOP_3`: high-confidence ranking $N \ge 3$, strict label truncation ($\le 20$ chars, $\le 2$ lines, full label in hover tooltip).
+   - `WORD_CLOUD`: strictly forbidden for quantitative ranking and trends.
+
+### C. Label Truncation on Podium Top 3
+In [`backend/app/services/adaptive_dashboard/visual_portfolio_optimizer.py:format_podium_labels`](file:///Users/vinayksharma/Developer/pulsehr-ai/backend/app/services/adaptive_dashboard/visual_portfolio_optimizer.py):
+- Entity names exceeding 20 characters are truncated with an ellipsis (`...`) for display on podium cards.
+- Multi-line wrapping is capped at 2 lines.
+- Unabridged full names and exact values are preserved in tooltips and the underlying data payload.
+

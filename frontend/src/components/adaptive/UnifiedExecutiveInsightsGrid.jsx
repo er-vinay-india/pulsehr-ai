@@ -195,11 +195,6 @@ export default function UnifiedExecutiveInsightsGrid({
       <div
         className="supporting-visuals-grid"
         data-testid="supporting-visuals-grid"
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 450px), 1fr))",
-          gap: "16px",
-        }}
       >
         {supportingTopics.map((topic) => (
           <ExecutiveVisualStory

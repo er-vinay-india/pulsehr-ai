@@ -48,19 +48,29 @@ Defined canonically in SCSS; JavaScript chart tokens and presentation themes inh
 | `--color-error` | `#8E1938` | `#FFB3C0` | Deep crimson; critical headwinds, high turnover |
 
 ### B. Truthful Visual Intent Grammar & ECharts Renderers
-Implemented in `backend/app/services/adaptive_dashboard/composition_planner.py` and `frontend/src/components/adaptive/VisualSpecRenderer.jsx`:
+Implemented in `backend/app/services/adaptive_dashboard/composition_planner.py`, `visual_portfolio_optimizer.py`, and `frontend/src/components/adaptive/VisualSpecRenderer.jsx`:
 1. **`RELATIONSHIP` Intent &rarr; True Scatter Plots**:
    - Correlation and bivariate measures render as native **ECharts scatter plots**.
    - Plotted coordinates: $X$-axis = measure 1, $Y$-axis = measure 2.
    - Point metadata: Carries entity identifier (e.g. city name) into interactive tooltips.
-   - Strictly replaces legacy synthetic categorical bar charts.
-2. **`TemporalLabelIntegrity`**:
-   - Synthetic time labels (`Week 1...5`, `Month 1...`, `Quarter 1...`) are permanently banned when the source table lacks a true `temporal_point` column.
-3. **`RANKING` Intent &rarr; Directional Bar Charts**:
-   - Polarity-aware color rendering (`HIGHER_IS_BETTER` vs `LOWER_IS_BETTER`).
-   - Benchmark reference lines (e.g. NAAQS statutory $60\ \mu\text{g/m}^3$ annual standard).
-4. **`ANOMALY` / `OUTLIER` Intent &rarr; Variance Bars**:
+   - Strictly replaces legacy synthetic categorical bar charts. Gate: requires 2 continuous numeric measures and $N \ge 3$ points.
+2. **`DISTRIBUTION` Intent &rarr; Five-Number Summary Box Plots**:
+   - Renders median, upper/lower quartiles (Q1, Q3), and min/max whiskers.
+   - Gate: requires numeric measure with $\ge 5$ observations (prefers $\ge 10$).
+3. **`RANKING` Intent &rarr; Directional Bar Charts & Podium Top 3**:
+   - Ranked horizontal bars with polarity-aware color rendering (`HIGHER_IS_BETTER` vs `LOWER_IS_BETTER`) and benchmark reference lines (e.g. NAAQS statutory $60\ \mu\text{g/m}^3$ annual standard).
+   - Olympic Podium (`podium_top_3`): Gold (#1), Silver (#2), and Bronze (#3) pedestals with medal badges. Strict label truncation ($\le 20$ chars, $\le 2$ lines, full label in hover tooltip).
+4. **`TARGET_VS_ACTUAL` Intent &rarr; Bullet Charts**:
+   - Horizontal performance bars with benchmark threshold indicators and gap badges.
+5. **`COMPARISON` Intent &rarr; Lollipop & Dumbbell Charts**:
+   - Lollipops for clean entity-level measure comparisons without heavy ink.
+   - Dumbbells for pairwise disparity spreads (e.g. SO2 vs NO2 gap across urban centers).
+6. **`COMPOSITION` Intent &rarr; 100% Stacked Bars & Treemaps**:
+   - Capacity breakdown across categorical cohorts or multi-sheet reconciliation.
+7. **`ANOMALY` / `OUTLIER` Intent &rarr; Variance Bars**:
    - Diverging or baseline-anchored variance bars highlighting statistical outlier distance.
+8. **`TemporalLabelIntegrity`**:
+   - Synthetic time labels (`Week 1...5`, `Month 1...`, `Quarter 1...`) are permanently banned when the source table lacks a true `temporal_point` column. Line/trend charts are only permitted when genuine temporal dimensions exist.
 
 ### C. Unified 16:9 Spatial Baseline
 Implemented in `backend/app/services/presentation/slide_layout.py`, `resolved_slides.scss`, and `resolved_pdf.py`:
@@ -90,3 +100,32 @@ Implemented in `backend/app/services/presentation/slide_layout.py` and `resolved
 - **Native PowerPoint (`python-pptx`)**: Generates real editable shape tables and native vector chart objects—never low-resolution screenshots.
 - **Executive PDF (`resolved_pdf.py`)**: Headless browser render enforcing identical 960×540 pt geometry and print CSS rules.
 - **Interactive Web Studio (`FrontendSlidesDeck.jsx`, `DeckStudioView.jsx`)**: Responsive slider navigation, live conversational slide mutation with rollback, and speaker notes drawer.
+
+### G. Executive Visual Diversity & Density Engine (8–15 Visual Envelope)
+Implemented in `backend/app/services/adaptive_dashboard/visual_portfolio_optimizer.py`, `composition_planner.py`, and `frontend/src/styles/executive-cockpit.scss`:
+
+1. **Dashboard Visual Budget Contract (`DashboardVisualBudget`)**:
+   ```python
+   min_visuals: int = 8
+   target_visuals: int = 10
+   max_visuals: int = 15
+   max_same_intent: int = 3
+   max_same_family: int = 2
+   min_distinct_families: int = 5
+   min_distinct_intents: int = 4
+   ```
+2. **Multi-Factor Portfolio Optimization**:
+   The optimizer ranks candidate stories using a balanced utility score:
+   $$\text{Score} = w_{\text{imp}} \cdot \text{importance} + w_{\text{conf}} \cdot \text{confidence} + w_{\text{bus}} \cdot \text{business\_relevance} + \text{Bonuses} - \text{Penalties}$$
+   - **Bonuses**: `new_intent_bonus` (+0.25), `new_family_bonus` (+0.20), `hero_anchor_bonus` (+0.15).
+   - **Penalties**: `same_family_penalty` (-0.30), `same_intent_penalty` (-0.20), `redundancy_penalty` (-0.50).
+3. **Responsive 12-Column Spatial Grid**:
+   - `HERO` (`layout-hint-hero`): `span 12` (full row prominence).
+   - `LARGE` (`layout-hint-large`): `span 12`.
+   - `MEDIUM` (`layout-hint-medium`): `span 6` (half width on desktop).
+   - `COMPACT` (`layout-hint-compact`): `span 4` (1/3 width on desktop).
+   - `MICRO` (`layout-hint-micro`): `span 3` (1/4 width on desktop).
+   - **Breakpoints**:
+     - Desktop ($\ge 1025\mathrm{px}$): Full multi-column grid density.
+     - Tablet ($\le 1024\mathrm{px}$): Compact and micro cards collapse to `span 6`.
+     - Mobile ($\le 768\mathrm{px}$): All cards collapse to `span 1` (single column 100% width) with zero horizontal clipping or overflow.

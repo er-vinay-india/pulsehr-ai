@@ -62,15 +62,15 @@ class InsightCandidate(BaseModel):
 
 
 class DashboardSlotBudget(BaseModel):
-    """Hard-governed slot allocation envelope for executive reporting (1 hero + up to 3 strategic + up to 2 diagnostic + up to 2 risk + 1 action)."""
+    """Hard-governed slot allocation envelope for executive reporting (1 hero + up to 5 strategic + up to 4 diagnostic + up to 3 risk + 2 action; max 15)."""
     model_config = ConfigDict(extra="forbid")
 
     max_hero: int = 1
-    max_strategic: int = 3
-    max_diagnostic: int = 2
-    max_risk_foresight: int = 2
-    max_action_scenario: int = 1
-    total_max: int = 9
+    max_strategic: int = 5
+    max_diagnostic: int = 4
+    max_risk_foresight: int = 3
+    max_action_scenario: int = 2
+    total_max: int = 15
 
 
 class GlobalInsightScorer:

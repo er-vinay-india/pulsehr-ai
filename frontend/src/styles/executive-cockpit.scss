@@ -800,3 +800,63 @@
     }
   }
 }
+
+/* --------------------------------------------------------------------------
+   7. Executive Visual Density & Diversity Grid (Governed 8-15 Visual Engine)
+   -------------------------------------------------------------------------- */
+.supporting-visuals-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 16px;
+  width: 100%;
+  box-sizing: border-box;
+
+  .layout-hint-hero,
+  .layout-hint-large {
+    grid-column: span 12;
+  }
+
+  .layout-hint-medium {
+    grid-column: span 6;
+  }
+
+  .layout-hint-compact {
+    grid-column: span 4;
+  }
+
+  .layout-hint-micro {
+    grid-column: span 3;
+  }
+
+  .scenario-summary-card {
+    grid-column: span 6;
+  }
+
+  @media (max-width: 1024px) {
+    .layout-hint-compact,
+    .layout-hint-micro {
+      grid-column: span 6;
+    }
+
+    .scenario-summary-card {
+      grid-column: span 12;
+    }
+  }
+
+  @media (max-width: 768px) {
+    grid-template-columns: 1fr;
+    gap: 12px;
+
+    .layout-hint-hero,
+    .layout-hint-large,
+    .layout-hint-medium,
+    .layout-hint-compact,
+    .layout-hint-micro,
+    .scenario-summary-card {
+      grid-column: span 1;
+      width: 100%;
+      min-width: 0;
+    }
+  }
+}
+

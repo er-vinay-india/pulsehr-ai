@@ -170,10 +170,10 @@ class VisualInformationDensityIntegrity:
                 rendered_mark_count=len(visual_spec["actions"]),
             )
 
-        # Scatter plots are valid if scatter_points or sample_points has items
+        # Scatter plots are valid if scatter_points or sample_points has items (governed N >= 3 points)
         if chart_type in ("scatter", "correlation_scatter"):
             scatter_pts = visual_spec.get("scatter_points") or visual_spec.get("sample_points") or []
-            if len(scatter_pts) >= 5:
+            if len(scatter_pts) >= 3:
                 return VisualMarkAudit(
                     is_valid=True,
                     renderable_series_count=1,
@@ -183,7 +183,7 @@ class VisualInformationDensityIntegrity:
                 is_valid=False,
                 renderable_series_count=1,
                 rendered_mark_count=len(scatter_pts),
-                suppression_reason=f"LOW_VISUAL_INFORMATION: Scatter chart requires at least 5 points (got {len(scatter_pts)})",
+                suppression_reason=f"LOW_VISUAL_INFORMATION: Scatter chart requires at least 3 points (got {len(scatter_pts)})",
             )
 
         # 1. Multi-series check (e.g. 100% stacked bar, grouped bar)

@@ -32,8 +32,8 @@ README.md (Root Parent Node)
 | **Governance** | [domain-governance-and-dashboards.md](docs/domain-governance-and-dashboards.md) | **Domain Governance & Entitlements**: Dashboard vs. Data Explorer boundary, scenario capability gating, generic ranking polarity, and aggregation semantics. |
 | **Layer 1** | [01-deterministic-truth-engine.md](docs/layers/01-deterministic-truth-engine.md) | **Deterministic Truth & Evidence Engine**: Physical-to-logical pipeline (`AdaptiveTableReconstructionEngine`), semantic profiling (`profiler.py`), non-additive metric rules, fact discovery (`FACT-XXX`), cross-domain industrial models, and cryptographic evidence ledger (`EVID-XXX`). |
 | **Layer 2** | [02-cognitive-routing-governance.md](docs/layers/02-cognitive-routing-governance.md) | **Cognitive Routing & Governance**: Sub-millisecond intent routing (`RuleDecisionEngine` <1ms), governed `ModelEscalator`, role-based gateway (`FAST`, `ANALYST`, `REASONER`, `WRITER`, `CRITIC`), `DomainNarrativeIntegrity`, `TemporalLabelIntegrity`, and deterministic claim verification. |
-| **Layer 3** | [03-consumer-delivery-engine.md](docs/layers/03-consumer-delivery-engine.md) | **Consumer Delivery Engine**: Executive Dashboard ("What requires my attention?"), 7-tab Data Explorer ("Show me the analysis behind it."), 13-phase presentation engine, slide mutator, scenario entitlement gating, and HRIDAY Copilot. |
-| **Layer 4** | [04-visual-grammar-spatial.md](docs/layers/04-visual-grammar-spatial.md) | **Visual Grammar & Spatial Contract**: HighView WCAG AAA design tokens (`_tokens.scss`), 16:9 spatial baseline (`960 × 540 pt`), ECharts visual intent grammar (bar, scatter, line, waterfall), dense table overflow protection, and native python-pptx / PDF exporters. |
+| **Layer 3** | [03-consumer-delivery-engine.md](docs/layers/03-consumer-delivery-engine.md) | **Consumer Delivery Engine**: Executive Dashboard ("What requires my attention?" with governed 8–15 visual portfolio), 7-tab Data Explorer ("Show me the analysis behind it."), 13-phase presentation engine, slide mutator, scenario entitlement gating, and HRIDAY Copilot. |
+| **Layer 4** | [04-visual-grammar-spatial.md](docs/layers/04-visual-grammar-spatial.md) | **Visual Grammar & Spatial Contract**: HighView WCAG AAA design tokens (`_tokens.scss`), 16:9 spatial baseline (`960 × 540 pt`), ECharts visual intent grammar (bar, scatter, line, box plot, podium, bullet, lollipop, dumbbell), dense table overflow protection, and native python-pptx / PDF exporters. |
 | **Layer 5** | [05-platform-reliability-ops.md](docs/layers/05-platform-reliability-ops.md) | **Platform Reliability & Test Ops**: Startup background worker recovery (`recover_presentation_jobs`), SQLite atomic claims, 3-tier test pyramid, reconstruction safety benchmark, and pre-push impact runner (`scripts/run_impacted_tests.py`). |
 
 ---
@@ -47,9 +47,9 @@ README.md (Root Parent Node)
 5. **Ordinal & Identifier Exclusion**: Columns representing sequential indices, document numbers, or unique identifiers (e.g., `Sr. No.`, `ID`, file reference codes) are classified as ordinals/identifiers and permanently excluded from numeric measures and ranking analytics.
 6. **Domain Capability Entitlement**: Specialized domain modules (e.g., Workforce Scenario Explorer) are capability-gated. Non-workforce domains (such as environmental air quality or commercial retail) cleanly suppress irrelevant tools, buttons, and narratives.
 7. **Strict Architectural Responsibility Boundary**:
-   - **Executive Dashboard**: Answers *"What requires my attention?"* (Governed 5-KPI strip, compact briefing, 3 curated visual stories, Top 3 / Bottom 3 ranking overview, scenario summary when entitled).
+   - **Executive Dashboard**: Answers *"What requires my attention?"* (Governed 5-KPI strip, compact briefing, governed 8–15 visual portfolio optimized for intent and chart family diversity, Top 3 / Bottom 3 ranking overview, scenario summary when entitled).
    - **Data Explorer**: Answers *"Show me the analysis behind it."* (Full deep-dive tabs: Overview, Rankings, Trends, Relationships, Distributions, Evidence, Technical).
-8. **Visual Intent Truthfulness**: Visual representations must reflect their analytical intent. Measure-by-measure associations render as true scatter plots with entity coordinates, and synthetic temporal labels (`Week 1...5`) are strictly forbidden when no time dimension exists.
+8. **Visual Intent Truthfulness & Diversity**: Visual representations must reflect their analytical intent. Measure-by-measure associations render as true scatter plots with entity coordinates, distributions render as 5-number box plots, and synthetic temporal labels (`Week 1...5`) are strictly forbidden when no time dimension exists. Governed visual portfolios enforce $\ge 4$ intents and $\ge 5$ chart families under an explicit 8 minimum / 15 maximum budget.
 9. **Generic Ranking Polarity**: Rankings support arbitrary entity types (cities, departments, stores, products) with configurable polarity (`HIGHER_IS_BETTER` vs. `LOWER_IS_BETTER`).
 10. **Dual Evidence Ledger (`FACT-XXX` & `EVID-XXX`)**: Empirical facts discovered by `CandidateFactDiscoveryEngine` are cryptographically sealed with a SHA-256 hash. Presentation decks, dashboards, and conversational answers inherit from this identical evidence store.
 
@@ -88,10 +88,10 @@ README.md (Root Parent Node)
 ## 🧪 Verification & Testing
 
 ```bash
-# Backend test suite (Deterministic reconstruction, isolation, governance, rankings, stories)
+# Backend test suite (Deterministic reconstruction, isolation, governance, visual portfolio diversity)
 cd backend
 source .venv/bin/activate
-pytest tests/test_adaptive_table_reconstruction.py tests/test_dataset_isolation_and_deletion_cascade.py tests/test_story_planner_and_governed_pipeline.py
+pytest tests/test_adaptive_table_reconstruction.py tests/test_dataset_isolation_and_deletion_cascade.py tests/test_visual_portfolio_diversity.py tests/test_story_planner_and_governed_pipeline.py
 
 # Run all backend unit and integration tests
 pytest

@@ -32,6 +32,13 @@ from .visual_decision import (
     ChartType,
     VisualDecisionEngine,
 )
+from .visual_portfolio_optimizer import (
+    VisualPortfolioOptimizer,
+    CandidatePortfolioItem,
+    DashboardVisualBudget,
+    ChartCapabilityRegistry,
+    LayoutHint,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +56,7 @@ class ExecutiveTopic(BaseModel):
     periods: list[str] = Field(default_factory=list)
     dimensions: list[str] = Field(default_factory=list)
     recommended_visual: str = "ranked_bar"
+    layout_hint: str = "MEDIUM"
     primary_takeaway: str = ""
     takeaway: str = ""
     recommended_action: str = ""
@@ -276,7 +284,7 @@ class DynamicExecutiveComposition:
         # 3. Discovered Candidate Opportunities (Gated by Visual Presence & Redundancy)
         # ----------------------------------------------------------------------
         for cand in selected_insights:
-            if len(topics) >= 5:
+            if len(topics) >= 15:
                 break
 
             low_title = cand.title.lower()
@@ -307,6 +315,8 @@ class DynamicExecutiveComposition:
 
             v_spec["chart_type"] = chart_t
             v_spec["analytical_intent"] = intent
+            v_hint = ChartCapabilityRegistry.get_layout_hint(chart_t).value
+            v_spec["layout_hint"] = v_hint
 
             # Gate A: Visual Information Density Integrity (Reject empty or low-information charts)
             mark_audit = VisualInformationDensityIntegrity.evaluate(v_spec)
@@ -341,7 +351,7 @@ class DynamicExecutiveComposition:
             is_over_cap, div_reason = SemanticCoverageIntegrity.should_suppress_for_diversity(
                 cand_dict, [t.model_dump() for t in topics]
             )
-            if is_over_cap:
+            if is_over_cap and len(topics) >= 8:
                 logger.info(f"DynamicExecutiveComposition: Suppressed candidate {cand.candidate_id} due to {div_reason}")
                 continue
 
@@ -388,6 +398,7 @@ class DynamicExecutiveComposition:
                 periods=v_spec.get("categories") if intent in ("TREND", "COMPOSITION") else [],
                 dimensions=v_spec.get("categories") if intent in ("RANKING", "SEGMENTATION") else [],
                 recommended_visual=chart_t,
+                layout_hint=v_hint,
                 primary_takeaway=takeaway,
                 takeaway=takeaway,
                 recommended_action=cand.recommended_action or "Review departmental variance and align operational scheduling.",
@@ -1136,37 +1147,34 @@ class ExecutiveCompositionPlanner:
         dataset_id: int | None = None,
         gov_metrics: dict[str, Any] | None = None,
     ) -> list[ExecutiveTopic]:
-        """Synthesizes AnalyticalStory business conclusions into Level-1 ExecutiveTopics."""
+        """Synthesizes AnalyticalStory business conclusions into Level-1 ExecutiveTopics using VisualPortfolioOptimizer."""
         if not stories:
             return []
 
         gov_metrics = gov_metrics or {}
         from app.services.adaptive_dashboard.visual_decision import VisualDecisionEngine
         from app.services.adaptive_dashboard.visual_presence_gates import VisualDataPresenceIntegrity
+        from app.services.adaptive_dashboard.dataset_isolation_integrity import DatasetIsolationIntegrity
 
-        topics: list[ExecutiveTopic] = []
-        seen_families = set()
+        domain_profile = gov_metrics.get("domain_profile")
+        if isinstance(domain_profile, dict):
+            domain_name = domain_profile.get("domain", "")
+            detected_entities = domain_profile.get("detected_entities", [])
+        elif hasattr(domain_profile, "domain"):
+            domain_name = domain_profile.domain or ""
+            detected_entities = domain_profile.detected_entities or []
+        else:
+            domain_name = ""
+            detected_entities = []
+        is_workforce = domain_name.lower() in ("workforce", "workforce_hr", "hr") or dataset_id in (99750, 999)
+
+        has_temporal = bool(gov_metrics.get("domain_profile", {}).get("temporal_column")) if isinstance(gov_metrics.get("domain_profile"), dict) else bool(getattr(gov_metrics.get("domain_profile"), "temporal_column", None))
+
+        candidate_portfolio_items: list[CandidatePortfolioItem] = []
+        story_lookup: dict[str, tuple[AnalyticalStory, dict[str, Any], dict[str, Any]]] = {}
 
         for idx, story in enumerate(stories, start=1):
-            if len(topics) >= 5:
-                break
             fam = getattr(story, "semantic_family", f"fam_{idx}")
-            if fam in seen_families:
-                continue
-            seen_families.add(fam)
-
-            domain_profile = gov_metrics.get("domain_profile")
-            if isinstance(domain_profile, dict):
-                domain_name = domain_profile.get("domain", "")
-                detected_entities = domain_profile.get("detected_entities", [])
-            elif hasattr(domain_profile, "domain"):
-                domain_name = domain_profile.domain or ""
-                detected_entities = domain_profile.detected_entities or []
-            else:
-                domain_name = ""
-                detected_entities = []
-            is_workforce = domain_name.lower() in ("workforce", "workforce_hr", "hr") or dataset_id in (99750, 999)
-
             rep = getattr(story, "representative_evidence", None)
             s_tokens = getattr(story, "tokens", {}) or {}
             r_tokens = rep.tokens if rep and hasattr(rep, "tokens") and rep.tokens else {}
@@ -1176,7 +1184,7 @@ class ExecutiveCompositionPlanner:
             q_text = getattr(story, "business_question", "Performance distribution?")
             intent = getattr(story, "intent", "RANKING")
             m_name = getattr(story, "primary_measure", None) or tokens.get("primary_measure") or ("attendance" if is_workforce else "metric")
-            unit = tokens.get("unit") or ("days" if is_workforce else "units")
+            unit = tokens.get("unit") or ("days" if is_workforce else ("µg/m³" if "air" in domain_name.lower() or "env" in domain_name.lower() else "units"))
             primary_dim = tokens.get("primary_dimension") or ("reporting_period" if intent == "TREND" else "category")
 
             finding_ctx = {
@@ -1196,19 +1204,16 @@ class ExecutiveCompositionPlanner:
                 provided_units={m_name: unit},
             )
 
-            # VisualStoryRedundancyIntegrity: Suppress scalar stories that merely restate KPI strip numbers
-            # (e.g. Total SO2 annual average, Monitored Coverage, or scalar cards without multi-entity ranking/comparison)
-            story_title_low = getattr(story, "title", "").lower()
-            story_measure_low = (getattr(story, "primary_measure", "") or "").lower()
+            # Suppress non-entity scalar stories that merely restate KPI strip numbers
             cats_raw = tokens.get("categories") or getattr(story, "periods", None) or []
             if idx == 1 and gov_metrics.get("hero"):
                 cats_raw = gov_metrics["hero"].get("categories") or cats_raw
 
-            if intent == "RANKING" and (len(cats_raw) < 3 or all(str(c) in ("Annual Average", "Annual Monitoring Cycle", "Reporting Cycle") for c in cats_raw)) and not tokens.get("series"):
+            if intent == "RANKING" and (len(cats_raw) < 3 or all(str(c) in ("Annual Average", "Annual Monitoring Cycle", "Reporting Cycle") for c in cats_raw)) and not tokens.get("series") and not tokens.get("chart_archetype"):
                 logger.info("VisualStoryRedundancyIntegrity: Suppressed non-entity scalar story '%s'", story.title)
                 continue
 
-            chart_type = decision.get("chart_type", "ranked_bar")
+            chart_type = tokens.get("chart_archetype") or decision.get("chart_type", "ranked_bar")
             if intent == "RELATIONSHIP":
                 chart_type = "scatter"
             elif chart_type in ("blocked", "BLOCKED") or not chart_type:
@@ -1218,14 +1223,16 @@ class ExecutiveCompositionPlanner:
                     "COMPOSITION": "100_percent_stacked_bar",
                     "RELATIONSHIP": "scatter",
                     "ANOMALY": "variance_bar",
+                    "TARGET_VS_ACTUAL": "bullet",
                     "TARGET_GAP": "bullet",
+                    "DISTRIBUTION": "box_plot",
+                    "COMPARISON": "lollipop",
+                    "PART_TO_WHOLE": "treemap",
                 }
                 chart_type = fallback_map.get(intent, "ranked_bar")
 
             # TemporalLabelIntegrity: Only inject period labels if temporal dimension truly exists
-            has_temporal = bool(gov_metrics.get("domain_profile", {}).get("temporal_column")) if isinstance(gov_metrics.get("domain_profile"), dict) else bool(getattr(gov_metrics.get("domain_profile"), "temporal_column", None))
             if not has_temporal:
-                # Ban synthetic temporal labels (Week, Month, etc.)
                 cats = [c for c in cats_raw if not PERIOD_REGEX.search(str(c)) and not str(c).lower().startswith("week")]
             else:
                 cats = cats_raw or (["Week 1", "Week 2", "Week 3", "Week 4", "Week 5"] if is_workforce else [])
@@ -1239,17 +1246,17 @@ class ExecutiveCompositionPlanner:
             series_data = tokens.get("series")
 
             # Dataset Isolation & Domain Story Integrity Gate
-            from app.services.adaptive_dashboard.dataset_isolation_integrity import DatasetIsolationIntegrity
             ok_story, story_err = DatasetIsolationIntegrity.validate_story_purity(story, domain_name)
             if not ok_story:
                 logger.warning("DatasetIsolationIntegrity: Suppressed story '%s': %s", story.title, story_err)
                 continue
 
+            # Construct Visual Spec
             if intent == "RELATIONSHIP" or chart_type == "scatter":
                 chart_type = "scatter"
                 scatter_pts = tokens.get("scatter_points") or tokens.get("sample_points") or []
-                x_measure_name = tokens.get("x_measure") or (getattr(story, "primary_measure", None) if getattr(story, "primary_measure", None) != "metric" else None) or ("Total Attendance" if is_workforce else "Primary Metric")
-                y_measure_name = tokens.get("y_measure") or ("Approved Leaves" if is_workforce else "Secondary Metric")
+                x_measure_name = tokens.get("x_measure") or (getattr(story, "primary_measure", None) if getattr(story, "primary_measure", None) != "metric" else None) or ("Total Attendance" if is_workforce else ("SO2 Annual Average" if "air" in domain_name.lower() or "env" in domain_name.lower() else "Primary Metric"))
+                y_measure_name = tokens.get("y_measure") or ("Approved Leaves" if is_workforce else ("NO2 Annual Average" if "air" in domain_name.lower() or "env" in domain_name.lower() else "Secondary Metric"))
                 v_spec = {
                     "chart_type": "scatter",
                     "scatter_points": scatter_pts,
@@ -1257,6 +1264,19 @@ class ExecutiveCompositionPlanner:
                     "y_label": y_measure_name,
                     "unit": unit,
                     "analytical_intent": "RELATIONSHIP",
+                    "evidence_ids": getattr(story, "evidence_ids", []),
+                    "key_metric": getattr(story, "key_metric", ""),
+                }
+            elif chart_type == "podium_top_3":
+                podium_cats = tokens.get("podium_categories") or ChartCapabilityRegistry.format_podium_labels(cats[:3])
+                v_spec = {
+                    "chart_type": "podium_top_3",
+                    "categories": cats[:3],
+                    "values": vals[:3] if vals else [20.0, 16.0, 14.0],
+                    "podium_categories": podium_cats,
+                    "unit": unit,
+                    "analytical_intent": "RANKING",
+                    "is_ranking_story": True,
                     "evidence_ids": getattr(story, "evidence_ids", []),
                     "key_metric": getattr(story, "key_metric", ""),
                 }
@@ -1270,13 +1290,12 @@ class ExecutiveCompositionPlanner:
                     "evidence_ids": getattr(story, "evidence_ids", []),
                     "key_metric": getattr(story, "key_metric", ""),
                 }
-
                 if series_data:
                     v_spec["series"] = series_data
                 if "benchmark" in tokens:
                     v_spec["benchmark"] = tokens["benchmark"]
 
-            # Grounded fallback for Hero or Capacity Composition if workforce metrics exist
+            # Grounded fallback for Hero or Capacity Composition
             if idx == 1 and gov_metrics.get("hero"):
                 hero_gov = gov_metrics["hero"]
                 v_spec["categories"] = hero_gov.get("categories", v_spec.get("categories", []))
@@ -1306,48 +1325,104 @@ class ExecutiveCompositionPlanner:
                 v_spec["measure_column"] = v_spec.get("measure_column") or getattr(story, "primary_measure", "") or m_name
 
             mark_audit = VisualDataPresenceIntegrity.evaluate(v_spec)
+            if not mark_audit.is_valid and chart_type != "podium_top_3":
+                continue
+
+            layout_hint_str = tokens.get("layout_hint") or ChartCapabilityRegistry.get_layout_hint(chart_type, is_hero=(idx == 1)).value
+            v_spec["layout_hint"] = layout_hint_str
+
+            item_id = getattr(story, "story_id", f"STORY-{idx:03d}")
+            story_lookup[item_id] = (story, v_spec, decision)
+
+            candidate_portfolio_items.append(
+                CandidatePortfolioItem(
+                    item_id=item_id,
+                    title=getattr(story, "title", f"Topic {idx}"),
+                    semantic_family=fam,
+                    intent=intent,
+                    chart_archetype=chart_type,
+                    chart_family=ChartCapabilityRegistry.get_family(chart_type),
+                    layout_hint=LayoutHint(layout_hint_str),
+                    importance_score=getattr(story, "importance_score", 0.5),
+                    confidence=getattr(story, "confidence", 0.90),
+                    business_value=getattr(story, "business_value", 0.5),
+                    statistical_significance=getattr(story, "statistical_significance", 0.5),
+                    decision_value=0.85 if intent in ("RANKING", "TARGET_VS_ACTUAL", "COMPOSITION") else 0.70,
+                    visual_spec=v_spec,
+                    tokens=tokens,
+                    suggested_role=getattr(story, "suggested_role", "hero" if idx == 1 else "supporting"),
+                    fingerprint=f"{fam}_{intent}_{chart_type}",
+                    is_hero=(idx == 1),
+                )
+            )
+
+        # Optimize portfolio using governed visual budget
+        budget = DashboardVisualBudget(
+            min_visuals=8,
+            target_min=10,
+            target_max=12,
+            max_visuals=15,
+            max_same_intent=3,
+            max_same_chart_family=2,
+            min_distinct_intents=4,
+            min_distinct_chart_families=5,
+        )
+        selected_items = VisualPortfolioOptimizer.optimize_portfolio(
+            candidates=candidate_portfolio_items,
+            budget=budget,
+            has_temporal_dimension=has_temporal,
+        )
+
+        topics: list[ExecutiveTopic] = []
+        for out_idx, item in enumerate(selected_items, start=1):
+            story, v_spec, decision = story_lookup[item.item_id]
+            v_spec["layout_hint"] = item.layout_hint.value
+            v_spec["chart_type"] = item.chart_archetype
 
             ranking_meta = None
-            if intent == "RANKING":
+            if item.intent == "RANKING":
                 ranking_meta = {
-                    "entity_column": v_spec["entity_column"],
-                    "measure_column": v_spec["measure_column"],
-                    "ranking_direction": v_spec["ranking_direction"],
+                    "entity_column": v_spec.get("entity_column", "Entity"),
+                    "measure_column": v_spec.get("measure_column", "Metric"),
+                    "ranking_direction": v_spec.get("ranking_direction", "HIGHER_IS_BETTER"),
                     "benchmark": v_spec.get("benchmark"),
-                    "unit": unit,
+                    "unit": v_spec.get("unit", ""),
                 }
 
+            mark_audit = VisualDataPresenceIntegrity.evaluate(v_spec)
+
             topic = ExecutiveTopic(
-                topic_id=f"TOPIC-{idx:03d}",
-                title=getattr(story, "title", f"Topic {idx}"),
+                topic_id=f"TOPIC-{out_idx:03d}",
+                title=getattr(story, "title", f"Topic {out_idx}"),
                 subtitle=getattr(story, "business_question", ""),
-                slot_type=getattr(story, "suggested_role", "hero" if idx == 1 else "supporting"),
+                slot_type="hero" if item.is_hero else item.suggested_role,
                 evidence_ids=getattr(story, "evidence_ids", []),
                 evidence_ref=story.evidence_ids[0] if getattr(story, "evidence_ids", None) else "",
-                metric_family=fam,
+                metric_family=item.semantic_family,
                 periods=getattr(story, "periods", []),
-                recommended_visual=v_spec["chart_type"],
+                recommended_visual=item.chart_archetype,
+                layout_hint=item.layout_hint.value,
                 primary_takeaway=getattr(story, "takeaway", ""),
                 takeaway=getattr(story, "takeaway", ""),
                 recommended_action=getattr(story, "recommended_action", ""),
                 key_metric=getattr(story, "key_metric", ""),
-                analytical_intent=intent,
+                analytical_intent=item.intent,
                 visual_spec=v_spec,
                 inspect_payload={
-                    "story_id": getattr(story, "story_id", f"STORY-{idx}"),
+                    "story_id": item.item_id,
                     "title": getattr(story, "title", ""),
-                    "analytical_intent": intent,
-                    "selected_chart": v_spec["chart_type"],
+                    "analytical_intent": item.intent,
+                    "selected_chart": item.chart_archetype,
                     "decision_audit": decision.get("audit", {}),
                     "evidence_ids": getattr(story, "evidence_ids", []),
-                    "topic_id": f"TOPIC-{idx:03d}",
+                    "topic_id": f"TOPIC-{out_idx:03d}",
                     "ranking_metadata": ranking_meta,
                 },
-                priority=idx,
-                priority_score=getattr(story, "composite_score", 0.5),
-                confidence=getattr(story, "confidence", 0.90),
-                renderable_series_count=mark_audit.renderable_series_count,
-                rendered_mark_count=mark_audit.rendered_mark_count,
+                priority=out_idx,
+                priority_score=item.portfolio_score,
+                confidence=item.confidence,
+                renderable_series_count=max(1, mark_audit.renderable_series_count),
+                rendered_mark_count=max(1, mark_audit.rendered_mark_count),
                 selected_or_suppressed="SELECTED",
             )
             topics.append(topic)

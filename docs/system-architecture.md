@@ -50,7 +50,8 @@ The platform is architected into **5 cohesive, integrated layers** supported by 
   LAYER 3: MULTI-SURFACE CONSUMER DELIVERY ENGINE
   ┌─────────────────────────────────────────────────────────────────────────────────────────────┐
   │ • Consumer 3A: Executive Dashboard ("What requires my attention?")                         │
-  │     - 5-KPI strip, 3 visual stories (Hero, Outlier, Scatter), Top 3/Bottom 3 ranking        │
+  │     - 5-KPI strip, 8–15 visual portfolio (Hero, Box Plot, Scatter, Podium, Bullet, etc.)   │
+  │     - VisualPortfolioOptimizer: multi-factor scoring, diversity quotas, layout hints        │
   │ • Consumer 3B: Data Explorer ("Show me the analysis behind it?")                            │
   │     - 7 deep analytical tabs: Overview, Rankings, Trends, Relationships, Distributions,     │
   │       Evidence, Technical (Reconstruction safety radar, confidence scores, provenance)      │

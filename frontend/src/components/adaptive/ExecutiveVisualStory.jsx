@@ -31,6 +31,11 @@ export default function ExecutiveVisualStory({
     COMPOSITION: themeTokens?.colors?.statusSuccess || "#10b981",
     RELATIONSHIP: "#8b5cf6",
     ANOMALY: themeTokens?.colors?.statusError || "#ef4444",
+    DISTRIBUTION: "#06b6d4",
+    TARGET_VS_ACTUAL: themeTokens?.colors?.statusSuccess || "#10b981",
+    COMPARISON: themeTokens?.colors?.brandBlue || "#2563eb",
+    PART_TO_WHOLE: "#8b5cf6",
+    GAP_EXPLANATION: themeTokens?.colors?.gold || "#d97706",
   }[topic.analytical_intent] || (themeTokens?.colors?.brandBlue || "#2563eb");
 
   const isRankingStory = topic.analytical_intent === "RANKING" || topic.visual_spec?.is_ranking_story;
@@ -41,6 +46,7 @@ export default function ExecutiveVisualStory({
   // Executive Dashboard Ranking Constraint: Exactly Top 3 + Bottom 3 only (never more than 6 unique entities)
   const compactVisualSpec = useMemo(() => {
     if (!topic.visual_spec) return null;
+    if (topic.visual_spec.chart_type === "podium_top_3") return topic.visual_spec;
     if (!isRankingStory) return topic.visual_spec;
 
     const spec = { ...topic.visual_spec };
@@ -107,22 +113,28 @@ export default function ExecutiveVisualStory({
     };
   }, [topic.visual_spec, isRankingStory]);
 
-  return (
-    <article
-      className={`executive-insight-card ${isHero ? "hero-card" : "supporting-card"}`}
-      data-testid={isHero ? "hero-card" : `supporting-card-${topic.topic_id}`}
-      style={{
-        backgroundColor: themeTokens?.colors?.surface,
-        border: `1px solid ${isHero ? (themeTokens?.colors?.brandBlue || "#2563eb") : themeTokens?.colors?.borderSubtle}`,
-        borderRadius: "12px",
-        padding: isHero ? "20px 24px" : "18px 20px",
-        display: "flex",
-        flexDirection: "column",
-        justifyContent: "space-between",
-        gap: "12px",
-        boxShadow: isHero ? "0 4px 20px -2px rgba(37, 99, 235, 0.08)" : "none",
-      }}
-    >
+    // Layout hint class for grid density
+    const layoutHint = (topic.layout_hint || topic.visual_spec?.layout_hint || (isHero ? "HERO" : "MEDIUM")).toLowerCase();
+    const layoutClass = `layout-hint-${layoutHint}`;
+
+    return (
+      <article
+        className={`executive-insight-card ${isHero ? "hero-card" : "supporting-card"} ${layoutClass}`}
+        data-testid={isHero ? "hero-card" : `supporting-card-${topic.topic_id}`}
+        style={{
+          backgroundColor: themeTokens?.colors?.surface,
+          border: `1px solid ${isHero ? (themeTokens?.colors?.brandBlue || "#2563eb") : themeTokens?.colors?.borderSubtle}`,
+          borderRadius: "12px",
+          padding: isHero ? "20px 24px" : "18px 20px",
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "space-between",
+          gap: "12px",
+          boxShadow: isHero ? "0 4px 20px -2px rgba(37, 99, 235, 0.08)" : "none",
+          minWidth: 0,
+          overflow: "hidden",
+        }}
+      >
       <div>
         {/* Header Badges */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
