@@ -28,11 +28,13 @@ The platform is architected into **5 cohesive, integrated layers** supported by 
   │ • Source-Faithful Sentinels: Preserves NM, -, NR, BDL; strictly bans coercion to 0.0        │
   │ • SQLite Storage & Provenance: Reconstructed tables stored in pulsehr.sqlite3 with lineage  │
   │ • Generic Semantic Profiling: Ordinal/identifier exclusion; non-additive measure detection  │
+  │ • Dataset Boundary & Isolation: DatasetIsolationIntegrity; strict intra-dataset joins only  │
+  │ • Transactional Cascaded Deletion: Bidirectional relationship purge, cache wipe, orphan test│
   │ • Mathematical Opportunity Mapping: Univariate, bivariate, correlations, cohorts            │
   │ • Candidate Fact Discovery: Pure code computation (FACT-XXX), minimum sample size gates     │
   │ • Cryptographic Evidence Ledger: SHA-256 sealed shared evidence package (EVID-XXX)          │
   └──────────────────────────────────────┬──────────────────────────────────────────────────────┘
-                                         │  Contracts: list[CandidateFact], Evidence Ledger
+                                         │  Contracts: list[CandidateFact], Evidence Ledger, DatasetIsolationIntegrity
                                          ▼
   LAYER 2: COGNITIVE ROUTING & GOVERNANCE LAYER
   ┌─────────────────────────────────────────────────────────────────────────────────────────────┐
@@ -124,3 +126,4 @@ The platform is architected into **5 cohesive, integrated layers** supported by 
 7. **Direct Inheritance Guarantee:** Downstream presentation decks, dashboards, and conversational answers inherit directly from the same evidence store.
 8. **Permutation-Only Prioritization Guarantee:** AI models can only reorder verified finding IDs; they cannot mutate mathematical values or invent ungrounded assertions.
 9. **Worker Resilience Guarantee:** Background generation jobs survive server reloads through PID-aware SQLite job recovery with bounded retries.
+10. **Dataset Boundary & Isolation Invariant:** Analytical artifacts and relationship joins must strictly satisfy `artifact.dataset_id == active_dataset_id`. Cross-dataset joins are permanently barred, deletion cascades bidirectionally with verified zero-orphan checks (`orphan_check="PASS"`), and all in-memory snapshot caches are completely purged upon source deletion.

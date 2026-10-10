@@ -46,15 +46,23 @@ Implemented in `backend/app/services/adaptive_table_reconstruction/safety_benchm
   - **False Split Rate**: Protection against leaving wrapped multi-line cells split across rows ($\le 1.0\%$).
   - **Model Overreach Rate**: Ensuring the governed model escalator is never invoked on unambiguous deterministic rows ($\le 0.0\%$).
 
-### C. Modular Test Pyramid (`backend/pytest.ini`)
+### C. Dataset Isolation & Deletion Cascade Regression Harness
+Implemented in `backend/tests/test_dataset_isolation_and_deletion_cascade.py`:
+- Validates the bidirectional deletion and zero-leakage invariant:
+  1. **A &rarr; Delete &rarr; B Semantic Disjointness**: Ingesting Dataset A (environmental), executing cascaded deletion, and ingesting Dataset B (workforce) guarantees exactly zero tokens of A (`SO2`, `NO2`, `PM10`, `PM2.5`, `Jharia`, `Brynihat`) appear anywhere in B's rendered payload.
+  2. **B &rarr; Delete &rarr; A Reverse Disjointness**: Ingesting Dataset B, deleting it, and ingesting A guarantees exactly zero tokens of B (`Attendance`, `Department`, `Approved Leave`, `Employee`, `WFO`) appear anywhere in A's payload.
+  3. **Simultaneous Co-Existence Isolation**: When multiple datasets co-exist in SQLite, zero cross-dataset joins are allowed in `sheet_relationships` (`left_sheet.dataset_id == right_sheet.dataset_id` for 100% of rows).
+  4. **Post-Deletion Orphan Verification**: Deletion is transactional and asserts zero orphan records across all descendant tables (`orphan_check = "PASS"`).
+
+### D. Modular Test Pyramid (`backend/pytest.ini`)
 
 | Execution Tier | Pytest Marker | Latency Target | Scope & Invariants |
 | :--- | :--- | :---: | :--- |
 | **Tier 1: Unit** | `@pytest.mark.unit` | `< 50ms` / test | Pure in-memory algorithmic transformers. Zero DB writes, zero network, zero LLM calls. |
-| **Tier 2: Integration** | `@pytest.mark.integration`, `@pytest.mark.db` | `0.5s - 5s` / mod | FastAPI endpoints, SQLite schema migrations, multi-stage pipelines, reconstruction flows. |
+| **Tier 2: Integration** | `@pytest.mark.integration`, `@pytest.mark.db` | `0.5s - 5s` / mod | FastAPI endpoints, SQLite schema migrations, multi-stage pipelines, reconstruction flows, isolation tests. |
 | **Tier 3: Benchmark** | `@pytest.mark.benchmark` | `30s - 15m` | Multi-case LLM evaluations, large matrix latency profiling (quarantined by default). |
 
-### D. The 8 Registered Domain Modules (`tests/module_registry.py`)
+### E. The 8 Registered Domain Modules (`tests/module_registry.py`)
 1. **`enrichment`**: Semantic enrichment, formula discovery, table synthesizer.
 2. **`eda`**: Exploratory data analysis, distributions, group-by metrics.
 3. **`dashboard`**: Adaptive multi-domain dashboard, visual presence gates, and disclosure cards.
@@ -64,7 +72,7 @@ Implemented in `backend/app/services/adaptive_table_reconstruction/safety_benchm
 7. **`ingestion`**: Dataset upload, adaptive table reconstruction, sheet catalog.
 8. **`decision_intelligence`**: Rule/embedding decision engines, rankings, and executive briefing.
 
-### E. Pre-Push Impact Runner (`scripts/run_impacted_tests.py`)
+### F. Pre-Push Impact Runner (`scripts/run_impacted_tests.py`)
 Inspects `git status` and `git diff` against `origin/main` to identify modified files and executes only the affected module tests:
 
 ```bash

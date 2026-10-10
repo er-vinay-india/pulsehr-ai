@@ -148,3 +148,33 @@ Rankings are decoupled from hardcoded business assumptions. Both the Executive D
 On the Executive Dashboard, the Top 3 / Bottom 3 component guarantees:
 - Maximum of **6 unique entities** rendered across the card.
 - If the total population $N \le 6$, entities are deduplicated and displayed as an ordered spectrum to avoid duplicate card entries.
+
+---
+
+## 8. Dataset Isolation Integrity & Cross-Dataset Non-Contamination
+
+### A. The Dataset Boundary Invariant
+To prevent analytical contamination across successively or concurrently uploaded workbooks, HighView enforces the invariant:
+
+$$\text{artifact}.\text{dataset\_id} == \text{active\_dataset\_id}$$
+
+Every visual story, evidence node, narrative element, and relationship candidate must strictly originate from the active dataset.
+
+### B. Two-Sheet Relationship Discovery Hygiene
+In [`sheet_catalog.py:rebuild_relationships`](file:///Users/vinayksharma/Developer/pulsehr-ai/backend/app/services/sheet_catalog.py#L826):
+1. **Intra-Dataset Join Invariant**: Cross-dataset relationships are forbidden. Sheets are only compared if `left['dataset_id'] == right['dataset_id']`.
+2. **Key Candidate Hygiene**: Non-key columns such as date ranges (`1st to 5th July`), temporal slices, and measure aggregates are explicitly excluded from join candidate consideration.
+3. **Canonical Key Alias Matching**: Entity IDs (`ID` $\leftrightarrow$ `Employee ID`) are recognized via canonical alias matching, yielding verified $1:1$ entity joins (e.g. `Sheet1.ID` $\leftrightarrow$ `Leave Calculation Check.Employee ID`, 209 matching keys) while preventing false-positive relationship explosions (e.g., 50 spurious cross-sheet links).
+
+### C. Cross-Domain Vocabulary Purity (`DatasetIsolationIntegrity`)
+In [`backend/app/services/adaptive_dashboard/dataset_isolation_integrity.py`](file:///Users/vinayksharma/Developer/pulsehr-ai/backend/app/services/adaptive_dashboard/dataset_isolation_integrity.py):
+- **Workforce Datasets**: Strictly guarded against environmental pollutant signatures (`SO2`, `NO2`, `PM10`, `PM2.5`, `Jharia`, `Brynihat`). Relationship visuals are grounded in genuine workforce measures (e.g. `Total Attendance` vs `Approved Leaves`, $r = -0.44$).
+- **Environmental Datasets**: Strictly guarded against workforce terminology (`Attendance`, `Department`, `Approved Leave`, `Employee`, `WFO`). Anomaly narratives report station exceedances rather than department disparities.
+
+### D. Transactional Cascaded Deletion & Cache Invalidation
+In [`backend/app/services/dataset_deletion.py`](file:///Users/vinayksharma/Developer/pulsehr-ai/backend/app/services/dataset_deletion.py):
+- **Bidirectional Relationship Purge**: Explicitly deletes `sheet_relationships WHERE left_sheet IN (...) OR right_sheet IN (...)`.
+- **Descendant Cascade**: Cleans `sheet_curated_rows`, `sheet_rows`, `sheet_cells`, `tabular_vectors`, `tabular_chunks`, `sheets`, `dataset_uploads`, and presentations within a single transactional block.
+- **Cache Invalidation**: Clears `SnapshotManager._SNAPSHOT_CACHE`, `_GENERIC_WORKFLOW_CACHE`, `_facts_by_snapshot`, and embedding memory caches.
+- **Post-Deletion Orphan Verification**: Verifies zero residual rows across all tables (`orphan_check = "PASS"`).
+- **Regression Contract**: Tested via `backend/tests/test_dataset_isolation_and_deletion_cascade.py` across A &rarr; Delete &rarr; B, B &rarr; Delete &rarr; A, and simultaneous co-existence scenarios.

@@ -61,7 +61,7 @@ README.md (Root Parent Node)
   - `POST /api/upload/file`: Ingest raw CSV/XLSX through `AdaptiveTableReconstructionEngine`, persist clean logical records into SQLite, and run semantic profiling.
   - `GET /api/sheets`: Sheet catalog, column profiles, domain classifications, and relationships.
   - `GET /api/sheets/{id}/rows`: Paginated source logical rows.
-  - `DELETE /api/upload/datasets/{id}`: Purge dataset and associated cached artifacts.
+  - `DELETE /api/upload/datasets/{id}`: Transactionally purge dataset, bidirectionally cascade sheet relationships, wipe descendant tables & in-memory caches, and verify zero orphans (`orphan_check="PASS"`).
 - **Adaptive Dashboard & Data Explorer**:
   - `GET /api/adaptive-dashboard/primary-element`: Primary visual story elements for the executive dashboard.
   - `GET /api/adaptive-dashboard/findings`: Domain-governed verified findings and narrative recommendations.
@@ -88,10 +88,10 @@ README.md (Root Parent Node)
 ## 🧪 Verification & Testing
 
 ```bash
-# Backend test suite (Deterministic reconstruction, governance, rankings, stories)
+# Backend test suite (Deterministic reconstruction, isolation, governance, rankings, stories)
 cd backend
 source .venv/bin/activate
-pytest tests/test_adaptive_table_reconstruction.py tests/test_generic_entity_ranking.py tests/test_story_planner_and_governed_pipeline.py
+pytest tests/test_adaptive_table_reconstruction.py tests/test_dataset_isolation_and_deletion_cascade.py tests/test_story_planner_and_governed_pipeline.py
 
 # Run all backend unit and integration tests
 pytest

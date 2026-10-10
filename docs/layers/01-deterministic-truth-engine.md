@@ -89,6 +89,31 @@ flowchart TD
 - **Output**: `SharedEvidencePackage`
 - **Integrity**: Every finding is assigned an audited citation ID (`EVID-EXEC-01`, `EVID-KPI-01`, `EVID-STRENGTH-01`) sealed with a SHA-256 snapshot hash.
 
+### I. Dataset Boundary & Cross-Domain Isolation (`DatasetIsolationIntegrity`)
+- **File**: `backend/app/services/adaptive_dashboard/dataset_isolation_integrity.py`
+- **Architectural Responsibilities**:
+  1. **Strict Intra-Dataset Relationship Invariant**: Enforces `left_sheet.dataset_id == right_sheet.dataset_id == active_dataset_id`. Two sheets from different uploads can never be linked or evaluated in relationship discovery.
+  2. **Cross-Domain Semantic Purity Guard**: Deterministically inspects titles, questions, takeaways, and axis tokens against prohibited vocabularies:
+     - Workforce contexts strictly ban environmental pollutant tokens (`SO2`, `NO2`, `PM10`, `PM2.5`, `Jharia`, `Brynihat`).
+     - Environmental contexts strictly ban workforce tokens (`Attendance`, `Department`, `Approved Leave`, `Employee`, `WFO`).
+  3. **Relationship Discovery Hygiene (`sheet_catalog.py`)**: Filters non-key date ranges (e.g. `1st to 5th July`), temporal slices, and measure aggregations from join candidate evaluation, matching only authentic canonical keys (e.g. `Employee ID` $\leftrightarrow$ `ID`) to eliminate relationship explosion.
+
+### J. Transactional Cascaded Deletion & Cache Invalidation Lifecycle
+- **File**: `backend/app/services/dataset_deletion.py`
+- **Contract**: `DatasetDeletionResult`
+- **Guarantees**:
+  1. **Bidirectional Relationship Purge**: Explicitly executes `DELETE FROM sheet_relationships WHERE left_sheet IN (...) OR right_sheet IN (...)` to guarantee no detached links survive.
+  2. **Descendant Table Cascade**: Transactionally deletes rows across `sheet_curated_rows`, `sheet_rows`, `sheet_cells`, `tabular_vectors`, `tabular_chunks`, `sheets`, `dataset_uploads`, `derived_tables`, and presentation jobs.
+  3. **In-Memory Cache Invalidation**: Completely clears in-memory caches across `SnapshotManager._SNAPSHOT_CACHE`, workflow orchestrator (`_GENERIC_WORKFLOW_CACHE`), insight registry (`_facts_by_snapshot`), and presentation embedding memories.
+  4. **Deterministic Post-Deletion Orphan Integrity Check**: Verifies 0 orphan rows across all database tables (`orphan_check = "PASS"`) before releasing lifecycle lock.
+
+### K. Bidirectional A &rarr; Delete &rarr; B Regression Contract
+- **Test Suite**: `backend/tests/test_dataset_isolation_and_deletion_cascade.py`
+- **Contract Requirements**:
+  1. **Forward Path**: Upload Dataset A (e.g. CPCB air quality) &rarr; generate dashboard &rarr; execute cascaded deletion &rarr; upload Dataset B (e.g. Attendance) &rarr; assert exactly zero tokens of Dataset A exist in Dataset B's serialized JSON payload.
+  2. **Reverse Path**: Upload Dataset B &rarr; generate dashboard &rarr; execute cascaded deletion &rarr; upload Dataset A &rarr; assert exactly zero tokens of Dataset B exist in Dataset A's serialized JSON payload.
+  3. **Co-existence Path**: When both datasets reside simultaneously in the database, `sheet_relationships` contains strictly zero cross-dataset joins (`left_ds == right_ds` for 100% of rows).
+
 ---
 
 ## 3. Layer Integration Contract (Output to Layer 2 & 3)
@@ -99,3 +124,5 @@ flowchart TD
 | **Candidate Facts** | `list[CandidateFact]` | Layer 2 `AnalystAgent`, `FactInterestingnessRanker` | Pure numerical observations; zero LLM interpretation. |
 | **Evidence Ledger** | `list[dict]` (`EVID-XXX`) | Layer 2 `CriticAgent`, Layer 3 `PresentationEngine` | Cell-level source coordinates; immutable audit trail. |
 | **Domain Profiles** | `DomainProfile` | Layer 3 Dashboard & Story Planner | Governed capabilities & vocabulary strictly bound to domain. |
+| **Dataset Isolation Guard** | `DatasetIsolationIntegrity` | Orchestrator, Composition Planner | Zero cross-dataset joins; complete vocabulary disjointness. |
+| **Deletion Cascade Result** | `DatasetDeletionResult` | Upload Router, Lifecycle Manager | Transactional cascade; zero orphan rows; `orphan_check="PASS"`. |
