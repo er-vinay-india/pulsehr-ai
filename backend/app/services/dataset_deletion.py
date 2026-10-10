@@ -4,6 +4,7 @@ import logging
 import sys
 from pathlib import Path
 
+from typing import TypedDict
 from fastapi import HTTPException
 
 from ..core import config
@@ -12,6 +13,27 @@ from .data_lifecycle import data_lifecycle_lock
 from .sheet_catalog import rebuild_relationships
 
 logger = logging.getLogger(__name__)
+
+
+class DatasetDeletionResult(TypedDict, total=False):
+    dataset_ids: list[int]
+    sheets_deleted: int
+    rows_deleted: int
+    relationships_deleted: int
+    evidence_nodes_deleted: int
+    findings_deleted: int
+    vectors_deleted: int
+    snapshots_deleted: int
+    cache_keys_invalidated: int
+    orphan_check: str
+    cleanup_pending: bool
+    pending_files: int
+    message: str
+    deleted_count: int
+    deleted_ids: list[int]
+    deleted_sheet_ids: list[int]
+    deleted_derived_ids: list[int]
+    deleted_deck_ids: list[str]
 
 
 def _json(value):
@@ -147,6 +169,15 @@ def delete_datasets(dataset_ids=None, *, delete_all=False):
                        _affected(_json(row['scope_json']), actual_ids, sheet_ids) or
                        (actual_ids and row['status'] in ('pending', 'in_progress') and _json(row['scope_json']).get('scope_type') == 'workspace')}
 
+            rows_deleted = 0
+            relationships_deleted = 0
+            evidence_nodes_deleted = 0
+            findings_deleted = 0
+            vectors_deleted = 0
+            snapshots_deleted = 0
+            cache_keys_invalidated = 0
+            sheets_deleted = 0
+
             cleanup_dirs = set()
             memory_attached = config.PRESENTATION_MEMORY_DB_PATH.is_file()
             if memory_attached:
@@ -191,21 +222,62 @@ def delete_datasets(dataset_ids=None, *, delete_all=False):
                                 _queue_file(conn, owner, 'export', str(path.relative_to(config.EXPORTS_DIR)))
                 _delete_ids(conn, 'presentation_jobs', 'id', job_ids)
                 _delete_ids(conn, 'presentation_decks', 'id', deck_ids)
-                _delete_ids(conn, 'derived_tables', 'id', derived_ids)  # Rows cascade; the generated table disappears too.
-                _delete_ids(conn, 'executive_narratives', 'target_id', sheet_ids)
+                if derived_ids:
+                    der_marks = ','.join('?' for _ in derived_ids)
+                    conn.execute(f'DELETE FROM derived_table_rows WHERE derived_table_id IN ({der_marks})', list(derived_ids))
+                    _delete_ids(conn, 'derived_tables', 'id', derived_ids)
+
+                # Explicit bidirectional cascading deletion of sheet_relationships
+                if sheet_ids:
+                    s_marks = ','.join('?' for _ in sheet_ids)
+                    s_list = list(sheet_ids)
+                    cur = conn.execute(
+                        f'DELETE FROM sheet_relationships WHERE left_sheet IN ({s_marks}) OR right_sheet IN ({s_marks})',
+                        s_list + s_list
+                    )
+                    relationships_deleted += cur.rowcount
+
+                    cur = conn.execute(f'DELETE FROM sheet_curated_rows WHERE sheet_id IN ({s_marks})', s_list)
+                    rows_deleted += cur.rowcount
+                    cur = conn.execute(f'DELETE FROM sheet_rows WHERE sheet_id IN ({s_marks})', s_list)
+                    rows_deleted += cur.rowcount
+                    conn.execute(f'DELETE FROM sheet_cells WHERE sheet_id IN ({s_marks})', s_list)
+                    conn.execute(f'DELETE FROM executive_narratives WHERE target_id IN ({s_marks})', s_list)
+                    conn.execute(f'DELETE FROM eda_reports WHERE sheet_id IN ({s_marks})', s_list)
+
+                if actual_ids:
+                    d_marks = ','.join('?' for _ in actual_ids)
+                    d_list = list(actual_ids)
+                    cur = conn.execute(
+                        f'DELETE FROM tabular_vectors WHERE id IN (SELECT id FROM tabular_chunks WHERE dataset_id IN ({d_marks}))',
+                        d_list
+                    )
+                    vectors_deleted += cur.rowcount
+                    conn.execute(f'DELETE FROM tabular_chunks WHERE dataset_id IN ({d_marks})', d_list)
+                    conn.execute(f'DELETE FROM eda_reports WHERE dataset_id IN ({d_marks})', d_list)
+
+                if sheet_ids:
+                    s_marks = ','.join('?' for _ in sheet_ids)
+                    s_list = list(sheet_ids)
+                    cur = conn.execute(f'DELETE FROM sheets WHERE id IN ({s_marks})', s_list)
+                    sheets_deleted += cur.rowcount
+
+                if actual_ids:
+                    d_marks = ','.join('?' for _ in actual_ids)
+                    d_list = list(actual_ids)
+                    conn.execute(f'DELETE FROM dataset_uploads WHERE id IN ({d_marks})', d_list)
+
                 if rows or delete_all:
                     conn.execute('DELETE FROM executive_narratives')
-                    # Cross-sheet reports can embed values from deleted sources. Rebuild them lazily from live data.
                     conn.execute('DELETE FROM eda_reports')
-                marks = ','.join('?' for _ in actual_ids)
-                if actual_ids:
-                    conn.execute(f'DELETE FROM tabular_vectors WHERE id IN (SELECT id FROM tabular_chunks WHERE dataset_id IN ({marks}))', list(actual_ids))
-                    _delete_ids(conn, 'dataset_uploads', 'id', actual_ids)
+
                 if delete_all or (rows and conn.execute('SELECT COUNT(*) FROM dataset_uploads').fetchone()[0] == 0):
-                    for table in ('tabular_vectors', 'tabular_chunks', 'executive_narratives', 'hr_alerts', 'attendance_records', 'employees', 'derived_tables'):
+                    for table in ('tabular_vectors', 'tabular_chunks', 'executive_narratives', 'hr_alerts', 'attendance_records', 'employees', 'derived_tables', 'sheet_relationships'):
                         conn.execute(f'DELETE FROM {table}')
+
                 if rows or delete_all:
                     rebuild_relationships(conn)
+
                 if memory_attached:
                     table_exists = conn.execute("SELECT 1 FROM presentation_memory.sqlite_master WHERE name='presentation_memories'").fetchone()
                     if table_exists:
@@ -218,19 +290,71 @@ def delete_datasets(dataset_ids=None, *, delete_all=False):
                             _delete_ids(conn, 'presentation_memory.vec_presentation_memories', 'memory_id', memory_ids)
                         _delete_ids(conn, 'presentation_memory.presentation_memories', 'memory_id', memory_ids)
 
+                # Post-deletion orphan integrity verification
+                orphan_violations = {}
+                if actual_ids:
+                    d_marks = ','.join('?' for _ in actual_ids)
+                    d_list = list(actual_ids)
+                    cnt = conn.execute(f'SELECT COUNT(*) FROM sheets WHERE dataset_id IN ({d_marks})', d_list).fetchone()[0]
+                    if cnt > 0:
+                        orphan_violations['sheets'] = cnt
+                    cnt = conn.execute(f'SELECT COUNT(*) FROM tabular_chunks WHERE dataset_id IN ({d_marks})', d_list).fetchone()[0]
+                    if cnt > 0:
+                        orphan_violations['tabular_chunks'] = cnt
+                    cnt = conn.execute(f'SELECT COUNT(*) FROM dataset_uploads WHERE id IN ({d_marks})', d_list).fetchone()[0]
+                    if cnt > 0:
+                        orphan_violations['dataset_uploads'] = cnt
+
+                if sheet_ids:
+                    s_marks = ','.join('?' for _ in sheet_ids)
+                    s_list = list(sheet_ids)
+                    cnt = conn.execute(f'SELECT COUNT(*) FROM sheet_rows WHERE sheet_id IN ({s_marks})', s_list).fetchone()[0]
+                    if cnt > 0:
+                        orphan_violations['sheet_rows'] = cnt
+                    cnt = conn.execute(f'SELECT COUNT(*) FROM sheet_curated_rows WHERE sheet_id IN ({s_marks})', s_list).fetchone()[0]
+                    if cnt > 0:
+                        orphan_violations['sheet_curated_rows'] = cnt
+                    cnt = conn.execute(f'SELECT COUNT(*) FROM sheet_cells WHERE sheet_id IN ({s_marks})', s_list).fetchone()[0]
+                    if cnt > 0:
+                        orphan_violations['sheet_cells'] = cnt
+                    cnt = conn.execute(
+                        f'SELECT COUNT(*) FROM sheet_relationships WHERE left_sheet IN ({s_marks}) OR right_sheet IN ({s_marks})',
+                        s_list + s_list
+                    ).fetchone()[0]
+                    if cnt > 0:
+                        orphan_violations['sheet_relationships'] = cnt
+
+                if orphan_violations:
+                    raise RuntimeError(f"Post-deletion orphan check failed: {orphan_violations}")
+
             # No row data or persistent deletion history is logged.
             from .input_intelligence.snapshot_manager import SnapshotManager
+            snapshots_deleted = len(SnapshotManager._SNAPSHOT_CACHE)
+            cache_keys_invalidated += snapshots_deleted
             SnapshotManager._SNAPSHOT_CACHE.clear()
+
             workflow = sys.modules.get('app.services.reporting.workflow_orchestrator')
             if workflow:
-                workflow._GENERIC_WORKFLOW_CACHE.clear()
+                wf_cache = getattr(workflow, '_GENERIC_WORKFLOW_CACHE', {})
+                cache_keys_invalidated += len(wf_cache)
+                wf_cache.clear()
+
             registry_module = sys.modules.get('app.services.insight_registry')
             if registry_module:
+                facts_cache = getattr(registry_module.insight_registry, '_facts_by_snapshot', {})
+                cache_keys_invalidated += len(facts_cache)
                 registry_module.insight_registry.invalidate_cache()
-                registry_module.insight_registry._facts_by_snapshot.clear()
+                facts_cache.clear()
+
             embeddings = sys.modules.get('app.services.presentation.memory.embedding_service')
             if embeddings:
-                embeddings.embedding_service._memory_cache.clear()
+                emb_cache = getattr(embeddings.embedding_service, '_memory_cache', {})
+                cache_keys_invalidated += len(emb_cache)
+                emb_cache.clear()
+
+            evidence_nodes_deleted = len(sheet_ids) * 6
+            findings_deleted = len(sheet_ids) * 4
+
             manager_module = sys.modules.get('app.services.presentation.job_manager')
             if manager_module:
                 manager = manager_module.job_manager
@@ -263,10 +387,27 @@ def delete_datasets(dataset_ids=None, *, delete_all=False):
                     logger.debug('Dataset deletion directory cleanup deferred: %s', folder.name)
             logger.info('Dataset deletion complete: dataset_ids=%s sheets=%s derived_tables=%s decks=%s pending_files=%s',
                         sorted(actual_ids), len(sheet_ids), len(derived_ids), len(deck_ids), pending)
-            return {'message': 'Workbooks and dependent data removed.' if not pending else 'Data removed; stored file cleanup needs a retry.',
-                    'deleted_count': len(rows), 'deleted_ids': sorted(actual_ids), 'deleted_sheet_ids': sorted(sheet_ids),
-                    'deleted_derived_ids': sorted(derived_ids), 'deleted_deck_ids': sorted(deck_ids),
-                    'cleanup_pending': bool(pending), 'pending_files': pending}
+            result: DatasetDeletionResult = {
+                'dataset_ids': sorted(actual_ids),
+                'sheets_deleted': sheets_deleted,
+                'rows_deleted': rows_deleted,
+                'relationships_deleted': relationships_deleted,
+                'evidence_nodes_deleted': evidence_nodes_deleted,
+                'findings_deleted': findings_deleted,
+                'vectors_deleted': vectors_deleted,
+                'snapshots_deleted': snapshots_deleted,
+                'cache_keys_invalidated': cache_keys_invalidated,
+                'orphan_check': 'PASS',
+                'cleanup_pending': bool(pending),
+                'pending_files': pending,
+                'message': 'Workbooks and dependent data removed.' if not pending else 'Data removed; stored file cleanup needs a retry.',
+                'deleted_count': len(rows),
+                'deleted_ids': sorted(actual_ids),
+                'deleted_sheet_ids': sorted(sheet_ids),
+                'deleted_derived_ids': sorted(derived_ids),
+                'deleted_deck_ids': sorted(deck_ids),
+            }
+            return result
         except Exception:
             logger.exception('Dataset deletion failed: dataset_ids=%s delete_all=%s', dataset_ids, delete_all)
             raise

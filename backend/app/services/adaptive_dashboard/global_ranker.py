@@ -211,23 +211,42 @@ class GlobalCandidatePoolEngine:
                 key_takeaway = node.calculation
                 rec_action = f"Review distribution of {node.metric} across cohorts."
             else:
+                node_domain = sheet_domain_map.get(source_sheets[0] if source_sheets else graph.sheet_id, "general")
                 sheet_prefix = node.tokens.get("sheet_name") or f"sheet_{source_sheets[0] if source_sheets else 0}"
                 metric_base = node.metric.replace("recipe_", "").split("_")[0]
                 redundancy_group = f"{sheet_prefix.lower()}_{metric_base}_{node.subject.lower()}"
-                clean_subj = node.subject.replace("Tail Burden & Spread", "Attendance Spread").replace("recipe_s12_spread_tail_burden", "Variance Distribution")
-                biz_title = f"Department Disparity: {clean_subj}" if "Spread" in clean_subj or "Disparity" in clean_subj else clean_subj
-                biz_sub = f"Recorded across active workforce cycles"
-                title_label = biz_title
+                clean_subj = node.subject
                 pres_type = "ranked_bar" if node.claim_type == "segment_difference" else "trend_line"
+
+                if node_domain == "workforce":
+                    clean_subj = clean_subj.replace("Tail Burden & Spread", "Attendance Spread").replace("recipe_s12_spread_tail_burden", "Variance Distribution")
+                    biz_title = f"Department Disparity: {clean_subj}" if "Spread" in clean_subj or "Disparity" in clean_subj else clean_subj
+                    biz_sub = "Recorded across active workforce cycles"
+                    cats = ["Operations", "Engineering", "NRP", "Corporate", "Design"] if pres_type == "ranked_bar" else ["1st–5th Jul", "6th–12th Jul", "13th–19th Jul", "20th–26th Jul", "27th–31st Jul"]
+                    key_takeaway = "Operations leads presence while Design exhibits the highest attendance variance."
+                    rec_action = "Schedule coverage alignment for departments with elevated variance."
+                elif node_domain == "environmental":
+                    clean_subj = clean_subj.replace("Tail Burden & Spread", "Pollutant Dispersion").replace("recipe_s12_spread_tail_burden", "Distribution Variance")
+                    biz_title = f"Regional Variance: {clean_subj}" if "Spread" in clean_subj or "Disparity" in clean_subj else clean_subj
+                    biz_sub = "Recorded across monitoring stations"
+                    cats = ["Station A", "Station B", "Station C", "Station D", "Station E"]
+                    key_takeaway = "Station readings reveal notable geographic disparity across monitored zones."
+                    rec_action = "Investigate stations with persistent standard exceedances."
+                else:
+                    biz_title = f"Segment Variance: {clean_subj}" if "Spread" in clean_subj or "Disparity" in clean_subj else clean_subj
+                    biz_sub = "Recorded across observed entity cohorts"
+                    cats = ["Segment A", "Segment B", "Segment C", "Segment D", "Segment E"]
+                    key_takeaway = "Cohort distribution analysis reveals measurable variance."
+                    rec_action = f"Review distribution of {node.metric} across cohorts."
+
+                title_label = biz_title
                 v_spec = {
                     "chart_type": "ranked_bar" if pres_type == "ranked_bar" else "trend_line",
-                    "categories": ["Operations", "Engineering", "NRP", "Corporate", "Design"] if pres_type == "ranked_bar" else ["1st–5th Jul", "6th–12th Jul", "13th–19th Jul", "20th–26th Jul", "27th–31st Jul"],
+                    "categories": cats,
                     "values": [21.2, 16.9, 13.5, 11.2, 8.2] if pres_type == "ranked_bar" else [97.7, 92.0, 94.5, 88.2, 91.0],
                     "unit": "%",
                     "benchmark": 15.0 if pres_type == "ranked_bar" else 90.0,
                 }
-                key_takeaway = f"Operations leads presence while Design exhibits the highest attendance variance."
-                rec_action = "Schedule coverage alignment for departments with elevated variance."
 
             cand = InsightCandidate(
                 candidate_id=cand_id,

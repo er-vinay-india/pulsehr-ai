@@ -1238,14 +1238,23 @@ class ExecutiveCompositionPlanner:
                     vals = [20.0, 16.0, 14.0, 11.0, 8.0]
             series_data = tokens.get("series")
 
+            # Dataset Isolation & Domain Story Integrity Gate
+            from app.services.adaptive_dashboard.dataset_isolation_integrity import DatasetIsolationIntegrity
+            ok_story, story_err = DatasetIsolationIntegrity.validate_story_purity(story, domain_name)
+            if not ok_story:
+                logger.warning("DatasetIsolationIntegrity: Suppressed story '%s': %s", story.title, story_err)
+                continue
+
             if intent == "RELATIONSHIP" or chart_type == "scatter":
                 chart_type = "scatter"
                 scatter_pts = tokens.get("scatter_points") or tokens.get("sample_points") or []
+                x_measure_name = tokens.get("x_measure") or (getattr(story, "primary_measure", None) if getattr(story, "primary_measure", None) != "metric" else None) or ("Total Attendance" if is_workforce else "Primary Metric")
+                y_measure_name = tokens.get("y_measure") or ("Approved Leaves" if is_workforce else "Secondary Metric")
                 v_spec = {
                     "chart_type": "scatter",
                     "scatter_points": scatter_pts,
-                    "x_label": tokens.get("x_measure", "SO2"),
-                    "y_label": tokens.get("y_measure", "NO2"),
+                    "x_label": x_measure_name,
+                    "y_label": y_measure_name,
                     "unit": unit,
                     "analytical_intent": "RELATIONSHIP",
                     "evidence_ids": getattr(story, "evidence_ids", []),

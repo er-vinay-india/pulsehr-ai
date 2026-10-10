@@ -76,14 +76,21 @@ class StoryPlanner:
         supporting = [r.evidence for r in ranked[1:4]]
 
         # Clean business subject
-        clean_subj = hero.subject.replace("Sheet1", "Attendance").replace("Leave Calculation Check", "Approved Leave")
+        clean_subj = hero.subject
+        if domain == "workforce":
+            clean_subj = clean_subj.replace("Sheet1", "Attendance").replace("Leave Calculation Check", "Approved Leave")
         clean_subj = clean_subj.replace(" × ", " & ")
 
         # 1. Determine narrative angle in clean business language
-        if "Attendance" in clean_subj and "Leave" in clean_subj:
+        if domain == "workforce" and "Attendance" in clean_subj and "Leave" in clean_subj:
             angle = "Attendance & Leave: Where the gap is concentrated"
         elif hero.claim_type == "segment_difference":
-            angle = f"Department Disparity & Variance in {clean_subj}"
+            if domain == "workforce":
+                angle = f"Department Disparity & Variance in {clean_subj}"
+            elif domain == "environmental":
+                angle = f"Regional Disparity & Station Variance in {clean_subj}"
+            else:
+                angle = f"Segment Disparity & Distribution Variance in {clean_subj}"
         elif hero.claim_type in ("capacity_gap", "target_gap"):
             angle = f"Operational Exposure & Capacity Deficit: {clean_subj}"
         elif hero.claim_type == "trend_change":
@@ -100,10 +107,12 @@ class StoryPlanner:
         if hero.difference_pct is None or hero.difference_pct == 0.0:
             hero_template = "{subject} established {formatted_value} across {population} observed records."
         elif "cross" in hero.metric.lower() or "&" in clean_subj or "×" in hero.subject:
-            hero_template = "{subject} showed {formatted_value} consistency across common employee records."
+            entity_label = "employee records" if domain == "workforce" else "records"
+            hero_template = f"{{subject}} showed {{formatted_value}} consistency across common {entity_label}."
             
         hero_rendered = graph.hydrate_template(hero_template, [hero.evidence_id])
-        hero_rendered = hero_rendered.replace("Sheet1 × Leave Calculation Check", "Attendance & Approved Leave").replace("Sheet1", "Attendance").replace("Leave Calculation Check", "Approved Leave")
+        if domain == "workforce":
+            hero_rendered = hero_rendered.replace("Sheet1 × Leave Calculation Check", "Attendance & Approved Leave").replace("Sheet1", "Attendance").replace("Leave Calculation Check", "Approved Leave")
         
         claims.append(
             GroundedClaim(

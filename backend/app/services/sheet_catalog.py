@@ -826,15 +826,31 @@ def rebuild_relationships(conn):
         counts.setdefault((row['sheet_id'], row['column_name']), {})[row['value_key']] = row['n']
     for idx, left in enumerate(sheets):
         for right in sheets[idx+1:]:
+            # DATASET ISOLATION INVARIANT: Never link sheets across different datasets
+            if left['dataset_id'] != right['dataset_id']:
+                continue
             for lp in json.loads(left['profile_json']):
                 for rp in json.loads(right['profile_json']):
                     lc = lp.get('column') or lp.get('name') or lp.get('original_name') or ''
                     rc = rp.get('column') or rp.get('name') or rp.get('original_name') or ''
                     if not lc or not rc:
                         continue
+
+                    # Filter out date intervals, temporal ranges, and measure aggregates from entity join keys
+                    is_temporal_or_agg = bool(
+                        re.search(r'\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|week|month|year|date|quarter)\b', lc.lower())
+                        or re.search(r'\b\d+(st|nd|rd|th)?\s+(to|-)\s+\d+(st|nd|rd|th)?\b', lc.lower())
+                        or re.search(r'^\d+(st|nd|rd|th)?\b', lc.lower())
+                        or lc.lower().startswith(('leaves(', 'total', 'avg', 'sum', 'so2', 'no2', 'pm10', 'pm2.5', 'interact_'))
+                        or rc.lower().startswith(('leaves(', 'total', 'avg', 'sum', 'so2', 'no2', 'pm10', 'pm2.5', 'interact_'))
+                    )
+                    if is_temporal_or_agg:
+                        continue
+
                     lp_canon = lp.get('canonical') or canonical(lc)
                     rp_canon = rp.get('canonical') or canonical(rc)
-                    exact = lp_canon == rp_canon
+                    id_alias_match = (lp_canon in ('id', 'employee_id') and rp_canon in ('id', 'employee_id'))
+                    exact = (lp_canon == rp_canon) or id_alias_match
                     similarity = None
                     if not exact and lp.get('embedding_model') == rp.get('embedding_model') and lp.get('vector') and rp.get('vector'):
                         a, b = np.array(lp['vector']), np.array(rp['vector'])
@@ -848,7 +864,10 @@ def rebuild_relationships(conn):
                         continue
                     lu, ru = all(v == 1 for v in lv.values()), all(v == 1 for v in rv.values())
                     cardinality = ('one' if lu else 'many') + '-to-' + ('one' if ru else 'many')
-                    keylike = lp_canon not in ('id', 'paid', 'valid') and (lp_canon in ('employee_id', 'employee_name', 'department', 'department_id', 'email') or lp_canon.endswith('id') or lp_canon.endswith('code'))
+                    keylike = id_alias_match or (
+                        lp_canon not in ('paid', 'valid')
+                        and (lp_canon in ('employee_id', 'employee_name', 'department', 'department_id', 'email', 'store_id', 'customer_id') or lp_canon.endswith('id') or lp_canon.endswith('code'))
+                    )
                     status = 'linked' if exact and keylike and (lu or ru) else 'suggested'
                     method = ('exact' if lc.casefold() == rc.casefold() else 'alias') if exact else 'vector'
 

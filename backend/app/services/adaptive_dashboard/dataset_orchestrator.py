@@ -15,6 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from ...db.database import get_connection
 from .contracts import AdaptiveDashboardResponse, UnifiedFinding
 from .evidence_graph import EvidenceGraph, EvidenceItem, findings_to_evidence_graph
+from .dataset_isolation_integrity import DatasetIsolationIntegrity
 from .insight_ranker import RankedInsight
 from .semantic_catalog import SemanticCatalog, infer_semantic_catalog
 from .story_planner import StoryPlan, StoryPlanner
@@ -116,9 +117,20 @@ class DatasetRelationshipEngine:
             )
             rows = cursor.fetchall()
             sheet_map = {s.sheet_id: s.sheet_name for s in sheets}
+            sheet_ds_map = {s.sheet_id: dataset_id for s in sheets}
 
             for idx, r in enumerate(rows, start=1):
                 left_id, right_id = r[1], r[2]
+                ok, reason = DatasetIsolationIntegrity.validate_sheet_relationship(
+                    rel_id=r[0],
+                    left_sheet_id=left_id,
+                    right_sheet_id=right_id,
+                    sheet_dataset_map=sheet_ds_map,
+                    active_dataset_id=dataset_id,
+                )
+                if not ok:
+                    continue
+
                 left_col, right_col = r[3], r[4]
                 card = r[7] if r[7] in ("one-to-one", "one-to-many", "many-to-one", "many-to-many") else "many-to-one"
                 sim = float(r[10]) if r[10] is not None else 0.90
@@ -317,11 +329,20 @@ def run_dataset_intelligence(dataset_id: int) -> DatasetIntelligenceResponse:
         for onode in opp_evidence_nodes:
             all_evidence_nodes.append(onode)
 
-        # 6. Build Unified Evidence Graph
+        # 6. Build Governed, Isolated Evidence Graph
+        sheet_ds_map = {s.sheet_id: dataset_id for s in sheets}
+        active_domain = next((d for d in sheet_domain_map.values() if d != "general"), "general")
+        clean_evidence_nodes = DatasetIsolationIntegrity.filter_evidence_graph(
+            nodes=all_evidence_nodes,
+            active_dataset_id=dataset_id,
+            active_domain=active_domain,
+            sheet_dataset_map=sheet_ds_map,
+        )
+
         unified_graph = EvidenceGraph(
             sheet_id=sheets[0].sheet_id if sheets else 0,
             snapshot=f"snap_dataset_{dataset_id}",
-            nodes=all_evidence_nodes,
+            nodes=clean_evidence_nodes,
         )
 
         # 6. Global Candidate Pool, Redundancy Suppression & Hard-Governed Capacity Budget

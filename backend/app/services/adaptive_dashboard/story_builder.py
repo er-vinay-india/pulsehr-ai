@@ -401,23 +401,37 @@ class AnalyticalStoryBuilder:
             imp = 0.95
         elif "association" in family_key or "correlation" in family_key or "relationship" in family_key:
             intent = "RELATIONSHIP"
+            # Prioritize representative evidence with actual scatter points and metric pairs
+            corr_nodes = [n for n in nodes if (n.tokens or {}).get("scatter_points") or (n.tokens or {}).get("x_measure")]
+            if corr_nodes:
+                rep = corr_nodes[0]
+
+            x_m = (rep.tokens or {}).get("x_measure")
+            y_m = (rep.tokens or {}).get("y_measure")
+            corr_val = (rep.tokens or {}).get("correlation")
+
             if is_workforce:
-                title = "Attendance and Leave Statistical Association"
-                question = "What is the correlation between key operational drivers?"
-                takeaway = f"Observed statistical dependency: {rep.formatted_value} across population."
-                recommended_action = "Incorporate interaction elasticity into monthly planning models."
+                clean_x = str(x_m or "Attendance Rate")
+                clean_y = str(y_m or "Approved Leave Rate")
+                title = f"{clean_x} vs {clean_y} Statistical Association"
+                question = f"What is the operational correlation between {clean_x.lower()} and {clean_y.lower()}?"
+                if corr_val is not None:
+                    takeaway = f"Observed operational dependency (r = {corr_val:+.2f}) between {clean_x.lower()} and {clean_y.lower()} across department cohorts."
+                else:
+                    takeaway = f"Observed statistical dependency: {rep.formatted_value} across evaluated population."
+                recommended_action = "Incorporate attendance-leave interaction elasticity into workforce capacity and monthly scheduling models."
             elif is_env:
-                x_m = (rep.tokens or {}).get("x_measure") or "SO2"
-                y_m = (rep.tokens or {}).get("y_measure") or "NO2"
-                clean_x = "SO2" if "so2" in str(x_m).lower() else str(x_m)
-                clean_y = "NO2" if "no2" in str(y_m).lower() else str(y_m)
+                clean_x = str(x_m or "SO2 Annual Average")
+                clean_y = str(y_m or "NO2 Annual Average")
                 title = f"{clean_x} vs {clean_y} Annual Average Association"
                 question = f"What is the statistical association between {clean_x} and {clean_y} concentrations?"
                 takeaway = f"Observed statistical dependency ({rep.formatted_value}) across {rep.population or 429} monitored locations."
                 recommended_action = "Prioritize multi-pollutant monitoring stations where both pollutants exhibit concurrent elevation."
             else:
-                title = "Metric Interaction and Elasticity"
-                question = "What is the correlation between key operational drivers?"
+                clean_x = str(x_m or "Primary Metric")
+                clean_y = str(y_m or "Secondary Metric")
+                title = f"{clean_x} vs {clean_y} Statistical Association"
+                question = f"What is the correlation between {clean_x} and {clean_y}?"
                 takeaway = f"Observed statistical dependency: {rep.formatted_value} across population."
                 recommended_action = "Incorporate interaction elasticity into monthly planning models."
             biz_val = 0.82
@@ -430,10 +444,15 @@ class AnalyticalStoryBuilder:
                 question = "Which monitored locations show unusually high PM10 levels?"
                 cats = (rep.tokens or {}).get("categories", [])
                 vals = (rep.tokens or {}).get("values", [])
-                top_name = cats[0] if cats else "Jharia"
-                top_val = f"{vals[0]:.0f} µg/m³" if vals else "281 µg/m³"
-                takeaway = f"{top_name} records the highest observed PM10 level at {top_val}, substantially exceeding the 60 µg/m³ NAAQS annual benchmark."
+                top_name = str(cats[0]) if cats else "Monitored Station"
+                top_val = f"{vals[0]:.0f} µg/m³" if vals else f"{rep.value} µg/m³"
+                takeaway = f"{top_name} records peak observed concentration at {top_val}, substantially exceeding the 60 µg/m³ NAAQS annual benchmark."
                 recommended_action = "Prioritize high-concentration locations for source investigation and pollution-control intervention."
+            elif is_workforce:
+                title = "Department Attendance Variance & Exception Concentration"
+                question = "Which departments show the largest deviation from attendance expectations?"
+                takeaway = f"Focal department exhibits notable attendance variance ({rep.formatted_value}) relative to organizational baseline."
+                recommended_action = "Review shift patterns and workload allocation in high-variance departments to stabilize attendance."
             else:
                 title = "Operational Variance & Exception Concentration"
                 question = "Where are anomalous variance spreads concentrated?"
