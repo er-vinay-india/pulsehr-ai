@@ -196,11 +196,44 @@ HighView's composition planner operates under an explicit visual budget:
 - **Maximum visuals:** 15
 - **Intent diversity:** $\ge 4$ distinct intents, max 3 per intent.
 - **Chart family diversity:** $\ge 5$ distinct chart families, max 2 per family.
+- **Visual morphology diversity:** $\ge 5$ distinct morphologies, max 2 per morphology.
 
-The portfolio is selected greedily by `VisualPortfolioOptimizer` using multi-factor scoring:
-$$\text{Score} = 0.40 \cdot \text{importance} + 0.35 \cdot \text{confidence} + 0.25 \cdot \text{business\_relevance} + \text{Diversity Bonuses} - \text{Redundancy Penalties}$$
+The portfolio is selected greedily by `VisualPortfolioOptimizer` using multi-factor scoring weighted by domain decision priority:
+$$\text{Score} = 0.30 \cdot \text{business\_value} + 0.25 \cdot \text{importance} + 0.25 \cdot \text{confidence} + 0.20 \cdot \text{domain\_decision\_value} + \text{Diversity Bonuses} - \text{Redundancy Penalties}$$
+- **Bonuses:** `new_morphology_bonus` (+0.40), `new_intent_bonus` (+0.25), `new_family_bonus` (+0.20), `hero_anchor_bonus` (+0.15).
+- **Penalties:** `same_morphology_penalty` (-0.25), `same_family_penalty` (-0.30), `same_intent_penalty` (-0.20), `redundancy_penalty` (-0.50).
 
-### B. Truth > Quota Invariant
+### B. Visual Morphology Classification (`VisualMorphology`)
+To eliminate the perceptual monotony of dashboards dominated by horizontal bars (where `ranked_bar`, `bullet`, `lollipop`, and `dumbbell` look like variations of bars), HighView classifies all visual archetypes into 10 distinct morphologies:
+- `LENGTH`: `ranked_bar`, `horizontal_bar`, `bullet`, `waterfall`, `variance_bar`
+- `POINT`: `lollipop`, `scatter`, `dot_plot`
+- `RANGE`: `dumbbell`, `range_plot`
+- `AREA`: `100_percent_stacked_bar`, `stacked_bar`, `donut`, `pie`
+- `TEMPORAL_PATH`: `line`, `area`, `slope` (strictly gated by genuine temporal dimensions)
+- `MATRIX`: `heatmap` (2D categorical cross-tabulation)
+- `DISTRIBUTION`: `box_plot`, `histogram`
+- `ICONIC`: `podium_top_3`
+- `HIERARCHICAL`: `treemap`, `dendrogram`
+- `FLOW`: `sankey`
+
+Enforcing `max_same_morphology <= 2` guarantees geometric diversity across the dashboard surface (e.g. 1 length, 1 distribution, 1 matrix/heatmap, 1 composition, 1 point, 1 range, 1 iconic).
+
+### C. Domain-Specific Decision Prioritization (`DomainVisualPriority`)
+The selection engine weights candidate visuals based on what executives in that domain must decide first:
+
+| Domain | Priority P1 (Hero / Top Slots) | Priority P2 (Supporting Insights) | Priority P3 (Diagnostics) |
+| :--- | :--- | :--- | :--- |
+| **Workforce / HR** | `TARGET_VS_ACTUAL` (WFO policy compliance)<br>`RANKING` (Leader/laggard departments)<br>`MATRIX` (Department $\times$ week heatmap)<br>`COMPOSITION` (Attendance vs leave capacity) | `DISTRIBUTION` (Spread and outliers)<br>`DIFFERENCE` (Policy gap dumbbell) | `RELATIONSHIP` (Bivariate scatter)<br>`VARIANCE` (Exception concentration) |
+| **Environmental** | `RANKING` (Pollutant exceedances / NAAQS benchmark)<br>`TARGET_VS_ACTUAL` (Standard limit compliance)<br>`MATRIX` (Pollutant $\times$ zone matrix) | `DISTRIBUTION` (Air quality spreads)<br>`RELATIONSHIP` ($\text{SO}_2 \leftrightarrow \text{NO}_2$ scatter) | `DIFFERENCE` (Zone disparity dumbbell)<br>`VARIANCE` (Station anomalies) |
+| **Default / Other** | `RANKING`<br>`TARGET_VS_ACTUAL` | `DISTRIBUTION`<br>`COMPOSITION` | `RELATIONSHIP`<br>`VARIANCE` |
+
+### D. 2D Categorical Cross-Tabulation Matrix Heatmaps (`heatmap`)
+- High-value 2D heatmaps cross-tabulate two categorical dimensions (e.g. Department $\times$ Weekly Period, or Pollutant $\times$ Monitoring Zone) against a continuous numeric measure.
+- Validated by `VisualDataPresenceIntegrity` requiring $\ge 4$ populated cell observations.
+- Rendered in ECharts with dynamic `visualMap` color gradient, cell value labels, and hover tooltips.
+- **Zero Synthetic Dimension Invariant:** Real categorical dimensions must be present in the data; synthetic temporal labels are never generated to force a heatmap.
+
+### E. Truth > Quota Invariant
 HighView prioritizes factual mathematical truth over visual quantity:
 1. **Never Fabricate Entities or Stories:** The optimizer will gladly return 8 high-confidence visuals rather than forcing 15 low-confidence or synthetic charts.
 2. **Never Fabricate Temporal Dimensions:** Cross-sectional tables never receive line charts, slope charts, or synthetic date buckets.
@@ -208,11 +241,48 @@ HighView prioritizes factual mathematical truth over visual quantity:
    - `BOX_PLOT`: numeric measure with grouping, $\ge 5$ observations.
    - `SCATTER`: 2 continuous numeric measures, $N \ge 3$ points.
    - `PODIUM_TOP_3`: high-confidence ranking $N \ge 3$, strict label truncation ($\le 20$ chars, $\le 2$ lines, full label in hover tooltip).
+   - `HEATMAP`: 2 categorical dimensions + 1 numeric measure, $\ge 4$ cell observations.
    - `WORD_CLOUD`: strictly forbidden for quantitative ranking and trends.
 
-### C. Label Truncation on Podium Top 3
+### F. Label Truncation on Podium Top 3
 In [`backend/app/services/adaptive_dashboard/visual_portfolio_optimizer.py:format_podium_labels`](file:///Users/vinayksharma/Developer/pulsehr-ai/backend/app/services/adaptive_dashboard/visual_portfolio_optimizer.py):
 - Entity names exceeding 20 characters are truncated with an ellipsis (`...`) for display on podium cards.
 - Multi-line wrapping is capped at 2 lines.
 - Unabridged full names and exact values are preserved in tooltips and the underlying data payload.
+
+---
+
+## 10. Semantic Visual Compression Layer & Level-1 Card Geometry
+
+### A. The Microcopy Contract (`VisualMicrocopy`)
+Executive decision-makers need high information density, not paragraphs of report text on Level 1. The `SemanticVisualCompressionLayer` compresses all visual story metadata into bounded microcopy:
+
+| Field | Word Limit | Semantic Role | Example |
+| :--- | :--- | :--- | :--- |
+| `short_title` | $\le 7$ words | Executive noun phrase | `"WFO Policy Compliance Benchmark"` |
+| `short_context` | $\le 8$ words | Cohort scope and basis | `"4 departments · 3-day target"` |
+| `short_finding` | $\le 12$ words | Single core takeaway | `"Engineering leads at 3.2 days; Support lags at 2.1."` |
+| `cta` | $\le 3$ words | Focused deep-link action | `"Inspect →"` |
+
+### B. Semantic Icon Registry (`SemanticIconRegistry`)
+Every visual card deterministically maps to a domain-appropriate SVG icon from Lucide React:
+- `target`: Policy compliance, target vs actual benchmarks.
+- `trophy`: Entity leaderboards, Olympic podiums, top rankings.
+- `users`: Workforce cohorts, department comparisons.
+- `wind`: Environmental air quality, pollutant monitoring.
+- `matrix`: 2D cross-tabulation heatmaps.
+- `distribution`: Box plots, quantile spreads, histograms.
+- `relationship`: Bivariate scatter plots, correlation analyses.
+- `trend`: Longitudinal time-series paths.
+- `alert`: Anomaly concentrations, variance exceptions.
+- `compare`: Dumbbell range spreads, lollipop comparisons.
+- `shield`: Governance checks, safety baselines.
+
+Domain guards in the registry prevent cross-domain token leakage (e.g. `users` icon is never emitted for environmental station data, and `wind` is never emitted for workforce data).
+
+### C. Reduced Card Chrome & Visual Area Dominance (>85%)
+- **Zero Permanent Action Clutter:** The `recommended_action` callout box is **never permanently rendered on Level-1 dashboard cards**.
+- The chart visual area commands $> 85\%$ of the vertical card space.
+- Clicking `"Inspect →"` opens the Quick Inspect Drawer, which displays the full business question, unabridged paragraph explanation, recommended action plan, and cryptographic evidence ledger citations (`EVID-XXX`).
+- The full deep dive remains available by clicking into the relevant Data Explorer tab.
 

@@ -170,6 +170,22 @@ class VisualInformationDensityIntegrity:
                 rendered_mark_count=len(visual_spec["actions"]),
             )
 
+        # Heatmaps are valid if heatmap_data or data matrix has items (>= 4 points)
+        if chart_type == "heatmap":
+            heat_data = visual_spec.get("heatmap_data") or visual_spec.get("data") or []
+            if len(heat_data) >= 4:
+                return VisualMarkAudit(
+                    is_valid=True,
+                    renderable_series_count=1,
+                    rendered_mark_count=len(heat_data),
+                )
+            return VisualMarkAudit(
+                is_valid=False,
+                renderable_series_count=1,
+                rendered_mark_count=len(heat_data),
+                suppression_reason=f"LOW_VISUAL_INFORMATION: Heatmap requires at least 4 cell data points (got {len(heat_data)})",
+            )
+
         # Scatter plots are valid if scatter_points or sample_points has items (governed N >= 3 points)
         if chart_type in ("scatter", "correlation_scatter"):
             scatter_pts = visual_spec.get("scatter_points") or visual_spec.get("sample_points") or []

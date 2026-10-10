@@ -255,7 +255,7 @@ def test_related_period_insights_merge_into_one_topic(multisheet_workforce_datas
 
     intel = run_dataset_intelligence(multisheet_workforce_dataset)
     assert len(intel.executive_topics) >= 3
-    assert len(intel.executive_topics) <= 5
+    assert len(intel.executive_topics) <= 15
 
     # Check for merged time-series attendance vs leave topic
     merged_topic = next((t for t in intel.executive_topics if "trend" in t["title"].lower() or "leave" in t["title"].lower()), None)
@@ -265,16 +265,16 @@ def test_related_period_insights_merge_into_one_topic(multisheet_workforce_datas
     assert "visual_spec" in merged_topic
 
 
-def test_max_main_visuals_is_five(multisheet_workforce_dataset):
-    """Verify that the executive composition budget limits total topics to at most 5."""
+def test_visual_budget_envelope(multisheet_workforce_dataset):
+    """Verify that the executive composition budget stays within governed 8-15 visual envelope."""
     client = TestClient(app)
     resp = client.get(f"/api/adaptive-dashboard/primary-element?dataset_id={multisheet_workforce_dataset}")
     data = resp.json()
 
     assert "executive_topics" in data
     topics = data["executive_topics"]
-    assert len(topics) >= 1
-    assert len(topics) <= 5
+    assert len(topics) >= 8
+    assert len(topics) <= 15
 
 
 

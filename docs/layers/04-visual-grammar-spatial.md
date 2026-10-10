@@ -111,15 +111,37 @@ Implemented in `backend/app/services/adaptive_dashboard/visual_portfolio_optimiz
    max_visuals: int = 15
    max_same_intent: int = 3
    max_same_family: int = 2
+   max_same_morphology: int = 2   # Strictly caps same geometric visual structure
+   min_distinct_morphologies: int = 5
    min_distinct_families: int = 5
    min_distinct_intents: int = 4
    ```
-2. **Multi-Factor Portfolio Optimization**:
+2. **Visual Morphology Classification (`VisualMorphology`)**:
+   Prevents length-based bar chart perceptual monotony across the dashboard:
+   - `LENGTH`: `ranked_bar`, `horizontal_bar`, `bullet`, `waterfall`, `variance_bar`
+   - `POINT`: `lollipop`, `scatter`, `dot_plot`
+   - `RANGE`: `dumbbell`, `range_plot`
+   - `AREA`: `100_percent_stacked_bar`, `stacked_bar`, `donut`, `pie`
+   - `TEMPORAL_PATH`: `line`, `area`, `slope` (gated by real temporal dimension)
+   - `MATRIX`: `heatmap` (2D categorical cross-tabulation)
+   - `DISTRIBUTION`: `box_plot`, `histogram`
+   - `ICONIC`: `podium_top_3`
+   - `HIERARCHICAL`: `treemap`, `dendrogram`
+   - `FLOW`: `sankey`
+3. **Multi-Factor Portfolio Optimization**:
    The optimizer ranks candidate stories using a balanced utility score:
-   $$\text{Score} = w_{\text{imp}} \cdot \text{importance} + w_{\text{conf}} \cdot \text{confidence} + w_{\text{bus}} \cdot \text{business\_relevance} + \text{Bonuses} - \text{Penalties}$$
-   - **Bonuses**: `new_intent_bonus` (+0.25), `new_family_bonus` (+0.20), `hero_anchor_bonus` (+0.15).
-   - **Penalties**: `same_family_penalty` (-0.30), `same_intent_penalty` (-0.20), `redundancy_penalty` (-0.50).
-3. **Responsive 12-Column Spatial Grid**:
+   $$\text{Score} = w_{\text{bus}} \cdot \text{business\_value} + w_{\text{imp}} \cdot \text{importance} + w_{\text{conf}} \cdot \text{confidence} + w_{\text{dec}} \cdot \text{domain\_decision\_value} + \text{Bonuses} - \text{Penalties}$$
+   - **Bonuses**: `new_morphology_bonus` (+0.40), `new_intent_bonus` (+0.25), `new_family_bonus` (+0.20), `hero_anchor_bonus` (+0.15).
+   - **Penalties**: `same_morphology_penalty` (-0.25), `same_family_penalty` (-0.30), `same_intent_penalty` (-0.20), `redundancy_penalty` (-0.50).
+4. **Semantic Visual Compression Layer (`SemanticVisualCompressionLayer`)**:
+   Transforms Level-1 cards into high-density, minimal-chrome decision surfaces:
+   - `short_title`: $\le 7$ words (executive noun phrase).
+   - `short_context`: $\le 8$ words (cohort context & scope).
+   - `short_finding`: $\le 12$ words (single clear takeaway sentence).
+   - `cta`: $\le 3$ words (e.g. "Inspect →").
+   - `SemanticIconRegistry`: Deterministic SVG icons (`target`, `trophy`, `users`, `calendar`, `alert`, `trend`, `distribution`, `compare`, `relationship`, `shield`, `matrix`, `wind`).
+   - **Reduced Card Chrome**: Never permanently renders `recommended_action` inside Level-1 cards. Visual area takes > 85% of card space. Full business questions, unabridged explanations, recommended action steps, and evidence citations live inside the Quick Inspect Drawer and Data Explorer.
+5. **Responsive 12-Column Spatial Grid**:
    - `HERO` (`layout-hint-hero`): `span 12` (full row prominence).
    - `LARGE` (`layout-hint-large`): `span 12`.
    - `MEDIUM` (`layout-hint-medium`): `span 6` (half width on desktop).

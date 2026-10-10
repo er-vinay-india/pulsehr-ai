@@ -15,8 +15,14 @@ import collections
 from enum import Enum
 import logging
 import re
-from typing import Any, Literal
+from typing import Any, Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field
+
+from .semantic_visual_compression import (
+    VisualMicrocopy,
+    SemanticIconRegistry,
+    SemanticVisualCompressionLayer,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +38,71 @@ class ChartFamily(str, Enum):
     FLOW = "FLOW"
     GEOSPATIAL = "GEOSPATIAL"
     SPECIALTY = "SPECIALTY"
+
+
+class VisualMorphology(str, Enum):
+    """Visual morphology classification ensuring geometric and perceptual diversity."""
+    LENGTH = "LENGTH"                # ranked_bar, horizontal_bar, column, bullet, waterfall, variance_bar
+    POINT = "POINT"                  # dot_plot, lollipop, scatter, beeswarm
+    RANGE = "RANGE"                  # dumbbell, range_chart
+    AREA = "AREA"                    # stacked_area, 100_percent_stacked_bar, stacked_bar, donut, pie, waffle
+    TEMPORAL_PATH = "TEMPORAL_PATH"  # line, spline, slope, bump
+    MATRIX = "MATRIX"                # heatmap, correlation_matrix
+    DISTRIBUTION = "DISTRIBUTION"    # box_plot, histogram, density_plot
+    ICONIC = "ICONIC"                # podium_top_3, pictogram, icon_array
+    HIERARCHICAL = "HIERARCHICAL"    # treemap, dendrogram, sunburst
+    FLOW = "FLOW"                    # sankey, alluvial
+    GEOSPATIAL = "GEOSPATIAL"        # choropleth, geo_bubble
+
+
+class DomainVisualPriority:
+    """Governed business priority and decision value weighting by business domain."""
+
+    WORKFORCE_PRIORITY: dict[str, float] = {
+        "TARGET_VS_ACTUAL": 1.0,     # P1: Immediate policy compliance (WFO / attendance target)
+        "RANKING": 0.95,             # P1: Leadership attention & unit accountability
+        "TEMPORAL": 0.92,            # P1: Direction over snapshot (when real dates exist)
+        "MATRIX": 0.90,              # P1: Department x period problem zones
+        "COMPOSITION": 0.85,         # P1: Presence vs leave capacity
+        "DISTRIBUTION": 0.70,        # P2: Inconsistency & spread
+        "COMPARISON": 0.65,          # P2: Gap & disparity
+        "ANOMALY": 0.60,             # P2: Outliers
+        "RELATIONSHIP": 0.50,        # P2: Diagnostic correlation
+    }
+
+    ENVIRONMENTAL_PRIORITY: dict[str, float] = {
+        "RANKING": 1.0,              # P1: Non-attainment hotspots
+        "TARGET_VS_ACTUAL": 0.95,    # P1: Statutory NAAQS benchmark compliance
+        "ANOMALY": 0.90,             # P1: Severe pollution concentration spikes
+        "DISTRIBUTION": 0.80,        # P2: Regional particulate spread
+        "COMPARISON": 0.75,          # P2: Pollutant & state comparison
+        "RELATIONSHIP": 0.70,        # P2: Multi-pollutant associations (SO2 vs NO2)
+        "MATRIX": 0.70,              # P2: Monitoring zones
+        "TEMPORAL": 0.85,            # P1/P2: Historical progression
+        "COMPOSITION": 0.60,
+    }
+
+    DEFAULT_PRIORITY: dict[str, float] = {
+        "RANKING": 0.90,
+        "TARGET_VS_ACTUAL": 0.85,
+        "TEMPORAL": 0.85,
+        "COMPOSITION": 0.80,
+        "DISTRIBUTION": 0.75,
+        "COMPARISON": 0.70,
+        "ANOMALY": 0.70,
+        "RELATIONSHIP": 0.65,
+        "MATRIX": 0.70,
+    }
+
+    @classmethod
+    def get_priority(cls, domain: str, intent: str) -> float:
+        d = (domain or "general").lower()
+        intent_up = (intent or "RANKING").upper()
+        if d in ("workforce", "workforce_hr", "hr"):
+            return cls.WORKFORCE_PRIORITY.get(intent_up, 0.60)
+        if "env" in d or "air" in d:
+            return cls.ENVIRONMENTAL_PRIORITY.get(intent_up, 0.70)
+        return cls.DEFAULT_PRIORITY.get(intent_up, 0.70)
 
 
 class ChartArchetype(str, Enum):
@@ -81,8 +152,10 @@ class DashboardVisualBudget(BaseModel):
     max_visuals: int = 15
     max_same_intent: int = 3
     max_same_chart_family: int = 2
+    max_same_morphology: int = 2   # Maximum 2 of same visual morphology (prevents bar/length dominance)
     min_distinct_intents: int = 4
     min_distinct_chart_families: int = 5
+    min_distinct_morphologies: int = 5
 
 
 class ChartCapabilityRegistry:
@@ -119,6 +192,37 @@ class ChartCapabilityRegistry:
         ChartArchetype.WORD_CLOUD.value: ChartFamily.SPECIALTY,
     }
 
+    ARCHETYPE_TO_MORPHOLOGY: dict[str, VisualMorphology] = {
+        ChartArchetype.RANKED_BAR.value: VisualMorphology.LENGTH,
+        ChartArchetype.HORIZONTAL_BAR.value: VisualMorphology.LENGTH,
+        ChartArchetype.BULLET.value: VisualMorphology.LENGTH,
+        "bullet_bar": VisualMorphology.LENGTH,
+        ChartArchetype.WATERFALL.value: VisualMorphology.LENGTH,
+        ChartArchetype.VARIANCE_BAR.value: VisualMorphology.LENGTH,
+        ChartArchetype.DOT_PLOT.value: VisualMorphology.POINT,
+        ChartArchetype.LOLLIPOP.value: VisualMorphology.POINT,
+        ChartArchetype.SCATTER.value: VisualMorphology.POINT,
+        "correlation_scatter": VisualMorphology.POINT,
+        "bubble": VisualMorphology.POINT,
+        ChartArchetype.DUMBBELL.value: VisualMorphology.RANGE,
+        ChartArchetype.BOX_PLOT.value: VisualMorphology.DISTRIBUTION,
+        ChartArchetype.HISTOGRAM.value: VisualMorphology.DISTRIBUTION,
+        ChartArchetype.ONE_HUNDRED_PERCENT_STACKED_BAR.value: VisualMorphology.AREA,
+        ChartArchetype.STACKED_BAR.value: VisualMorphology.AREA,
+        ChartArchetype.DONUT.value: VisualMorphology.AREA,
+        ChartArchetype.PIE.value: VisualMorphology.AREA,
+        ChartArchetype.LINE.value: VisualMorphology.TEMPORAL_PATH,
+        "trend_line": VisualMorphology.TEMPORAL_PATH,
+        ChartArchetype.AREA.value: VisualMorphology.TEMPORAL_PATH,
+        ChartArchetype.SLOPE.value: VisualMorphology.TEMPORAL_PATH,
+        ChartArchetype.HEATMAP.value: VisualMorphology.MATRIX,
+        ChartArchetype.PODIUM_TOP_3.value: VisualMorphology.ICONIC,
+        ChartArchetype.TREEMAP.value: VisualMorphology.HIERARCHICAL,
+        ChartArchetype.DENDROGRAM.value: VisualMorphology.HIERARCHICAL,
+        ChartArchetype.SANKEY.value: VisualMorphology.FLOW,
+        ChartArchetype.WORD_CLOUD.value: VisualMorphology.ICONIC,
+    }
+
     ARCHETYPE_TO_LAYOUT_HINT: dict[str, LayoutHint] = {
         ChartArchetype.PODIUM_TOP_3.value: LayoutHint.COMPACT,
         ChartArchetype.BULLET.value: LayoutHint.COMPACT,
@@ -152,6 +256,11 @@ class ChartCapabilityRegistry:
     def get_family(cls, archetype: str) -> ChartFamily:
         """Resolves chart family with fallback to COMPARISON."""
         return cls.ARCHETYPE_TO_FAMILY.get(archetype.lower(), ChartFamily.COMPARISON)
+
+    @classmethod
+    def get_morphology(cls, archetype: str) -> VisualMorphology:
+        """Resolves visual morphology ensuring geometric diversity."""
+        return cls.ARCHETYPE_TO_MORPHOLOGY.get(archetype.lower(), VisualMorphology.LENGTH)
 
     @classmethod
     def get_layout_hint(cls, archetype: str, is_hero: bool = False) -> LayoutHint:
@@ -214,6 +323,13 @@ class ChartCapabilityRegistry:
                 return False, "TEMPORAL chart rejected: genuine validated temporal dimension does not exist (truth > quota)"
             return True, "VALIDATED"
 
+        # 7. HEATMAP GATING: Matrix or 2D categorical cross-tabulation required
+        if arch == ChartArchetype.HEATMAP.value:
+            has_matrix = bool(spec.get("heatmap_data") or spec.get("data") or (spec.get("x_categories") and spec.get("y_categories")))
+            if not has_matrix and not spec.get("categories"):
+                return False, "HEATMAP rejected: requires matrix cross-tabulation data"
+            return True, "VALIDATED"
+
         return True, "VALIDATED"
 
     @classmethod
@@ -260,18 +376,25 @@ class CandidatePortfolioItem(BaseModel):
     intent: str
     chart_archetype: str
     chart_family: ChartFamily
+    chart_morphology: VisualMorphology = VisualMorphology.LENGTH
     layout_hint: LayoutHint = LayoutHint.MEDIUM
     importance_score: float = 0.5
     confidence: float = 0.90
     business_value: float = 0.5
     statistical_significance: float = 0.5
     decision_value: float = 0.5
+    domain_decision_value: float = 0.5
+    domain: str = "general"
     visual_spec: dict[str, Any] = Field(default_factory=dict)
     tokens: dict[str, Any] = Field(default_factory=dict)
     suggested_role: str = "supporting"
     fingerprint: str = ""
     is_hero: bool = False
     portfolio_score: float = 0.0
+    visual_microcopy: Optional[VisualMicrocopy] = None
+
+
+CandidatePortfolioItem.model_rebuild()
 
 
 class VisualPortfolioOptimizer:
@@ -283,15 +406,19 @@ class VisualPortfolioOptimizer:
         candidates: list[CandidatePortfolioItem],
         budget: DashboardVisualBudget | None = None,
         has_temporal_dimension: bool = False,
+        domain: str = "general",
     ) -> list[CandidatePortfolioItem]:
         """Selects 8–15 visuals satisfying diversity constraints under the 'truth > quota' contract."""
         budget = budget or DashboardVisualBudget()
         if not candidates:
             return []
 
-        # Step 1: Pre-validate candidates through archetype gates
+        # Step 1: Pre-validate candidates through archetype gates & attach morphology & domain value
         valid_candidates: list[CandidatePortfolioItem] = []
         for c in candidates:
+            c.domain = domain
+            c.domain_decision_value = DomainVisualPriority.get_priority(domain, c.intent)
+
             is_valid, reason = ChartCapabilityRegistry.validate_archetype_gates(
                 archetype=c.chart_archetype,
                 spec=c.visual_spec,
@@ -303,10 +430,12 @@ class VisualPortfolioOptimizer:
                 if c.chart_archetype not in (ChartArchetype.WORD_CLOUD.value, ChartArchetype.LINE.value):
                     c.chart_archetype = ChartArchetype.RANKED_BAR.value
                     c.chart_family = ChartFamily.COMPARISON
+                    c.chart_morphology = VisualMorphology.LENGTH
                     c.layout_hint = LayoutHint.MEDIUM
                     valid_candidates.append(c)
             else:
                 c.chart_family = ChartCapabilityRegistry.get_family(c.chart_archetype)
+                c.chart_morphology = ChartCapabilityRegistry.get_morphology(c.chart_archetype)
                 c.layout_hint = ChartCapabilityRegistry.get_layout_hint(c.chart_archetype, is_hero=c.is_hero)
                 valid_candidates.append(c)
 
@@ -329,23 +458,47 @@ class VisualPortfolioOptimizer:
             logger.info("Candidate pool size (%d) <= min_visuals (%d); respecting Truth > Quota", len(valid_candidates), budget.min_visuals)
             for c in valid_candidates:
                 c.portfolio_score = round(cls._base_score(c), 4)
+                c.visual_microcopy = SemanticVisualCompressionLayer.compress_topic(
+                    title=c.title,
+                    takeaway=c.tokens.get("takeaway", "") or c.title,
+                    intent=c.intent,
+                    key_metric=c.tokens.get("key_metric", "") or "",
+                    tokens=c.tokens,
+                    domain=domain,
+                )
             return valid_candidates
 
         # Step 2: Iterative greedy portfolio selection with multi-factor scoring and diversity bonuses
         selected: list[CandidatePortfolioItem] = []
         intent_counts: dict[str, int] = collections.defaultdict(int)
         family_counts: dict[ChartFamily, int] = collections.defaultdict(int)
+        morphology_counts: dict[VisualMorphology, int] = collections.defaultdict(int)
         selected_fingerprints: set[str] = set()
 
-        # Step 2a: Anchor the Hero candidate first
-        hero_candidates = [c for c in valid_candidates if c.suggested_role == "hero" or c.is_hero]
-        anchor = hero_candidates[0] if hero_candidates else valid_candidates[0]
+        # Step 2a: Anchor the Hero candidate first (reflecting domain priority)
+        is_workforce = domain.lower() in ("workforce", "workforce_hr", "hr")
+        anchor: CandidatePortfolioItem | None = None
+
+        if is_workforce:
+            # P1 Workforce Anchor: Target vs Actual (WFO / Policy compliance) is highest consequence
+            policy_cands = [
+                c for c in valid_candidates
+                if c.intent == "TARGET_VS_ACTUAL" or c.chart_archetype == ChartArchetype.BULLET.value
+            ]
+            if policy_cands:
+                anchor = policy_cands[0]
+
+        if not anchor:
+            hero_candidates = [c for c in valid_candidates if c.suggested_role == "hero" or c.is_hero]
+            anchor = hero_candidates[0] if hero_candidates else valid_candidates[0]
+
         anchor.is_hero = True
         anchor.layout_hint = LayoutHint.HERO
         anchor.portfolio_score = round(cls._base_score(anchor) + 1.0, 4)
         selected.append(anchor)
         intent_counts[anchor.intent] += 1
         family_counts[anchor.chart_family] += 1
+        morphology_counts[anchor.chart_morphology] += 1
         if anchor.fingerprint:
             selected_fingerprints.add(anchor.fingerprint)
 
@@ -361,16 +514,18 @@ class VisualPortfolioOptimizer:
                 if cand.fingerprint and cand.fingerprint in selected_fingerprints:
                     continue
 
-                # 2. Hard caps: max same intent and max same chart family
+                # 2. Hard caps: max same intent, max same chart family, and max same morphology
                 current_intent_count = intent_counts[cand.intent]
                 current_family_count = family_counts[cand.chart_family]
+                current_morphology_count = morphology_counts[cand.chart_morphology]
 
-                # If we haven't reached min_visuals yet, we allow slight flexibility if no other candidates exist
                 pool_constrained = (len(selected) + len(remaining)) <= budget.min_visuals
                 if not pool_constrained:
                     if current_intent_count >= budget.max_same_intent:
                         continue
                     if current_family_count >= budget.max_same_chart_family:
+                        continue
+                    if current_morphology_count >= budget.max_same_morphology:
                         continue
 
                 # 3. Calculate portfolio score
@@ -385,15 +540,23 @@ class VisualPortfolioOptimizer:
 
                 # Diversity bonus: rewarding distinct visual chart families
                 if current_family_count == 0:
-                    score += 0.40  # Major bonus for presenting a fresh visual chart family
+                    score += 0.35  # Major bonus for presenting a fresh visual chart family
                 elif current_family_count == 1:
-                    score += 0.15
+                    score += 0.10
 
-                # Goal bonus: pushing towards target minimum intents (4) and families (5)
+                # Perceptual Morphology diversity bonus: rewarding distinct visual forms
+                if current_morphology_count == 0:
+                    score += 0.40  # Highest bonus for presenting a genuinely distinct visual geometry
+                else:
+                    score -= (0.25 * current_morphology_count)  # Penalty for geometric repetition
+
+                # Goal bonus: pushing towards target minimum intents (4), families (5), and morphologies (5)
                 if len(intent_counts) < budget.min_distinct_intents and current_intent_count == 0:
-                    score += 0.25
+                    score += 0.20
                 if len(family_counts) < budget.min_distinct_chart_families and current_family_count == 0:
-                    score += 0.30
+                    score += 0.20
+                if len(morphology_counts) < budget.min_distinct_morphologies and current_morphology_count == 0:
+                    score += 0.25
 
                 # Semantic family diversity: avoid too many stories on the same metric family
                 same_sem_family = sum(1 for s in selected if s.semantic_family == cand.semantic_family)
@@ -405,7 +568,7 @@ class VisualPortfolioOptimizer:
                     best_candidate = cand
 
             if not best_candidate:
-                # If constrained by hard caps before hitting min_visuals, relax family cap slightly
+                # If constrained by hard caps before hitting min_visuals, relax caps slightly
                 if len(selected) < budget.min_visuals and remaining:
                     fallback_cands = [c for c in remaining if c.fingerprint not in selected_fingerprints]
                     if fallback_cands:
@@ -420,6 +583,7 @@ class VisualPortfolioOptimizer:
             selected.append(best_candidate)
             intent_counts[best_candidate.intent] += 1
             family_counts[best_candidate.chart_family] += 1
+            morphology_counts[best_candidate.chart_morphology] += 1
             if best_candidate.fingerprint:
                 selected_fingerprints.add(best_candidate.fingerprint)
             remaining.remove(best_candidate)
@@ -428,21 +592,34 @@ class VisualPortfolioOptimizer:
             if len(selected) >= budget.target_max:
                 break
 
+        # Attach semantic visual microcopy to all selected candidates
+        for c in selected:
+            c.visual_microcopy = SemanticVisualCompressionLayer.compress_topic(
+                title=c.title,
+                takeaway=c.tokens.get("takeaway", "") or c.title,
+                intent=c.intent,
+                key_metric=c.tokens.get("key_metric", "") or "",
+                tokens=c.tokens,
+                domain=domain,
+            )
+
         logger.info(
-            "VisualPortfolioOptimizer selected %d visuals (intents=%d, families=%d)",
+            "VisualPortfolioOptimizer selected %d visuals (intents=%d, families=%d, morphologies=%d)",
             len(selected),
             len(intent_counts),
             len(family_counts),
+            len(morphology_counts),
         )
         return selected
 
     @classmethod
     def _base_score(cls, c: CandidatePortfolioItem) -> float:
-        """Computes multi-factor intrinsic merit score."""
+        """Computes multi-factor intrinsic merit score including domain decision priority."""
         return (
-            0.35 * c.business_value
+            0.30 * c.business_value
             + 0.25 * c.importance_score
             + 0.20 * c.confidence
+            + 0.15 * c.domain_decision_value
             + 0.10 * c.statistical_significance
-            + 0.10 * c.decision_value
         )
+

@@ -122,7 +122,7 @@ The platform is architected into **5 cohesive, integrated layers** supported by 
 2. **Zero LLM Math Guarantee:** Code computes all numbers deterministically. Models receive verified numbers as context and generate narratives; they never compute sums, averages, or deltas.
 3. **Non-Additive Aggregation Guarantee:** Concentration and rate metrics cannot be summed. Averages, medians, or distributions are enforced.
 4. **Ordinal Exclusion Guarantee:** Sequence numbers and document codes (e.g. `Sr. No.`) are excluded from numeric rankings and KPI rollups.
-5. **Dashboard vs. Explorer Separation Guarantee:** Level 1 Executive Dashboard is restricted to executive briefing, 5 KPIs, 3 visual stories, and compact Top 3/Bottom 3; full analytics and evidence live in the Data Explorer.
+5. **Dashboard vs. Explorer Separation Guarantee:** Level 1 Executive Dashboard is restricted to executive briefing, 5 KPIs, governed 8–15 visual portfolio (target 10–12) with perceptual morphology capping and semantic visual microcopy, and compact Top 3/Bottom 3; full analytics and evidence live in the Data Explorer.
 6. **Capability Entitlement Guarantee:** Specialized domain modules (Scenario Explorer) are strictly hidden on non-entitled domains.
 7. **Direct Inheritance Guarantee:** Downstream presentation decks, dashboards, and conversational answers inherit directly from the same evidence store.
 8. **Permutation-Only Prioritization Guarantee:** AI models can only reorder verified finding IDs; they cannot mutate mathematical values or invent ungrounded assertions.

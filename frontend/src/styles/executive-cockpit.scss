@@ -860,3 +860,114 @@
   }
 }
 
+/* --------------------------------------------------------------------------
+   8. Executive Visual Microcopy & Compressed Card Typography
+   -------------------------------------------------------------------------- */
+.executive-insight-card {
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+
+  &:hover {
+    box-shadow: 0 6px 18px -4px rgba(0, 0, 0, 0.08);
+  }
+
+  .card-header-compressed {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 2px;
+
+    .card-title-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+
+      .semantic-icon-wrapper {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 26px;
+        height: 26px;
+        border-radius: 6px;
+        flex-shrink: 0;
+      }
+
+      .card-compressed-title {
+        margin: 0;
+        font-weight: 700;
+        line-height: 1.25;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+    }
+
+    .card-actions-group {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+  }
+
+  .card-metric-context {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin-bottom: 6px;
+    font-size: 0.78rem;
+
+    .card-primary-number {
+      font-weight: 800;
+      font-size: 0.88rem;
+    }
+
+    .card-short-context {
+      font-size: 0.75rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+  }
+
+  .card-short-insight {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    padding-top: 8px;
+    margin-top: 4px;
+
+    p {
+      margin: 0;
+      font-size: 0.78rem;
+      font-weight: 500;
+      line-height: 1.35;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+    }
+  }
+
+  .card-btn-inspect {
+    background: transparent;
+    border: 1px solid rgba(0, 0, 0, 0.12);
+    border-radius: 6px;
+    font-size: 0.70rem;
+    font-weight: 600;
+    padding: 2px 8px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    transition: all 0.15s ease;
+
+    &:hover {
+      background: rgba(0, 0, 0, 0.04);
+    }
+  }
+}
+

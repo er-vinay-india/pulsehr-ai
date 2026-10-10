@@ -653,6 +653,80 @@ export default function VisualSpecRenderer({
       };
     }
 
+    // 9.5 HEATMAP (Matrix Archetype)
+    if (chartType === "heatmap") {
+      const rawData = visualSpec.heatmap_data || visualSpec.data || [];
+      const xCats = visualSpec.x_categories || visualSpec.categories || [];
+      const yCats = visualSpec.y_categories || [];
+
+      const cellValues = rawData.map((d) => (Array.isArray(d) ? d[2] : (d.value ?? 0)));
+      const minVal = cellValues.length ? Math.min(...cellValues) : 0;
+      const maxVal = cellValues.length ? Math.max(...cellValues) : 100;
+
+      return {
+        backgroundColor: "transparent",
+        tooltip: {
+          position: "top",
+          backgroundColor: isDark ? "#1e293b" : "#ffffff",
+          borderColor: isDark ? "#334155" : "#e2e8f0",
+          textStyle: { color: isDark ? "#f1f5f9" : "#0f172a", fontSize: 12 },
+          formatter: (p) => {
+            const val = p.data[2];
+            const xLabel = xCats[p.data[0]] || p.data[0];
+            const yLabel = yCats[p.data[1]] || p.data[1];
+            const unitSuffix = unit ? ` ${unit}` : "";
+            return `<strong>${yLabel} × ${xLabel}</strong><br/>Value: <strong>${val}${unitSuffix}</strong>`;
+          },
+        },
+        grid: { top: 20, right: 30, bottom: 45, left: 100, containLabel: true },
+        xAxis: {
+          type: "category",
+          data: xCats,
+          splitArea: { show: true },
+          axisLabel: { color: textColor, fontSize: 11 },
+        },
+        yAxis: {
+          type: "category",
+          data: yCats,
+          splitArea: { show: true },
+          axisLabel: { color: textColor, fontSize: 11 },
+        },
+        visualMap: {
+          min: minVal,
+          max: maxVal,
+          calculable: false,
+          orient: "horizontal",
+          left: "center",
+          bottom: "0%",
+          itemWidth: 10,
+          itemHeight: 60,
+          textStyle: { color: textColor, fontSize: 10 },
+          inRange: {
+            color: isDark
+              ? ["#1e293b", "#3b82f6", "#60a5fa", "#f59e0b", "#ef4444"]
+              : ["#eff6ff", "#93c5fd", "#3b82f6", "#f59e0b", "#ef4444"],
+          },
+        },
+        series: [
+          {
+            type: "heatmap",
+            data: rawData,
+            label: {
+              show: true,
+              fontSize: 10,
+              color: isDark ? "#f8fafc" : "#0f172a",
+            },
+            emphasis: {
+              itemStyle: {
+                shadowBlur: 10,
+                shadowColor: "rgba(0, 0, 0, 0.5)",
+              },
+            },
+          },
+        ],
+      };
+    }
+
     // 10. DEFAULT: RANKED BAR / HORIZONTAL BAR (Ranking Archetype)
     const bench = benchmark ?? (values.length ? values.reduce((a, b) => a + b, 0) / values.length : 15.0);
     return {

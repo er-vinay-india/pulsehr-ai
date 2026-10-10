@@ -1,17 +1,8 @@
-import React, { useState, useMemo } from "react";
-import { Sparkles, ArrowRight, ExternalLink, ShieldCheck, TrendingUp, BarChart3, AlertCircle, SlidersHorizontal, HelpCircle } from "lucide-react";
+import React, { useMemo } from "react";
+import { ArrowRight } from "lucide-react";
 import VisualSpecRenderer from "./VisualSpecRenderer";
-import GenericRankingExplorer from "./GenericRankingExplorer";
+import SemanticIcon from "./SemanticIcon";
 import { getContextualExplorerTarget } from "../../utils/explorerNavigation";
-
-function sanitizeTemplateText(text, fallback = "") {
-  if (!text || typeof text !== "string") return fallback;
-  const tokenRegex = /\{[a-zA-Z0-9_]+\}/g;
-  if (tokenRegex.test(text)) {
-    return text.replace(tokenRegex, "").replace(/\s{2,}/g, " ").trim() || fallback;
-  }
-  return text;
-}
 
 export default function ExecutiveVisualStory({
   topic,
@@ -22,8 +13,6 @@ export default function ExecutiveVisualStory({
   onInspect,
 }) {
   if (!topic) return null;
-
-  const [explorerOpen, setExplorerOpen] = useState(false);
 
   const intentColor = {
     RANKING: themeTokens?.colors?.brandBlue || "#2563eb",
@@ -36,7 +25,12 @@ export default function ExecutiveVisualStory({
     COMPARISON: themeTokens?.colors?.brandBlue || "#2563eb",
     PART_TO_WHOLE: "#8b5cf6",
     GAP_EXPLANATION: themeTokens?.colors?.gold || "#d97706",
+    MATRIX: "#6366f1",
   }[topic.analytical_intent] || (themeTokens?.colors?.brandBlue || "#2563eb");
+
+  const intentBg = isDark
+    ? "rgba(255, 255, 255, 0.06)"
+    : "rgba(0, 0, 0, 0.04)";
 
   const isRankingStory = topic.analytical_intent === "RANKING" || topic.visual_spec?.is_ranking_story;
 
@@ -74,8 +68,6 @@ export default function ExecutiveVisualStory({
       };
     }
 
-    // Single category list:
-    // If population <= 6 unique entities, show all as clean ranked_bar without duplicating
     if (rawCategories.length <= 6) {
       return {
         ...spec,
@@ -87,10 +79,8 @@ export default function ExecutiveVisualStory({
       };
     }
 
-    // Population > 6: Take Top 3 + Bottom 3 unique entities
     const topCats = rawCategories.slice(0, 3);
     const topVals = rawValues.slice(0, 3);
-
     const candBotCats = rawCategories.slice(-3);
     const candBotVals = rawValues.slice(-3);
 
@@ -113,66 +103,86 @@ export default function ExecutiveVisualStory({
     };
   }, [topic.visual_spec, isRankingStory]);
 
-    // Layout hint class for grid density
-    const layoutHint = (topic.layout_hint || topic.visual_spec?.layout_hint || (isHero ? "HERO" : "MEDIUM")).toLowerCase();
-    const layoutClass = `layout-hint-${layoutHint}`;
+  // Compressed Level-1 Microcopy (<= 7 word title, <= 8 word context, <= 12 word finding)
+  const microcopy = useMemo(() => {
+    if (topic.visual_microcopy) {
+      return topic.visual_microcopy;
+    }
+    const words = (str) => (str || "").trim().split(/\s+/).filter(Boolean);
+    const shortTitle = words(topic.title).slice(0, 7).join(" ");
+    const shortContext = words(topic.subtitle || "").slice(0, 8).join(" ");
+    const shortTakeaway = words(topic.primary_takeaway || topic.takeaway || topic.title || "").slice(0, 12).join(" ");
+    return {
+      icon: topic.analytical_intent === "TARGET_VS_ACTUAL" ? "target" : "activity",
+      short_title: shortTitle || topic.title,
+      primary_number: topic.key_metric || "",
+      short_context: shortContext,
+      short_finding: shortTakeaway || "Analyzed metric distributions across reporting population.",
+      cta: "Inspect →",
+    };
+  }, [topic]);
 
-    return (
-      <article
-        className={`executive-insight-card ${isHero ? "hero-card" : "supporting-card"} ${layoutClass}`}
-        data-testid={isHero ? "hero-card" : `supporting-card-${topic.topic_id}`}
-        style={{
-          backgroundColor: themeTokens?.colors?.surface,
-          border: `1px solid ${isHero ? (themeTokens?.colors?.brandBlue || "#2563eb") : themeTokens?.colors?.borderSubtle}`,
-          borderRadius: "12px",
-          padding: isHero ? "20px 24px" : "18px 20px",
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "space-between",
-          gap: "12px",
-          boxShadow: isHero ? "0 4px 20px -2px rgba(37, 99, 235, 0.08)" : "none",
-          minWidth: 0,
-          overflow: "hidden",
-        }}
-      >
+  // Layout hint class for grid density
+  const layoutHint = (topic.layout_hint || topic.visual_spec?.layout_hint || (isHero ? "HERO" : "MEDIUM")).toLowerCase();
+  const layoutClass = `layout-hint-${layoutHint}`;
+
+  return (
+    <article
+      className={`executive-insight-card ${isHero ? "hero-card" : "supporting-card"} ${layoutClass}`}
+      data-testid={isHero ? "hero-card" : `supporting-card-${topic.topic_id}`}
+      style={{
+        backgroundColor: themeTokens?.colors?.surface,
+        border: `1px solid ${isHero ? (themeTokens?.colors?.brandBlue || "#2563eb") : themeTokens?.colors?.borderSubtle}`,
+        borderRadius: "12px",
+        padding: isHero ? "18px 22px" : "14px 16px",
+        display: "flex",
+        flexDirection: "column",
+        justifyContent: "space-between",
+        gap: "10px",
+        boxShadow: isHero ? "0 4px 20px -2px rgba(37, 99, 235, 0.08)" : "none",
+        minWidth: 0,
+        overflow: "hidden",
+      }}
+    >
       <div>
-        {/* Header Badges */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+        {/* Compressed Header: Semantic Icon + Short Title (<= 7 words) + Inspect CTA */}
+        <div className="card-header-compressed" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+          <div className="card-title-group" style={{ display: "flex", alignItems: "center", gap: "8px", minWidth: 0 }}>
             <span
+              className="semantic-icon-wrapper"
               style={{
-                padding: "2px 8px",
-                borderRadius: "6px",
-                fontSize: "0.70rem",
-                fontWeight: 700,
-                textTransform: "uppercase",
-                backgroundColor: isHero ? "rgba(37, 99, 235, 0.12)" : "var(--color-bg-subtle, rgba(0, 0, 0, 0.04))",
-                color: intentColor,
                 display: "inline-flex",
                 alignItems: "center",
-                gap: "4px",
+                justifyContent: "center",
+                width: "26px",
+                height: "26px",
+                borderRadius: "6px",
+                backgroundColor: intentBg,
+                color: intentColor,
+                flexShrink: 0,
               }}
             >
-              {isHero ? <Sparkles size={11} /> : <BarChart3 size={11} />}
-              {topic.analytical_intent || "ANALYSIS"}
+              <SemanticIcon name={microcopy.icon} size={15} />
             </span>
-            {topic.key_metric && (
-              <span
-                style={{
-                  fontSize: "0.72rem",
-                  fontWeight: 600,
-                  color: themeTokens?.colors?.textPrimary,
-                  backgroundColor: isDark ? "rgba(255, 255, 255, 0.06)" : "rgba(0, 0, 0, 0.05)",
-                  padding: "2px 7px",
-                  borderRadius: "4px",
-                }}
-              >
-                {topic.key_metric}
-              </span>
-            )}
+            <h3
+              className="card-compressed-title"
+              title={topic.title}
+              style={{
+                margin: 0,
+                fontSize: isHero ? "1.15rem" : "0.95rem",
+                fontWeight: 700,
+                color: themeTokens?.colors?.textPrimary,
+                lineHeight: 1.25,
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }}
+            >
+              {microcopy.short_title}
+            </h3>
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <div className="card-actions-group" style={{ display: "flex", alignItems: "center", gap: "6px", flexShrink: 0 }}>
             {contextualTarget && (
               <a
                 href={contextualTarget.url}
@@ -185,138 +195,142 @@ export default function ExecutiveVisualStory({
                   border: `1px solid ${themeTokens?.colors?.brandBlue || "#2563eb"}`,
                   borderRadius: "6px",
                   color: themeTokens?.colors?.brandBlue || "#2563eb",
-                  fontSize: "0.72rem",
+                  fontSize: "0.70rem",
                   fontWeight: 600,
-                  padding: "3px 9px",
+                  padding: "2px 7px",
                   display: "inline-flex",
                   alignItems: "center",
-                  gap: "4px",
+                  gap: "3px",
                   backgroundColor: isDark ? "rgba(37, 99, 235, 0.12)" : "rgba(37, 99, 235, 0.06)",
                   cursor: "pointer",
                 }}
                 aria-label={`${contextualTarget.label} in Data Explorer`}
               >
                 <span>{contextualTarget.label}</span>
-                <ArrowRight size={12} />
+                <ArrowRight size={10} />
               </a>
             )}
 
             {onInspect && (
               <button
                 type="button"
-                className="btn-inspect-subtle"
+                className="card-btn-inspect"
                 onClick={() => onInspect(topic)}
                 style={{
                   background: "transparent",
                   border: `1px solid ${themeTokens?.colors?.borderSubtle || "rgba(0, 0, 0, 0.12)"}`,
                   borderRadius: "6px",
                   color: themeTokens?.colors?.textSecondary || "#64748b",
-                  fontSize: "0.72rem",
-                  fontWeight: 500,
-                  padding: "3px 8px",
+                  fontSize: "0.70rem",
+                  fontWeight: 600,
+                  padding: "2px 8px",
                   cursor: "pointer",
                   display: "inline-flex",
                   alignItems: "center",
-                  gap: "4px",
+                  gap: "3px",
                 }}
-                aria-label={`Why this matters: ${topic.title}`}
+                aria-label={`Inspect ${topic.title}`}
               >
-                <HelpCircle size={12} />
-                <span>Why this matters</span>
+                <span>{microcopy.cta || "Inspect →"}</span>
               </button>
             )}
           </div>
         </div>
 
-        {/* Title & Subtitle */}
-        <h3
-          style={{
-            margin: "4px 0 2px 0",
-            fontSize: isHero ? "1.22rem" : "1.02rem",
-            fontWeight: 700,
-            color: themeTokens?.colors?.textPrimary,
-            lineHeight: 1.3,
-          }}
-        >
-          {topic.title}
-        </h3>
-        {topic.subtitle && (
-          <p style={{ margin: "0 0 8px 0", fontSize: "0.78rem", color: themeTokens?.colors?.textSecondary }}>
-            {topic.subtitle}
-          </p>
+        {/* Sub-strip: Primary metric number + Short context sentence (<= 8 words) */}
+        {(microcopy.primary_number || microcopy.short_context) && (
+          <div
+            className="card-metric-context"
+            style={{
+              display: "flex",
+              alignItems: "baseline",
+              gap: "8px",
+              marginBottom: "6px",
+              fontSize: "0.78rem",
+            }}
+          >
+            {microcopy.primary_number && (
+              <span
+                className="card-primary-number"
+                style={{
+                  fontWeight: 800,
+                  fontSize: "0.88rem",
+                  color: intentColor,
+                }}
+              >
+                {microcopy.primary_number}
+              </span>
+            )}
+            {microcopy.short_context && (
+              <span
+                className="card-short-context"
+                style={{
+                  color: themeTokens?.colors?.textSecondary,
+                  fontSize: "0.75rem",
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                }}
+              >
+                {microcopy.short_context}
+              </span>
+            )}
+          </div>
         )}
 
-        {/* Visual Chart */}
-        <div style={{ marginTop: "6px", width: "100%" }}>
+        {/* Visual Spec Chart View */}
+        <div style={{ marginTop: "4px", width: "100%" }}>
           <VisualSpecRenderer
             visualSpec={compactVisualSpec}
             themeTokens={themeTokens}
             isDark={isDark}
-            height={isHero ? "290px" : "230px"}
+            height={isHero ? "290px" : "220px"}
           />
         </div>
       </div>
 
-      {/* Takeaway & Action Footer */}
+      {/* Compressed Footer: Single short insight sentence (<= 12 words) without permanent action block */}
       <div
+        className="card-short-insight"
         style={{
-          display: "grid",
-          gridTemplateColumns: isHero ? "repeat(auto-fit, minmax(260px, 1fr))" : "1fr",
-          gap: "10px",
-          paddingTop: "10px",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: "8px",
+          paddingTop: "8px",
+          marginTop: "4px",
           borderTop: `1px solid ${themeTokens?.colors?.borderSubtle || "#e2e8f0"}`,
         }}
       >
-        <div>
-          <span
-            style={{
-              fontSize: "0.68rem",
-              fontWeight: 700,
-              textTransform: "uppercase",
-              color: intentColor,
+        <p
+          style={{
+            margin: 0,
+            fontSize: "0.78rem",
+            fontWeight: 500,
+            color: themeTokens?.colors?.textPrimary,
+            lineHeight: 1.35,
+          }}
+        >
+          {microcopy.short_finding}
+        </p>
+        {contextualTarget && (
+          <a
+            href={contextualTarget.url}
+            onClick={(e) => {
+              e.preventDefault();
+              window.location.href = contextualTarget.url;
             }}
-          >
-            Key Finding
-          </span>
-          <p
             style={{
-              margin: "2px 0 0 0",
-              fontSize: isHero ? "0.88rem" : "0.82rem",
+              fontSize: "0.72rem",
+              color: themeTokens?.colors?.brandBlue || "#2563eb",
+              textDecoration: "none",
               fontWeight: 600,
-              color: themeTokens?.colors?.textPrimary,
-              lineHeight: 1.38,
+              whiteSpace: "nowrap",
+              flexShrink: 0,
             }}
           >
-            {sanitizeTemplateText(topic.primary_takeaway || topic.takeaway, "Analyzed metric distributions across reporting population.")}
-          </p>
-        </div>
-
-        {topic.recommended_action && (
-          <div
-            style={{
-              backgroundColor: isDark ? "rgba(255, 255, 255, 0.03)" : "rgba(0, 0, 0, 0.02)",
-              border: `1px solid ${themeTokens?.colors?.borderSubtle}`,
-              borderRadius: "6px",
-              padding: "6px 10px",
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: "4px", marginBottom: "2px" }}>
-              <ArrowRight size={11} color={intentColor} />
-              <span
-                style={{
-                  fontSize: "0.68rem",
-                  fontWeight: 700,
-                  textTransform: "uppercase",
-                  color: themeTokens?.colors?.textSecondary,
-                }}
-              >
-                Recommended Action
-              </span>
-            </div>
-            <p style={{ margin: 0, fontSize: "0.78rem", color: themeTokens?.colors?.textSecondary, lineHeight: 1.3 }}>
-              {sanitizeTemplateText(topic.recommended_action)}
-            </p>
-          </div>
+            Deep Dive →
+          </a>
         )}
       </div>
     </article>

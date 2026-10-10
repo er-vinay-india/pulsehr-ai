@@ -39,6 +39,10 @@ from .visual_portfolio_optimizer import (
     ChartCapabilityRegistry,
     LayoutHint,
 )
+from .semantic_visual_compression import (
+    SemanticVisualCompressionLayer,
+    VisualMicrocopy,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +76,7 @@ class ExecutiveTopic(BaseModel):
     rendered_mark_count: int = 1
     selected_or_suppressed: str = "SELECTED"
     suppression_reason: str | None = None
+    visual_microcopy: VisualMicrocopy | None = None
 
 
 class ICompositionStrategy(ABC):
@@ -416,6 +421,17 @@ class DynamicExecutiveComposition:
             )
             topics.append(topic)
             selected_fps.append(cand_fp)
+
+        # Attach visual_microcopy for Level-1 card display
+        for top in topics:
+            if not top.visual_microcopy:
+                top.visual_microcopy = SemanticVisualCompressionLayer.compress_topic(
+                    title=top.title,
+                    takeaway=top.primary_takeaway or top.takeaway or top.title,
+                    intent=top.analytical_intent,
+                    key_metric=top.key_metric,
+                    domain=domain,
+                )
 
         return topics
 
@@ -1294,6 +1310,12 @@ class ExecutiveCompositionPlanner:
                     v_spec["series"] = series_data
                 if "benchmark" in tokens:
                     v_spec["benchmark"] = tokens["benchmark"]
+                if "heatmap_data" in tokens:
+                    v_spec["heatmap_data"] = tokens["heatmap_data"]
+                if "x_categories" in tokens:
+                    v_spec["x_categories"] = tokens["x_categories"]
+                if "y_categories" in tokens:
+                    v_spec["y_categories"] = tokens["y_categories"]
 
             # Grounded fallback for Hero or Capacity Composition
             if idx == 1 and gov_metrics.get("hero"):
@@ -1349,7 +1371,12 @@ class ExecutiveCompositionPlanner:
                     statistical_significance=getattr(story, "statistical_significance", 0.5),
                     decision_value=0.85 if intent in ("RANKING", "TARGET_VS_ACTUAL", "COMPOSITION") else 0.70,
                     visual_spec=v_spec,
-                    tokens=tokens,
+                    tokens={
+                        **tokens,
+                        "takeaway": getattr(story, "takeaway", ""),
+                        "key_metric": getattr(story, "key_metric", ""),
+                        "unit": unit,
+                    },
                     suggested_role=getattr(story, "suggested_role", "hero" if idx == 1 else "supporting"),
                     fingerprint=f"{fam}_{intent}_{chart_type}",
                     is_hero=(idx == 1),
@@ -1364,13 +1391,16 @@ class ExecutiveCompositionPlanner:
             max_visuals=15,
             max_same_intent=3,
             max_same_chart_family=2,
+            max_same_morphology=2,
             min_distinct_intents=4,
             min_distinct_chart_families=5,
+            min_distinct_morphologies=5,
         )
         selected_items = VisualPortfolioOptimizer.optimize_portfolio(
             candidates=candidate_portfolio_items,
             budget=budget,
             has_temporal_dimension=has_temporal,
+            domain=domain_name,
         )
 
         topics: list[ExecutiveTopic] = []
@@ -1408,9 +1438,13 @@ class ExecutiveCompositionPlanner:
                 key_metric=getattr(story, "key_metric", ""),
                 analytical_intent=item.intent,
                 visual_spec=v_spec,
+                visual_microcopy=item.visual_microcopy,
                 inspect_payload={
                     "story_id": item.item_id,
                     "title": getattr(story, "title", ""),
+                    "business_question": getattr(story, "business_question", ""),
+                    "primary_takeaway": getattr(story, "takeaway", ""),
+                    "recommended_action": getattr(story, "recommended_action", ""),
                     "analytical_intent": item.intent,
                     "selected_chart": item.chart_archetype,
                     "decision_audit": decision.get("audit", {}),

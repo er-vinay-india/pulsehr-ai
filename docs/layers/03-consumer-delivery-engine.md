@@ -34,12 +34,21 @@ Implemented in `backend/app/services/adaptive_dashboard/` and `frontend/src/page
   1. **Dataset Context & Briefing Card**: High-level provenance, entity count, and high-impact executive summary.
   2. **Governed 5-KPI Strip**: Single-line summary metrics with domain-appropriate aggregation (e.g. Mean $\text{PM}_{10}$, Mean $\text{PM}_{2.5}$, Station Coverage) and explicit units ($\mu\text{g/m}^3$). Additive `SUM`/`Total` operations are strictly banned on rates and concentrations.
   3. **Executive Visual Diversity & Density Engine (Governed 8–15 Visual Envelope, Target 10–12)**:
-     - *Governed Portfolio Optimization*: Evaluated by `VisualPortfolioOptimizer` using multi-factor portfolio scoring (importance + confidence + business relevance + diversity bonuses - redundancy penalties).
+     - *Governed Portfolio Optimization*: Evaluated by `VisualPortfolioOptimizer` using multi-factor portfolio scoring (importance + confidence + business relevance + diversity bonuses - redundancy penalties) weighted by `DomainVisualPriority`.
+     - *Domain-Specific Decision Prioritization*: The hero and top supporting slots reflect domain decision priorities (`DomainVisualPriority`). For workforce, WFO policy compliance (`TARGET_VS_ACTUAL`, P1) anchors the Hero card, followed by leader rankings (`RANKING`, P1), period cross-tabulation matrix (`MATRIX`, P1), and capacity reconciliation (`COMPOSITION`, P1).
+     - *Perceptual Diversity (Visual Morphology)*: Evaluated by `VisualMorphology` (`LENGTH`, `POINT`, `RANGE`, `AREA`, `TEMPORAL_PATH`, `MATRIX`, `DISTRIBUTION`, `ICONIC`, `HIERARCHICAL`, `FLOW`). HighView strictly caps `max_same_morphology <= 2` and enforces $\ge 5$ distinct morphologies, ensuring that length-based bars never visually dominate the portfolio.
      - *Intent & Family Diversity Quotas*: Enforces $\ge 4$ distinct analytical intents (max 3 per intent) and $\ge 5$ distinct chart families (max 2 per family).
      - *Gated Visual Archetypes*:
-       - `HERO / LARGE (span 12)`: Primary benchmark ranking (e.g. Ambient air quality vs NAAQS standard, or Department Attendance vs Policy Benchmark).
+       - `HERO / LARGE (span 12)`: Primary benchmark ranking or policy compliance hero, and 2D cross-tabulation heatmaps (`heatmap`).
        - `MEDIUM (span 6)`: Distribution box plots (`box_plot`), bivariate relationship scatter plots (`scatter`), capacity composition (`100_percent_stacked_bar`), and statistical anomaly variance bars (`variance_bar`).
        - `COMPACT (span 4) / MICRO (span 3)`: Olympic Top 3 podium (`podium_top_3` with gold/silver/bronze pedestals and strict $\le 20$ character label truncation), target vs actual bullet charts (`bullet`), metric comparisons (`lollipop`), and disparity range spreads (`dumbbell`).
+     - *Semantic Visual Compression Layer (`SemanticVisualCompressionLayer`)*: Level-1 executive cards eliminate report prose in favor of high visual density:
+       - `short_title`: $\le 7$ words (executive noun phrase).
+       - `short_context`: $\le 8$ words (cohort context & scope).
+       - `short_finding`: $\le 12$ words (single clear takeaway sentence).
+       - `cta`: $\le 3$ words (e.g. "Inspect →").
+       - `SemanticIconRegistry`: Deterministic mapping to SVG icons (`target`, `trophy`, `users`, `calendar`, `alert`, `trend`, `distribution`, `compare`, `relationship`, `shield`, `matrix`, `wind`).
+       - **Zero Permanent Action Clutter**: `recommended_action` is never rendered permanently inside Level-1 dashboard cards. Unabridged business questions, full explanations, recommended action steps, and cryptographic evidence citations are preserved on demand inside the Quick Inspect Drawer and Data Explorer.
      - *Truth > Quota Invariant*: HighView never synthesizes artificial stories, fabricated entities, or fake temporal dimensions to satisfy a count quota.
   4. **Top 3 / Bottom 3 Ranking Card**: Compact ranking overview with polarity awareness (`HIGHER_IS_BETTER` vs `LOWER_IS_BETTER`). Enforces a maximum of 6 unique entities and avoids duplicate entries on small cohorts ($N \le 6$). Deep-links via `"Explore full ranking →"`.
   5. **Compact Scenario Summary**: High-level simulation impact card, strictly gated to entitled domains.

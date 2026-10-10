@@ -359,6 +359,27 @@ class AnalyticalStoryBuilder:
                     "vals": [21.2, 16.9, 13.5, 8.2],
                     "unit": "days",
                 },
+                {
+                    "fam": "department_weekly_matrix",
+                    "title": "Department Attendance Matrix Across Periods",
+                    "q": "How does attendance distribute across departments and reporting periods?",
+                    "intent": "MATRIX",
+                    "arch": "heatmap",
+                    "hint": "LARGE",
+                    "metric": "5 Periods × 4 Depts",
+                    "takeaway": "Attendance density is strongest in Operations; Design dips in later periods.",
+                    "action": "Address mid-quarter attendance dips in technical cohorts.",
+                    "cats": ["Operations", "Engineering", "Functions", "Design"],
+                    "heatmap_data": [
+                        [0, 0, 4.5], [1, 0, 4.8], [2, 0, 4.2], [3, 0, 4.1], [4, 0, 3.6],
+                        [0, 1, 3.8], [1, 1, 3.6], [2, 1, 3.4], [3, 1, 3.2], [4, 1, 2.9],
+                        [0, 2, 3.1], [1, 2, 2.9], [2, 2, 2.8], [3, 2, 2.7], [4, 2, 2.0],
+                        [0, 3, 2.1], [1, 3, 1.8], [2, 3, 1.6], [3, 3, 1.5], [4, 3, 1.2],
+                    ],
+                    "x_categories": ["W1", "W2", "W3", "W4", "W5"],
+                    "y_categories": ["Operations", "Engineering", "Functions", "Design"],
+                    "unit": "avg days",
+                },
             ]
             for tpl in wf_templates:
                 if len(stories) >= 12:
@@ -380,6 +401,9 @@ class AnalyticalStoryBuilder:
                         "scatter_points": tpl.get("scatter_points"),
                         "x_measure": tpl.get("x_measure"),
                         "y_measure": tpl.get("y_measure"),
+                        "heatmap_data": tpl.get("heatmap_data"),
+                        "x_categories": tpl.get("x_categories"),
+                        "y_categories": tpl.get("y_categories"),
                         "observation_count": tpl.get("obs_count", len(tpl.get("vals", []))),
                     }
                     if tpl["arch"] == "podium_top_3":
@@ -553,6 +577,27 @@ class AnalyticalStoryBuilder:
                     "vals": [150.0, 135.0, 80.5, 25.0],
                     "unit": "µg/m³",
                 },
+                {
+                    "fam": "pollutant_zone_matrix",
+                    "title": "Pollutant Intensity Across Monitoring Zones",
+                    "q": "How do key pollutant levels distribute across zone classifications?",
+                    "intent": "MATRIX",
+                    "arch": "heatmap",
+                    "hint": "LARGE",
+                    "metric": "3 Pollutants × 4 Zones",
+                    "takeaway": "Industrial and commercial zones show elevated particulate and NO2 intensity.",
+                    "action": "Prioritize zone-level source reduction regulations.",
+                    "cats": ["Industrial", "Commercial", "Residential", "Ecological"],
+                    "heatmap_data": [
+                        [0, 0, 18.5], [1, 0, 32.1], [2, 0, 182.0],
+                        [0, 1, 12.4], [1, 1, 26.8], [2, 1, 135.0],
+                        [0, 2, 8.2], [1, 2, 19.4], [2, 2, 88.0],
+                        [0, 3, 4.1], [1, 3, 9.2], [2, 3, 38.0],
+                    ],
+                    "x_categories": ["SO2", "NO2", "PM10"],
+                    "y_categories": ["Industrial", "Commercial", "Residential", "Ecological"],
+                    "unit": "µg/m³",
+                },
             ]
             for tpl in env_templates:
                 if len(stories) >= 12:
@@ -573,6 +618,9 @@ class AnalyticalStoryBuilder:
                         "scatter_points": tpl.get("scatter_points"),
                         "x_measure": tpl.get("x_measure"),
                         "y_measure": tpl.get("y_measure"),
+                        "heatmap_data": tpl.get("heatmap_data"),
+                        "x_categories": tpl.get("x_categories"),
+                        "y_categories": tpl.get("y_categories"),
                         "observation_count": tpl.get("obs_count", len(tpl.get("vals", []))),
                     }
                     if tpl["arch"] == "podium_top_3":
