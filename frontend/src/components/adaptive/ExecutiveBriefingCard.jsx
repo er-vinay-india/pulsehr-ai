@@ -29,26 +29,14 @@ export default function ExecutiveBriefingCard({ briefing, snapshot, onInspect, o
         gap: "14px",
       }}
     >
-      <div style={{ display: "flex", alignItems: "baseline", gap: "12px", minWidth: 0, flex: 1 }}>
-        <span
-          style={{
-            fontSize: "0.72rem",
-            fontWeight: 700,
-            textTransform: "uppercase",
-            letterSpacing: "0.06em",
-            color: themeTokens.colors.gold || "#d97706",
-            whiteSpace: "nowrap",
-          }}
-        >
-          Executive Summary
-        </span>
+      <div style={{ display: "flex", alignItems: "center", minWidth: 0, flex: 1 }}>
         <p
           style={{
             margin: 0,
             fontSize: "0.96rem",
-            fontWeight: 600,
+            fontWeight: 500,
             color: themeTokens.colors.textPrimary,
-            lineHeight: 1.4,
+            lineHeight: 1.5,
           }}
         >
           {briefing.headline ||

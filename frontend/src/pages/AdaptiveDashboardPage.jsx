@@ -317,6 +317,8 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
       } else {
         period = "Current Period Verified";
       }
+    } else {
+      period = period.replace(/\s*\([^)]*\)/g, "").trim();
     }
 
     return {
@@ -342,13 +344,10 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
           </div>
         </div>
 
-        {/* Scope Bar: Dataset Context Only (ZERO Sheet Selector) */}
-        <div className="adaptive-scope-bar page-command-bar">
-          {sources.length > 1 && (
-            <div className="scope-control-group" style={{ minWidth: "220px" }}>
-              <label htmlFor="dataset-selector" style={{ fontSize: "11px", color: themeTokens.colors.textMuted }}>
-                Dataset / Workbook
-              </label>
+        {/* Compact Dataset Context & Command Bar */}
+        <div className="adaptive-scope-bar page-command-bar" aria-label="Dataset Command Bar">
+          <div className="dataset-selector-and-context">
+            <div className="scope-control-group">
               <Select
                 id="dataset-selector"
                 value={selectedDatasetId}
@@ -356,98 +355,40 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
                 disabled={sourcesLoading}
                 aria-label="Selected dataset workbook"
                 placeholder={sourcesLoading ? "Loading datasets…" : "Select dataset…"}
-                options={sources.map((d) => ({
-                  value: String(d.id),
-                  label: d.display_name || d.original_name || `Dataset ${d.id}`,
-                }))}
+                options={
+                  sources.length > 0
+                    ? sources.map((d) => ({
+                        value: String(d.id),
+                        label: d.display_name || d.original_name || `Dataset ${d.id}`,
+                      }))
+                    : selectedDatasetId
+                    ? [
+                        {
+                          value: String(selectedDatasetId),
+                          label: data?.dataset_name || activeDataset?.display_name || activeDataset?.original_name || "Dataset",
+                        },
+                      ]
+                    : []
+                }
               />
             </div>
-          )}
 
-          <div
-            className="dataset-level-context"
-            style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}
-          >
-            <div
-              className="scope-context-badge"
-              style={{
-                padding: "6px 12px",
-                borderRadius: "6px",
-                backgroundColor: themeTokens.colors.surface,
-                border: `1px solid ${themeTokens.colors.borderSubtle}`,
-                display: "flex",
-                alignItems: "center",
-                gap: "6px",
-              }}
-            >
-              <span
-                style={{
-                  fontSize: "11px",
-                  color: themeTokens.colors.textMuted,
-                  textTransform: "uppercase",
-                  letterSpacing: "0.04em",
-                }}
-              >
-                Dataset
-              </span>
-              <strong style={{ fontSize: "12px", color: themeTokens.colors.textPrimary }}>
-                {data?.dataset_name || activeDataset?.display_name || activeDataset?.original_name || "Workbook"}
-              </strong>
-            </div>
-
-            <div
-              className="scope-context-badge"
-              style={{
-                padding: "6px 12px",
-                borderRadius: "6px",
-                backgroundColor: themeTokens.colors.surface,
-                border: `1px solid ${themeTokens.colors.borderSubtle}`,
-                display: "flex",
-                alignItems: "center",
-                gap: "6px",
-              }}
-            >
-              <span
-                style={{
-                  fontSize: "11px",
-                  color: themeTokens.colors.textMuted,
-                  textTransform: "uppercase",
-                  letterSpacing: "0.04em",
-                }}
-              >
-                Sources
-              </span>
-              <strong style={{ fontSize: "12px", color: themeTokens.colors.textPrimary }}>
-                {data?.source_sheet_count || data?.sheet_count || activeDataset?.sheet_count || activeDataset?.sheets?.length || 1} related {(data?.sheet_count || activeDataset?.sheet_count || 1) === 1 ? "sheet" : "sheets"}
-              </strong>
-            </div>
-
-            <div
-              className="scope-context-badge"
-              style={{
-                padding: "6px 12px",
-                borderRadius: "6px",
-                backgroundColor: themeTokens.colors.surface,
-                border: `1px solid ${themeTokens.colors.borderSubtle}`,
-                display: "flex",
-                alignItems: "center",
-                gap: "6px",
-              }}
-            >
-              <span
-                style={{
-                  fontSize: "11px",
-                  color: themeTokens.colors.textMuted,
-                  textTransform: "uppercase",
-                  letterSpacing: "0.04em",
-                }}
-              >
-                Intelligence
-              </span>
-              <strong style={{ fontSize: "12px", color: themeTokens.colors.textPrimary }}>
-                {data?.selected_dashboard_insights?.length || 0} Executive Insights
-              </strong>
-            </div>
+            {scopeLine && (
+              <div className="dataset-context-meta" aria-label="Dataset context">
+                <span className="dataset-context-meta__item dataset-context-meta__period">
+                  {scopeLine.period}
+                </span>
+                <span className="dataset-context-meta__sep">·</span>
+                <span className="dataset-context-meta__item dataset-context-meta__sheets">
+                  {scopeLine.sheet}
+                </span>
+                <span className="dataset-context-meta__sep">·</span>
+                <span className="dataset-context-meta__item dataset-context-meta__verified">
+                  <span className="scope-live-dot" aria-hidden="true" />
+                  <span>Live verified</span>
+                </span>
+              </div>
+            )}
           </div>
 
           <Button
@@ -544,26 +485,6 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
 
           {/* Content Wrapper (Dimmed during re-calculation) */}
           <div className={calculating && data ? "adaptive-content-recalculating" : ""}>
-            {/* Authoritative Scope Line */}
-            {scopeLine && (
-              <section className="dashboard-section dashboard-section--context" aria-label="Dataset Context">
-                <div className="adaptive-scope-line" aria-label="Dataset and population scope">
-                  <span className="scope-line-item scope-line-workbook">
-                    <strong>{scopeLine.workbook}</strong> · {scopeLine.sheet}
-                  </span>
-                  <span className="scope-line-separator">·</span>
-                  <span className="scope-line-item scope-line-period">
-                    Reporting period: <strong>{scopeLine.period}</strong>
-                  </span>
-                  <span className="scope-line-separator">·</span>
-                  <span className="scope-line-item scope-line-status">
-                    <span className="scope-live-dot" />
-                    {scopeLine.refreshed}
-                  </span>
-                </div>
-              </section>
-            )}
-
             {/* Governed Executive Briefing Audio/Text (if available at dataset level) */}
             {!calcError && briefingElement && (
               <section
@@ -574,8 +495,6 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
                 <SectionHeader
                   id="section-summary-heading"
                   title="Executive Summary"
-                  badge="Leadership Brief"
-                  subtitle="Synthesized executive briefing and strategic operational signals."
                 />
                 <ExecutiveBriefingCard
                   briefing={briefingElement}

@@ -252,10 +252,11 @@
       }
     }
 
-    /* Scope Bar: Source Control, Actual Period, Refresh Action */
+    /* Scope Bar: Compact Dataset Context & Command Bar */
     .adaptive-scope-bar {
       display: flex;
       align-items: center;
+      justify-content: space-between;
       gap: 16px;
       flex-wrap: wrap;
       padding: 10px 16px;
@@ -264,35 +265,41 @@
       border-radius: 12px;
       box-shadow: var(--shadow-sm);
 
+      .dataset-selector-and-context {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        flex-wrap: wrap;
+        flex: 1 1 auto;
+        min-width: 0;
+      }
+
       .scope-control-group {
         display: flex;
         align-items: center;
-        gap: 8px;
         flex: 0 1 auto;
-        min-width: 0;
-
-        label {
-          font-size: 13px;
-          color: var(--fg-secondary);
-          white-space: nowrap;
-          font-weight: 500;
-          flex-shrink: 0;
-          min-width: max-content;
-        }
+        min-width: 220px;
+        max-width: 360px;
 
         select, .radix-select-trigger {
-          height: 40px;
-          min-height: 40px;
+          height: 38px;
+          min-height: 38px;
           flex: 1 1 auto;
-          min-width: 140px;
-          max-width: 380px;
+          width: 100%;
           border: 1px solid var(--border);
           border-radius: var(--radius-xs, 6px);
           background: var(--surface-card);
           color: var(--fg-primary);
           padding: 8px 12px;
           font-size: 14px;
+          font-weight: 600;
           box-sizing: border-box;
+          cursor: pointer;
+
+          &:hover:not(:disabled) {
+            border-color: var(--border-strong);
+            background: var(--surface-card-hover);
+          }
 
           &:focus-visible {
             outline: 2px solid var(--border-focus);
@@ -301,58 +308,58 @@
         }
       }
 
-      .scope-period-display {
-        font-size: 13px;
-        color: var(--fg-secondary);
-        background: var(--surface-inset);
-        border: 1px solid var(--border-subtle);
-        padding: 8px 14px;
-        border-radius: var(--radius-xs, 6px);
-        white-space: nowrap;
-      }
-
-      .scope-data-through-badge {
-        font-size: 13px;
-        color: var(--fg-secondary);
-        background: var(--surface-inset);
-        border: 1px solid var(--border-subtle);
-        padding: 8px 14px;
-        border-radius: var(--radius-xs, 6px);
-        white-space: nowrap;
-      }
-
-      .scope-persona-badge {
-        font-size: 13px;
-        font-weight: 600;
-        color: var(--hv-text-primary);
-        background: var(--hv-info-bg);
-        border: 1px solid var(--hv-border-strong);
-        padding: 8px 14px;
-        border-radius: var(--radius-xs, 6px);
-        white-space: nowrap;
+      .dataset-context-meta {
         display: flex;
         align-items: center;
         gap: 8px;
+        flex-wrap: wrap;
+        font-size: 13px;
+        color: var(--fg-secondary);
 
-        .persona-dot {
-          width: 7px;
-          height: 7px;
-          border-radius: 50%;
-          background: var(--hv-brand-secondary);
-          display: inline-block;
+        &__item {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          font-weight: 500;
+        }
+
+        &__sep {
+          color: var(--color-text-muted);
+          user-select: none;
+        }
+
+        &__verified {
+          color: var(--hv-status-success);
+          font-weight: 600;
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+
+          .scope-live-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--hv-status-success);
+            box-shadow: 0 0 6px var(--hv-status-success);
+            flex-shrink: 0;
+          }
         }
       }
 
       .scope-refresh-btn {
-        min-height: 40px;
+        min-height: 38px;
+        height: 38px;
         border: 1px solid var(--border);
         border-radius: var(--radius-xs, 6px);
         background: var(--surface-card);
         color: var(--fg-primary);
-        padding: 8px 16px;
+        padding: 6px 14px;
         font-size: 13px;
         font-weight: 600;
         cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
         transition: background 0.15s ease, border-color 0.15s ease;
 
         &:hover:not(:disabled) {
@@ -372,62 +379,42 @@
       }
 
       @media (max-width: 640px) {
-        gap: 6px;
-        padding-bottom: 8px;
+        gap: 10px;
+        padding: 10px 12px;
+
+        .dataset-selector-and-context {
+          gap: 10px;
+          width: 100%;
+        }
 
         .scope-control-group {
-          order: 1;
-          flex: 1 1 calc(100% - 90px);
+          flex: 1 1 auto;
           width: calc(100% - 90px);
           min-width: 0;
-
-          label {
-            display: inline-block;
-            font-size: 12px;
-            flex-shrink: 0;
-            min-width: max-content;
-          }
+          max-width: none;
 
           select, .radix-select-trigger {
-            flex: 1 1 auto;
-            min-width: 0;
             width: 100%;
-            height: 38px;
-            min-height: 38px;
+            height: 36px;
+            min-height: 36px;
             font-size: 13px;
             padding: 6px 10px;
           }
         }
 
         .scope-refresh-btn {
-          order: 2;
           flex: 0 0 80px;
           width: 80px;
           height: 36px;
           min-height: 36px;
-          max-height: 36px;
           padding: 6px 8px;
           font-size: 12px;
         }
 
-        .scope-period-display {
-          order: 3;
+        .dataset-context-meta {
           font-size: 11px;
-          padding: 3px 8px;
-          min-height: auto;
-          border-radius: 4px;
-        }
-
-        .scope-data-through-badge {
-          order: 4;
-          font-size: 11px;
-          padding: 3px 8px;
-          min-height: auto;
-          border-radius: 4px;
-        }
-
-        .scope-persona-badge {
-          display: none !important;
+          gap: 6px;
+          width: 100%;
         }
       }
     }
