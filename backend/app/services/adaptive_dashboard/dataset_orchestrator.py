@@ -434,6 +434,7 @@ def run_dataset_intelligence(dataset_id: int) -> DatasetIntelligenceResponse:
         domain_name = dom_obj.value if hasattr(dom_obj, "value") else str(dom_obj or "")
         if not domain_name or domain_name in ("general", "general_tabular"):
             domain_name = "workforce_hr" if any("workforce" in str(v) for v in sheet_domain_map.values()) else "general_tabular"
+        gov_metrics["dataset_id"] = dataset_id
         analytical_stories = AnalyticalStoryBuilder.build_stories(
             evidence_graph=unified_graph,
             domain=domain_name,

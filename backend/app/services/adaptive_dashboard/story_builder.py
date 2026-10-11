@@ -110,13 +110,68 @@ class AnalyticalStoryBuilder:
 
         # 2. Derive companion analytical stories from rich clusters (Podium, Distribution, Target, Disparity)
         companion_stories: list[AnalyticalStory] = []
+
+        # A. Check for Person Entity Ranking (e.g. Employee Top 3 Attendance Leaders)
+        dataset_id = gov_metrics.get("dataset_id")
+        person_ranking = None
+        if dataset_id:
+            try:
+                from .ranking_engine import GenericEntityRankingEngine, EntityGrain
+                person_ranking = GenericEntityRankingEngine.get_top_person_ranking(dataset_id=dataset_id, top_n=3)
+            except Exception as exc:
+                logger.warning("Failed to derive top person ranking: %s", exc)
+
+        has_person_podium = False
+        if person_ranking and person_ranking.get("top_rows") and len(person_ranking["top_rows"]) >= 3:
+            top_rows = person_ranking["top_rows"]
+            top_cats = [str(r["entity"]) for r in top_rows]
+            top_vals = [float(r["value"]) for r in top_rows]
+            sec_ids = [r.get("secondary_id") for r in top_rows]
+            unit_str = person_ranking.get("unit") or "Days"
+            formatted_podium = ChartCapabilityRegistry.format_podium_labels(top_cats)
+            leader_desc = f"{top_cats[0]} leads individual attendance with {top_vals[0]} {unit_str}, followed by {top_cats[1]} ({top_vals[1]}) and {top_cats[2]} ({top_vals[2]})."
+
+            companion_stories.append(
+                AnalyticalStory(
+                    story_id=f"STORY-{story_idx:03d}",
+                    semantic_family="person_attendance_podium",
+                    title="Top 3 Employee Attendance Leaders",
+                    business_question="Which top 3 individual employees lead in attendance?",
+                    intent="RANKING",
+                    periods=["July 2026"],
+                    key_metric=f"Top: {top_cats[0]} ({top_vals[0]} {unit_str})",
+                    takeaway=leader_desc,
+                    recommended_action="Recognize top individual performers and identify consistent operational patterns.",
+                    importance_score=0.94,
+                    business_value=0.92,
+                    statistical_significance=0.95,
+                    confidence=0.95,
+                    suggested_role="supporting",
+                    tokens={
+                        "chart_archetype": "podium_top_3",
+                        "layout_hint": "COMPACT",
+                        "categories": top_cats,
+                        "values": top_vals,
+                        "podium_categories": formatted_podium,
+                        "secondary_ids": sec_ids,
+                        "entity_grain": "PERSON",
+                        "entity_column": person_ranking.get("person_identifier_column") or "ID",
+                        "measure_column": person_ranking.get("attendance_measure") or "Final Attendance",
+                        "unit": unit_str,
+                        "ranking_direction": "HIGHER_IS_BETTER",
+                    },
+                )
+            )
+            story_idx += 1
+            has_person_podium = True
+
         for s in list(stories):
             cats = s.tokens.get("categories", [])
             vals = s.tokens.get("values", [])
             bench = s.tokens.get("benchmark")
 
-            # A. Derive Podium Top 3 story from ranking clusters with >= 3 categories
-            if s.intent == "RANKING" and len(cats) >= 3 and not any("podium" in x.semantic_family for x in (stories + companion_stories)):
+            # B. Derive Podium Top 3 story from ranking clusters ONLY if no person-level podium was generated
+            if not has_person_podium and s.intent == "RANKING" and len(cats) >= 3 and not any("podium" in x.semantic_family for x in (stories + companion_stories)):
                 if vals and len(vals) == len(cats):
                     sorted_pairs = sorted(zip(cats, vals), key=lambda x: x[1], reverse=True)
                     top_cats = [p[0] for p in sorted_pairs[:3]]
@@ -149,6 +204,7 @@ class AnalyticalStoryBuilder:
                             "categories": top_cats,
                             "values": top_vals,
                             "podium_categories": formatted_podium,
+                            "entity_grain": "DEPARTMENT",
                         },
                     )
                 )

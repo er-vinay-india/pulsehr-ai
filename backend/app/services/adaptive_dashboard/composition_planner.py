@@ -1197,7 +1197,16 @@ class ExecutiveCompositionPlanner:
         candidate_portfolio_items: list[CandidatePortfolioItem] = []
         story_lookup: dict[str, tuple[AnalyticalStory, dict[str, Any], dict[str, Any]]] = {}
 
+        # Identify authoritative hero story (excluding podium_top_3)
+        hero_candidate = next(
+            (s for s in stories if getattr(s, "suggested_role", "") == "hero" and s.tokens.get("chart_archetype") != "podium_top_3"),
+            None,
+        )
+        if not hero_candidate:
+            hero_candidate = next((s for s in stories if s.tokens.get("chart_archetype") != "podium_top_3"), stories[0] if stories else None)
+
         for idx, story in enumerate(stories, start=1):
+            is_hero_story = (story == hero_candidate)
             fam = getattr(story, "semantic_family", f"fam_{idx}")
             rep = getattr(story, "representative_evidence", None)
             s_tokens = getattr(story, "tokens", {}) or {}
@@ -1230,7 +1239,7 @@ class ExecutiveCompositionPlanner:
 
             # Suppress non-entity scalar stories that merely restate KPI strip numbers
             cats_raw = tokens.get("categories") or getattr(story, "periods", None) or []
-            if idx == 1 and gov_metrics.get("hero"):
+            if is_hero_story and gov_metrics.get("hero"):
                 cats_raw = gov_metrics["hero"].get("categories") or cats_raw
 
             if intent == "RANKING" and (len(cats_raw) < 3 or all(str(c) in ("Annual Average", "Annual Monitoring Cycle", "Reporting Cycle") for c in cats_raw)) and not tokens.get("series") and not tokens.get("chart_archetype"):
@@ -1292,15 +1301,22 @@ class ExecutiveCompositionPlanner:
                     "key_metric": getattr(story, "key_metric", ""),
                 }
             elif chart_type == "podium_top_3":
-                podium_cats = tokens.get("podium_categories") or ChartCapabilityRegistry.format_podium_labels(cats[:3])
+                podium_cats = tokens.get("podium_categories") or ChartCapabilityRegistry.format_podium_labels(tokens.get("categories", cats)[:3])
+                p_categories = tokens.get("categories")[:3] if tokens.get("categories") else cats[:3]
+                p_values = tokens.get("values")[:3] if tokens.get("values") else (vals[:3] if vals else [20.0, 16.0, 14.0])
                 v_spec = {
                     "chart_type": "podium_top_3",
-                    "categories": cats[:3],
-                    "values": vals[:3] if vals else [20.0, 16.0, 14.0],
+                    "categories": p_categories,
+                    "values": p_values,
                     "podium_categories": podium_cats,
+                    "secondary_ids": tokens.get("secondary_ids", []),
+                    "entity_grain": tokens.get("entity_grain", "PERSON"),
+                    "entity_column": tokens.get("entity_column", "ID"),
+                    "measure_column": tokens.get("measure_column", "Final Attendance"),
                     "unit": unit,
                     "analytical_intent": "RANKING",
                     "is_ranking_story": True,
+                    "ranking_direction": tokens.get("ranking_direction", "HIGHER_IS_BETTER"),
                     "evidence_ids": getattr(story, "evidence_ids", []),
                     "key_metric": getattr(story, "key_metric", ""),
                 }
@@ -1326,7 +1342,7 @@ class ExecutiveCompositionPlanner:
                     v_spec["y_categories"] = tokens["y_categories"]
 
             # Grounded fallback for Hero or Capacity Composition
-            if idx == 1 and gov_metrics.get("hero"):
+            if is_hero_story and gov_metrics.get("hero") and chart_type != "podium_top_3":
                 hero_gov = gov_metrics["hero"]
                 v_spec["categories"] = hero_gov.get("categories", v_spec.get("categories", []))
                 v_spec["values"] = hero_gov.get("values", v_spec.get("values", []))
@@ -1347,12 +1363,13 @@ class ExecutiveCompositionPlanner:
                 ]
                 v_spec["unit"] = "employee-days"
 
-            if intent == "RANKING":
+            if intent == "RANKING" or chart_type == "podium_top_3":
                 v_spec["is_ranking_story"] = True
-                v_spec["ranking_direction"] = tokens.get("ranking_direction", "HIGHER_IS_BETTER")
+                v_spec["ranking_direction"] = tokens.get("ranking_direction", v_spec.get("ranking_direction", "HIGHER_IS_BETTER"))
                 default_ent = detected_entities[0].capitalize() if detected_entities else "Entity"
-                v_spec["entity_column"] = v_spec.get("entity_column") or getattr(story, "dimension", "") or default_ent
-                v_spec["measure_column"] = v_spec.get("measure_column") or getattr(story, "primary_measure", "") or m_name
+                v_spec["entity_column"] = tokens.get("entity_column") or v_spec.get("entity_column") or getattr(story, "dimension", "") or default_ent
+                v_spec["measure_column"] = tokens.get("measure_column") or v_spec.get("measure_column") or getattr(story, "primary_measure", "") or m_name
+                v_spec["entity_grain"] = tokens.get("entity_grain", v_spec.get("entity_grain", "PERSON" if chart_type == "podium_top_3" else "DEPARTMENT"))
 
             mark_audit = VisualDataPresenceIntegrity.evaluate(v_spec)
             if not mark_audit.is_valid and chart_type != "podium_top_3":
@@ -1385,9 +1402,9 @@ class ExecutiveCompositionPlanner:
                         "key_metric": getattr(story, "key_metric", ""),
                         "unit": unit,
                     },
-                    suggested_role=getattr(story, "suggested_role", "hero" if idx == 1 else "supporting"),
+                    suggested_role=getattr(story, "suggested_role", "hero" if is_hero_story else "supporting"),
                     fingerprint=f"{fam}_{intent}_{chart_type}",
-                    is_hero=(idx == 1),
+                    is_hero=is_hero_story,
                 )
             )
 
@@ -1418,9 +1435,10 @@ class ExecutiveCompositionPlanner:
             v_spec["chart_type"] = item.chart_archetype
 
             ranking_meta = None
-            if item.intent == "RANKING":
+            if item.intent == "RANKING" or v_spec.get("is_ranking_story"):
                 ranking_meta = {
                     "entity_column": v_spec.get("entity_column", "Entity"),
+                    "entity_grain": v_spec.get("entity_grain", "DEPARTMENT"),
                     "measure_column": v_spec.get("measure_column", "Metric"),
                     "ranking_direction": v_spec.get("ranking_direction", "HIGHER_IS_BETTER"),
                     "benchmark": v_spec.get("benchmark"),
@@ -1448,7 +1466,7 @@ class ExecutiveCompositionPlanner:
                 topic_id=f"TOPIC-{out_idx:03d}",
                 title=getattr(story, "title", f"Topic {out_idx}"),
                 subtitle=getattr(story, "business_question", ""),
-                slot_type="hero" if item.is_hero else item.suggested_role,
+                slot_type="hero" if item.is_hero else (item.suggested_role if item.suggested_role in ("hero", "supporting", "risk_anomaly", "action_scenario") else "supporting"),
                 evidence_ids=e_ids,
                 evidence_ref=e_ids[0] if e_ids else "",
                 metric_family=item.semantic_family,

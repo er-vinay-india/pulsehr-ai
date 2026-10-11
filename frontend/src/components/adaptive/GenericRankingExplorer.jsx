@@ -138,7 +138,11 @@ export default function GenericRankingExplorer({
   const filteredRows = useMemo(() => {
     if (!searchFilter.trim()) return rows;
     const q = searchFilter.toLowerCase();
-    return rows.filter((r) => String(r.entity).toLowerCase().includes(q));
+    return rows.filter(
+      (r) =>
+        String(r.entity).toLowerCase().includes(q) ||
+        (r.secondary_id && String(r.secondary_id).toLowerCase().includes(q))
+    );
   }, [rows, searchFilter]);
 
   // Determine Visual Archetype from Limit & Cardinality
@@ -406,7 +410,21 @@ export default function GenericRankingExplorer({
                 {filteredRows.map((r) => (
                   <tr key={r.rank + r.entity} style={{ borderBottom: `1px solid ${themeTokens?.colors?.borderSubtle}` }}>
                     <td style={{ padding: "4px 8px", fontWeight: 700, color: themeTokens?.colors?.textSecondary }}>#{r.rank}</td>
-                    <td style={{ padding: "4px 8px", fontWeight: 600 }}>{r.entity}</td>
+                    <td style={{ padding: "4px 8px", fontWeight: 600 }}>
+                      <span>{r.entity}</span>
+                      {r.secondary_id && (
+                        <span
+                          style={{
+                            fontSize: "0.68rem",
+                            color: themeTokens?.colors?.textMuted || "#94a3b8",
+                            marginLeft: "5px",
+                            fontWeight: "normal",
+                          }}
+                        >
+                          ({r.secondary_id})
+                        </span>
+                      )}
+                    </td>
                     <td style={{ padding: "4px 8px", textAlign: "right", fontWeight: 700 }}>{r.formatted_value}</td>
                     <td style={{ padding: "4px 8px", textAlign: "right", color: themeTokens?.colors?.textMuted }}>{r.percentile_label}</td>
                     <td style={{ padding: "4px 8px", textAlign: "right", color: r.delta_benchmark >= 0 ? "#10b981" : "#ef4444" }}>

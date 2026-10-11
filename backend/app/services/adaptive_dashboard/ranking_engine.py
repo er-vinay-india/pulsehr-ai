@@ -21,6 +21,70 @@ from app.db.database import get_connection
 logger = logging.getLogger(__name__)
 
 
+class EntityGrain(str, Enum):
+    """Semantic grain level of an analytical entity."""
+    PERSON = "PERSON"
+    TEAM = "TEAM"
+    DEPARTMENT = "DEPARTMENT"
+    REGION = "REGION"
+    LOCATION = "LOCATION"
+    PRODUCT = "PRODUCT"
+    ORGANIZATION = "ORGANIZATION"
+    OTHER = "OTHER"
+
+
+class SemanticEntityRole(str, Enum):
+    """Semantic classification of a column role in an entity hierarchy."""
+    PERSON_ENTITY_LABEL = "PERSON_ENTITY_LABEL"            # e.g. "Full Name", "Employee Name", "Staff Name"
+    PERSON_ENTITY_IDENTIFIER = "PERSON_ENTITY_IDENTIFIER"  # e.g. "Employee ID", "Emp ID", "ID"
+    ORGANIZATIONAL_GROUP = "ORGANIZATIONAL_GROUP"          # e.g. "Department", "Store", "Region"
+    DIMENSION = "DIMENSION"                                # General categorical dimension
+
+
+def is_column_label_reliable(sample_vals: list[Any]) -> bool:
+    """Checks whether values in a person label column are actual names rather than row index numbers."""
+    if not sample_vals:
+        return False
+    valid = [str(v).strip() for v in sample_vals if v is not None and str(v).strip()]
+    if not valid:
+        return False
+    # If 50% or more of non-empty sample values are purely digits/integers, the column is not reliable as names
+    digit_count = sum(1 for v in valid if v.isdigit() or re.match(r"^\d+$", v))
+    return (digit_count / len(valid)) < 0.5
+
+
+def resolve_person_display(
+    name_val: Any,
+    id_val: Any,
+    is_name_reliable: bool = True,
+) -> tuple[str, str | None]:
+    """Resolves primary display key and optional secondary ID for a person entity.
+
+    Returns: (primary_display, secondary_id)
+    Rules:
+    - If Name is reliable and non-empty:
+        - If ID exists and differs from Name: returns (Name, ID)
+        - Else: returns (Name, None)
+    - Else if ID exists and non-empty:
+        - Returns (ID, None)
+    - Else if Name exists and non-empty:
+        - Returns (Name, None)
+    - Else:
+        - Returns ("", None)  # Never fabricate
+    """
+    clean_name = str(name_val).strip() if name_val is not None and not (isinstance(name_val, float) and math.isnan(name_val)) else ""
+    clean_id = str(id_val).strip() if id_val is not None and not (isinstance(id_val, float) and math.isnan(id_val)) else ""
+
+    if is_name_reliable and clean_name and not clean_name.isdigit():
+        sec_id = clean_id if clean_id and clean_id != clean_name else None
+        return (clean_name, sec_id)
+    elif clean_id:
+        return (clean_id, None)
+    elif clean_name and not clean_name.isdigit():
+        return (clean_name, None)
+    return ("", None)
+
+
 class RankingDirection(str, Enum):
     """Semantic desirability direction for ranking."""
     HIGHER_IS_BETTER = "HIGHER_IS_BETTER"  # Top = highest value (e.g. Sales, Attendance Rate, Revenue, Exam Score)
@@ -43,6 +107,9 @@ class EntityRankingIntent(BaseModel):
     aggregation: str = "avg"              # "sum", "avg", "mean", "count"
     unit: str = ""
     grain: str = ""
+    entity_grain: EntityGrain | str = EntityGrain.DEPARTMENT
+    person_label_column: str | None = None
+    person_identifier_column: str | None = None
 
     ranking_direction: RankingDirection = RankingDirection.HIGHER_IS_BETTER
     confidence: float = 0.90
@@ -64,6 +131,8 @@ class RankedEntityRow(BaseModel):
     percentile_label: str                 # e.g. "Top 2%" or "Bottom 5%"
     delta_benchmark: float | None = None  # value - benchmark
     is_above_benchmark: bool | None = None
+    secondary_id: str | None = None
+    entity_grain: str | None = None
 
 
 class EntityRankingStory(BaseModel):
@@ -75,6 +144,9 @@ class EntityRankingStory(BaseModel):
     entity_column: str
     display_name: str
     sheet_id: int
+    entity_grain: str = "DEPARTMENT"
+    person_label_column: str | None = None
+    person_identifier_column: str | None = None
 
     measure: str
     measure_label: str
@@ -195,6 +267,56 @@ class GenericEntityRankingEngine:
                 profs = json.loads(prof_json) if prof_json else []
                 prof_map = {p.get("column", ""): p for p in profs}
 
+                # 1. First pass: Identify person entity columns (label + identifier)
+                person_label_col: str | None = None
+                person_id_col: str | None = None
+
+                for col in cols:
+                    low_c = col.lower().strip()
+                    if any(low_c.startswith(prefix) for prefix in ("interact_", "col_")) or " + " in col:
+                        continue
+                    if any(t in low_c for t in ("full name", "employee name", "emp name", "staff name", "person name", "first name", "last name", "worker name")):
+                        person_label_col = col
+                    elif low_c == "name" and not any(t in low_c for t in ("dataset", "company", "file", "sheet")):
+                        person_label_col = col
+                    elif any(t in low_c for t in ("employee id", "emp id", "employee_id", "emp_id", "personnel id", "personnel number", "badge", "staff id", "student id")):
+                        person_id_col = col
+                    elif low_c in ("id", "emp_no", "employee_no", "empno") and not any(low_c.startswith(k) for k in ("sr", "s_", "seq", "row", "record")):
+                        person_id_col = col
+
+                # Check reliability of person label column (e.g. detect row index numbers like "1", "2" stored in "Full Name")
+                is_label_reliable = False
+                if person_label_col:
+                    try:
+                        sample_rows = conn.execute(
+                            "SELECT json_extract(data_json, ?) FROM sheet_rows WHERE sheet_id = ? AND json_extract(data_json, ?) IS NOT NULL LIMIT 20",
+                            (f'$.\"{person_label_col}\"', sid, f'$.\"{person_label_col}\"'),
+                        ).fetchall()
+                        is_label_reliable = is_column_label_reliable([r[0] for r in sample_rows])
+                    except Exception:
+                        is_label_reliable = False
+
+                # If person identifier or person label exists, register PERSON entity
+                if person_id_col or person_label_col:
+                    col_to_rank = person_id_col if (person_id_col and (not is_label_reliable or not person_label_col)) else (person_label_col or person_id_col)
+                    card = 0
+                    if col_to_rank:
+                        card = prof_map.get(col_to_rank, {}).get("distinct") or prof_map.get(col_to_rank, {}).get("cardinality", 0)
+                    entities.append({
+                        "sheet_id": sid,
+                        "sheet_name": sname,
+                        "column": col_to_rank or "Employee",
+                        "entity_type": "Employee",
+                        "entity_grain": EntityGrain.PERSON.value,
+                        "display_name": "Employee",
+                        "cardinality": max(card, 2),
+                        "is_individual": True,
+                        "person_label_column": person_label_col,
+                        "person_identifier_column": person_id_col,
+                        "is_label_reliable": is_label_reliable,
+                    })
+
+                # 2. Second pass: Group entities and rankable measures
                 for col in cols:
                     low_c = col.lower().strip()
                     prof = prof_map.get(col, {})
@@ -206,42 +328,46 @@ class GenericEntityRankingEngine:
                     if any(low_c.startswith(prefix) for prefix in ("interact_", "col_")) or " + " in col:
                         continue
 
-                    # Filter out row sequence ordinals, identifiers, and surrogate keys from both entity and measure candidates
+                    # Filter out sequence ordinals and row identifiers
                     is_seq_id = (
                         bool(re.match(r'^(sr|s|seq|row)[\._\s]?no\.?', low_c, re.I))
-                        or low_c in ("sr_no", "s_no", "srno", "sno", "serial_no", "row_num", "row_no", "row_id", "record_id", "id", "key", "uuid", "hash")
-                        or low_c.endswith(("_id", "_key", "_code", "_idx"))
-                        or role == "IDENTIFIER"
+                        or low_c in ("sr_no", "s_no", "srno", "sno", "serial_no", "row_num", "row_no", "row_id", "record_id", "uuid", "hash")
                     )
                     if is_seq_id:
                         continue
 
-                    # Entity / Dimension candidate: Must be non-numeric categorical/cohort, or low-cardinality discrete dimension
+                    # Skip person columns already processed
+                    if col in (person_label_col, person_id_col):
+                        continue
+
+                    # Group / Dimension candidate: Department, Store, Product, Category, City, State, etc.
                     if not is_numeric:
                         if not any(low_c == t or low_c.endswith(f"_{t}") for t in ("date", "datetime", "timestamp", "quarter", "month", "year", "week")):
-                            # Meaningful entity check
-                            is_meaningful = True
-                            if low_c in ("id", "key", "uuid", "hash", "sno", "srno"):
-                                is_meaningful = False
-                            if is_meaningful and card >= 2:
+                            if card >= 2 and low_c not in ("id", "key", "uuid", "hash"):
                                 ent_type = cls._infer_entity_type_label(col)
-                                is_indiv = any(t in low_c for t in ("employee", "student", "customer", "person", "full name", "staff", "user"))
+                                grain = EntityGrain.DEPARTMENT.value if "department" in low_c else (
+                                    EntityGrain.LOCATION.value if any(t in low_c for t in ("store", "location", "facility", "site")) else
+                                    EntityGrain.PRODUCT.value if any(t in low_c for t in ("product", "item", "sku", "category")) else
+                                    EntityGrain.REGION.value if any(t in low_c for t in ("city", "state", "region", "country")) else
+                                    EntityGrain.OTHER.value
+                                )
                                 entities.append({
                                     "sheet_id": sid,
                                     "sheet_name": sname,
                                     "column": col,
                                     "entity_type": ent_type,
+                                    "entity_grain": grain,
                                     "display_name": col.replace("_", " ").title(),
                                     "cardinality": card,
-                                    "is_individual": is_indiv,
+                                    "is_individual": False,
                                 })
 
-                    # Rankable Measure candidate: Must be true continuous/discrete numeric metric
+                    # Rankable Measure candidate: Must be continuous/discrete numeric metric
                     is_id_name = (
                         low_c in ("full name", "name", "id", "code", "key", "number", "num", "idx", "zip", "postal")
                         or low_c.endswith(("_id", "_key", "_code", "_idx"))
                     )
-                    if is_numeric and not is_id_name:
+                    if is_numeric and not is_id_name and not is_seq_id:
                         unit = prof.get("unit") or prof.get("detected_unit") or ""
                         direction, conf, reason = cls.infer_desirability_direction(col, unit)
                         agg = "avg" if any(t in low_c for t in ("rate", "pct", "avg", "mean", "attendance", "cpi", "unemployment", "score", "grade", "price", "annual average", "average", "pm10", "pm2.5", "so2", "no2")) else "sum"
@@ -269,11 +395,11 @@ class GenericEntityRankingEngine:
                 unique_entities.append(e)
 
         # Sort entities by executive priority:
-        # Prioritize executive aggregate cohorts (City, State, Department, Store, Product, Category, Region) over individual-level drilldowns
-        def entity_priority_key(ent: dict[str, Any]) -> tuple[int, int]:
-            # Priority 0: Explicit group entities (City, State, Department, Store, Product, Region, Category)
-            is_group = any(t in ent["entity_type"].lower() for t in ("city", "state", "department", "store", "product", "region", "category", "branch", "division"))
-            return (1 if not is_group else 0, 1 if ent["is_individual"] else 0, -ent["cardinality"])
+        # Group entities (Department, Store, City) first, followed by Person (Employee)
+        def entity_priority_key(ent: dict[str, Any]) -> tuple[int, int, int]:
+            is_group = not ent.get("is_individual", False)
+            grain_prio = 0 if ent.get("entity_grain") == EntityGrain.DEPARTMENT.value else (1 if is_group else 2)
+            return (grain_prio, 0 if is_group else 1, -ent["cardinality"])
 
         unique_entities.sort(key=entity_priority_key)
 
@@ -285,14 +411,18 @@ class GenericEntityRankingEngine:
                 seen_meas.add(m["column"])
                 unique_measures.append(m)
 
-        # Prioritize dominant business measures (PM10, PM2.5, Attendance, Sales, Revenue, Margin, Score)
+        # Prioritize dominant business measures (Final Attendance, Attendance, PM10, PM2.5, Sales, Revenue, Margin, Score)
         def measure_priority_key(meas: dict[str, Any]) -> int:
             col_l = meas["column"].lower()
-            if any(k in col_l for k in ("pm10", "pm2.5", "pm2_5", "final attendance", "attendance rate", "weekly_sales", "sales", "revenue", "profit", "score", "gpa")):
+            if "final attendance" in col_l or "attendance rate" in col_l:
                 return 0
-            if any(k in col_l for k in ("so2", "no2", "attendance", "leave", "margin", "volume", "units")):
+            if "total attendance" in col_l or "attendance" in col_l:
                 return 1
-            return 2
+            if any(k in col_l for k in ("weekly_sales", "sales", "revenue", "profit", "score", "pm10", "pm2.5")):
+                return 2
+            if any(k in col_l for k in ("so2", "no2", "leave", "margin", "volume", "units")):
+                return 3
+            return 4
 
         unique_measures.sort(key=measure_priority_key)
 
@@ -368,6 +498,14 @@ class GenericEntityRankingEngine:
                 ).fetchone()
                 sheet_id = row[0] if row else None
 
+            # Fallback sheet lookup by measure column if entity column is an alias (e.g. "Employee")
+            if sheet_id is None:
+                row = conn.execute(
+                    "SELECT id FROM sheets WHERE dataset_id = ? AND columns_json LIKE ? LIMIT 1",
+                    (dataset_id, f'%"{measure_column}"%'),
+                ).fetchone()
+                sheet_id = row[0] if row else None
+
             if sheet_id is None:
                 return {
                     "entity_column": entity_column,
@@ -379,44 +517,94 @@ class GenericEntityRankingEngine:
                     "mode": direction,
                 }
 
-            # 2. Extract profile to determine unit & benchmark
-            prof_row = conn.execute("SELECT profile_json FROM sheets WHERE id = ?", (sheet_id,)).fetchone()
-            profs = json.loads(prof_row[0]) if prof_row and prof_row[0] else []
+            # 2. Extract sheet columns and profile to determine unit & benchmark
+            s_row = conn.execute("SELECT columns_json, profile_json FROM sheets WHERE id = ?", (sheet_id,)).fetchone()
+            sheet_cols = json.loads(s_row[0]) if s_row and s_row[0] else []
+            profs = json.loads(s_row[1]) if s_row and s_row[1] else []
             m_prof = next((p for p in profs if p.get("column") == measure_column), {})
             unit = m_prof.get("unit") or m_prof.get("detected_unit") or ""
 
+            # 3. Detect if entity is PERSON grain
+            ent_low = entity_column.lower().strip()
+            is_person = (
+                ent_low in ("employee", "person", "staff", "id", "employee id", "emp id", "full name")
+                or any(t in ent_low for t in ("employee", "staff"))
+            )
+
+            person_label_col: str | None = None
+            person_id_col: str | None = None
+            if is_person:
+                for c in sheet_cols:
+                    cl = c.lower().strip()
+                    if any(cl.startswith(p) for p in ("interact_", "col_")) or " + " in c:
+                        continue
+                    if any(t in cl for t in ("full name", "employee name", "emp name", "staff name", "person name")) or cl == "name":
+                        person_label_col = c
+                    elif any(t in cl for t in ("employee id", "emp id", "employee_id", "emp_id", "personnel id", "badge", "staff id")):
+                        person_id_col = c
+                    elif cl in ("id", "emp_no", "employee_no") and not any(cl.startswith(k) for k in ("sr", "s_", "seq", "row")):
+                        person_id_col = c
+
+            is_name_reliable = False
+            if person_label_col:
+                try:
+                    samples = conn.execute(
+                        "SELECT json_extract(data_json, ?) FROM sheet_rows WHERE sheet_id = ? AND json_extract(data_json, ?) IS NOT NULL LIMIT 20",
+                        (f'$.\"{person_label_col}\"', sheet_id, f'$.\"{person_label_col}\"'),
+                    ).fetchall()
+                    is_name_reliable = is_column_label_reliable([r[0] for r in samples])
+                except Exception:
+                    is_name_reliable = False
+
+            # Determine grouping and display columns
+            group_col = person_id_col or person_label_col or entity_column if is_person else entity_column
+
             # Determine semantic desirability direction
             desirability, conf, reason = cls.infer_desirability_direction(measure_column, unit)
-
-            # Map TOP vs BOTTOM to numeric ordering based on semantic desirability:
-            # If HIGHER_IS_BETTER: TOP = DESC, BOTTOM = ASC
-            # If LOWER_IS_BETTER:  TOP = ASC (lowest numeric is best!), BOTTOM = DESC
-            # If NEUTRAL:          TOP = DESC (Highest), BOTTOM = ASC (Lowest)
             is_lower_better = (desirability == RankingDirection.LOWER_IS_BETTER)
 
             # Build SQL Group By Aggregation
             agg_func = "AVG" if aggregation.lower() in ("avg", "mean") else "SUM"
-            val_expr = f"{agg_func}(CAST(json_extract(data_json, '$.{entity_column}') AS TEXT))" if agg_func == "COUNT" else f"{agg_func}(CAST(json_extract(data_json, '$.{measure_column}') AS REAL))"
+            meas_path = f'$.\"{measure_column}\"'
+            val_expr = f"{agg_func}(CAST(json_extract(data_json, ?) AS REAL))"
 
-            # Base query across rows
-            sql_base = f"""
-                SELECT 
-                    json_extract(data_json, '$.{entity_column}') AS entity_val,
-                    {val_expr} AS metric_val,
-                    COUNT(*) AS record_count
-                FROM sheet_rows
-                WHERE sheet_id = ?
-                  AND json_extract(data_json, '$.{entity_column}') IS NOT NULL
-                  AND json_extract(data_json, '$.{entity_column}') != ''
-                  AND json_extract(data_json, '$.{measure_column}') IS NOT NULL
-            """
-            params: list[Any] = [sheet_id]
+            if is_person and person_id_col and person_label_col:
+                id_path = f'$.\"{person_id_col}\"'
+                lbl_path = f'$.\"{person_label_col}\"'
+                sql_base = f"""
+                    SELECT 
+                        json_extract(data_json, ?) AS p_id,
+                        json_extract(data_json, ?) AS p_name,
+                        {val_expr} AS metric_val,
+                        COUNT(*) AS record_count
+                    FROM sheet_rows
+                    WHERE sheet_id = ?
+                      AND json_extract(data_json, ?) IS NOT NULL
+                      AND json_extract(data_json, ?) != ''
+                      AND json_extract(data_json, ?) IS NOT NULL
+                """
+                params: list[Any] = [id_path, lbl_path, meas_path, sheet_id, id_path, id_path, meas_path]
+            else:
+                grp_path = f'$.\"{group_col}\"'
+                sql_base = f"""
+                    SELECT 
+                        json_extract(data_json, ?) AS entity_val,
+                        '' AS dummy_name,
+                        {val_expr} AS metric_val,
+                        COUNT(*) AS record_count
+                    FROM sheet_rows
+                    WHERE sheet_id = ?
+                      AND json_extract(data_json, ?) IS NOT NULL
+                      AND json_extract(data_json, ?) != ''
+                      AND json_extract(data_json, ?) IS NOT NULL
+                """
+                params: list[Any] = [grp_path, meas_path, sheet_id, grp_path, grp_path, meas_path]
 
             # Apply active dashboard filters
             for f_col, f_val in filter_context.items():
                 if f_val is not None:
-                    sql_base += f" AND json_extract(data_json, '$.{f_col}') = ?"
-                    params.append(str(f_val))
+                    sql_base += " AND json_extract(data_json, ?) = ?"
+                    params.extend([f'$.\"{f_col}\"', str(f_val)])
 
             sql_base += " GROUP BY 1"
 
@@ -427,6 +615,8 @@ class GenericEntityRankingEngine:
             if population_count == 0:
                 return {
                     "entity_column": entity_column,
+                    "entity_type": "Employee" if is_person else cls._infer_entity_type_label(entity_column),
+                    "entity_grain": EntityGrain.PERSON.value if is_person else EntityGrain.DEPARTMENT.value,
                     "measure_column": measure_column,
                     "population_count": 0,
                     "ranked_rows": [],
@@ -439,12 +629,49 @@ class GenericEntityRankingEngine:
             # Parse and sort population in Python
             parsed_population = []
             for r in all_groups:
-                ent_name = str(r[0]).strip()
-                val = float(r[1]) if r[1] is not None and not (isinstance(r[1], float) and math.isnan(r[1])) else 0.0
-                parsed_population.append({"entity": ent_name, "value": val, "records": r[2]})
+                v1 = str(r[0]).strip() if r[0] is not None else ""
+                v2 = str(r[1]).strip() if r[1] is not None else ""
+                val = float(r[2]) if r[2] is not None and not (isinstance(r[2], float) and math.isnan(r[2])) else 0.0
+                rec_count = r[3]
+
+                if is_person:
+                    primary_name, sec_id = resolve_person_display(v2, v1, is_name_reliable)
+                    if not primary_name:
+                        continue
+                    parsed_population.append({
+                        "entity": primary_name,
+                        "secondary_id": sec_id,
+                        "entity_grain": EntityGrain.PERSON.value,
+                        "value": val,
+                        "records": rec_count,
+                    })
+                else:
+                    if not v1:
+                        continue
+                    parsed_population.append({
+                        "entity": v1,
+                        "secondary_id": None,
+                        "entity_grain": EntityGrain.DEPARTMENT.value if "department" in entity_column.lower() else EntityGrain.OTHER.value,
+                        "value": val,
+                        "records": rec_count,
+                    })
+
+            population_count = len(parsed_population)
+            if population_count == 0:
+                return {
+                    "entity_column": entity_column,
+                    "entity_type": "Employee" if is_person else cls._infer_entity_type_label(entity_column),
+                    "entity_grain": EntityGrain.PERSON.value if is_person else EntityGrain.DEPARTMENT.value,
+                    "measure_column": measure_column,
+                    "population_count": 0,
+                    "ranked_rows": [],
+                    "bottom_rows": [],
+                    "limit": limit,
+                    "mode": direction,
+                    "ranking_direction": desirability.value,
+                }
 
             # Sort best to worst according to desirability
-            # If higher is better: descending. If lower is better: ascending.
             reverse_sort = not is_lower_better
             sorted_population = sorted(parsed_population, key=lambda x: x["value"], reverse=reverse_sort)
 
@@ -457,7 +684,6 @@ class GenericEntityRankingEngine:
                 rows = []
                 for idx, item in enumerate(sub_list):
                     rank_num = start_rank + idx
-                    # Percentile: (population - rank + 1) / population * 100
                     p_tile = round(((population_count - rank_num + 1) / max(1, population_count)) * 100.0, 1)
                     p_tile = max(0.1, min(100.0, p_tile))
 
@@ -483,6 +709,8 @@ class GenericEntityRankingEngine:
                         percentile_label=p_label,
                         delta_benchmark=delta,
                         is_above_benchmark=is_above,
+                        secondary_id=item.get("secondary_id"),
+                        entity_grain=item.get("entity_grain"),
                     ))
                 return rows
 
@@ -498,10 +726,7 @@ class GenericEntityRankingEngine:
             if mode_upper == "TOP":
                 ranked_rows = make_ranked_rows(sorted_population[:n_limit])
             elif mode_upper == "BOTTOM":
-                # Worst according to desirability (the tail of sorted_population)
-                # To display bottom ranks intuitively: Rank N down to Rank 1 from the bottom
                 tail = list(reversed(sorted_population))[:n_limit]
-                # Keep worst items, ranked from worst (e.g. Rank 1 of bottom)
                 bottom_ranked = []
                 for idx, item in enumerate(tail):
                     rank_num = population_count - idx
@@ -520,13 +745,13 @@ class GenericEntityRankingEngine:
                         percentile_label=f"Bottom {round((idx + 1) / population_count * 100.0, 1)}%",
                         delta_benchmark=round(v - benchmark_val, 2),
                         is_above_benchmark=(v >= benchmark_val) if not is_lower_better else (v <= benchmark_val),
+                        secondary_id=item.get("secondary_id"),
+                        entity_grain=item.get("entity_grain"),
                     ))
                 ranked_rows = bottom_ranked
             elif mode_upper == "BOTH":
-                # Top N and Bottom N with overlap prevention
                 half_limit = n_limit // 2 if n_limit > 1 else 1
                 if 2 * half_limit >= population_count:
-                    # Population fully covered without duplication!
                     ranked_rows = make_ranked_rows(sorted_population)
                 else:
                     ranked_rows = make_ranked_rows(sorted_population[:half_limit])
@@ -549,6 +774,8 @@ class GenericEntityRankingEngine:
                             percentile_label=f"Bottom {round((idx + 1) / population_count * 100.0, 1)}%",
                             delta_benchmark=round(v - benchmark_val, 2),
                             is_above_benchmark=(v >= benchmark_val) if not is_lower_better else (v <= benchmark_val),
+                            secondary_id=item.get("secondary_id"),
+                            entity_grain=item.get("entity_grain"),
                         ))
 
             # Distribution Summary (P10, P25, P50, P75, P90, min, max, std)
@@ -573,7 +800,8 @@ class GenericEntityRankingEngine:
 
             return {
                 "entity_column": entity_column,
-                "entity_type": cls._infer_entity_type_label(entity_column),
+                "entity_type": "Employee" if is_person else cls._infer_entity_type_label(entity_column),
+                "entity_grain": EntityGrain.PERSON.value if is_person else EntityGrain.DEPARTMENT.value,
                 "measure_column": measure_column,
                 "aggregation": aggregation,
                 "unit": unit,
@@ -588,6 +816,61 @@ class GenericEntityRankingEngine:
                 "is_full_coverage": len(ranked_rows) >= population_count or (len(ranked_rows) + len(bottom_rows) >= population_count),
             }
 
+        finally:
+            if close_conn:
+                conn.close()
+
+    @classmethod
+    def get_top_person_ranking(
+        cls,
+        dataset_id: int,
+        top_n: int = 3,
+        conn=None,
+    ) -> dict[str, Any] | None:
+        """Discovers person entity and top N individuals by attendance/performance measure."""
+        close_conn = False
+        if conn is None:
+            conn = get_connection()
+            close_conn = True
+
+        try:
+            entities, measures = cls.discover_rankable_entities_and_measures(dataset_id, conn)
+            # Find person entity
+            person_ent = next((e for e in entities if e.get("entity_grain") == EntityGrain.PERSON.value or e.get("entity_type") == "Employee"), None)
+            if not person_ent:
+                return None
+
+            # Find preferred measure (attendance measure if available, else first measure)
+            chosen_measure = next(
+                (m for m in measures if any(k in m["column"].lower() for k in ("final attendance", "total attendance", "attendance"))),
+                measures[0] if measures else None,
+            )
+            if not chosen_measure:
+                return None
+
+            res = cls.execute_ranking_query(
+                dataset_id=dataset_id,
+                entity_column=person_ent["column"],
+                measure_column=chosen_measure["column"],
+                sheet_id=person_ent["sheet_id"],
+                aggregation=chosen_measure.get("aggregation", "avg"),
+                direction="TOP",
+                limit=top_n,
+                conn=conn,
+            )
+
+            mapping_proof = {
+                "person_label_column": person_ent.get("person_label_column"),
+                "person_identifier_column": person_ent.get("person_identifier_column"),
+                "attendance_measure": chosen_measure["column"],
+                "aggregation": chosen_measure.get("aggregation", "avg"),
+                "grain": "PERSON",
+                "top_rows": res.get("ranked_rows", []),
+                "unit": res.get("unit", "") or "Days",
+                "population_count": res.get("population_count", 0),
+            }
+            logger.info("Semantic Person Ranking Mapping Proof: %s", json.dumps({k: v for k, v in mapping_proof.items() if k != "top_rows"}))
+            return mapping_proof
         finally:
             if close_conn:
                 conn.close()

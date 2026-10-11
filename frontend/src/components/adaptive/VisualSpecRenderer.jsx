@@ -12,12 +12,14 @@ function PodiumTop3View({ visualSpec, themeTokens, isDark, height = "250px" }) {
   const values = visualSpec.values || [];
   const unit = visualSpec.unit || "";
   const podiumCats = visualSpec.podium_categories || [];
+  const secondaryIds = visualSpec.secondary_ids || [];
 
   const items = [
     {
       rank: 2,
       label: podiumCats[1]?.display_label || categories[1] || "2nd Place",
       fullLabel: podiumCats[1]?.full_label || categories[1] || "2nd Place",
+      secondaryId: secondaryIds[1],
       value: values[1] != null ? values[1] : "-",
       pedestalHeight: "80px",
       badgeColor: isDark ? "#94a3b8" : "#64748b",
@@ -29,6 +31,7 @@ function PodiumTop3View({ visualSpec, themeTokens, isDark, height = "250px" }) {
       rank: 1,
       label: podiumCats[0]?.display_label || categories[0] || "1st Place",
       fullLabel: podiumCats[0]?.full_label || categories[0] || "1st Place",
+      secondaryId: secondaryIds[0],
       value: values[0] != null ? values[0] : "-",
       pedestalHeight: "115px",
       badgeColor: "#f59e0b",
@@ -41,6 +44,7 @@ function PodiumTop3View({ visualSpec, themeTokens, isDark, height = "250px" }) {
       rank: 3,
       label: podiumCats[2]?.display_label || categories[2] || "3rd Place",
       fullLabel: podiumCats[2]?.full_label || categories[2] || "3rd Place",
+      secondaryId: secondaryIds[2],
       value: values[2] != null ? values[2] : "-",
       pedestalHeight: "60px",
       badgeColor: isDark ? "#d97706" : "#b45309",
@@ -116,25 +120,48 @@ function PodiumTop3View({ visualSpec, themeTokens, isDark, height = "250px" }) {
             {item.value} <span style={{ fontSize: "0.72rem", fontWeight: 500, color: themeTokens?.colors?.textMuted }}>{unit}</span>
           </div>
 
-          {/* Category Display Label (truncated to <= 20 chars, max 2 lines, full text in tooltip) */}
+          {/* Category Display Label (with optional secondary identifier) */}
           <div
-            title={item.fullLabel}
+            title={item.fullLabel + (item.secondaryId ? ` (ID: ${item.secondaryId})` : "")}
             style={{
               fontSize: "0.72rem",
               fontWeight: 600,
               color: isDark ? "#cbd5e1" : "#334155",
               lineHeight: 1.25,
-              height: "28px",
-              display: "-webkit-box",
-              WebkitLineClamp: 2,
-              WebkitBoxOrient: "vertical",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
+              height: item.secondaryId ? "36px" : "28px",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
               marginBottom: "8px",
               cursor: "help",
+              textAlign: "center",
+              maxWidth: "100%",
             }}
           >
-            {item.label}
+            <span
+              style={{
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+                maxWidth: "100%",
+                display: "block",
+              }}
+            >
+              {item.label}
+            </span>
+            {item.secondaryId && (
+              <span
+                style={{
+                  fontSize: "0.64rem",
+                  color: themeTokens?.colors?.textMuted || "#64748b",
+                  fontWeight: 500,
+                  display: "block",
+                }}
+              >
+                ID: {item.secondaryId}
+              </span>
+            )}
           </div>
 
           {/* Pedestal Block */}
