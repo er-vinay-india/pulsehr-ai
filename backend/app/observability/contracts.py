@@ -62,6 +62,7 @@ class ClaimAttribution(BaseModel):
     text: str
     claim_type: ClaimType = ClaimType.OBSERVED
     evidence_ids: list[str] = Field(default_factory=list)
+    context_ids: list[str] = Field(default_factory=list)
     scenario_ids: list[str] = Field(default_factory=list)
     verification_status: Literal["VERIFIED", "UNVERIFIED", "REJECTED", "REWRITTEN"] = "VERIFIED"
 
@@ -102,6 +103,7 @@ class GroundingEvaluation(BaseModel):
 
     factual_claim_count: int = 0
     evid_grounded_claims: int = 0
+    ctx_grounded_claims: int = 0
     scen_grounded_claims: int = 0
     ungrounded_claims: int = 0
     conflicting_claims: int = 0
@@ -277,6 +279,7 @@ class AITrace(BaseModel):
     model_calls: list[dict[str, Any]] = Field(default_factory=list)
 
     evidence_ids: list[str] = Field(default_factory=list)
+    context_ids: list[str] = Field(default_factory=list)
     scenario_ids: list[str] = Field(default_factory=list)
     provenance_ids: list[str] = Field(default_factory=list)
 

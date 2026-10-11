@@ -186,7 +186,7 @@ class GovernedMCPGateway:
 
             duration_ms = (time.perf_counter() - start_time) * 1000.0
 
-            # Extract evidence and provenance IDs from result if present
+            # Extract evidence, context, and provenance IDs from result if present
             evidence_ids: list[str] = []
             if "evidence_id" in final_dict and final_dict["evidence_id"]:
                 evidence_ids.append(str(final_dict["evidence_id"]))
@@ -195,6 +195,13 @@ class GovernedMCPGateway:
             if "grounded_evidence_ids" in final_dict and isinstance(final_dict["grounded_evidence_ids"], list):
                 evidence_ids.extend([str(e) for e in final_dict["grounded_evidence_ids"]])
             evidence_ids = list(dict.fromkeys(evidence_ids))
+
+            context_ids: list[str] = []
+            if "context_id" in final_dict and final_dict["context_id"]:
+                context_ids.append(str(final_dict["context_id"]))
+            if "context_ids" in final_dict and isinstance(final_dict["context_ids"], list):
+                context_ids.extend([str(c) for c in final_dict["context_ids"]])
+            context_ids = list(dict.fromkeys(context_ids))
 
             provenance_ids: list[str] = []
             if "snapshot_id" in final_dict:
@@ -222,6 +229,7 @@ class GovernedMCPGateway:
                 tool_name=request.tool_name,
                 result=final_dict,
                 evidence_ids=evidence_ids,
+                context_ids=context_ids,
                 provenance_ids=provenance_ids,
                 dataset_id=request.dataset_id,
                 execution_id=exec_id,

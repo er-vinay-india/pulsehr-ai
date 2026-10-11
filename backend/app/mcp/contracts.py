@@ -66,6 +66,7 @@ class MCPToolResponse(BaseModel):
     tool_name: str
     result: dict[str, Any] = Field(default_factory=dict)
     evidence_ids: list[str] = Field(default_factory=list)
+    context_ids: list[str] = Field(default_factory=list)
     provenance_ids: list[str] = Field(default_factory=list)
     dataset_id: int | str | None = None
     execution_id: str
@@ -79,7 +80,7 @@ class MCPToolDefinition(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="ignore")
 
     tool_name: str
-    capability_group: Literal["dataset", "analytics", "evidence", "scenario", "presentation", "governance"]
+    capability_group: Literal["dataset", "analytics", "evidence", "scenario", "presentation", "governance", "context"]
     description: str
     input_schema: type[BaseModel]
     output_schema: type[BaseModel]
@@ -620,3 +621,109 @@ class GetDecisionProvenanceOutput(BaseModel):
     evidence_ids: list[str]
     duration_ms: float
     timestamp: float
+
+
+# =============================================================================
+# 7. Context MCP Schemas (Phase F)
+# =============================================================================
+
+class SearchContextInput(BaseModel):
+    query: str
+    domain: str | None = None
+    artifact_type: str | None = None
+    department: str | None = None
+    limit: int = 5
+
+class ContextEvidenceItem(BaseModel):
+    context_id: str
+    document_id: str
+    artifact_type: str
+    domain: str
+    title: str
+    section: str
+    verbatim_excerpt: str
+    rule_summary: str
+    metric_name: str | None = None
+    operator: str | None = None
+    threshold_value: float | str | None = None
+    unit: str | None = None
+    department: str | None = None
+    provenance_hash: str
+
+class SearchContextOutput(BaseModel):
+    query: str
+    total_matched: int
+    matches: list[ContextEvidenceItem]
+    context_ids: list[str]
+
+
+class GetPolicyInput(BaseModel):
+    policy_name_or_id: str
+
+class GetPolicyOutput(BaseModel):
+    document_id: str
+    title: str
+    artifact_type: str
+    domain: str
+    version: str
+    effective_date: str
+    content_summary: str
+    context_ids: list[str]
+    extracted_evidence: list[ContextEvidenceItem]
+
+
+class GetBusinessDefinitionInput(BaseModel):
+    term: str
+
+class GetBusinessDefinitionOutput(BaseModel):
+    term: str
+    found: bool
+    context_id: str | None = None
+    definition: str | None = None
+    metric_name: str | None = None
+    calculation_standard: str | None = None
+    document_id: str | None = None
+
+
+class GetThresholdInput(BaseModel):
+    metric_name: str
+    department: str | None = None
+
+class GetThresholdOutput(BaseModel):
+    metric_name: str
+    found: bool
+    context_id: str | None = None
+    operator: str | None = None
+    threshold_value: float | str | None = None
+    unit: str | None = None
+    rule_summary: str | None = None
+    document_id: str | None = None
+    department: str | None = None
+
+
+class GetDocumentEvidenceInput(BaseModel):
+    context_id: str
+
+class GetDocumentEvidenceOutput(BaseModel):
+    context_id: str
+    found: bool
+    evidence: ContextEvidenceItem | None = None
+
+
+class TraceContextProvenanceInput(BaseModel):
+    context_ids: list[str]
+
+class ContextProvenanceRecord(BaseModel):
+    context_id: str
+    document_id: str
+    document_title: str
+    version: str
+    section: str
+    verbatim_excerpt: str
+    provenance_hash: str
+    source_uri: str | None = None
+    effective_date: str
+
+class TraceContextProvenanceOutput(BaseModel):
+    total_records: int
+    records: list[ContextProvenanceRecord]

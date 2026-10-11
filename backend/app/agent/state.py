@@ -31,8 +31,9 @@ class HighviewAgentState(BaseModel):
     selected_entities: list[str] = Field(default_factory=list)
     selected_measures: list[str] = Field(default_factory=list)
 
-    # Invariant: absolute separation of observed truth from counterfactual projections
+    # Invariant: absolute separation of observed truth, organizational context, and counterfactual projections
     evidence_ids: list[str] = Field(default_factory=list)   # Empirical facts (EVID-xxx)
+    context_ids: list[str] = Field(default_factory=list)    # Organizational context facts (CTX-xxx)
     scenario_ids: list[str] = Field(default_factory=list)   # Counterfactual simulations (SCEN-xxx)
     provenance_ids: list[str] = Field(default_factory=list) # Snapshot / calculation audit tokens
 

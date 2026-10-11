@@ -25,9 +25,10 @@ from .governance_server import register_governance_tools
 from .presentation_server import register_presentation_tools
 from .registry import MCPToolRegistry, mcp_registry
 from .scenario_server import register_scenario_tools
+from .context_server import register_context_tools
 
 
-# Automatically register all 6 capability groups on package import
+# Automatically register all 7 capability groups on package import
 def _initialize_mcp_catalog() -> None:
     register_dataset_tools()
     register_analytics_tools()
@@ -35,6 +36,7 @@ def _initialize_mcp_catalog() -> None:
     register_scenario_tools()
     register_presentation_tools()
     register_governance_tools()
+    register_context_tools()
 
 
 _initialize_mcp_catalog()

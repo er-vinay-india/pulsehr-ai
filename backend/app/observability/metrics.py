@@ -79,13 +79,30 @@ class AnomalyDetector:
                 trace_id=trace.trace_id,
             ))
 
-        # 5. EVID/SCEN Contamination Check
-        has_evid = any(eid.startswith("SCEN-") for eid in trace.evidence_ids)
-        if has_evid:
+        # 5. EVID/SCEN/CTX Namespace Contamination Check
+        has_scen_in_evid = any(eid.startswith("SCEN-") for eid in trace.evidence_ids)
+        has_ctx_in_evid = any(eid.startswith("CTX-") for eid in trace.evidence_ids)
+        has_scen_in_ctx = any(cid.startswith("SCEN-") for cid in trace.context_ids)
+
+        if has_scen_in_evid:
             anomalies.append(RuntimeAnomaly(
                 anomaly_type="SCENARIO_EVIDENCE_CONTAMINATION",
                 severity="CRITICAL",
-                message=f"Counterfactual SCEN tokens detected inside evidence_ids ledger in trace {trace.trace_id}",
+                message=f"Counterfactual SCEN tokens detected inside empirical evidence_ids ledger in trace {trace.trace_id}",
+                trace_id=trace.trace_id,
+            ))
+        if has_ctx_in_evid:
+            anomalies.append(RuntimeAnomaly(
+                anomaly_type="CONTEXT_EVIDENCE_CONTAMINATION",
+                severity="CRITICAL",
+                message=f"Organizational CTX tokens detected inside empirical evidence_ids ledger in trace {trace.trace_id}",
+                trace_id=trace.trace_id,
+            ))
+        if has_scen_in_ctx:
+            anomalies.append(RuntimeAnomaly(
+                anomaly_type="SCENARIO_CONTEXT_CONTAMINATION",
+                severity="CRITICAL",
+                message=f"Counterfactual SCEN tokens detected inside context_ids ledger in trace {trace.trace_id}",
                 trace_id=trace.trace_id,
             ))
 

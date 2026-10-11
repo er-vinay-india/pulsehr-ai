@@ -132,6 +132,7 @@ class AIObservabilityService:
             status=state.workflow_status,
             tools=state.tool_history,
             evidence_ids=list(state.evidence_ids),
+            context_ids=list(getattr(state, "context_ids", [])),
             scenario_ids=list(state.scenario_ids),
             provenance_ids=list(state.provenance_ids),
             approvals=approvals,
