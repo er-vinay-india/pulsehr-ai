@@ -46,8 +46,10 @@ Implemented in `backend/app/services/adaptive_dashboard/` and `frontend/src/page
        Server-side layout optimizer packages the selected portfolio into a structured `DashboardLayoutPlan` containing sections, rows, and cards:
        - Resolves visual spans dynamically based on archetype intrinsic shape profiles (`VisualSpatialProfile`) rather than rigid static hints.
        - Guarantees zero orphan cards and $\ge 85\%$ row utilization (achieving 100% on live datasets) via canonical row packing templates (`12`, `8+4`, `6+6`, `7+5`, `4+4+4`).
+       - Enforces `ReadableSpanIntegrity` and `ContentDensityAnalyzer` (`LabelDensityScore`): prevents chart cramming by forbidding spans below minimum readable bounds; long labels (>= 20 chars) bump ranking charts to effective min span 8.
+       - Employs multi-objective row layout optimization: $\text{Score} = 0.40 \cdot \text{adjacency} + 0.30 \cdot \text{readability} + 0.20 \cdot \text{efficiency} + 0.10 \cdot \text{height}$.
        - Synchronizes card and viewport heights across paired row companions (`HeightBalanceIntegrity`), eliminating ragged row baselines.
-       - Emits server-driven `topic.spatial_placement` consumed by `ExecutiveVisualCard.jsx` (`span-12`, `span-8`, `span-6`, `span-4`) with synchronized height classes (`height-short`, `height-standard`, `height-tall`).
+       - Emits server-driven `topic.spatial_placement` consumed by `ExecutiveVisualCard.jsx` (`span-12`, `span-8`, `span-6`, `span-4`) with synchronized height classes (`height-short`, `height-standard`, `height-tall`), sorted by `order_index` to guarantee strict DOM reading order.
      - *Semantic Visual Compression Layer (`SemanticVisualCompressionLayer`)*: Level-1 executive cards eliminate report prose in favor of high visual density:
        - `short_title`: $\le 7$ words (executive noun phrase).
        - `short_context`: $\le 8$ words (cohort context & scope).

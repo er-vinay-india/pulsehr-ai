@@ -169,10 +169,16 @@ Implemented in `backend/app/services/adaptive_dashboard/visual_portfolio_optimiz
      - **Morphology Contrast Bonus (+0.25)**: Pairs contrasting geometries (e.g. `MATRIX` with `ICONIC`, or `POINT` with `AREA`).
      - **Identical Morphology Penalty (-0.20)**: Discourages placing two identical length-based bars adjacent to each other.
    - **Spatial Composition QA Gates & Invariants**:
-     - `RowUtilizationIntegrity`: Average row utilization $\ge 85\%$ (achieves 100% on live workforce and environmental datasets).
-     - `OrphanCardIntegrity`: 0 orphan cards. Rejects single 4-span or 6-span cards marooned on incomplete rows.
-     - `PriorityAreaIntegrity`: The primary Hero visual receives span 12 and precedes any supporting analysis.
-     - `Zero CSS Masonry / Zero CSS Order`: Reading order in the DOM strictly mirrors spatial layout order. CSS `order:` is permanently banned.
+     - `ReadableSpanIntegrity`: Every visual archetype enforces `min_readable_span`, `preferred_span`, and `max_useful_span`. Hard constraint: $span < min\_readable\_span$ renders a candidate row pattern invalid.
+     - `ContentDensityAnalyzer` & `LabelDensityScore`: Dynamically analyzes category counts, series counts, and label lengths (max and average character counts). Entity labels $\ge 20$ characters (e.g. enterprise department titles) trigger a `label_density_adjustment = +1`, setting `effective_min_span = 8` for ranking charts and permanently banning 4-column squeeze (`4 + 4 + 4` candidate rejection).
+     - `Decoupled Priority & Visual Span`: Business priority (P1, P2, P3) determines vertical section ordering (`Priority` &rarr; `Diagnostic` &rarr; `Supporting`), while intrinsic spatial legibility dictates column span. A supporting analysis ranking chart receives 8 columns when entity names require width.
+     - `Multi-Objective Row Layout Scoring`:
+       $$\text{Score} = 0.40 \cdot \text{semantic\_adjacency} + 0.30 \cdot \text{visual\_readability} + 0.20 \cdot \text{spatial\_efficiency} + 0.10 \cdot \text{height\_balance}$$
+       Evaluates candidate row configurations (`8 + 4`, `6 + 6`, `12`, etc.) to select optimal readability and companion pairings.
+     - `RowUtilizationIntegrity`: Average row utilization = 100% on live datasets with 0 orphan cards and 0 intentional partial rows.
+     - `PriorityAreaIntegrity`: The primary Hero visual receives span 12 and anchors the top decision section.
+     - `Synchronized DOM Order & Zero CSS Reordering`: Partitioned topics within sections are sorted strictly by server-assigned `order_index`, ensuring DOM reading order identically matches visual row packing order without CSS `order:`.
+     - `Tiered Governance Banner`: Informational verification notices render as a compact `<div className="governance-status-compact">` pill (`Governance ✓ Verified Single-Domain Analysis`), reserving high-prominence alert banners strictly for critical integrity failures or coverage gaps.
    - **Multi-Viewport Responsive Contract**:
      - **Desktop ($\ge 1025\mathrm{px}$)**: Full server-optimized multi-column layout (`span-12`, `span-8`, `span-6`, `span-4`).
      - **Tablet ($\le 1024\mathrm{px}$)**: Cards with span $>6$ collapse to span 12; cards with span $\le 6$ scale to span 6 (balanced 2-column grid).

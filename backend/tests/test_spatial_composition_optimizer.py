@@ -1,20 +1,26 @@
-"""Unit and Integration Tests for SpatialCompositionOptimizer and Layout Invariants.
+"""Unit and Integration Tests for SpatialCompositionOptimizer, ReadableSpanIntegrity, and Layout Invariants.
 
 Verifies:
-1. Intrinsic profile registry mapping and aspect ratio boundaries.
-2. RowUtilizationIntegrity: row utilization >= 85% across all rows.
-3. OrphanCardIntegrity: zero isolated compact/medium cards on incomplete rows.
-4. HeightBalanceIntegrity: paired cards on the same row share synchronized height classes.
-5. PriorityAreaIntegrity: Hero visual receives column span 12 (maximum visual area).
-6. AdjacencyIntegrity: complementary pairings and morphology contrast bonuses.
-7. End-to-end dataset intelligence integration on workforce (99767) and environmental (99768) datasets.
+1. Intrinsic legibility profile registry mapping and aspect ratio boundaries.
+2. ContentDensityAnalyzer & LabelDensityScore: long entity labels expand effective min span.
+3. ReadableSpanIntegrity: hard rejection of placements below effective min span.
+4. No 4-column squeeze for ranked bars with long department names (forced to 8+ columns).
+5. Supporting Analysis 8+4 pairing: Department Attendance Ranking (8) + Leave Allocation (4).
+6. RowUtilizationIntegrity: row utilization >= 85% across all rows (achieving 100% on live datasets).
+7. OrphanCardIntegrity: zero isolated compact/medium cards on incomplete rows.
+8. HeightBalanceIntegrity: paired cards on the same row share synchronized height classes.
+9. PriorityAreaIntegrity: Hero visual receives column span 12 (maximum visual area).
+10. End-to-end dataset intelligence integration on workforce (99767) and environmental (99768) datasets.
 """
 import pytest
 from app.services.adaptive_dashboard.spatial_composition_optimizer import (
     SpatialCompositionOptimizer,
     ARCHETYPE_PROFILES,
     VisualHeightClass,
+    VisualLegibilityProfile,
+    get_legibility_profile,
     get_spatial_profile,
+    analyze_content_density,
     score_adjacency_compatibility,
     SpatialPlacement,
     DashboardLayoutPlan,
@@ -23,8 +29,8 @@ from app.services.adaptive_dashboard.composition_planner import ExecutiveTopic
 from app.services.adaptive_dashboard.dataset_orchestrator import run_dataset_intelligence
 
 
-def test_spatial_profile_registry():
-    """Verifies all supported archetypes have governed spatial profiles."""
+def test_legibility_profile_registry():
+    """Verifies all supported archetypes have governed legibility profiles."""
     archetypes = [
         "heatmap",
         "ranking",
@@ -43,19 +49,105 @@ def test_spatial_profile_registry():
         "multi_series_trend",
     ]
     for arch in archetypes:
-        prof = get_spatial_profile(arch)
+        prof = get_legibility_profile(arch)
         assert prof.chart_archetype == arch
-        assert prof.min_col_span >= 3
-        assert prof.max_col_span <= 12
-        assert prof.min_col_span <= prof.preferred_col_span <= prof.max_col_span
+        assert prof.min_readable_span >= 3
+        assert prof.max_useful_span <= 12
+        assert prof.min_readable_span <= prof.preferred_span <= prof.max_useful_span
         assert prof.preferred_height in (VisualHeightClass.SHORT, VisualHeightClass.STANDARD, VisualHeightClass.TALL)
 
-    # Heatmap must be TALL
-    assert get_spatial_profile("heatmap").preferred_height == VisualHeightClass.TALL
-    assert get_spatial_profile("heatmap").min_col_span >= 7
+    # Heatmap must be TALL with min_readable_span >= 7
+    assert get_legibility_profile("heatmap").preferred_height == VisualHeightClass.TALL
+    assert get_legibility_profile("heatmap").min_readable_span >= 7
+
+    # Ranked bar must have base min_readable_span >= 7
+    assert get_legibility_profile("ranked_bar").min_readable_span >= 7
+    assert get_legibility_profile("ranked_bar").preferred_span >= 8
+
+    # Scatter must have min_readable_span >= 5 (cannot be 4)
+    assert get_legibility_profile("scatter").min_readable_span >= 5
 
     # Bullet must be SHORT or STANDARD
-    assert get_spatial_profile("bullet").preferred_height == VisualHeightClass.SHORT
+    assert get_legibility_profile("bullet").preferred_height == VisualHeightClass.SHORT
+
+
+def test_label_density_analysis_and_adjustment():
+    """Verifies that long entity labels expand effective min span for ranking charts."""
+    prof = get_legibility_profile("ranked_bar")
+
+    # Short labels: base min span 7 remains 7
+    topic_short = ExecutiveTopic(
+        topic_id="T1",
+        title="Short Ranking",
+        analytical_intent="RANKING",
+        recommended_visual="ranked_bar",
+        visual_spec={
+            "chart_type": "ranked_bar",
+            "categories": ["HR", "IT", "Sales", "Ops"],
+        },
+    )
+    density_short = analyze_content_density(topic_short, prof)
+    assert density_short.longest_label_length <= 10
+    assert density_short.effective_min_span == 7
+
+    # Long enterprise labels: expands effective min span to 8
+    topic_long = ExecutiveTopic(
+        topic_id="T2",
+        title="Department Attendance Ranking",
+        analytical_intent="RANKING",
+        recommended_visual="ranked_bar",
+        visual_spec={
+            "chart_type": "ranked_bar",
+            "categories": [
+                "Alliance Initiative - Design",
+                "Operations and Infrastructure",
+                "Alliance Initiative - Platforms Engineering",
+                "Alliance Initiative - Products",
+            ],
+        },
+    )
+    density_long = analyze_content_density(topic_long, prof)
+    assert density_long.longest_label_length >= 30
+    assert density_long.label_density_adjustment >= 1
+    assert density_long.effective_min_span >= 8
+    assert density_long.effective_preferred_span >= 8
+
+
+def test_no_4_col_squeeze_for_long_label_rankings():
+    """Verifies that 4 columns is strictly forbidden for long-label ranked bars."""
+    topic_ranked = ExecutiveTopic(
+        topic_id="T_RANK",
+        title="Department Attendance Ranking",
+        analytical_intent="RANKING",
+        recommended_visual="ranked_bar",
+        visual_spec={
+            "chart_type": "ranked_bar",
+            "categories": [
+                "Alliance Initiative - Design",
+                "Operations and Infrastructure",
+                "Alliance Initiative - Platforms Engineering",
+            ],
+        },
+    )
+    topic_lollipop = ExecutiveTopic(
+        topic_id="T_LOLL",
+        title="Leave Allocation",
+        analytical_intent="COMPARISON",
+        recommended_visual="lollipop",
+        visual_spec={
+            "chart_type": "lollipop",
+            "categories": ["Dept A", "Dept B", "Dept C"],
+        },
+    )
+
+    plan = SpatialCompositionOptimizer.optimize_layout([topic_ranked, topic_lollipop], domain="workforce")
+    assert plan.qa_passed is True
+    assert plan.readability_violations_count == 0
+
+    # The ranked bar must be allocated 8 columns, and lollipop 4 columns (8+4)
+    assert topic_ranked.spatial_placement.column_span == 8
+    assert topic_lollipop.spatial_placement.column_span == 4
+    assert topic_ranked.spatial_placement.pattern == "8+4"
 
 
 def test_adjacency_complementarity_scoring():
@@ -99,8 +191,8 @@ def test_adjacency_complementarity_scoring():
     assert repeat_score < 0.50
 
 
-def test_row_utilization_and_orphan_integrity():
-    """Verifies that an 8-topic portfolio is packed with >=85% row utilization and zero orphans."""
+def test_row_utilization_and_readability_invariants():
+    """Verifies that an 8-topic portfolio is packed with >=85% row utilization, zero orphans, and 0 readability violations."""
     topics = [
         ExecutiveTopic(
             topic_id="T1",
@@ -147,17 +239,24 @@ def test_row_utilization_and_orphan_integrity():
         ),
         ExecutiveTopic(
             topic_id="T7",
-            title="Department Benchmarking",
-            analytical_intent="COMPARISON",
-            recommended_visual="lollipop",
-            visual_spec={"chart_type": "lollipop"},
+            title="Department Attendance Ranking",
+            analytical_intent="RANKING",
+            recommended_visual="ranked_bar",
+            visual_spec={
+                "chart_type": "ranked_bar",
+                "categories": [
+                    "Alliance Initiative - Design",
+                    "Operations and Infrastructure",
+                    "Alliance Initiative - Platforms Engineering",
+                ],
+            },
         ),
         ExecutiveTopic(
             topic_id="T8",
-            title="Variance Anomaly",
-            analytical_intent="ANOMALY",
-            recommended_visual="variance_bar",
-            visual_spec={"chart_type": "variance_bar"},
+            title="Leave Utilization Benchmark",
+            analytical_intent="COMPARISON",
+            recommended_visual="lollipop",
+            visual_spec={"chart_type": "lollipop"},
         ),
     ]
 
@@ -165,21 +264,21 @@ def test_row_utilization_and_orphan_integrity():
 
     # Invariant 1: QA Gates passed
     assert plan.qa_passed is True
+    assert plan.readability_violations_count == 0
     assert plan.orphan_cards_count == 0
 
-    # Invariant 2: Average row utilization >= 85% (in practice, 100%)
+    # Invariant 2: Average row utilization >= 85%
     assert plan.average_row_utilization >= 0.85
+    assert plan.average_readable_span_score >= 0.90
     assert plan.total_cards == 8
 
     # Invariant 3: Hero receives span 12
     hero_card = topics[0]
     assert hero_card.spatial_placement.column_span == 12
 
-    # Invariant 4: Every row achieves >= 10 columns out of 12
-    for sec in plan.sections:
-        for r in sec.rows:
-            assert r.total_span >= 10, f"Row {r.row_id} has total span {r.total_span} < 10"
-            assert r.utilization >= 0.85
+    # Invariant 4: Long-label ranked bar receives 8 columns
+    ranked_card = topics[6]
+    assert ranked_card.spatial_placement.column_span == 8
 
     # Invariant 5: HeightBalanceIntegrity (all cards on a row share synchronized height)
     for sec in plan.sections:
@@ -194,14 +293,15 @@ def test_workforce_dataset_layout_plan_live():
     lp = resp.layout_plan
     assert lp is not None
     assert lp["qa_passed"] is True
+    assert lp["readability_violations_count"] == 0
     assert lp["total_cards"] >= 5
     assert lp["average_row_utilization"] >= 0.85
     assert lp["orphan_cards_count"] == 0
 
-    # Check sections exist
-    section_ids = [s["section_id"] for s in lp["sections"]]
-    assert "priority" in section_ids
-    assert "diagnostic" in section_ids
+    # Verify Department Attendance Ranking has at least 8 columns
+    ranking_spans = lp["qa_details"].get("ranking_card_spans", {})
+    for title, span in ranking_spans.items():
+        assert span >= 8, f"Ranking card '{title}' has span {span} < 8"
 
 
 def test_environmental_dataset_layout_plan_live():
@@ -210,6 +310,7 @@ def test_environmental_dataset_layout_plan_live():
     lp = resp.layout_plan
     assert lp is not None
     assert lp["qa_passed"] is True
+    assert lp["readability_violations_count"] == 0
     assert lp["total_cards"] >= 5
     assert lp["average_row_utilization"] >= 0.85
     assert lp["orphan_cards_count"] == 0

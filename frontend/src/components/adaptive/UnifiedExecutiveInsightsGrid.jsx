@@ -22,9 +22,15 @@ function partitionTopics(topics, layoutPlan = null) {
   // 1. Authoritative Server-Driven Spatial Partition
   const hasSpatialSections = topics.some((t) => Boolean(t.spatial_placement?.section_id));
   if (hasSpatialSections) {
-    const priority = topics.filter((t) => t.spatial_placement?.section_id === "priority");
-    const diagnostic = topics.filter((t) => t.spatial_placement?.section_id === "diagnostic");
-    const supporting = topics.filter((t) => t.spatial_placement?.section_id === "supporting");
+    const priority = topics
+      .filter((t) => t.spatial_placement?.section_id === "priority")
+      .sort((a, b) => (a.spatial_placement?.order_index ?? 0) - (b.spatial_placement?.order_index ?? 0));
+    const diagnostic = topics
+      .filter((t) => t.spatial_placement?.section_id === "diagnostic")
+      .sort((a, b) => (a.spatial_placement?.order_index ?? 0) - (b.spatial_placement?.order_index ?? 0));
+    const supporting = topics
+      .filter((t) => t.spatial_placement?.section_id === "supporting")
+      .sort((a, b) => (a.spatial_placement?.order_index ?? 0) - (b.spatial_placement?.order_index ?? 0));
     return { priority, diagnostic, supporting };
   }
 
@@ -134,27 +140,70 @@ export default function UnifiedExecutiveInsightsGrid({
         />
       </section>
 
-      {/* Coverage Warnings Banner if present */}
-      {coverageWarnings && coverageWarnings.length > 0 && (
-        <div
-          className="coverage-warning-banner"
-          role="status"
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "8px",
-            padding: "8px 14px",
-            borderRadius: "8px",
-            backgroundColor: "rgba(245, 158, 11, 0.10)",
-            border: `1px solid ${themeTokens.colors.gold || "#f59e0b"}`,
-            color: isDark ? "#fbbf24" : "#b45309",
-            fontSize: "0.80rem",
-          }}
-        >
-          <AlertTriangle size={14} aria-hidden="true" />
-          <span>{coverageWarnings[0]}</span>
-        </div>
-      )}
+      {/* Governance Status & Critical Coverage Warnings */}
+      {(() => {
+        if (!coverageWarnings || coverageWarnings.length === 0) return null;
+        const isCritical = (w) => {
+          const l = (w || "").toLowerCase();
+          return (
+            l.includes("insufficient evidence") ||
+            l.includes("domain conflict") ||
+            l.includes("coverage gap") ||
+            l.includes("integrity failure") ||
+            l.includes("error") ||
+            l.includes("unverified")
+          );
+        };
+        const critical = coverageWarnings.filter(isCritical);
+        const informational = coverageWarnings.filter((w) => !isCritical(w));
+
+        if (critical.length > 0) {
+          return (
+            <div
+              className="coverage-warning-banner"
+              role="alert"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                padding: "8px 14px",
+                borderRadius: "8px",
+                backgroundColor: "rgba(245, 158, 11, 0.10)",
+                border: `1px solid ${themeTokens.colors.gold || "#f59e0b"}`,
+                color: isDark ? "#fbbf24" : "#b45309",
+                fontSize: "0.80rem",
+                marginBottom: "8px",
+              }}
+            >
+              <AlertTriangle size={14} aria-hidden="true" />
+              <span>{critical[0]}</span>
+            </div>
+          );
+        }
+
+        if (informational.length > 0) {
+          return (
+            <div
+              className="governance-status-compact"
+              role="status"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+                padding: "2px 0 8px 4px",
+                fontSize: "0.75rem",
+                color: "var(--color-text-muted, #78877f)",
+              }}
+            >
+              <ShieldCheck size={13} style={{ color: "var(--color-success, #075443)" }} aria-hidden="true" />
+              <span style={{ fontWeight: 600, color: "var(--color-text-secondary, #334b57)" }}>Governance ✓</span>
+              <span style={{ opacity: 0.85 }}>Verified Single-Domain Analysis</span>
+            </div>
+          );
+        }
+
+        return null;
+      })()}
 
       {/* 2. PRIORITY DECISIONS SECTION (Hero + Core Decision Anchors) */}
       {priority.length > 0 && (
