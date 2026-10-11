@@ -92,7 +92,7 @@ class ModelEscalator:
         response_model: Type[T],
         temperature: float = 0.0,
     ) -> Tuple[Optional[T], Dict[str, Any], float]:
-        """Calls local Ollama endpoint requesting typed JSON, enforcing schema validation."""
+        """Calls local model through Highview ModelGateway requesting typed JSON, enforcing schema validation."""
         start_time = time.perf_counter()
         self.telemetry.model_calls += 1
         if self.model_name not in self.telemetry.models_used:
@@ -105,34 +105,33 @@ class ModelEscalator:
         )
 
         try:
-            with httpx.Client(timeout=12) as client:
-                res = client.post(
-                    f"{self.ollama_url}/api/chat",
-                    json={
-                        "model": self.model_name,
-                        "messages": [
-                            {"role": "system", "content": system_instruction},
-                            {"role": "user", "content": prompt},
-                        ],
-                        "stream": False,
-                        "format": "json",
-                        "think": False,
-                        "options": {"temperature": temperature, "num_predict": 300},
-                    },
-                )
-                res.raise_for_status()
-                data = res.json()
-                raw_content = data.get("message", {}).get("content", "").strip()
-                tokens = data.get("prompt_eval_count", 0) + data.get("eval_count", 0)
+            from ..gateway.contracts import AIRequest, AITaskType
+            from ..gateway.model_gateway import ModelGateway, extract_json_payload
+
+            req = AIRequest(
+                task_type=AITaskType.STRUCTURAL_AI,
+                prompt=prompt,
+                system_prompt=system_instruction,
+                structured_output_schema=response_model,
+                temperature_override=temperature,
+                model_override=self.model_name,
+                max_latency_ms=12000.0,
+            )
+            res = ModelGateway.execute(req)
+            elapsed_ms = res.latency_ms
+            self.telemetry.model_latency_ms += elapsed_ms
+
+            if res.success and res.parsed is not None:
+                raw_content = res.raw_text
+                try:
+                    parsed_json = json.loads(extract_json_payload(raw_content)) if isinstance(raw_content, str) else res.parsed.model_dump()
+                except Exception:
+                    parsed_json = res.parsed.model_dump()
+                tokens = res.execution_record.tokens_used or 0
                 self.telemetry.model_tokens += tokens
-
-                elapsed_ms = (time.perf_counter() - start_time) * 1000
-                self.telemetry.model_latency_ms += elapsed_ms
-
-                # Parse JSON
-                parsed_json = json.loads(raw_content)
-                validated_obj = response_model.model_validate(parsed_json)
-                return validated_obj, parsed_json, elapsed_ms
+                return res.parsed, parsed_json, elapsed_ms
+            else:
+                return None, {"error": res.error or "Model execution failed"}, elapsed_ms
 
         except Exception as exc:
             elapsed_ms = (time.perf_counter() - start_time) * 1000

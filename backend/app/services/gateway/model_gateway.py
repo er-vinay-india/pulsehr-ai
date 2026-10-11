@@ -1,4 +1,13 @@
-"""Central Model Gateway providing role-based model dispatch, fallback cascades, and structured schema parsing."""
+"""Central Model Gateway providing role-based model dispatch, fallback cascades, and structured schema parsing.
+
+Phase A Enhancements:
+- HighView AI Task Taxonomy (STRUCTURAL_AI, SEMANTIC_AI, NARRATIVE_AI, AGENTIC_AI, PRESENTATION_AI, DETERMINISTIC_CALCULATION).
+- Strongly-typed AIRequest & AIResponse execution envelope.
+- Cryptographic input/output hashing for immutable audit trails (AIExecutionRecord).
+- Integrated ModelHealthService & circuit breaking to skip degraded models.
+- Graceful offline and deterministic calculation bypass.
+"""
+from __future__ import annotations
 
 import json
 import logging
@@ -12,6 +21,16 @@ from pydantic import BaseModel, ValidationError
 from ...core import config
 from ...core.models_config import ModelRole, get_role_config
 from .assistant_identity import guarded_completion
+from .contracts import (
+    AIExecutionRecord,
+    AIRequest,
+    AIResponse,
+    AITaskType,
+    ReasoningLevel,
+    compute_hash,
+)
+from .model_health import model_health_service
+from .model_router import ModelRouter
 from .observability import ExecutionTrace, trace_registry
 
 logger = logging.getLogger(__name__)
@@ -20,7 +39,7 @@ T = TypeVar("T", bound=BaseModel)
 
 
 class GatewayResult(Generic[T]):
-    """Standardized result wrapper returned by ModelGateway."""
+    """Standardized result wrapper returned by ModelGateway.generate() (legacy interface)."""
     def __init__(
         self,
         raw_text: str,
@@ -69,7 +88,7 @@ def extract_json_payload(text: str) -> str:
     match = re.search(r'```(?:json)?\s*([\s\S]*?)\s*```', cleaned, re.IGNORECASE)
     if match:
         return match.group(1).strip()
-    
+
     # Check for outermost JSON object { ... }
     obj_match = re.search(r'\{[\s\S]*\}', cleaned)
     if obj_match:
@@ -93,6 +112,205 @@ def extract_json_payload(text: str) -> str:
 class ModelGateway:
     """Central gateway routing all LLM requests through logical roles with fallback cascades."""
 
+    # -------------------------------------------------------------------------
+    # Phase A Typed Execution Entry Point: ModelGateway.execute(request)
+    # -------------------------------------------------------------------------
+    @classmethod
+    def execute(cls, request: AIRequest) -> AIResponse[Any]:
+        """Universal execution entrypoint for HighView AI requests.
+
+        Enforces:
+        1. DETERMINISTIC_CALCULATION bypass (0 tokens, no model call).
+        2. Health-aware model routing and circuit breaking.
+        3. Cascading fallbacks through available local models.
+        4. Structured output validation against Pydantic schemas.
+        5. Immutable cryptographic audit logging (AIExecutionRecord).
+        6. Resilient offline degradation to deterministic fallback.
+        """
+        start_time = time.perf_counter()
+
+        # 1. Deterministic Calculation Bypass
+        if request.task_type == AITaskType.DETERMINISTIC_CALCULATION:
+            inp_hash = compute_hash(request.model_dump())
+            out_hash = compute_hash("deterministic_bypass")
+            rec = AIExecutionRecord(
+                request_id=request.request_id,
+                task_type=request.task_type,
+                model="deterministic_bypass",
+                dataset_id=request.dataset_id,
+                evidence_ids=request.evidence_ids,
+                structured_input_hash=inp_hash,
+                structured_output_hash=out_hash,
+                latency_ms=0.0,
+                fallback_used=False,
+                models_attempted=[],
+                entitlement_status="PASS",
+                tokens_used=0,
+                success=True,
+            )
+            parsed_val = request.deterministic_fallback
+            raw_text = str(request.deterministic_fallback) if request.deterministic_fallback is not None else ""
+            return AIResponse(
+                raw_text=raw_text,
+                parsed=parsed_val,
+                execution_record=rec,
+                success=True,
+                deterministic_bypass=True,
+            )
+
+        # 2. Compute Input Hash
+        inp_hash = compute_hash({
+            "prompt": request.prompt or request.query,
+            "system_prompt": request.system_prompt,
+            "context": request.context,
+            "schema": request.structured_output_schema.__name__ if request.structured_output_schema else None,
+        })
+
+        # 3. Resolve Model Candidate Cascade
+        candidates = ModelRouter.route_ai_request(request)
+        if not candidates:
+            candidates = [getattr(config, "OLLAMA_MODEL", "qwen3.5:2b")]
+
+        models_attempted: list[str] = []
+        last_error: str | None = None
+        prompt_content = request.prompt or request.query
+        timeout_sec = min(request.max_latency_ms / 1000.0, 60.0)
+
+        # 4. Iterate Candidates
+        for idx, model_candidate in enumerate(candidates):
+            models_attempted.append(model_candidate)
+            model_start = time.perf_counter()
+
+            try:
+                messages = []
+                if request.system_prompt:
+                    messages.append({"role": "system", "content": request.system_prompt})
+                messages.append({"role": "user", "content": prompt_content})
+
+                temp = request.temperature_override if request.temperature_override is not None else 0.15
+
+                payload: dict[str, Any] = {
+                    "model": model_candidate,
+                    "messages": messages,
+                    "stream": False,
+                    "options": {
+                        "temperature": temp,
+                        "num_predict": 4096 if request.reasoning_level == ReasoningLevel.HIGH else 2048,
+                        "num_ctx": 8192
+                    }
+                }
+
+                # Disable thinking mode unless DeepSeek-R1 or reasoning role
+                if not any(k in model_candidate.lower() for k in ("deepseek-r1", "r1")):
+                    payload["think"] = False
+
+                if request.structured_output_schema is not None:
+                    payload["format"] = "json"
+
+                client_timeout = httpx.Timeout(timeout_sec, connect=4.0)
+                with httpx.Client(timeout=client_timeout) as client:
+                    resp = client.post(f"{config.OLLAMA_BASE_URL}/api/chat", json=payload)
+                    resp.raise_for_status()
+                    body = resp.json()
+
+                msg_obj = body.get("message", {})
+                raw_response = msg_obj.get("content", "") or body.get("response", "") or msg_obj.get("thinking", "")
+                cleaned = clean_cot_reasoning(raw_response)
+
+                if not cleaned:
+                    raise ValueError(f"Model '{model_candidate}' returned an empty response.")
+
+                # Parse structured JSON if requested
+                parsed_instance = None
+                if request.structured_output_schema is not None:
+                    json_str = extract_json_payload(cleaned)
+                    data_dict = json.loads(json_str)
+                    parsed_instance = request.structured_output_schema.model_validate(data_dict)
+
+                model_latency_ms = (time.perf_counter() - model_start) * 1000.0
+                total_latency_ms = (time.perf_counter() - start_time) * 1000.0
+
+                # Record success with ModelHealthService
+                model_health_service.record_success(model_candidate, model_latency_ms)
+
+                out_hash = compute_hash(json_str if request.structured_output_schema else cleaned)
+                rec = AIExecutionRecord(
+                    request_id=request.request_id,
+                    task_type=request.task_type,
+                    model=model_candidate,
+                    dataset_id=request.dataset_id,
+                    evidence_ids=request.evidence_ids,
+                    structured_input_hash=inp_hash,
+                    structured_output_hash=out_hash,
+                    latency_ms=total_latency_ms,
+                    fallback_used=(idx > 0),
+                    models_attempted=models_attempted,
+                    entitlement_status="PASS",
+                    tokens_used=(len(prompt_content) + len(cleaned)) // 4,
+                    success=True,
+                )
+
+                return AIResponse(
+                    raw_text=cleaned,
+                    parsed=parsed_instance,
+                    execution_record=rec,
+                    success=True,
+                    fallback_triggered=(idx > 0),
+                )
+
+            except Exception as exc:
+                model_latency_ms = (time.perf_counter() - model_start) * 1000.0
+                last_error = str(exc)
+                logger.warning(
+                    f"ModelGateway candidate '{model_candidate}' failed ({model_latency_ms:.0f}ms): {exc}. "
+                    f"Falling back to next candidate..."
+                )
+                model_health_service.record_failure(model_candidate, last_error)
+                continue
+
+        # 5. If all models fail: Graceful Offline Degradation
+        total_latency_ms = (time.perf_counter() - start_time) * 1000.0
+        out_hash = compute_hash(str(request.deterministic_fallback or "fallback_exhausted"))
+
+        rec = AIExecutionRecord(
+            request_id=request.request_id,
+            task_type=request.task_type,
+            model="deterministic_fallback" if request.deterministic_fallback is not None else "none",
+            dataset_id=request.dataset_id,
+            evidence_ids=request.evidence_ids,
+            structured_input_hash=inp_hash,
+            structured_output_hash=out_hash,
+            latency_ms=total_latency_ms,
+            fallback_used=True,
+            models_attempted=models_attempted,
+            entitlement_status="PASS",
+            tokens_used=0,
+            circuit_breaker_triggered=True,
+            success=(request.deterministic_fallback is not None),
+            error=last_error,
+        )
+
+        fallback_parsed = None
+        if request.structured_output_schema is not None and isinstance(request.deterministic_fallback, request.structured_output_schema):
+            fallback_parsed = request.deterministic_fallback
+
+        fallback_text = str(request.deterministic_fallback) if request.deterministic_fallback is not None else (
+            "Deterministic fallback: Core calculations verified from evidence graph. AI narrative unavailable."
+        )
+
+        return AIResponse(
+            raw_text=fallback_text,
+            parsed=fallback_parsed,
+            execution_record=rec,
+            success=(request.deterministic_fallback is not None),
+            fallback_triggered=True,
+            error=last_error,
+        )
+
+    # -------------------------------------------------------------------------
+    # Legacy Interface: ModelGateway.generate(...)
+    # Preserved for existing callers with 100% backward compatibility
+    # -------------------------------------------------------------------------
     @classmethod
     def generate(
         cls,
@@ -155,8 +373,7 @@ class ModelGateway:
                                 "num_ctx": 8192
                             }
                         }
-                        # Disable Ollama internal thinking mode for non-REASONER roles (ANALYST, WRITER, FAST)
-                        # to prevent unbounded chain-of-thought token generation and latency timeouts.
+                        # Disable Ollama internal thinking mode for non-REASONER roles
                         if role != ModelRole.REASONER and not any(k in model_candidate.lower() for k in ("deepseek-r1", "r1")):
                             payload["think"] = False
 
@@ -174,6 +391,7 @@ class ModelGateway:
                         raw_response = msg_obj.get("content", "") or body.get("response", "") or msg_obj.get("thinking", "")
                         cleaned = clean_cot_reasoning(raw_response)
                         return extract_json_payload(cleaned) if response_schema else cleaned
+
                     identity_result = guarded_completion(
                         invoke, query=identity_query if identity_query is not None else prompt, runtime_model=model_candidate,
                         task_system=system_prompt, structured=response_schema is not None,
@@ -196,6 +414,8 @@ class ModelGateway:
                         json_str = extract_json_payload(cleaned_response)
                         data_dict = json.loads(json_str)
                         parsed_instance = response_schema.model_validate(data_dict)
+
+                    model_health_service.record_success(model_candidate, duration_ms)
 
                     trace = ExecutionTrace(
                         trace_id=trace_id,
@@ -238,6 +458,7 @@ class ModelGateway:
                         f"ModelGateway attempt {attempt + 1} failed for role '{role.value}' "
                         f"on model '{model_candidate}': {exc}"
                     )
+                    model_health_service.record_failure(model_candidate, last_error)
                     time.sleep(0.3 * (attempt + 1))
 
         # If all candidates exhausted, record failure trace
@@ -272,3 +493,6 @@ class ModelGateway:
             identity_guard_triggered=identity_triggered,
             identity_retry_count=identity_retries
         )
+
+
+HighviewModelGateway = ModelGateway

@@ -2,14 +2,100 @@
 
 import logging
 from typing import Any
-from ...core.models_config import ModelRole
+from ...core import config
+from ...core.models_config import ModelRole, get_role_config
 from ..decision_engine.base import DecisionResult
+from .contracts import AIRequest, AITaskType, ReasoningLevel
+from .model_health import model_health_service
 
 logger = logging.getLogger(__name__)
 
 
+# Default model candidates per governed AI task taxonomy
+TASK_MODEL_CASCADES: dict[AITaskType, list[str]] = {
+    AITaskType.STRUCTURAL_AI: [
+        "phi4-mini:latest",
+        "qwen3.5:2b",
+        "llama3.1:8b"
+    ],
+    AITaskType.SEMANTIC_AI: [
+        "qwen3.5:2b",
+        "phi4-mini:latest",
+        "qwen3.5:9b"
+    ],
+    AITaskType.NARRATIVE_AI: [
+        "gemma4:12b",
+        "qwen3.5:9b",
+        "phi4-mini:latest"
+    ],
+    AITaskType.AGENTIC_AI: [
+        "qwen3.5:9b",
+        "gemma4:12b",
+        "phi4-mini:latest"
+    ],
+    AITaskType.PRESENTATION_AI: [
+        "gemma4:12b",
+        "qwen3.5:9b",
+        "phi4-mini:latest"
+    ],
+    AITaskType.DETERMINISTIC_CALCULATION: []  # 100% bypass - no model needed
+}
+
+
 class ModelRouter:
     """Intelligently routes inference tasks across installed local models based on workload characteristics."""
+
+    @staticmethod
+    def route_ai_request(request: AIRequest) -> list[str]:
+        """Returns ordered, health-aware candidate model cascade for a typed AIRequest."""
+        # 1. Deterministic calculation strictly returns empty list (NO MODEL)
+        if request.task_type == AITaskType.DETERMINISTIC_CALCULATION:
+            return []
+
+        # 2. Start with user/request override if specified
+        candidates: list[str] = []
+        if request.model_override:
+            candidates.append(request.model_override)
+
+        # 3. High reasoning level or deep investigative queries promote DeepSeek-R1
+        if request.reasoning_level == ReasoningLevel.HIGH:
+            deepseek_model = getattr(config, "MODEL_ROLE_REASONER_PRIMARY", "deepseek-r1:7b")
+            if deepseek_model not in candidates:
+                candidates.append(deepseek_model)
+            qwen_model = getattr(config, "MODEL_ROLE_ANALYST_PRIMARY", "qwen3.5:9b")
+            if qwen_model not in candidates:
+                candidates.append(qwen_model)
+
+        # 4. Pull base cascade for the assigned AITaskType
+        base_cascade = TASK_MODEL_CASCADES.get(request.task_type, ["qwen3.5:9b", "phi4-mini:latest"])
+        for m in base_cascade:
+            if m not in candidates:
+                candidates.append(m)
+
+        # 5. Low latency budget prioritization: if budget < 12 seconds, ensure fast model is upfront
+        if request.max_latency_ms < 12000.0 and request.reasoning_level != ReasoningLevel.HIGH:
+            fast_model = "phi4-mini:latest"
+            if fast_model in candidates:
+                candidates.remove(fast_model)
+                candidates.insert(0, fast_model)
+
+        # 6. Append system default model as ultimate fallback if not present
+        sys_default = getattr(config, "OLLAMA_MODEL", "qwen3.5:2b")
+        if sys_default not in candidates:
+            candidates.append(sys_default)
+
+        # 7. Health-aware re-ordering: sort healthy models ahead of degraded models
+        healthy: list[str] = []
+        degraded: list[str] = []
+        for m in candidates:
+            if model_health_service.is_healthy(m):
+                healthy.append(m)
+            else:
+                degraded.append(m)
+
+        # Retain healthy first; keep degraded at the tail as a last-resort fallback
+        ordered = healthy + degraded
+        return ordered
 
     @staticmethod
     def route_task(
@@ -19,7 +105,7 @@ class ModelRouter:
         latency_priority: bool = False,
         decision_result: DecisionResult | None = None
     ) -> ModelRole:
-        """Determines the optimal logical ModelRole for a given workload."""
+        """Determines the optimal logical ModelRole for a given workload (legacy compatibility)."""
         # 1. If DecisionEngine already suggested a role, honor it
         if decision_result and decision_result.suggested_role:
             try:

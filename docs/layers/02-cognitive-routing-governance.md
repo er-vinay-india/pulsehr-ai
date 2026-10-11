@@ -43,8 +43,26 @@ Implemented in `backend/app/services/decision_engine/`:
   - `FAST` &rarr; `ANALYST` if confidence < 0.65 or schema invalid.
   - `ANALYST` &rarr; `REASONER` if confidence < 0.50 or schema invalid.
 
-### C. Role-Based Model Gateway & Configuration
-Defined in `backend/app/core/models_config.py` and `backend/app/services/gateway/model_gateway.py`:
+### C. Role-Based Model Gateway & AI Execution Layer (Phase A)
+Defined in `backend/app/core/models_config.py`, `backend/app/services/gateway/contracts.py`, `model_health.py`, and `backend/app/services/gateway/model_gateway.py`:
+
+1. **AI Task Taxonomy & Model Cascades (`AITaskType`)**:
+   - `STRUCTURAL_AI`: Header reconstruction, row continuation ambiguity &rarr; Primary: `phi4-mini:latest`, Fallbacks: `qwen3.5:2b`, `llama3.1:8b`.
+   - `SEMANTIC_AI`: Measure semantics, domain column classification &rarr; Primary: `qwen3.5:2b`, Fallbacks: `phi4-mini:latest`, `qwen3.5:9b`.
+   - `NARRATIVE_AI`: Executive summary, concise explanation, short findings &rarr; Primary: `gemma4:12b`, Fallbacks: `qwen3.5:9b`, `phi4-mini:latest`.
+   - `AGENTIC_AI`: Multi-step workflow planning, tool dispatch routing &rarr; Primary: `qwen3.5:9b`, Fallbacks: `gemma4:12b`, `phi4-mini:latest`.
+   - `PRESENTATION_AI`: Slide narrative, visual storytelling &rarr; Primary: `gemma4:12b`, Fallbacks: `qwen3.5:9b`, `phi4-mini:latest`.
+   - `DETERMINISTIC_CALCULATION`: **NO MODEL** &rarr; Complete mathematical bypass with 0 tokens and immediate execution.
+
+2. **Unified `AIRequest` & `AIResponse` Execution Envelope**:
+   - Strongly-typed request containing task type, dataset ID, required capability, max latency budget, reasoning level, structured schema, and optional deterministic fallback.
+   - Emits `AIExecutionRecord` with SHA-256 `structured_input_hash` and `structured_output_hash` for immutable cryptographic provenance.
+
+3. **Fleet Health Monitor & Circuit Breaker (`ModelHealthService`)**:
+   - Real-time probing of installed local models via Ollama tags endpoint.
+   - Circuit breaker trips to `DEGRADED` after consecutive failures ($\ge 3$), automatically diverting traffic to healthy models without incurring repetitive timeout latency.
+   - Half-open probation window allows models to recover after cool-down.
+   - **Zero-Downtime Offline Resilience**: If local LLMs are unreachable, core analytics and deterministic features gracefully return rule-verified outputs without crashing.
 
 | Logical Role | Primary Model | Fallback Model | Max Tokens | Timeout | Primary Responsibility |
 | :--- | :--- | :--- | :---: | :---: | :--- |
