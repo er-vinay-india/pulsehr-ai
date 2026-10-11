@@ -220,6 +220,7 @@ class DatasetIntelligenceResponse(BaseModel):
     analytical_opportunities: list[Any] = Field(default_factory=list)
     relationship_reduction: dict[str, Any] = Field(default_factory=dict)
     funnel_trace: dict[str, Any] = Field(default_factory=dict)
+    layout_plan: dict[str, Any] | None = None
     snapshot: str = ""
 
 
@@ -456,6 +457,13 @@ def run_dataset_intelligence(dataset_id: int) -> DatasetIntelligenceResponse:
                 gov_metrics=gov_metrics,
             )
 
+        # 7.6 SpatialCompositionOptimizer: Plan deterministic 12-column row layouts
+        from .spatial_composition_optimizer import SpatialCompositionOptimizer
+        layout_plan = SpatialCompositionOptimizer.optimize_layout(
+            topics=executive_topics,
+            domain=domain_name,
+        )
+
         funnel_trace = GlobalCandidatePoolEngine.build_funnel_trace(
             candidates=candidates,
             selected=selected,
@@ -490,6 +498,12 @@ def run_dataset_intelligence(dataset_id: int) -> DatasetIntelligenceResponse:
             "opportunities_planned": len(planned_opps),
             "noise_reduction_ratio": f"{red_tracker.reduction_ratio:.1f}% noise eliminated",
             "relationship_reduction": red_tracker.model_dump(),
+            "spatial_layout": {
+                "qa_passed": layout_plan.qa_passed,
+                "average_row_utilization": f"{layout_plan.average_row_utilization * 100:.1f}%",
+                "total_rows": layout_plan.total_rows,
+                "orphan_cards": layout_plan.orphan_cards_count,
+            },
             "funnel_trace": {
                 "generated": funnel_trace["opportunities_generated"],
                 "executed": funnel_trace["opportunities_executed"],
@@ -522,6 +536,7 @@ def run_dataset_intelligence(dataset_id: int) -> DatasetIntelligenceResponse:
             analytical_opportunities=[o.model_dump() for o in planned_opps[:20]],
             relationship_reduction=red_tracker.model_dump(),
             funnel_trace=funnel_trace,
+            layout_plan=layout_plan.model_dump(),
             snapshot=unified_graph.snapshot,
         )
     finally:

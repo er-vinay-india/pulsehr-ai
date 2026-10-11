@@ -141,15 +141,40 @@ Implemented in `backend/app/services/adaptive_dashboard/visual_portfolio_optimiz
    - `cta`: $\le 3$ words (e.g. "Inspect →").
    - `SemanticIconRegistry`: Deterministic SVG icons (`target`, `trophy`, `users`, `calendar`, `alert`, `trend`, `distribution`, `compare`, `relationship`, `shield`, `matrix`, `wind`).
    - **Reduced Card Chrome**: Never permanently renders `recommended_action` inside Level-1 cards. Visual area takes > 85% of card space. Full business questions, unabridged explanations, recommended action steps, and evidence citations live inside the Quick Inspect Drawer and Data Explorer.
-5. **Responsive 12-Column Spatial Grid & Semantic Landmarks**:
-   - `HERO` (`layout-hint-hero`, `visual-card--hero`): `span 12` (full row prominence).
-   - `LARGE` (`layout-hint-large`, `visual-card--large`): `span 12`.
-   - `MEDIUM` (`layout-hint-medium`, `visual-card--medium`): `span 6` (half width on desktop).
-   - `COMPACT` (`layout-hint-compact`, `visual-card--compact`): `span 4` (1/3 width on desktop).
-   - `MICRO` (`layout-hint-micro`, `visual-card--micro`): `span 3` (1/4 width on desktop).
-   - **CSS Grid vs Flexbox Boundary**: CSS Grid exclusively governs page sections and visual card portfolios (`ExecutiveVisualGrid`). Flexbox exclusively governs component internals (card headers, metric wrappers, button groups).
-   - **DOM Order Equals Reading Order**: DOM elements are rendered in strict order of analytical importance (Priority &rarr; Diagnostic &rarr; Supporting). CSS `order:` properties are permanently barred.
-   - **Breakpoints**:
-     - Desktop ($\ge 1025\mathrm{px}$): Full multi-column grid density.
-     - Tablet ($\le 1024\mathrm{px}$): Compact and micro cards collapse to `span 6`.
-     - Mobile ($\le 768\mathrm{px}$): All cards collapse to `span 1` (single column 100% width) with zero horizontal clipping or overflow.
+5. **Intelligent Spatial Composition Engine (`SpatialCompositionOptimizer`)**:
+   Implemented in `backend/app/services/adaptive_dashboard/spatial_composition_optimizer.py` and rendered via `frontend/src/components/adaptive/ExecutiveVisualCard.jsx` & `executive-cockpit.scss`:
+   - **Core Purpose**: Replaces rigid static layout hints with dynamic, server-driven multi-viewport spatial arrangement. Eliminates orphan cards, enforces intrinsic archetype shape profiles, synchronizes companion card heights, and guarantees balanced row packing in a 12-column grid.
+   - **Intrinsic Visual Shape Profiles (`VisualSpatialProfile`)**:
+     Every visual archetype defines its natural span, allowable span envelope, natural aspect ratio, and height class:
+     - `heatmap`: Natural span 8 (envelope 7–12), natural aspect ratio `2.4`, height class `tall`.
+     - `podium_top_3`: Natural span 4 (envelope 4–6), natural aspect ratio `1.2`, height class `tall` (promoted to match paired heatmap).
+     - `scatter`: Natural span 6 (envelope 6–8), natural aspect ratio `1.5`, height class `standard`.
+     - `box_plot`: Natural span 6 (envelope 5–8), natural aspect ratio `1.6`, height class `standard`.
+     - `bullet`: Natural span 12 or 4 (envelope 4–12), natural aspect ratio `3.0`, height class `short` (wide compact strip).
+     - `100_percent_stacked_bar`: Natural span 6 (envelope 4–8), natural aspect ratio `1.6`, height class `standard`.
+     - `ranked_bar`, `horizontal_bar`: Natural span 6 (envelope 4–8), natural aspect ratio `1.4`, height class `standard`.
+     - `dumbbell`, `lollipop`, `variance_bar`: Natural span 4 (envelope 4–6), natural aspect ratio `1.3`, height class `standard`.
+   - **Deterministic Row Packing Solver (`_pack_section_into_rows`)**:
+     Partitions visual cards within decision sections (`priority`, `diagnostic`, `supporting`) into balanced rows matching canonical 12-column templates:
+     - `12`: Single Hero or wide visual (100% row utilization).
+     - `8 + 4` / `4 + 8`: Asymmetric focal pair (e.g. Heatmap matrix + Podium top 3, 100% row utilization).
+     - `6 + 6`: Balanced diagnostic pair (e.g. Scatter plot + Box plot or Stacked Capacity, 100% row utilization).
+     - `7 + 5` / `5 + 7`: Weighted analytical pair (100% row utilization).
+     - `4 + 4 + 4`: Balanced triplet of compact comparative cards (100% row utilization).
+   - **Synchronized Row Height Balancing (`HeightBalanceIntegrity`)**:
+     Paired cards in a single row share a synchronized visual height class (`short` ~250px, `standard` ~310px, `tall` ~390px) calculated via `_resolve_row_height_class`. When an intrinsically tall visual (like a Heatmap) pairs with a companion (like an Olympic Podium), both cards and their internal chart viewports share the tall height class, preventing ragged row bottoms.
+   - **Adjacency Compatibility Scoring (`score_adjacency_compatibility`)**:
+     Evaluates candidate companion pairs before row assignment:
+     - **Intent Complementarity Bonus (+0.30)**: Pairs `RELATIONSHIP` with `DISTRIBUTION` or `TARGET_VS_ACTUAL` with `RANKING`.
+     - **Morphology Contrast Bonus (+0.25)**: Pairs contrasting geometries (e.g. `MATRIX` with `ICONIC`, or `POINT` with `AREA`).
+     - **Identical Morphology Penalty (-0.20)**: Discourages placing two identical length-based bars adjacent to each other.
+   - **Spatial Composition QA Gates & Invariants**:
+     - `RowUtilizationIntegrity`: Average row utilization $\ge 85\%$ (achieves 100% on live workforce and environmental datasets).
+     - `OrphanCardIntegrity`: 0 orphan cards. Rejects single 4-span or 6-span cards marooned on incomplete rows.
+     - `PriorityAreaIntegrity`: The primary Hero visual receives span 12 and precedes any supporting analysis.
+     - `Zero CSS Masonry / Zero CSS Order`: Reading order in the DOM strictly mirrors spatial layout order. CSS `order:` is permanently banned.
+   - **Multi-Viewport Responsive Contract**:
+     - **Desktop ($\ge 1025\mathrm{px}$)**: Full server-optimized multi-column layout (`span-12`, `span-8`, `span-6`, `span-4`).
+     - **Tablet ($\le 1024\mathrm{px}$)**: Cards with span $>6$ collapse to span 12; cards with span $\le 6$ scale to span 6 (balanced 2-column grid).
+     - **Mobile ($\le 768\mathrm{px}$)**: All cards collapse to full width (`span 1` in single-column grid) with zero horizontal overflow.
+

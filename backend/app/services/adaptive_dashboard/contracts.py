@@ -474,6 +474,7 @@ class AdaptiveDashboardResponse(BaseModel):
     executive_topics: list[dict[str, Any]] = Field(default_factory=list)
     executive_kpis: list[dict[str, Any]] = Field(default_factory=list)
     domain_profile: dict[str, Any] = Field(default_factory=dict)
+    layout_plan: dict[str, Any] | None = None
 
 
 class ExecutiveKPISpec(BaseModel):

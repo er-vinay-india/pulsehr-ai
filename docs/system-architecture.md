@@ -51,7 +51,7 @@ The platform is architected into **5 cohesive, integrated layers** supported by 
   ┌─────────────────────────────────────────────────────────────────────────────────────────────┐
   │ • Consumer 3A: Executive Dashboard ("What requires my attention?")                         │
   │     - 5-KPI strip, 8–15 visual portfolio (Hero, Box Plot, Scatter, Podium, Bullet, etc.)   │
-  │     - VisualPortfolioOptimizer: multi-factor scoring, diversity quotas, layout hints        │
+  │     - VisualPortfolioOptimizer & SpatialCompositionOptimizer (zero-orphan balanced rows)   │
   │ • Consumer 3B: Data Explorer ("Show me the analysis behind it?")                            │
   │     - 7 deep analytical tabs: Overview, Rankings, Trends, Relationships, Distributions,     │
   │       Evidence, Technical (Reconstruction safety radar, confidence scores, provenance)      │
@@ -68,6 +68,7 @@ The platform is architected into **5 cohesive, integrated layers** supported by 
   │ • Standard Typography Hierarchy: 38pt cover, 30pt header, 20pt panel, 18pt body, 16pt table│
   │ • Truthful Visual Intent Grammar: True ECharts scatter plots for bivariate relationships,   │
   │   ban on synthetic time labels, horizontal bars for benchmarks, variance bars for anomalies │
+  │ • Intelligent Spatial Composition: server-driven 12-col packing, synchronized row heights  │
   │ • Native Multi-Format Exporters: python-pptx native vector charts, headless PDF, React UI   │
   └─────────────────────────────────────────────────────────────────────────────────────────────┘
 

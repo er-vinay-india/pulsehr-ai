@@ -38,10 +38,16 @@ Implemented in `backend/app/services/adaptive_dashboard/` and `frontend/src/page
      - *Domain-Specific Decision Prioritization*: The hero and top supporting slots reflect domain decision priorities (`DomainVisualPriority`). For workforce, WFO policy compliance (`TARGET_VS_ACTUAL`, P1) anchors the Hero card, followed by leader rankings (`RANKING`, P1), period cross-tabulation matrix (`MATRIX`, P1), and capacity reconciliation (`COMPOSITION`, P1).
      - *Perceptual Diversity (Visual Morphology)*: Evaluated by `VisualMorphology` (`LENGTH`, `POINT`, `RANGE`, `AREA`, `TEMPORAL_PATH`, `MATRIX`, `DISTRIBUTION`, `ICONIC`, `HIERARCHICAL`, `FLOW`). HighView strictly caps `max_same_morphology <= 2` and enforces $\ge 5$ distinct morphologies, ensuring that length-based bars never visually dominate the portfolio.
      - *Intent & Family Diversity Quotas*: Enforces $\ge 4$ distinct analytical intents (max 3 per intent) and $\ge 5$ distinct chart families (max 2 per family).
-     - *Gated Visual Archetypes*:
-       - `HERO / LARGE (span 12)`: Primary benchmark ranking or policy compliance hero, and 2D cross-tabulation heatmaps (`heatmap`).
+     - *Gated Visual Archetypes & Spatial Profiles*:
+       - `HERO / LARGE (span 12, 8)`: Primary benchmark ranking or policy compliance hero, and 2D cross-tabulation heatmaps (`heatmap`).
        - `MEDIUM (span 6)`: Distribution box plots (`box_plot`), bivariate relationship scatter plots (`scatter`), capacity composition (`100_percent_stacked_bar`), and statistical anomaly variance bars (`variance_bar`).
-       - `COMPACT (span 4) / MICRO (span 3)`: Olympic Top 3 podium (`podium_top_3` with gold/silver/bronze pedestals and strict $\le 20$ character label truncation), target vs actual bullet charts (`bullet`), metric comparisons (`lollipop`), and disparity range spreads (`dumbbell`).
+       - `COMPACT (span 4)`: Olympic Top 3 podium (`podium_top_3` with gold/silver/bronze pedestals and strict $\le 20$ character label truncation), target vs actual bullet charts (`bullet`), metric comparisons (`lollipop`), and disparity range spreads (`dumbbell`).
+     - *Intelligent Spatial Composition Engine (`SpatialCompositionOptimizer`)*:
+       Server-side layout optimizer packages the selected portfolio into a structured `DashboardLayoutPlan` containing sections, rows, and cards:
+       - Resolves visual spans dynamically based on archetype intrinsic shape profiles (`VisualSpatialProfile`) rather than rigid static hints.
+       - Guarantees zero orphan cards and $\ge 85\%$ row utilization (achieving 100% on live datasets) via canonical row packing templates (`12`, `8+4`, `6+6`, `7+5`, `4+4+4`).
+       - Synchronizes card and viewport heights across paired row companions (`HeightBalanceIntegrity`), eliminating ragged row baselines.
+       - Emits server-driven `topic.spatial_placement` consumed by `ExecutiveVisualCard.jsx` (`span-12`, `span-8`, `span-6`, `span-4`) with synchronized height classes (`height-short`, `height-standard`, `height-tall`).
      - *Semantic Visual Compression Layer (`SemanticVisualCompressionLayer`)*: Level-1 executive cards eliminate report prose in favor of high visual density:
        - `short_title`: $\le 7$ words (executive noun phrase).
        - `short_context`: $\le 8$ words (cohort context & scope).
@@ -67,7 +73,7 @@ Implemented in `backend/app/services/adaptive_dashboard/` and `frontend/src/page
   - *Standardized `CardActions` Component*: Unifies primary ("Inspect") and secondary ("Deep dive") controls into accessible buttons and anchors.
   - *Portal `<dialog>` Quick Inspect*: Quick inspect context is rendered through React Portal (`createPortal(..., document.body)`) using a native `<dialog open>` element with keyboard focus trap, `Escape` key dismissal, and automatic focus restoration to the originating trigger button.
 - **Redundancy Suppression (`VisualStoryRedundancyIntegrity`)**: Standalone scalar cards that duplicate values in the KPI strip are suppressed from the visual stories grid.
-- **Responsive Sizing & Zero Overflow**: 12-column grid system collapses compact/micro cards to 6-span on tablets (max-width 1024px) and 12-span single-column on mobile (<768px), guaranteeing zero horizontal clipping or overflow.
+- **Multi-Viewport Responsive Sizing & Zero Overflow**: 12-column grid system collapses compact cards to 6-span on tablets (max-width 1024px) and 12-span single-column on mobile (<768px), guaranteeing zero horizontal clipping, zero orphan cards, and zero CSS `order:` reordering.
 
 ### Consumer 3B: Data Explorer ("Show me the analysis behind it.")
 Implemented in `frontend/src/pages/DataExplorerPage.jsx` and `frontend/src/components/explorer/`:

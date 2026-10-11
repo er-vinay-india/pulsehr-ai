@@ -126,9 +126,18 @@ export default function ExecutiveVisualCard({
     };
   }, [topic]);
 
-  // Layout hint class for CSS Grid
+  // Server-driven Spatial Placement (SpatialCompositionOptimizer)
+  const colSpan = topic.spatial_placement?.column_span || (isHero ? 12 : topic.layout_hint === "LARGE" ? 8 : topic.layout_hint === "COMPACT" ? 4 : 6);
+  const heightClass = topic.spatial_placement?.height_class || (isHero ? "standard" : "standard");
   const layoutHint = (topic.layout_hint || topic.visual_spec?.layout_hint || (isHero ? "HERO" : "MEDIUM")).toLowerCase();
-  const layoutClass = `layout-hint-${layoutHint} visual-card--${layoutHint}`;
+  const layoutClass = `span-${colSpan} height-${heightClass} layout-hint-${layoutHint} visual-card--${layoutHint}`;
+
+  // Synchronized chart height based on row height class
+  const chartHeight = useMemo(() => {
+    if (heightClass === "tall") return "320px";
+    if (heightClass === "short") return "190px";
+    return isHero ? "280px" : "230px";
+  }, [heightClass, isHero]);
 
   const accessibleChartDescription = topic.primary_takeaway || topic.takeaway || topic.title || "Visual analytics chart.";
 
@@ -136,8 +145,11 @@ export default function ExecutiveVisualCard({
     <article
       className={`executive-visual-card executive-insight-card ${isHero ? "hero-card visual-card--hero" : "supporting-card"} ${layoutClass}`}
       data-testid={isHero ? "hero-card" : `supporting-card-${topic.topic_id}`}
+      data-column-span={colSpan}
+      data-height-class={heightClass}
       aria-labelledby={`topic-title-${topic.topic_id}`}
       style={{
+        gridColumn: `span ${colSpan}`,
         backgroundColor: themeTokens?.colors?.surface,
         border: `1px solid ${isHero ? (themeTokens?.colors?.brandBlue || "#2563eb") : themeTokens?.colors?.borderSubtle}`,
         borderRadius: "12px",
@@ -281,7 +293,7 @@ export default function ExecutiveVisualCard({
             visualSpec={compactVisualSpec}
             themeTokens={themeTokens}
             isDark={isDark}
-            height={isHero ? "290px" : "220px"}
+            height={chartHeight}
           />
           {/* 3. FIGCAPTION ("What can I do next?"): Compressed finding + Deep dive link */}
           <figcaption

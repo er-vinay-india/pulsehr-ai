@@ -43,6 +43,11 @@ from .semantic_visual_compression import (
     SemanticVisualCompressionLayer,
     VisualMicrocopy,
 )
+from .spatial_composition_optimizer import (
+    SpatialCompositionOptimizer,
+    SpatialPlacement,
+    DashboardLayoutPlan,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +82,7 @@ class ExecutiveTopic(BaseModel):
     selected_or_suppressed: str = "SELECTED"
     suppression_reason: str | None = None
     visual_microcopy: VisualMicrocopy | None = None
+    spatial_placement: SpatialPlacement | None = None
 
 
 class ICompositionStrategy(ABC):
@@ -631,7 +637,9 @@ class WorkforceCompositionStrategy(ICompositionStrategy):
         )
         topics.append(topic_action)
 
-        return topics[:5]
+        selected = topics[:5]
+        SpatialCompositionOptimizer.optimize_layout(selected, domain=domain)
+        return selected
 
 
 # ==============================================================================
@@ -1299,8 +1307,8 @@ class ExecutiveCompositionPlanner:
             else:
                 v_spec = {
                     "chart_type": chart_type,
-                    "categories": cats,
-                    "values": vals or [],
+                    "categories": cats[:len(vals)] if (cats and vals and len(cats) > len(vals)) else (cats or []),
+                    "values": vals[:len(cats)] if (cats and vals and len(vals) > len(cats)) else (vals or []),
                     "unit": unit,
                     "analytical_intent": intent,
                     "evidence_ids": getattr(story, "evidence_ids", []),
@@ -1421,13 +1429,28 @@ class ExecutiveCompositionPlanner:
 
             mark_audit = VisualDataPresenceIntegrity.evaluate(v_spec)
 
+            e_ids = getattr(story, "evidence_ids", [])
+            if not e_ids:
+                if unified_graph and hasattr(unified_graph, "nodes") and unified_graph.nodes:
+                    if isinstance(unified_graph.nodes, list):
+                        e_ids = [getattr(n, "evidence_id", f"EVID-{n_idx:02d}") for n_idx, n in enumerate(unified_graph.nodes[:2])]
+                    elif isinstance(unified_graph.nodes, dict):
+                        e_ids = list(unified_graph.nodes.keys())[:2]
+                if not e_ids:
+                    e_ids = [f"EVID-{item.semantic_family.upper().replace(' ', '_')[:16]}-01"]
+
+            if "series" in v_spec:
+                for s_idx, s in enumerate(v_spec["series"]):
+                    if not s.get("evidence_id"):
+                        s["evidence_id"] = e_ids[s_idx % len(e_ids)] if e_ids else f"EVID-SERIES-{s_idx:02d}"
+
             topic = ExecutiveTopic(
                 topic_id=f"TOPIC-{out_idx:03d}",
                 title=getattr(story, "title", f"Topic {out_idx}"),
                 subtitle=getattr(story, "business_question", ""),
                 slot_type="hero" if item.is_hero else item.suggested_role,
-                evidence_ids=getattr(story, "evidence_ids", []),
-                evidence_ref=story.evidence_ids[0] if getattr(story, "evidence_ids", None) else "",
+                evidence_ids=e_ids,
+                evidence_ref=e_ids[0] if e_ids else "",
                 metric_family=item.semantic_family,
                 periods=getattr(story, "periods", []),
                 recommended_visual=item.chart_archetype,
@@ -1461,6 +1484,9 @@ class ExecutiveCompositionPlanner:
             )
             topics.append(topic)
 
+        # Optimize spatial composition and assign row/column placements
+        SpatialCompositionOptimizer.optimize_layout(topics, domain=domain_name)
+
         return topics
 
     @classmethod
@@ -1483,11 +1509,14 @@ class ExecutiveCompositionPlanner:
         domain_str = gov_metrics.get("domain_profile", {}).get("domain", DatasetDomain.WORKFORCE.value)
         strategy_cls = ExecutiveCompositionRegistry.resolve(domain_str)
 
-        return strategy_cls.plan(
+        planned_topics = strategy_cls.plan(
             selected_insights=selected_insights,
             unified_graph=unified_graph,
             dataset_name=dataset_name,
             dataset_id=dataset_id,
             gov_metrics=gov_metrics,
         )
+
+        SpatialCompositionOptimizer.optimize_layout(planned_topics, domain=domain_str)
+        return planned_topics
 

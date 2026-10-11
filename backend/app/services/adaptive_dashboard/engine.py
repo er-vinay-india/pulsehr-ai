@@ -5066,6 +5066,8 @@ def run_adaptive_dashboard(
                     resp.evidence_graph = ds_intel.evidence_graph.model_dump()
                 if ds_intel.executive_integrity:
                     resp.executive_integrity = ds_intel.executive_integrity
+                if ds_intel.layout_plan:
+                    resp.layout_plan = ds_intel.layout_plan
             except Exception as ds_err:
                 logger.warning("Could not run unified dataset intelligence for dataset %s: %s", target_dataset_id, ds_err)
 

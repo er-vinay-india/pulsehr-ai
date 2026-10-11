@@ -10,16 +10,25 @@ import SectionHeader from "./SectionHeader";
 import ScenarioSummaryCard from "./ScenarioSummaryCard";
 
 /**
- * Deterministically partition executive visual topics into logical decision tiers:
- * - Priority Decisions: Top hero decision + high-impact policy/matrix benchmarks.
- * - Diagnostic Insights: Statistical distributions, bivariate relationships, and top performers.
- * - Supporting Analysis: Comparative breakdowns, range disparities, and variance anomalies.
+ * Partition executive visual topics into logical decision tiers:
+ * Uses server-driven spatial_placement.section_id from SpatialCompositionOptimizer.
+ * Falls back to deterministic heuristic if spatial_placement is absent.
  */
-function partitionTopics(topics) {
+function partitionTopics(topics, layoutPlan = null) {
   if (!topics || topics.length === 0) {
     return { priority: [], diagnostic: [], supporting: [] };
   }
 
+  // 1. Authoritative Server-Driven Spatial Partition
+  const hasSpatialSections = topics.some((t) => Boolean(t.spatial_placement?.section_id));
+  if (hasSpatialSections) {
+    const priority = topics.filter((t) => t.spatial_placement?.section_id === "priority");
+    const diagnostic = topics.filter((t) => t.spatial_placement?.section_id === "diagnostic");
+    const supporting = topics.filter((t) => t.spatial_placement?.section_id === "supporting");
+    return { priority, diagnostic, supporting };
+  }
+
+  // 2. Fallback Heuristic
   if (topics.length <= 4) {
     return {
       priority: [topics[0]],
@@ -73,6 +82,7 @@ export default function UnifiedExecutiveInsightsGrid({
   datasetId = null,
   sheetCount = 1,
   domainProfile = null,
+  layoutPlan = null,
   onInspectInsight,
   onOpenScenarioExplorer,
 }) {
@@ -99,8 +109,8 @@ export default function UnifiedExecutiveInsightsGrid({
 
   // Partition topics across decision tiers
   const { priority, diagnostic, supporting } = useMemo(
-    () => partitionTopics(executiveTopics),
-    [executiveTopics]
+    () => partitionTopics(executiveTopics, layoutPlan),
+    [executiveTopics, layoutPlan]
   );
 
   return (

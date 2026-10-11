@@ -632,6 +632,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
                   datasetId={selectedDatasetId}
                   sheetCount={data.sheet_count || 1}
                   domainProfile={data?.domain_profile || null}
+                  layoutPlan={data?.layout_plan || null}
                   onInspectInsight={(cand) => {
                     handleOpenInspect("candidate", cand);
                   }}
