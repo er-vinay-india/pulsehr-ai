@@ -1,15 +1,14 @@
-import React, { useEffect, useRef } from "react";
-import ReactDOM from "react-dom";
-import { Sparkles, X, ShieldCheck, ArrowRight } from "lucide-react";
+import React from "react";
+import { Sparkles, ShieldCheck, ArrowRight } from "lucide-react";
+import HighviewSidePanel from "../../design-system/components/HighviewSidePanel";
+import Button from "../../design-system/components/Button";
+import { resolvePresentationLabel } from "../../design-system/registries/PresentationLabelResolver";
 import { buildExplorerUrl, getContextualExplorerTarget } from "../../utils/explorerNavigation";
 
 /**
- * Accessible Quick Inspect Dialog rendered through a React Portal outside nested layout containers.
- * Prevents overflow clipping, z-index collisions, and focus escapes.
- * Handles:
- * - ESC key dismissal
- * - Focus restoration to originating trigger button on close
- * - Focus trapping within dialog
+ * Accessible Quick Inspect Side Panel powered by HighviewSidePanel.
+ * Enforces the SidePanelMotionInvariant (originates at right edge, moves right -> left).
+ * Displays rich context, underlying mathematical grain, source sheets, and deep links.
  */
 export default function QuickInspectDialog({
   isOpen,
@@ -22,403 +21,249 @@ export default function QuickInspectDialog({
   themeTokens,
   isDark = false,
 }) {
-  const dialogRef = useRef(null);
-  const previousActiveElementRef = useRef(null);
-
-  // Store trigger button on open, return focus on close
-  useEffect(() => {
-    if (isOpen) {
-      previousActiveElementRef.current = document.activeElement;
-      // Focus the dialog container or first focusable element
-      setTimeout(() => {
-        if (dialogRef.current) {
-          dialogRef.current.focus();
-        }
-      }, 50);
-
-      const handleKeyDown = (e) => {
-        if (e.key === "Escape") {
-          e.preventDefault();
-          onClose();
-        } else if (e.key === "Tab") {
-          // Trap focus
-          if (!dialogRef.current) return;
-          const focusable = dialogRef.current.querySelectorAll(
-            'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-          );
-          if (focusable.length === 0) return;
-          const first = focusable[0];
-          const last = focusable[focusable.length - 1];
-          if (e.shiftKey && document.activeElement === first) {
-            e.preventDefault();
-            last.focus();
-          } else if (!e.shiftKey && document.activeElement === last) {
-            e.preventDefault();
-            first.focus();
-          }
-        }
-      };
-
-      window.addEventListener("keydown", handleKeyDown);
-      return () => {
-        window.removeEventListener("keydown", handleKeyDown);
-        if (previousActiveElementRef.current && typeof previousActiveElementRef.current.focus === "function") {
-          previousActiveElementRef.current.focus();
-        }
-      };
-    }
-  }, [isOpen, onClose]);
-
   if (!isOpen) return null;
 
-  const content = (
-    <div
-      className="adaptive-modal-backdrop"
-      onClick={onClose}
-      role="presentation"
-      style={{
-        position: "fixed",
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        backgroundColor: "rgba(0, 0, 0, 0.5)",
-        backdropFilter: "blur(4px)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        zIndex: 9999,
-        padding: "16px",
-      }}
-    >
-      <dialog
-        open
-        ref={dialogRef}
-        className="adaptive-inspect-dialog quick-inspect-drawer"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="inspect-dialog-title"
-        onClick={(e) => e.stopPropagation()}
-        tabIndex={-1}
-        style={{
-          margin: 0,
-          maxWidth: "540px",
-          width: "100%",
-          padding: "24px 28px",
-          borderRadius: "14px",
-          backgroundColor: themeTokens?.colors?.surface || "#ffffff",
-          border: `1px solid ${themeTokens?.colors?.borderSubtle || "#e2e8f0"}`,
-          boxShadow: "0 20px 40px -10px rgba(0, 0, 0, 0.25)",
-          color: themeTokens?.colors?.textPrimary || "#0f172a",
-        }}
+  const topic = inspectTarget;
+  const isCandidate = Boolean(selectedCandidate);
+  const title = isCandidate
+    ? selectedCandidate?.title || "Candidate Finding"
+    : topic?.title || "Executive Visual";
+
+  const cleanTitle = resolvePresentationLabel(title);
+  const contextualTarget = topic
+    ? getContextualExplorerTarget(topic, selectedDatasetId)
+    : null;
+
+  const footer = contextualTarget ? (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
+      <Button
+        variant="GHOST"
+        size="sm"
+        onClick={onClose}
+        ariaLabel="Close Quick Inspect"
       >
-        {/* Header */}
-        <div
-          className="adaptive-inspect-dialog-header"
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "flex-start",
-            marginBottom: "16px",
-          }}
-        >
+        Close
+      </Button>
+      <a
+        href={contextualTarget.url}
+        onClick={(e) => {
+          e.preventDefault();
+          window.location.href = contextualTarget.url;
+        }}
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: "6px",
+          textDecoration: "none",
+          backgroundColor: "var(--action-primary-bg, #075443)",
+          color: "var(--action-primary-text, #ffffff)",
+          fontSize: "0.82rem",
+          fontWeight: 600,
+          padding: "8px 14px",
+          borderRadius: "8px",
+          cursor: "pointer",
+          transition: "all 0.15s ease",
+        }}
+        aria-label={`${contextualTarget.label} in Data Explorer`}
+      >
+        <span>Explore in Data Explorer</span>
+        <ArrowRight size={14} aria-hidden="true" />
+      </a>
+    </div>
+  ) : (
+    <div style={{ display: "flex", justifyContent: "flex-end", width: "100%" }}>
+      <Button
+        variant="GHOST"
+        size="sm"
+        onClick={onClose}
+        ariaLabel="Close Quick Inspect"
+      >
+        Close
+      </Button>
+    </div>
+  );
+
+  return (
+    <HighviewSidePanel
+      isOpen={isOpen}
+      onClose={onClose}
+      title={cleanTitle}
+      subtitle="Contextual inspection & ground truth lineage"
+      icon={Sparkles}
+      badge="Verified"
+      breadcrumbs={["Workspace", "Dashboard", "Quick Inspect"]}
+      footer={footer}
+      width="560px"
+      maxWidth="92vw"
+      ariaLabel={`Quick Inspect for ${cleanTitle}`}
+      className="quick-inspect-side-panel"
+    >
+      <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+        {isCandidate ? (
           <div>
-            <span
-              className="dialog-kicker"
+            <h4
               style={{
-                fontSize: "0.72rem",
+                margin: "0 0 6px 0",
+                fontSize: "0.80rem",
                 fontWeight: 700,
-                letterSpacing: "0.04em",
                 textTransform: "uppercase",
-                color: themeTokens?.colors?.brandBlue || "#2563eb",
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "4px",
-                marginBottom: "4px",
+                letterSpacing: "0.05em",
+                color: "var(--color-text-muted, #3C5059)",
               }}
             >
-              <Sparkles size={12} aria-hidden="true" /> Quick Context
-            </span>
-            <h2
-              id="inspect-dialog-title"
-              className="dialog-title"
+              Candidate Specification
+            </h4>
+            <p
               style={{
-                margin: "2px 0 0 0",
-                fontSize: "1.15rem",
-                fontWeight: 700,
-                color: themeTokens?.colors?.textPrimary,
-                lineHeight: 1.3,
+                margin: 0,
+                fontSize: "0.90rem",
+                color: "var(--color-text-primary, #172B3A)",
+                lineHeight: 1.5,
               }}
             >
-              {inspectTarget === "runtime_diagnostics"
-                ? "Dataset Scope & Runtime Verification"
-                : inspectTarget === "briefing"
-                ? "Executive Briefing Overview"
-                : selectedCandidate?.title || "Decision Context"}
-            </h2>
+              {selectedCandidate.takeaway ||
+                selectedCandidate.description ||
+                "Synthesized analytical candidate."}
+            </p>
+            {selectedCandidate.metric_value != null && (
+              <div style={{ marginTop: "12px" }}>
+                <span style={{ fontSize: "0.75rem", color: "var(--color-text-muted, #3C5059)" }}>
+                  Measured Value:
+                </span>{" "}
+                <strong style={{ fontSize: "1.1rem", color: "var(--color-text-primary, #172B3A)" }}>
+                  {selectedCandidate.metric_value}
+                </strong>
+              </div>
+            )}
           </div>
-          <button
-            type="button"
-            className="modal-close-btn"
-            onClick={onClose}
-            aria-label="Close inspection details"
-            style={{
-              background: "transparent",
-              border: "none",
-              color: themeTokens?.colors?.textMuted || "#94a3b8",
-              cursor: "pointer",
-              padding: "4px",
-              borderRadius: "6px",
-              display: "flex",
-            }}
-          >
-            <X size={18} aria-hidden="true" />
-          </button>
-        </div>
+        ) : (
+          (() => {
+            const sheetCount = data?.sheet_count || activeDataset?.sheet_count || 1;
+            const sheetText = `${sheetCount} unified ${sheetCount === 1 ? "sheet" : "sheets"}`;
+            const primaryMetric = topic?.key_metric || topic?.visual_microcopy?.primary_number;
+            const subtitle = topic?.subtitle || topic?.visual_microcopy?.short_context;
+            const takeaway =
+              topic?.primary_takeaway ||
+              topic?.takeaway ||
+              topic?.visual_microcopy?.short_finding;
+            const intent = resolvePresentationLabel(topic?.analytical_intent || "Analytical Focus");
 
-        {/* Quick Inspect Body */}
-        <div
-          className="adaptive-inspect-dialog-body"
-          style={{ display: "flex", flexDirection: "column", gap: "16px" }}
-        >
-          {inspectTarget === "runtime_diagnostics" ? (
-            <>
-              <div
-                style={{
-                  fontSize: "0.86rem",
-                  color: themeTokens?.colors?.textSecondary,
-                  lineHeight: 1.5,
-                }}
-              >
-                This dashboard operates on governed workbook{" "}
-                <strong>
-                  {data?.dataset_name || activeDataset?.display_name || "Workbook"}
-                </strong>{" "}
-                across <strong>{data?.sheet_count || 1} sheet(s)</strong> and{" "}
-                <strong>{data?.relationship_count || 0} relational link(s)</strong>.
-              </div>
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "8px",
-                  fontSize: "0.80rem",
-                  color: themeTokens?.colors?.textMuted,
-                }}
-              >
-                <ShieldCheck
-                  size={14}
-                  color={themeTokens?.colors?.statusSuccess || "#10b981"}
-                  aria-hidden="true"
-                />
-                <span>
-                  Cryptographically verified against snapshot{" "}
-                  <code>{data?.snapshot || "snap_live"}</code>
-                </span>
-              </div>
-              <div style={{ marginTop: "8px" }}>
-                <a
-                  href={buildExplorerUrl({ datasetId: selectedDatasetId, tab: "technical" })}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    window.location.href = buildExplorerUrl({
-                      datasetId: selectedDatasetId,
-                      tab: "technical",
-                    });
-                  }}
-                  className="btn-primary"
+            return (
+              <>
+                {/* 1. Analytical Classification */}
+                <div
                   style={{
-                    display: "inline-flex",
+                    display: "flex",
                     alignItems: "center",
-                    gap: "6px",
-                    textDecoration: "none",
-                    fontSize: "0.82rem",
-                    padding: "8px 14px",
+                    gap: "8px",
+                    padding: "8px 12px",
                     borderRadius: "8px",
+                    backgroundColor: "var(--color-bg-subtle, #EEEFE9)",
+                    border: "1px solid var(--color-border, #D4DDD6)",
+                    fontSize: "0.78rem",
                   }}
-                  aria-label="Explore Technical Diagnostics & Records in Data Explorer"
                 >
-                  <span>Explore Technical Diagnostics & Records</span>
-                  <ArrowRight size={14} aria-hidden="true" />
-                </a>
-              </div>
-            </>
-          ) : (
-            (() => {
-              const targetTopic = selectedCandidate;
-              const contextualTarget = getContextualExplorerTarget(
-                targetTopic,
-                selectedDatasetId
-              );
-              const businessQuestion =
-                targetTopic?.visual_spec?.business_question ||
-                targetTopic?.inspect_payload?.business_question ||
-                targetTopic?.subtitle;
-              const keyMetric =
-                targetTopic?.key_metric ||
-                targetTopic?.metric_name ||
-                targetTopic?.formatted_value;
-              const takeaway =
-                targetTopic?.primary_takeaway ||
-                targetTopic?.takeaway ||
-                targetTopic?.business_impact ||
-                "Key metric distribution observed across validated scope.";
-              const sheetCount =
-                data?.sheet_count || targetTopic?.source_sheet_ids?.length || 1;
-              const sheetText = `${sheetCount} ${sheetCount === 1 ? "sheet" : "sheets"}`;
+                  <span style={{ color: "var(--color-text-muted, #3C5059)", fontWeight: 600 }}>
+                    Analytical Intent:
+                  </span>
+                  <strong style={{ color: "var(--color-text-primary, #172B3A)" }}>
+                    {intent}
+                  </strong>
+                </div>
 
-              return (
-                <>
-                  {/* 1. Business Question */}
-                  {businessQuestion && (
-                    <div
-                      style={{
-                        padding: "10px 14px",
-                        borderRadius: "8px",
-                        backgroundColor: isDark
-                          ? "rgba(37, 99, 235, 0.08)"
-                          : "rgba(37, 99, 235, 0.04)",
-                        border: `1px solid ${themeTokens?.colors?.borderSubtle || "#e2e8f0"}`,
-                      }}
-                    >
-                      <span
-                        style={{
-                          fontSize: "0.68rem",
-                          fontWeight: 700,
-                          textTransform: "uppercase",
-                          color: themeTokens?.colors?.brandBlue || "#2563eb",
-                        }}
-                      >
-                        Core Business Question
-                      </span>
-                      <p
-                        style={{
-                          margin: "2px 0 0 0",
-                          fontSize: "0.84rem",
-                          fontStyle: "italic",
-                          color: themeTokens?.colors?.textPrimary,
-                          lineHeight: 1.4,
-                        }}
-                      >
-                        "{businessQuestion}"
-                      </p>
-                    </div>
-                  )}
-
-                  {/* 2. Key Metric & Impact */}
-                  {keyMetric && (
-                    <div style={{ display: "flex", alignItems: "baseline", gap: "10px" }}>
-                      <div>
-                        <span
-                          style={{
-                            fontSize: "0.68rem",
-                            fontWeight: 700,
-                            textTransform: "uppercase",
-                            color: themeTokens?.colors?.textMuted,
-                          }}
-                        >
-                          Key Observation
-                        </span>
-                        <div
-                          style={{
-                            fontSize: "1.3rem",
-                            fontWeight: 800,
-                            color: themeTokens?.colors?.textPrimary,
-                            marginTop: "2px",
-                          }}
-                        >
-                          {keyMetric}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* 3. One-line Interpretation ("Why this matters") */}
+                {/* 2. Measured Metric Highlight */}
+                {primaryMetric && (
                   <div>
                     <span
                       style={{
-                        fontSize: "0.68rem",
+                        fontSize: "0.74rem",
                         fontWeight: 700,
                         textTransform: "uppercase",
-                        color: themeTokens?.colors?.brandBlue || "#2563eb",
+                        letterSpacing: "0.05em",
+                        color: "var(--color-text-muted, #3C5059)",
                       }}
                     >
-                      Why This Matters
+                      Measured Result
                     </span>
+                    <div
+                      style={{
+                        fontSize: "1.75rem",
+                        fontWeight: 800,
+                        color: "var(--color-brand-primary, #183B56)",
+                        lineHeight: 1.2,
+                        marginTop: "2px",
+                      }}
+                    >
+                      {primaryMetric}
+                    </div>
+                    {subtitle && (
+                      <p
+                        style={{
+                          margin: "2px 0 0 0",
+                          fontSize: "0.82rem",
+                          color: "var(--color-text-secondary, #334B57)",
+                        }}
+                      >
+                        {subtitle}
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {/* 3. Executive Takeaway */}
+                {takeaway && (
+                  <div>
+                    <h4
+                      style={{
+                        margin: "0 0 4px 0",
+                        fontSize: "0.74rem",
+                        fontWeight: 700,
+                        textTransform: "uppercase",
+                        letterSpacing: "0.05em",
+                        color: "var(--color-text-muted, #3C5059)",
+                      }}
+                    >
+                      Executive Finding
+                    </h4>
                     <p
                       style={{
-                        margin: "4px 0 0 0",
-                        fontSize: "0.86rem",
-                        color: themeTokens?.colors?.textSecondary,
-                        lineHeight: 1.45,
+                        margin: 0,
+                        fontSize: "0.88rem",
+                        color: "var(--color-text-primary, #172B3A)",
+                        lineHeight: 1.5,
                       }}
                     >
                       {takeaway}
                     </p>
                   </div>
+                )}
 
-                  {/* 4. Evidence Confidence & Source Scope */}
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "8px",
-                      fontSize: "0.78rem",
-                      color: themeTokens?.colors?.textMuted,
-                      paddingTop: "6px",
-                      borderTop: `1px solid ${themeTokens?.colors?.borderSubtle || "#e2e8f0"}`,
-                    }}
-                  >
-                    <ShieldCheck
-                      size={14}
-                      color={themeTokens?.colors?.statusSuccess || "#10b981"}
-                      aria-hidden="true"
-                    />
-                    <span>
-                      Grounded in {sheetText} · Mathematically verified · 100% confidence
-                    </span>
-                  </div>
-
-                  {/* 5. Deep Link: Explore Full Analysis */}
-                  {contextualTarget && (
-                    <div style={{ marginTop: "6px" }}>
-                      <a
-                        href={contextualTarget.url}
-                        onClick={(e) => {
-                          e.preventDefault();
-                          window.location.href = contextualTarget.url;
-                        }}
-                        style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: "6px",
-                          textDecoration: "none",
-                          backgroundColor: themeTokens?.colors?.brandBlue || "#2563eb",
-                          color: "#ffffff",
-                          fontSize: "0.82rem",
-                          fontWeight: 600,
-                          padding: "9px 16px",
-                          borderRadius: "8px",
-                          cursor: "pointer",
-                          transition: "background-color 0.15s ease",
-                        }}
-                        aria-label={`${contextualTarget.label} in Data Explorer`}
-                      >
-                        <span>Explore full analysis</span>
-                        <ArrowRight size={14} aria-hidden="true" />
-                      </a>
-                    </div>
-                  )}
-                </>
-              );
-            })()
-          )}
-        </div>
-      </dialog>
-    </div>
+                {/* 4. Evidence Confidence & Source Scope */}
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    fontSize: "0.78rem",
+                    color: "var(--color-text-muted, #3C5059)",
+                    paddingTop: "10px",
+                    borderTop: "1px solid var(--color-border, #D4DDD6)",
+                  }}
+                >
+                  <ShieldCheck
+                    size={16}
+                    color="var(--color-success, #075443)"
+                    aria-hidden="true"
+                  />
+                  <span>
+                    Grounded in {sheetText} · Mathematically verified · 100% confidence
+                  </span>
+                </div>
+              </>
+            );
+          })()
+        )}
+      </div>
+    </HighviewSidePanel>
   );
-
-  return typeof document !== "undefined"
-    ? ReactDOM.createPortal(content, document.body)
-    : null;
 }

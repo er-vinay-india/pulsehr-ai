@@ -1,5 +1,6 @@
 @use "./tokens";
 @use "./base";
+@use "../design-system/styles/design-system";
 
 .app {
   display: flex;

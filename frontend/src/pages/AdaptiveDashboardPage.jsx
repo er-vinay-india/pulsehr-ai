@@ -17,7 +17,9 @@ import {
   Loader2,
   ShieldCheck,
   ExternalLink,
+  RefreshCw,
 } from "lucide-react";
+import Button from "../design-system/components/Button";
 import ErrorBoundary from "../components/common/ErrorBoundary";
 import Select from "../components/common/Select";
 import ExecutiveBriefingCard from "../components/adaptive/ExecutiveBriefingCard";
@@ -338,36 +340,31 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
               Automated spreadsheet intelligence, cross-functional KPI tracking, and decision discovery.
             </p>
           </div>
-          <div className="header-actions-row">
+          <div className="header-actions-row" style={{ display: "flex", alignItems: "center", gap: "10px" }}>
             {Boolean(data?.domain_profile?.governed_scenario_domain || data?.domain_profile?.domain === "workforce") && (
-              <button
-                type="button"
-                className={showScenarioExplorer ? "btn-primary btn-sm" : "btn-secondary btn-sm"}
+              <Button
+                variant={showScenarioExplorer ? "PRIMARY" : "SECONDARY"}
+                size="sm"
+                icon={Sparkles}
                 onClick={() => setShowScenarioExplorer((prev) => !prev)}
                 disabled={!selectedDatasetId || calculating}
                 title="Toggle Executive Scenario Explorer & What-If Simulator"
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "5px",
-                  borderColor: showScenarioExplorer ? undefined : (themeTokens.colors.brandPurple || "#8b5cf6"),
-                  color: showScenarioExplorer ? undefined : (themeTokens.colors.brandPurple || "#8b5cf6"),
-                }}
+                ariaLabel="Toggle Executive Scenario Explorer & What-If Simulator"
               >
-                <Sparkles size={14} />
-                <span>{showScenarioExplorer ? "Hide Scenario Explorer" : "Scenario Explorer"}</span>
-              </button>
+                {showScenarioExplorer ? "Hide Scenario Explorer" : "Scenario Explorer"}
+              </Button>
             )}
-            <button
-              type="button"
-              className="btn-primary btn-sm"
+            <Button
+              variant="PRIMARY"
+              size="sm"
+              icon={Presentation}
               onClick={handleCreatePresentationFromDashboard}
               disabled={!selectedDatasetId || calculating}
               title="Generate a 16:9 executive presentation deck from active dashboard data"
+              ariaLabel="Generate executive presentation deck"
             >
-              <Presentation size={14} />
-              <span>Create Presentation</span>
-            </button>
+              Create Presentation
+            </Button>
           </div>
         </div>
 
@@ -479,15 +476,18 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
             </div>
           </div>
 
-          <button
-            type="button"
+          <Button
+            variant="GHOST"
+            size="sm"
+            icon={RefreshCw}
             className="scope-refresh-btn"
             onClick={() => setRevision((r) => r + 1)}
             disabled={calculating || !selectedDatasetId}
-            aria-label="Refresh analysis for selected workbook"
+            ariaLabel="Refresh analysis for selected workbook"
+            title="Refresh analysis for selected workbook"
           >
             Refresh
-          </button>
+          </Button>
         </div>
       </header>
 

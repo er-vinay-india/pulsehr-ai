@@ -1,7 +1,8 @@
 import React, { useMemo } from "react";
 import VisualSpecRenderer from "./VisualSpecRenderer";
 import SemanticIcon from "./SemanticIcon";
-import CardActions from "./CardActions";
+import ActionIconButton from "../../design-system/components/ActionIconButton";
+import { resolvePresentationLabel } from "../../design-system/registries/PresentationLabelResolver";
 import { getContextualExplorerTarget } from "../../utils/explorerNavigation";
 
 /**
@@ -164,74 +165,64 @@ export default function ExecutiveVisualCard({
       }}
     >
       <div>
-        {/* 1. HEADER ("What is this?"): Semantic Icon + H3 Title + Standardized CardActions */}
-        <header
-          className="visual-card__header card-header-compressed"
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            marginBottom: "4px",
-          }}
-        >
-          <div
-            className="visual-card__title-group card-title-group"
-            style={{ display: "flex", alignItems: "center", gap: "8px", minWidth: 0 }}
+        {/* 1. HEADER ("What is this?"): Semantic Icon + H3 Title (Protected) + ActionIconButton */}
+        <header className="visual-card__header visual-card__header-grid">
+          <span
+            className="visual-card__icon semantic-icon-wrapper"
+            aria-hidden="true"
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              width: "26px",
+              height: "26px",
+              borderRadius: "6px",
+              backgroundColor: intentBg,
+              color: intentColor,
+              flexShrink: 0,
+            }}
           >
-            <span
-              className="visual-card__icon semantic-icon-wrapper"
-              aria-hidden="true"
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                width: "26px",
-                height: "26px",
-                borderRadius: "6px",
-                backgroundColor: intentBg,
-                color: intentColor,
-                flexShrink: 0,
-              }}
-            >
-              <SemanticIcon name={microcopy.icon} size={15} />
-            </span>
+            <SemanticIcon name={microcopy.icon} size={15} />
+          </span>
+
+          <div className="visual-card__title-cell">
             <h3
               id={`topic-title-${topic.topic_id}`}
               className="visual-card__title card-compressed-title"
               title={topic.title}
+              aria-label={topic.title}
               style={{
                 margin: 0,
-                fontSize: isHero ? "1.15rem" : "0.95rem",
+                fontSize: isHero ? "1.15rem" : "0.98rem",
                 fontWeight: 700,
                 color: themeTokens?.colors?.textPrimary,
                 lineHeight: 1.25,
-                whiteSpace: "nowrap",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
               }}
             >
-              {microcopy.short_title}
+              {microcopy.short_title || topic.title}
             </h3>
           </div>
 
-          <CardActions
-            primary={{
-              label: microcopy.cta || "Inspect →",
-              onClick: () => onInspect && onInspect(topic),
-              ariaLabel: `Inspect ${topic.title}`,
-            }}
-            secondary={
-              contextualTarget
-                ? {
-                    label: contextualTarget.label,
-                    href: contextualTarget.url,
-                    ariaLabel: `${contextualTarget.label} in Data Explorer`,
-                  }
-                : null
-            }
-            themeTokens={themeTokens}
-            isDark={isDark}
-          />
+          <div className="visual-card__actions-cell">
+            {contextualTarget && (
+              <ActionIconButton
+                action="deep_dive"
+                title={topic.title}
+                tooltip={`${contextualTarget.label} in Data Explorer`}
+                ariaLabel={`${contextualTarget.label} in Data Explorer`}
+                href={contextualTarget.url}
+                size={14}
+              />
+            )}
+            <ActionIconButton
+              action="inspect"
+              title={topic.title}
+              tooltip={`Inspect ${topic.title}`}
+              ariaLabel={`Inspect ${topic.title}`}
+              onClick={() => onInspect && onInspect(topic)}
+              size={14}
+            />
+          </div>
         </header>
 
         {/* Metric / Context sub-strip: Primary metric number + Short context sentence */}

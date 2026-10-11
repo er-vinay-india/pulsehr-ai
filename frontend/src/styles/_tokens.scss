@@ -131,7 +131,7 @@
   --nav-active-bg: var(--color-bg-soft-teal);
   --nav-active-indicator: var(--color-brand-secondary);
 
-  /* Buttons */
+  /* Buttons & Central Action Tokens */
   --btn-primary-bg: var(--color-brand-accent);
   --btn-primary-hover: #064536;
   --btn-primary-fg: #FFFFFF;
@@ -145,6 +145,59 @@
   --btn-outline-border: var(--color-brand-accent);
   --btn-outline-fg: var(--color-brand-accent);
   --btn-outline-bg: transparent;
+
+  /* Central Semantic Action Tokens (Light Mode - WCAG AAA >= 7:1) */
+  --action-primary-bg: #075443;
+  --action-primary-text: #FFFFFF;
+  --action-primary-border: #075443;
+  --action-primary-hover-bg: #064536;
+
+  --action-secondary-bg: #183B56;
+  --action-secondary-text: #FFFFFF;
+  --action-secondary-border: #183B56;
+  --action-secondary-hover-bg: #122F45;
+
+  --action-ghost-bg: transparent;
+  --action-ghost-text: var(--color-text-primary);
+  --action-ghost-border: var(--color-border);
+  --action-ghost-hover-bg: var(--color-bg-subtle);
+
+  --action-icon-bg: var(--color-bg-subtle);
+  --action-icon-text: var(--color-text-secondary);
+  --action-icon-border: var(--color-border);
+  --action-icon-hover-bg: var(--color-bg-soft-blue);
+  --action-icon-hover-text: var(--color-brand-blue);
+  --action-icon-hover-border: var(--color-brand-blue);
+
+  --action-focus-ring: rgba(7, 84, 67, 0.4);
+
+  /* Central Typography Scale Tokens (Perceptual Hierarchy) */
+  --font-size-heading-1: 2rem;       /* 32px - Page Dominant */
+  --line-height-heading-1: 1.15;
+  --font-weight-heading-1: 700;
+
+  --font-size-heading-2: 1.45rem;    /* 23.2px - Major Section Anchors */
+  --line-height-heading-2: 1.25;
+  --font-weight-heading-2: 650;
+
+  --font-size-heading-3: 1.05rem;    /* 16.8px - Visual Card Titles */
+  --line-height-heading-3: 1.3;
+  --font-weight-heading-3: 600;
+
+  --font-size-heading-4: 0.92rem;    /* 14.7px - Sub-Card & Table Headers */
+  --line-height-heading-4: 1.35;
+  --font-weight-heading-4: 600;
+
+  --font-size-body: 0.875rem;        /* 14px */
+  --line-height-body: 1.5;
+
+  --font-size-caption: 0.75rem;      /* 12px */
+  --line-height-caption: 1.4;
+
+  --font-size-eyebrow: 0.6875rem;    /* 11px - Metadata Badges */
+  --letter-spacing-eyebrow: 0.06em;
+  --font-weight-eyebrow: 700;
+
 
   /* ------------------------------------------------------------------------
      3. HRIDAY ASSISTANT PALETTE (Warm, Human, Intelligent, Supportive)
@@ -365,7 +418,7 @@
   --nav-active-bg: var(--color-bg-soft-teal);
   --nav-active-indicator: var(--color-brand-secondary);
 
-  /* Buttons */
+  /* Buttons & Central Action Tokens */
   --btn-primary-bg: var(--color-brand-accent);
   --btn-primary-hover: #A6E7CB;
   --btn-primary-fg: #172B3A;
@@ -379,6 +432,31 @@
   --btn-outline-border: var(--color-brand-accent);
   --btn-outline-fg: var(--color-brand-accent);
   --btn-outline-bg: transparent;
+
+  /* Central Semantic Action Tokens (Dark Mode - WCAG AAA >= 7:1) */
+  --action-primary-bg: #147A62;
+  --action-primary-text: #FFFFFF;
+  --action-primary-border: #147A62;
+  --action-primary-hover-bg: #1A9678;
+
+  --action-secondary-bg: #234E70;
+  --action-secondary-text: #FFFFFF;
+  --action-secondary-border: #234E70;
+  --action-secondary-hover-bg: #2C618A;
+
+  --action-ghost-bg: transparent;
+  --action-ghost-text: var(--color-text-primary);
+  --action-ghost-border: var(--color-border);
+  --action-ghost-hover-bg: var(--color-bg-subtle);
+
+  --action-icon-bg: rgba(255, 255, 255, 0.06);
+  --action-icon-text: var(--color-text-secondary);
+  --action-icon-border: var(--color-border);
+  --action-icon-hover-bg: rgba(169, 202, 232, 0.16);
+  --action-icon-hover-text: var(--color-brand-blue);
+  --action-icon-hover-border: var(--color-brand-blue);
+
+  --action-focus-ring: rgba(20, 122, 98, 0.5);
 
   /* ------------------------------------------------------------------------
      3. HRIDAY Assistant Dark Tokens (Warm, Focused, Human-Friendly)

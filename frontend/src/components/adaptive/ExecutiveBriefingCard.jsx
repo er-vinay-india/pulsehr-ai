@@ -1,6 +1,8 @@
 import React, { useState } from "react";
 import { Volume2, VolumeX, ChevronDown, ChevronUp, Info, ShieldCheck } from "lucide-react";
 import VoiceoverPlayer from "../VoiceoverPlayer";
+import Button from "../../design-system/components/Button";
+import ActionIconButton from "../../design-system/components/ActionIconButton";
 import { useTheme } from "../../context/ThemeContext";
 import { getThemeTokens } from "../../theme/tokens";
 
@@ -83,50 +85,27 @@ export default function ExecutiveBriefingCard({ briefing, snapshot, onInspect, o
             />
           </div>
 
-          <button
-            type="button"
+          <Button
+            variant="GHOST"
+            size="sm"
             className="compact-briefing-toggle-btn"
             onClick={() => setShowFullBriefing((prev) => !prev)}
             aria-expanded={showFullBriefing}
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "5px",
-              padding: "5px 10px",
-              borderRadius: "6px",
-              fontSize: "0.76rem",
-              fontWeight: 600,
-              backgroundColor: "var(--color-bg-subtle, rgba(0, 0, 0, 0.04))",
-              border: `1px solid ${themeTokens.colors.borderSubtle}`,
-              color: themeTokens.colors.textSecondary,
-              cursor: "pointer",
-            }}
+            ariaLabel={showFullBriefing ? "Close details" : "Read briefing"}
+            iconRight={showFullBriefing ? ChevronUp : ChevronDown}
           >
-            <span>{showFullBriefing ? "Close details" : "Read briefing"}</span>
-            {showFullBriefing ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-          </button>
+            {showFullBriefing ? "Close details" : "Read briefing"}
+          </Button>
 
           {inspectHandler && (
-            <button
-              type="button"
+            <ActionIconButton
+              action="inspect"
+              title="Executive Briefing"
+              tooltip="Inspect briefing evidence and calculations"
+              ariaLabel="Inspect executive briefing calculation"
               onClick={() => inspectHandler("briefing", briefing.inspect)}
-              aria-label="Inspect executive briefing calculation"
-              title="Inspect briefing evidence and calculations"
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                width: "28px",
-                height: "28px",
-                borderRadius: "6px",
-                background: "none",
-                border: `1px solid ${themeTokens.colors.borderSubtle}`,
-                color: themeTokens.colors.textMuted,
-                cursor: "pointer",
-              }}
-            >
-              <Info size={14} />
-            </button>
+              size={14}
+            />
           )}
         </div>
       </div>
