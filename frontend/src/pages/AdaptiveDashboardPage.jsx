@@ -275,7 +275,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
 
   const handleOpenInspect = (target, cand = null) => {
     setInspectTarget(target);
-    if (cand) setSelectedCandidate(cand);
+    setSelectedCandidate(cand || (target === "briefing" ? briefingElement : null));
     setInspectModalOpen(true);
   };
 
@@ -499,7 +499,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
                 <ExecutiveBriefingCard
                   briefing={briefingElement}
                   sheetId={selectedDatasetId}
-                  onOpenInspect={() => handleOpenInspect("briefing")}
+                  onOpenInspect={() => handleOpenInspect("briefing", briefingElement)}
                   snapshot={data?.snapshot}
                   domain={data?.contract?.domain}
                 />

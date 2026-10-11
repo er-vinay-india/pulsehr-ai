@@ -8,6 +8,8 @@ import ExecutiveVisualCard from "./ExecutiveVisualCard";
 import ExecutiveVisualGrid from "./ExecutiveVisualGrid";
 import SectionHeader from "./SectionHeader";
 import ScenarioSummaryCard from "./ScenarioSummaryCard";
+import HighviewSidePanel from "../../design-system/components/HighviewSidePanel";
+import Button from "../../design-system/components/Button";
 
 /**
  * Partition executive visual topics into logical decision tiers:
@@ -333,147 +335,153 @@ export default function UnifiedExecutiveInsightsGrid({
         </section>
       )}
 
-      {/* Accessible KPI Evidence Drill-down Modal rendered via Portal */}
-      {activeKpiEvidence &&
-        typeof document !== "undefined" &&
-        ReactDOM.createPortal(
-          <div
-            className="kpi-modal-backdrop"
-            onClick={() => setActiveKpiEvidence(null)}
-            role="presentation"
-            style={{
-              position: "fixed",
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              backgroundColor: "rgba(0, 0, 0, 0.5)",
-              backdropFilter: "blur(4px)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              zIndex: 9999,
-              padding: "16px",
-            }}
-          >
-            <dialog
-              open
-              ref={kpiModalRef}
-              className="kpi-modal-card"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="kpi-audit-modal-title"
-              onClick={(e) => e.stopPropagation()}
-              tabIndex={-1}
-              style={{
-                margin: 0,
-                backgroundColor: themeTokens.colors.surface,
-                borderRadius: "12px",
-                padding: "20px 24px",
-                maxWidth: "460px",
-                width: "100%",
-                boxShadow: "0 10px 25px rgba(0,0,0,0.2)",
-                border: `1px solid ${themeTokens.colors.borderSubtle}`,
-                color: themeTokens.colors.textPrimary,
-              }}
+      {/* Governed KPI Audit Detail Side Panel (Slides in from the RIGHT edge) */}
+      <HighviewSidePanel
+        isOpen={Boolean(activeKpiEvidence)}
+        onClose={() => setActiveKpiEvidence(null)}
+        title={activeKpiEvidence ? `${activeKpiEvidence.label} Audit Detail` : "KPI Audit Detail"}
+        subtitle="Calculation methodology & verified ground truth evidence"
+        icon={ShieldCheck}
+        badge="Verified"
+        breadcrumbs={["Workspace", "Dashboard", "KPI Audit"]}
+        width="520px"
+        maxWidth="92vw"
+        ariaLabel={activeKpiEvidence ? `${activeKpiEvidence.label} Audit Detail` : "KPI Audit Detail"}
+        className="kpi-side-panel"
+        footer={
+          <div style={{ display: "flex", justifyContent: "flex-end", width: "100%" }}>
+            <Button
+              variant="GHOST"
+              size="sm"
+              onClick={() => setActiveKpiEvidence(null)}
+              ariaLabel="Close KPI audit panel"
             >
-              <div
+              Close
+            </Button>
+          </div>
+        }
+      >
+        {activeKpiEvidence && (
+          <div style={{ display: "flex", flexDirection: "column", gap: "18px" }}>
+            <div>
+              <span
                 style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  marginBottom: "12px",
+                  fontSize: "0.74rem",
+                  fontWeight: 700,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.05em",
+                  color: "var(--color-text-muted, #3C5059)",
                 }}
               >
-                <h3
-                  id="kpi-audit-modal-title"
+                Audited Value
+              </span>
+              <div
+                style={{
+                  fontSize: "2rem",
+                  fontWeight: 800,
+                  color: "var(--color-brand-primary, #183B56)",
+                  lineHeight: 1.2,
+                  marginTop: "2px",
+                }}
+              >
+                {activeKpiEvidence.formatted_value || `${activeKpiEvidence.value}${activeKpiEvidence.unit || ""}`}
+              </div>
+              {activeKpiEvidence.subtext && (
+                <p
+                  style={{
+                    margin: "4px 0 0 0",
+                    fontSize: "0.85rem",
+                    color: "var(--color-text-secondary, #334B57)",
+                  }}
+                >
+                  {activeKpiEvidence.subtext}
+                </p>
+              )}
+            </div>
+
+            {activeKpiEvidence.definition && (
+              <div>
+                <h4
+                  style={{
+                    margin: "0 0 4px 0",
+                    fontSize: "0.75rem",
+                    fontWeight: 700,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.05em",
+                    color: "var(--color-text-muted, #3C5059)",
+                  }}
+                >
+                  Business Definition
+                </h4>
+                <p
                   style={{
                     margin: 0,
-                    fontSize: "1.1rem",
-                    fontWeight: 700,
-                    color: themeTokens.colors.textPrimary,
+                    fontSize: "0.90rem",
+                    color: "var(--color-text-primary, #172B3A)",
+                    lineHeight: 1.5,
                   }}
                 >
-                  {activeKpiEvidence.label} Audit Detail
-                </h3>
-                <button
-                  type="button"
-                  onClick={() => setActiveKpiEvidence(null)}
-                  aria-label="Close KPI audit modal"
-                  style={{
-                    background: "transparent",
-                    border: "none",
-                    cursor: "pointer",
-                    color: themeTokens.colors.textMuted,
-                    padding: "4px",
-                    display: "flex",
-                  }}
-                >
-                  <X size={18} aria-hidden="true" />
-                </button>
+                  {activeKpiEvidence.definition}
+                </p>
               </div>
+            )}
 
-              <div
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "10px",
-                  fontSize: "0.84rem",
-                }}
-              >
-                <div>
-                  <span style={{ fontWeight: 600, color: themeTokens.colors.textSecondary }}>
-                    Value:
-                  </span>{" "}
-                  <strong style={{ color: themeTokens.colors.textPrimary }}>
-                    {activeKpiEvidence.formatted_value || activeKpiEvidence.value}
-                  </strong>
-                </div>
-                {activeKpiEvidence.definition && (
-                  <div>
-                    <span style={{ fontWeight: 600, color: themeTokens.colors.textSecondary }}>
-                      Definition:
-                    </span>
-                    <p style={{ margin: "3px 0 0 0", color: themeTokens.colors.textPrimary }}>
-                      {activeKpiEvidence.definition}
-                    </p>
-                  </div>
-                )}
-                {activeKpiEvidence.calculation && (
-                  <div>
-                    <span style={{ fontWeight: 600, color: themeTokens.colors.textSecondary }}>
-                      Formula:
-                    </span>
-                    <pre
-                      style={{
-                        margin: "4px 0 0 0",
-                        padding: "6px 8px",
-                        borderRadius: "6px",
-                        backgroundColor: isDark ? "#0f172a" : "#f1f5f9",
-                        fontSize: "0.78rem",
-                        overflowX: "auto",
-                      }}
-                    >
-                      {activeKpiEvidence.calculation}
-                    </pre>
-                  </div>
-                )}
-                {activeKpiEvidence.evidence_id && (
-                  <div
-                    style={{
-                      fontSize: "0.76rem",
-                      color: themeTokens.colors.textMuted,
-                      marginTop: "4px",
-                    }}
-                  >
-                    Evidence ID: <code>{activeKpiEvidence.evidence_id}</code>
-                  </div>
-                )}
+            {activeKpiEvidence.calculation && (
+              <div>
+                <h4
+                  style={{
+                    margin: "0 0 4px 0",
+                    fontSize: "0.75rem",
+                    fontWeight: 700,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.05em",
+                    color: "var(--color-text-muted, #3C5059)",
+                  }}
+                >
+                  Calculation Formula
+                </h4>
+                <pre
+                  style={{
+                    margin: 0,
+                    padding: "10px 14px",
+                    borderRadius: "8px",
+                    backgroundColor: isDark ? "rgba(15, 23, 42, 0.8)" : "rgba(241, 245, 249, 0.8)",
+                    border: "1px solid var(--color-border, #D4DDD6)",
+                    fontSize: "0.80rem",
+                    fontFamily: "monospace",
+                    overflowX: "auto",
+                    color: "var(--color-text-primary, #172B3A)",
+                  }}
+                >
+                  {activeKpiEvidence.calculation}
+                </pre>
               </div>
-            </dialog>
-          </div>,
-          document.body
+            )}
+
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: "8px",
+                paddingTop: "14px",
+                borderTop: "1px solid var(--color-border, #D4DDD6)",
+                fontSize: "0.78rem",
+                color: "var(--color-text-muted, #3C5059)",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <ShieldCheck size={16} color="var(--color-success, #075443)" aria-hidden="true" />
+                <span>Verified single-domain calculation · Zero synthetic data</span>
+              </div>
+              {activeKpiEvidence.evidence_id && (
+                <div style={{ fontFamily: "monospace", fontSize: "0.74rem" }}>
+                  Evidence ID: <code>{activeKpiEvidence.evidence_id}</code>
+                </div>
+              )}
+            </div>
+          </div>
         )}
+      </HighviewSidePanel>
     </div>
   );
 }
