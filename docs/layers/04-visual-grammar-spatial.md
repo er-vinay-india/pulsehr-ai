@@ -141,12 +141,14 @@ Implemented in `backend/app/services/adaptive_dashboard/visual_portfolio_optimiz
    - `cta`: $\le 3$ words (e.g. "Inspect →").
    - `SemanticIconRegistry`: Deterministic SVG icons (`target`, `trophy`, `users`, `calendar`, `alert`, `trend`, `distribution`, `compare`, `relationship`, `shield`, `matrix`, `wind`).
    - **Reduced Card Chrome**: Never permanently renders `recommended_action` inside Level-1 cards. Visual area takes > 85% of card space. Full business questions, unabridged explanations, recommended action steps, and evidence citations live inside the Quick Inspect Drawer and Data Explorer.
-5. **Responsive 12-Column Spatial Grid**:
-   - `HERO` (`layout-hint-hero`): `span 12` (full row prominence).
-   - `LARGE` (`layout-hint-large`): `span 12`.
-   - `MEDIUM` (`layout-hint-medium`): `span 6` (half width on desktop).
-   - `COMPACT` (`layout-hint-compact`): `span 4` (1/3 width on desktop).
-   - `MICRO` (`layout-hint-micro`): `span 3` (1/4 width on desktop).
+5. **Responsive 12-Column Spatial Grid & Semantic Landmarks**:
+   - `HERO` (`layout-hint-hero`, `visual-card--hero`): `span 12` (full row prominence).
+   - `LARGE` (`layout-hint-large`, `visual-card--large`): `span 12`.
+   - `MEDIUM` (`layout-hint-medium`, `visual-card--medium`): `span 6` (half width on desktop).
+   - `COMPACT` (`layout-hint-compact`, `visual-card--compact`): `span 4` (1/3 width on desktop).
+   - `MICRO` (`layout-hint-micro`, `visual-card--micro`): `span 3` (1/4 width on desktop).
+   - **CSS Grid vs Flexbox Boundary**: CSS Grid exclusively governs page sections and visual card portfolios (`ExecutiveVisualGrid`). Flexbox exclusively governs component internals (card headers, metric wrappers, button groups).
+   - **DOM Order Equals Reading Order**: DOM elements are rendered in strict order of analytical importance (Priority &rarr; Diagnostic &rarr; Supporting). CSS `order:` properties are permanently barred.
    - **Breakpoints**:
      - Desktop ($\ge 1025\mathrm{px}$): Full multi-column grid density.
      - Tablet ($\le 1024\mathrm{px}$): Compact and micro cards collapse to `span 6`.

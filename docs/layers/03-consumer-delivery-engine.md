@@ -52,6 +52,20 @@ Implemented in `backend/app/services/adaptive_dashboard/` and `frontend/src/page
      - *Truth > Quota Invariant*: HighView never synthesizes artificial stories, fabricated entities, or fake temporal dimensions to satisfy a count quota.
   4. **Top 3 / Bottom 3 Ranking Card**: Compact ranking overview with polarity awareness (`HIGHER_IS_BETTER` vs `LOWER_IS_BETTER`). Enforces a maximum of 6 unique entities and avoids duplicate entries on small cohorts ($N \le 6$). Deep-links via `"Explore full ranking →"`.
   5. **Compact Scenario Summary**: High-level simulation impact card, strictly gated to entitled domains.
+- **Semantic DOM Hierarchy & Page Landmarks**:
+  - *Single Document H1*: Exactly one `<h1>Executive Dashboard</h1>` on the page.
+  - *Logical H2 Section Groups*: Major decision sections are encapsulated in `<section aria-labelledby="...">` with styled `<h2>` headers:
+    - `H2: Executive Summary` (`dashboard-section--summary`)
+    - `H2: Key Performance Indicators` (`dashboard-section--kpis` using semantic `<dl>`, `<dt>`, `<dd>`)
+    - `H2: Priority Decisions` (`dashboard-section--priority` containing hero & large P1 decisions)
+    - `H2: Diagnostic Insights` (`dashboard-section--diagnostics` containing distributions, correlations, and podiums)
+    - `H2: Supporting Analysis` (`dashboard-section--supporting` containing comparative rankings and anomalies)
+    - `H2: Scenario Analysis` (`dashboard-section--scenario` when domain-entitled)
+    - `H2: Evidence & Governance` (`dashboard-section--evidence` as a semantic `<aside>`)
+  - *Independent `<article>` Visual Cards with `<h3>`*: Every visual story is an `<article className="executive-visual-card">` with an `<h3>` heading, guaranteeing a strict non-skipping heading outline (`H1` &rarr; `H2` &rarr; `H3`).
+  - *Semantic `<figure>` and `<figcaption>` Boundary*: Charts live inside `<figure className="visual-card__figure">` with an accessible `<p className="sr-only">` description and `<figcaption className="visual-card__figcaption">` containing the short finding and deep-link action.
+  - *Standardized `CardActions` Component*: Unifies primary ("Inspect") and secondary ("Deep dive") controls into accessible buttons and anchors.
+  - *Portal `<dialog>` Quick Inspect*: Quick inspect context is rendered through React Portal (`createPortal(..., document.body)`) using a native `<dialog open>` element with keyboard focus trap, `Escape` key dismissal, and automatic focus restoration to the originating trigger button.
 - **Redundancy Suppression (`VisualStoryRedundancyIntegrity`)**: Standalone scalar cards that duplicate values in the KPI strip are suppressed from the visual stories grid.
 - **Responsive Sizing & Zero Overflow**: 12-column grid system collapses compact/micro cards to 6-span on tablets (max-width 1024px) and 12-span single-column on mobile (<768px), guaranteeing zero horizontal clipping or overflow.
 

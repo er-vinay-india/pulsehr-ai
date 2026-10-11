@@ -804,7 +804,10 @@
 /* --------------------------------------------------------------------------
    7. Executive Visual Density & Diversity Grid (Governed 8-15 Visual Engine)
    -------------------------------------------------------------------------- */
-.supporting-visuals-grid {
+.executive-visual-grid,
+.supporting-visuals-grid,
+.priority-visuals-grid,
+.diagnostic-visuals-grid {
   display: grid;
   grid-template-columns: repeat(12, 1fr);
   gap: 16px;
@@ -812,19 +815,24 @@
   box-sizing: border-box;
 
   .layout-hint-hero,
-  .layout-hint-large {
+  .layout-hint-large,
+  .visual-card--hero,
+  .visual-card--large {
     grid-column: span 12;
   }
 
-  .layout-hint-medium {
+  .layout-hint-medium,
+  .visual-card--medium {
     grid-column: span 6;
   }
 
-  .layout-hint-compact {
+  .layout-hint-compact,
+  .visual-card--compact {
     grid-column: span 4;
   }
 
-  .layout-hint-micro {
+  .layout-hint-micro,
+  .visual-card--micro {
     grid-column: span 3;
   }
 
@@ -834,7 +842,9 @@
 
   @media (max-width: 1024px) {
     .layout-hint-compact,
-    .layout-hint-micro {
+    .layout-hint-micro,
+    .visual-card--compact,
+    .visual-card--micro {
       grid-column: span 6;
     }
 
@@ -852,11 +862,76 @@
     .layout-hint-medium,
     .layout-hint-compact,
     .layout-hint-micro,
+    .visual-card--hero,
+    .visual-card--large,
+    .visual-card--medium,
+    .visual-card--compact,
+    .visual-card--micro,
     .scenario-summary-card {
       grid-column: span 1;
       width: 100%;
       min-width: 0;
     }
+  }
+}
+
+/* --------------------------------------------------------------------------
+   7b. Semantic Section & Landmark Containers
+   -------------------------------------------------------------------------- */
+.dashboard-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  box-sizing: border-box;
+
+  &__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 16px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+    margin-bottom: 4px;
+  }
+
+  &__header-main {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  &__title-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  &__title {
+    font-size: 1.05rem;
+    font-weight: 700;
+    letter-spacing: -0.015em;
+    margin: 0;
+    line-height: 1.25;
+  }
+
+  &__badge {
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 2px 7px;
+    border-radius: 4px;
+    background: rgba(37, 99, 235, 0.08);
+    color: #2563eb;
+    border: 1px solid rgba(37, 99, 235, 0.2);
+  }
+
+  &__subtitle {
+    font-size: 0.78rem;
+    color: #64748b;
+    margin: 0;
+    line-height: 1.35;
   }
 }
 

@@ -24,6 +24,8 @@ import ExecutiveBriefingCard from "../components/adaptive/ExecutiveBriefingCard"
 import InvestigationDrawer from "../components/InvestigationDrawer";
 import EmployeeDrawer from "../components/EmployeeDrawer";
 import UnifiedExecutiveInsightsGrid from "../components/adaptive/UnifiedExecutiveInsightsGrid";
+import SectionHeader from "../components/adaptive/SectionHeader";
+import QuickInspectDialog from "../components/adaptive/QuickInspectDialog";
 import ExecutiveScenarioExplorer from "../components/adaptive/ExecutiveScenarioExplorer";
 import SafeReactECharts from "../components/charts/SafeReactECharts";
 import { buildExplorerUrl, getContextualExplorerTarget } from "../utils/explorerNavigation";
@@ -570,31 +572,45 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
           <div className={calculating && data ? "adaptive-content-recalculating" : ""}>
             {/* Authoritative Scope Line */}
             {scopeLine && (
-              <div className="adaptive-scope-line" aria-label="Dataset and population scope">
-                <span className="scope-line-item scope-line-workbook">
-                  <strong>{scopeLine.workbook}</strong> · {scopeLine.sheet}
-                </span>
-                <span className="scope-line-separator">·</span>
-                <span className="scope-line-item scope-line-period">
-                  Reporting period: <strong>{scopeLine.period}</strong>
-                </span>
-                <span className="scope-line-separator">·</span>
-                <span className="scope-line-item scope-line-status">
-                  <span className="scope-live-dot" />
-                  {scopeLine.refreshed}
-                </span>
-              </div>
+              <section className="dashboard-section dashboard-section--context" aria-label="Dataset Context">
+                <div className="adaptive-scope-line" aria-label="Dataset and population scope">
+                  <span className="scope-line-item scope-line-workbook">
+                    <strong>{scopeLine.workbook}</strong> · {scopeLine.sheet}
+                  </span>
+                  <span className="scope-line-separator">·</span>
+                  <span className="scope-line-item scope-line-period">
+                    Reporting period: <strong>{scopeLine.period}</strong>
+                  </span>
+                  <span className="scope-line-separator">·</span>
+                  <span className="scope-line-item scope-line-status">
+                    <span className="scope-live-dot" />
+                    {scopeLine.refreshed}
+                  </span>
+                </div>
+              </section>
             )}
 
             {/* Governed Executive Briefing Audio/Text (if available at dataset level) */}
             {!calcError && briefingElement && (
-              <ExecutiveBriefingCard
-                briefing={briefingElement}
-                sheetId={selectedDatasetId}
-                onOpenInspect={() => handleOpenInspect("briefing")}
-                snapshot={data?.snapshot}
-                domain={data?.contract?.domain}
-              />
+              <section
+                className="dashboard-section dashboard-section--summary"
+                aria-labelledby="section-summary-heading"
+                style={{ marginBottom: "24px" }}
+              >
+                <SectionHeader
+                  id="section-summary-heading"
+                  title="Executive Summary"
+                  badge="Leadership Brief"
+                  subtitle="Synthesized executive briefing and strategic operational signals."
+                />
+                <ExecutiveBriefingCard
+                  briefing={briefingElement}
+                  sheetId={selectedDatasetId}
+                  onOpenInspect={() => handleOpenInspect("briefing")}
+                  snapshot={data?.snapshot}
+                  domain={data?.contract?.domain}
+                />
+              </section>
             )}
 
             {/* Governed Unified Executive Insights Grid (4-5 Executive Topics & Business KPIs) */}
@@ -671,255 +687,79 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
               </div>
             )}
 
-            {/* Level 2: Compact Contextual Evidence Handoff Strip */}
+            {/* Level 2: Compact Contextual Evidence & Governance Handoff Strip */}
             {!calcError && (
-              <div
-                className="adaptive-evidence-handoff-strip"
-                data-testid="adaptive-evidence-handoff-strip"
-                style={{
-                  marginTop: "20px",
-                  padding: "12px 18px",
-                  borderRadius: "10px",
-                  backgroundColor: themeTokens.colors.surface,
-                  border: `1px solid ${themeTokens.colors.borderSubtle}`,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: "12px",
-                  flexWrap: "wrap",
-                }}
+              <aside
+                className="dashboard-section dashboard-section--evidence"
+                aria-label="Evidence and governance"
+                style={{ marginTop: "24px" }}
               >
-                <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "0.84rem", color: themeTokens.colors.textSecondary }}>
-                  <ShieldCheck size={16} color={themeTokens.colors.brandBlue || "#2563eb"} />
-                  <span>
-                    <strong style={{ color: themeTokens.colors.textPrimary }}>
-                      {data?.evidence_count ?? data?.story_plan?.claims?.length ?? 73} validated findings
-                    </strong>
-                    {" · "}
-                    <span>
-                      {data?.relationship_count ?? 3} cross-source relationships
-                    </span>
-                  </span>
-                </div>
-                <a
-                  href={buildExplorerUrl({ datasetId: selectedDatasetId, tab: "evidence" })}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    window.location.href = buildExplorerUrl({ datasetId: selectedDatasetId, tab: "evidence" });
-                  }}
+                <div
+                  className="adaptive-evidence-handoff-strip"
+                  data-testid="adaptive-evidence-handoff-strip"
                   style={{
-                    textDecoration: "none",
-                    color: themeTokens.colors.brandBlue || "#2563eb",
-                    fontSize: "0.82rem",
-                    fontWeight: 600,
-                    display: "inline-flex",
+                    padding: "12px 18px",
+                    borderRadius: "10px",
+                    backgroundColor: themeTokens.colors.surface,
+                    border: `1px solid ${themeTokens.colors.borderSubtle}`,
+                    display: "flex",
                     alignItems: "center",
-                    gap: "6px",
+                    justifyContent: "space-between",
+                    gap: "12px",
+                    flexWrap: "wrap",
                   }}
-                  aria-label="Explore evidence ledger and lineage in Data Explorer"
                 >
-                  <span>Explore evidence ledger & lineage</span>
-                  <ArrowRight size={14} />
-                </a>
-              </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "0.84rem", color: themeTokens.colors.textSecondary }}>
+                    <ShieldCheck size={16} color={themeTokens.colors.brandBlue || "#2563eb"} aria-hidden="true" />
+                    <span>
+                      <strong style={{ color: themeTokens.colors.textPrimary }}>
+                        {data?.evidence_count ?? data?.story_plan?.claims?.length ?? 73} validated findings
+                      </strong>
+                      {" · "}
+                      <span>
+                        {data?.relationship_count ?? 3} cross-source relationships
+                      </span>
+                    </span>
+                  </div>
+                  <a
+                    href={buildExplorerUrl({ datasetId: selectedDatasetId, tab: "evidence" })}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      window.location.href = buildExplorerUrl({ datasetId: selectedDatasetId, tab: "evidence" });
+                    }}
+                    style={{
+                      textDecoration: "none",
+                      color: themeTokens.colors.brandBlue || "#2563eb",
+                      fontSize: "0.82rem",
+                      fontWeight: 600,
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "6px",
+                    }}
+                    aria-label="Explore evidence ledger and lineage in Data Explorer"
+                  >
+                    <span>Explore evidence ledger & lineage</span>
+                    <ArrowRight size={14} aria-hidden="true" />
+                  </a>
+                </div>
+              </aside>
             )}
           </div>
         </section>
       </SurfaceGuard>
 
-      {/* Layer 3: Quick Inspect Drawer (Sleek, Non-Technical Executive Context) */}
-      {inspectModalOpen && (
-        <div className="adaptive-modal-backdrop" onClick={handleCloseInspect} role="presentation">
-          <div
-            ref={dialogRef}
-            className="adaptive-inspect-dialog quick-inspect-drawer"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="inspect-dialog-title"
-            onClick={(e) => e.stopPropagation()}
-            tabIndex={-1}
-            style={{
-              maxWidth: "540px",
-              padding: "24px 28px",
-              borderRadius: "14px",
-              backgroundColor: themeTokens.colors.surface,
-              border: `1px solid ${themeTokens.colors.borderSubtle}`,
-              boxShadow: "0 20px 40px -10px rgba(0, 0, 0, 0.25)",
-            }}
-          >
-            {/* Header */}
-            <div className="adaptive-inspect-dialog-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "16px" }}>
-              <div>
-                <span
-                  className="dialog-kicker"
-                  style={{
-                    fontSize: "0.72rem",
-                    fontWeight: 700,
-                    letterSpacing: "0.04em",
-                    textTransform: "uppercase",
-                    color: themeTokens.colors.brandBlue || "#2563eb",
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "4px",
-                    marginBottom: "4px",
-                  }}
-                >
-                  <Sparkles size={12} /> Quick Context
-                </span>
-                <h2 id="inspect-dialog-title" className="dialog-title" style={{ margin: "2px 0 0 0", fontSize: "1.15rem", fontWeight: 700, color: themeTokens.colors.textPrimary, lineHeight: 1.3 }}>
-                  {inspectTarget === "runtime_diagnostics"
-                    ? "Dataset Scope & Runtime Verification"
-                    : inspectTarget === "briefing"
-                    ? "Executive Briefing Overview"
-                    : selectedCandidate?.title || "Decision Context"}
-                </h2>
-              </div>
-              <button
-                ref={modalCloseBtnRef}
-                type="button"
-                className="modal-close-btn"
-                onClick={handleCloseInspect}
-                aria-label="Close inspection details"
-                style={{
-                  background: "transparent",
-                  border: "none",
-                  color: themeTokens.colors.textMuted || "#94a3b8",
-                  cursor: "pointer",
-                  padding: "4px",
-                  borderRadius: "6px",
-                  display: "flex",
-                }}
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            {/* Quick Inspect Body: Strictly Non-Technical */}
-            <div className="adaptive-inspect-dialog-body" style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-              {inspectTarget === "runtime_diagnostics" ? (
-                <>
-                  <div style={{ fontSize: "0.86rem", color: themeTokens.colors.textSecondary, lineHeight: 1.5 }}>
-                    This dashboard operates on governed workbook <strong>{data?.dataset_name || activeDataset?.display_name || "Workbook"}</strong> across <strong>{data?.sheet_count || 1} sheet(s)</strong> and <strong>{data?.relationship_count || 0} relational link(s)</strong>.
-                  </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "0.80rem", color: themeTokens.colors.textMuted }}>
-                    <ShieldCheck size={14} color={themeTokens.colors.statusSuccess || "#10b981"} />
-                    <span>Cryptographically verified against snapshot <code>{data?.snapshot || "snap_live"}</code></span>
-                  </div>
-                  <div style={{ marginTop: "8px" }}>
-                    <a
-                      href={buildExplorerUrl({ datasetId: selectedDatasetId, tab: "technical" })}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        window.location.href = buildExplorerUrl({ datasetId: selectedDatasetId, tab: "technical" });
-                      }}
-                      className="btn-primary"
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: "6px",
-                        textDecoration: "none",
-                        fontSize: "0.82rem",
-                        padding: "8px 14px",
-                        borderRadius: "8px",
-                      }}
-                    >
-                      <span>Explore Technical Diagnostics & Records</span>
-                      <ArrowRight size={14} />
-                    </a>
-                  </div>
-                </>
-              ) : (
-                (() => {
-                  const targetTopic = selectedCandidate;
-                  const contextualTarget = getContextualExplorerTarget(targetTopic, selectedDatasetId);
-                  const businessQuestion = targetTopic?.visual_spec?.business_question || targetTopic?.inspect_payload?.business_question || targetTopic?.subtitle;
-                  const keyMetric = targetTopic?.key_metric || targetTopic?.metric_name || targetTopic?.formatted_value;
-                  const takeaway = targetTopic?.primary_takeaway || targetTopic?.takeaway || targetTopic?.business_impact || "Key metric distribution observed across validated scope.";
-                  const sheetCount = data?.sheet_count || targetTopic?.source_sheet_ids?.length || 1;
-                  const sheetText = `${sheetCount} ${sheetCount === 1 ? "sheet" : "sheets"}`;
-
-                  return (
-                    <>
-                      {/* 1. Business Question */}
-                      {businessQuestion && (
-                        <div style={{ padding: "10px 14px", borderRadius: "8px", backgroundColor: isDark ? "rgba(37, 99, 235, 0.08)" : "rgba(37, 99, 235, 0.04)", border: `1px solid ${themeTokens.colors.borderSubtle}` }}>
-                          <span style={{ fontSize: "0.68rem", fontWeight: 700, textTransform: "uppercase", color: themeTokens.colors.brandBlue || "#2563eb" }}>
-                            Core Business Question
-                          </span>
-                          <p style={{ margin: "2px 0 0 0", fontSize: "0.84rem", fontStyle: "italic", color: themeTokens.colors.textPrimary, lineHeight: 1.4 }}>
-                            "{businessQuestion}"
-                          </p>
-                        </div>
-                      )}
-
-                      {/* 2. Key Metric & Impact */}
-                      {keyMetric && (
-                        <div style={{ display: "flex", alignItems: "baseline", gap: "10px" }}>
-                          <div>
-                            <span style={{ fontSize: "0.68rem", fontWeight: 700, textTransform: "uppercase", color: themeTokens.colors.textMuted }}>
-                              Key Observation
-                            </span>
-                            <div style={{ fontSize: "1.3rem", fontWeight: 800, color: themeTokens.colors.textPrimary, marginTop: "2px" }}>
-                              {keyMetric}
-                            </div>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* 3. One-line Interpretation ("Why this matters") */}
-                      <div>
-                        <span style={{ fontSize: "0.68rem", fontWeight: 700, textTransform: "uppercase", color: themeTokens.colors.brandBlue || "#2563eb" }}>
-                          Why This Matters
-                        </span>
-                        <p style={{ margin: "4px 0 0 0", fontSize: "0.86rem", color: themeTokens.colors.textSecondary, lineHeight: 1.45 }}>
-                          {takeaway}
-                        </p>
-                      </div>
-
-                      {/* 4. Evidence Confidence & Source Scope */}
-                      <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "0.78rem", color: themeTokens.colors.textMuted, paddingTop: "6px", borderTop: `1px solid ${themeTokens.colors.borderSubtle}` }}>
-                        <ShieldCheck size={14} color={themeTokens.colors.statusSuccess || "#10b981"} />
-                        <span>
-                          Grounded in {sheetText} · Mathematically verified · 100% confidence
-                        </span>
-                      </div>
-
-                      {/* 5. Deep Link: Explore Full Analysis */}
-                      <div style={{ marginTop: "6px" }}>
-                        <a
-                          href={contextualTarget.url}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            window.location.href = contextualTarget.url;
-                          }}
-                          style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: "6px",
-                            textDecoration: "none",
-                            backgroundColor: themeTokens.colors.brandBlue || "#2563eb",
-                            color: "#ffffff",
-                            fontSize: "0.82rem",
-                            fontWeight: 600,
-                            padding: "9px 16px",
-                            borderRadius: "8px",
-                            cursor: "pointer",
-                            transition: "background-color 0.15s ease",
-                          }}
-                          aria-label={`${contextualTarget.label} in Data Explorer`}
-                        >
-                          <span>Explore full analysis</span>
-                          <ArrowRight size={14} />
-                        </a>
-                      </div>
-                    </>
-                  );
-                })()
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Layer 3: Accessible Quick Inspect Dialog Rendered Through Portal */}
+      <QuickInspectDialog
+        isOpen={inspectModalOpen}
+        onClose={handleCloseInspect}
+        inspectTarget={inspectTarget}
+        selectedCandidate={selectedCandidate}
+        data={data}
+        activeDataset={activeDataset}
+        selectedDatasetId={selectedDatasetId}
+        themeTokens={themeTokens}
+        isDark={isDark}
+      />
 
       {/* Inline Contextual Evidence & Source Records Drawer */}
       {investigationTarget && (

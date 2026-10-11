@@ -1,34 +1,67 @@
-import React, { useState, useMemo } from "react";
-import {
-  Sparkles,
-  GitMerge,
-  AlertCircle,
-  ExternalLink,
-  ShieldCheck,
-  Layers,
-  TrendingUp,
-  CheckCircle2,
-  ArrowRight,
-  BarChart3,
-  AlertTriangle,
-  Info,
-  X,
-} from "lucide-react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
+import ReactDOM from "react-dom";
+import { AlertTriangle, X, ShieldCheck } from "lucide-react";
 import { useTheme } from "../../context/ThemeContext";
 import { getThemeTokens } from "../../theme/tokens";
-import ExecutiveVisualStory from "./ExecutiveVisualStory";
+import ExecutiveKPIGrid from "./ExecutiveKPIGrid";
+import ExecutiveVisualCard from "./ExecutiveVisualCard";
+import ExecutiveVisualGrid from "./ExecutiveVisualGrid";
+import SectionHeader from "./SectionHeader";
 import ScenarioSummaryCard from "./ScenarioSummaryCard";
 
 /**
- * Hard token validator guaranteeing zero unresolved {token} variables reach the UI.
+ * Deterministically partition executive visual topics into logical decision tiers:
+ * - Priority Decisions: Top hero decision + high-impact policy/matrix benchmarks.
+ * - Diagnostic Insights: Statistical distributions, bivariate relationships, and top performers.
+ * - Supporting Analysis: Comparative breakdowns, range disparities, and variance anomalies.
  */
-function sanitizeTemplateText(text, fallback = "") {
-  if (!text || typeof text !== "string") return fallback;
-  const tokenRegex = /\{[a-zA-Z0-9_]+\}/g;
-  if (tokenRegex.test(text)) {
-    return text.replace(tokenRegex, "").replace(/\s{2,}/g, " ").trim() || fallback;
+function partitionTopics(topics) {
+  if (!topics || topics.length === 0) {
+    return { priority: [], diagnostic: [], supporting: [] };
   }
-  return text;
+
+  if (topics.length <= 4) {
+    return {
+      priority: [topics[0]],
+      diagnostic: topics.slice(1),
+      supporting: [],
+    };
+  }
+
+  const heroIndex = topics.findIndex((t) => t.slot_type === "hero");
+  const hero = heroIndex >= 0 ? topics[heroIndex] : topics[0];
+  const remaining = topics.filter((t) => t !== hero);
+
+  const priorityIntents = new Set(["TARGET_VS_ACTUAL", "MATRIX", "COMPOSITION", "RANKING"]);
+  const diagnosticIntents = new Set(["DISTRIBUTION", "RELATIONSHIP", "ANOMALY", "VARIANCE"]);
+
+  const priority = [hero];
+  const diagnostic = [];
+  const supporting = [];
+
+  for (const t of remaining) {
+    if (
+      priority.length < 3 &&
+      (t.layout_hint === "LARGE" || priorityIntents.has(t.analytical_intent))
+    ) {
+      priority.push(t);
+    } else if (
+      diagnosticIntents.has(t.analytical_intent) ||
+      t.visual_spec?.chart_type === "podium_top_3" ||
+      t.visual_spec?.chart_type === "box_plot" ||
+      t.visual_spec?.chart_type === "scatter"
+    ) {
+      diagnostic.push(t);
+    } else {
+      supporting.push(t);
+    }
+  }
+
+  if (diagnostic.length === 0 && supporting.length > 0) {
+    diagnostic.push(...supporting.splice(0, Math.ceil(supporting.length / 2)));
+  }
+
+  return { priority, diagnostic, supporting };
 }
 
 export default function UnifiedExecutiveInsightsGrid({
@@ -48,112 +81,48 @@ export default function UnifiedExecutiveInsightsGrid({
 
   // Active KPI modal evidence inspector state
   const [activeKpiEvidence, setActiveKpiEvidence] = useState(null);
+  const kpiModalRef = useRef(null);
 
-  // Dynamic Domain Subtitle
-  const domainSubtitle = useMemo(() => {
-    const rawTpl = domainProfile?.display_subtitle;
-    if (rawTpl) {
-      return rawTpl
-        .replace("{count}", sheetCount)
-        .replace("{sources}", sheetCount === 1 ? "source" : "sources");
+  // ESC key for KPI audit modal
+  useEffect(() => {
+    if (activeKpiEvidence) {
+      const handleKeyDown = (e) => {
+        if (e.key === "Escape") {
+          e.preventDefault();
+          setActiveKpiEvidence(null);
+        }
+      };
+      window.addEventListener("keydown", handleKeyDown);
+      return () => window.removeEventListener("keydown", handleKeyDown);
     }
-    const domainName = domainProfile?.display_domain_name;
-    if (domainName) {
-      return `Synthesized ${domainName.toLowerCase()} insights across ${sheetCount} reconciled ${sheetCount === 1 ? "source" : "sources"}`;
-    }
-    return `Synthesized business insights across ${sheetCount} reconciled ${sheetCount === 1 ? "source" : "sources"}`;
-  }, [domainProfile, sheetCount]);
+  }, [activeKpiEvidence]);
 
-  // Extract Hero Topic & Supporting Topics
-  const heroTopic = useMemo(() => {
-    if (!executiveTopics || executiveTopics.length === 0) return null;
-    return executiveTopics.find((t) => t.slot_type === "hero") || executiveTopics[0];
-  }, [executiveTopics]);
-
-  const supportingTopics = useMemo(() => {
-    if (!executiveTopics || executiveTopics.length === 0) return [];
-    return executiveTopics.filter((t) => t !== heroTopic);
-  }, [executiveTopics, heroTopic]);
+  // Partition topics across decision tiers
+  const { priority, diagnostic, supporting } = useMemo(
+    () => partitionTopics(executiveTopics),
+    [executiveTopics]
+  );
 
   return (
-    <section
+    <div
       className="unified-executive-insights-grid"
-      aria-label="Unified Executive Intelligence Dashboard"
-      style={{ display: "flex", flexDirection: "column", gap: "20px" }}
+      style={{ display: "flex", flexDirection: "column", gap: "28px" }}
     >
-      {/* 1. DOMAIN KPI STRIP (Stable, Governed Domain Metrics Layer) */}
-      <div
-        className="executive-kpi-strip"
-        role="region"
-        aria-label="Executive KPI Overview"
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-          gap: "12px",
-        }}
+      {/* 1. KEY METRICS SECTION (Semantic H2 + dl/dt/dd KPI Grid) */}
+      <section
+        className="dashboard-section dashboard-section--kpis"
+        aria-labelledby="section-kpis-heading"
       >
-        {executiveKpis.map((kpi, idx) => (
-          <article
-            key={kpi.kpi_id || idx}
-            className="kpi-card"
-            data-testid={`kpi-card-${kpi.kpi_id}`}
-            onClick={() => setActiveKpiEvidence(kpi)}
-            style={{
-              backgroundColor: themeTokens.colors.surface,
-              border: `1px solid ${themeTokens.colors.borderSubtle}`,
-              borderRadius: "10px",
-              padding: "14px 16px",
-              cursor: "pointer",
-              transition: "transform 0.15s ease, box-shadow 0.15s ease",
-            }}
-          >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-              <span
-                style={{
-                  fontSize: "0.74rem",
-                  fontWeight: 600,
-                  color: themeTokens.colors.textSecondary,
-                  textTransform: "uppercase",
-                  letterSpacing: "0.03em",
-                }}
-              >
-                {kpi.label}
-              </span>
-              <Info size={12} color={themeTokens.colors.textMuted} />
-            </div>
-
-            <div style={{ margin: "6px 0 2px 0", display: "flex", alignItems: "baseline", gap: "6px" }}>
-              <span
-                style={{
-                  fontSize: "1.45rem",
-                  fontWeight: 800,
-                  color: themeTokens.colors.textPrimary,
-                  letterSpacing: "-0.02em",
-                }}
-              >
-                {kpi.formatted_value || `${kpi.value}${kpi.unit || ""}`}
-              </span>
-              {kpi.variance && (
-                <span
-                  style={{
-                    fontSize: "0.76rem",
-                    fontWeight: 600,
-                    color: kpi.variance.startsWith("+")
-                      ? themeTokens.colors.statusSuccess || "#10b981"
-                      : themeTokens.colors.statusError || "#ef4444",
-                  }}
-                >
-                  {kpi.variance}
-                </span>
-              )}
-            </div>
-
-            <div style={{ fontSize: "0.72rem", color: themeTokens.colors.textMuted }}>
-              {kpi.subtext || `Audited across ${kpi.population || "all"} records`}
-            </div>
-          </article>
-        ))}
-      </div>
+        <h2 id="section-kpis-heading" className="sr-only">
+          Key Performance Indicators
+        </h2>
+        <ExecutiveKPIGrid
+          kpis={executiveKpis}
+          onSelectKpi={setActiveKpiEvidence}
+          themeTokens={themeTokens}
+          isDark={isDark}
+        />
+      </section>
 
       {/* Coverage Warnings Banner if present */}
       {coverageWarnings && coverageWarnings.length > 0 && (
@@ -172,139 +141,267 @@ export default function UnifiedExecutiveInsightsGrid({
             fontSize: "0.80rem",
           }}
         >
-          <AlertTriangle size={14} />
+          <AlertTriangle size={14} aria-hidden="true" />
           <span>{coverageWarnings[0]}</span>
         </div>
       )}
 
-      {/* 2. HERO VISUAL STORY (Dominant Anchor Visual) */}
-      {heroTopic && (
-        <div className="hero-visual-wrapper" data-testid="hero-visual-wrapper">
-          <ExecutiveVisualStory
-            topic={heroTopic}
-            isHero={true}
-            datasetId={datasetId}
-            themeTokens={themeTokens}
-            isDark={isDark}
-            onInspect={onInspectInsight}
+      {/* 2. PRIORITY DECISIONS SECTION (Hero + Core Decision Anchors) */}
+      {priority.length > 0 && (
+        <section
+          className="dashboard-section dashboard-section--priority"
+          aria-labelledby="section-priority-heading"
+        >
+          <SectionHeader
+            id="section-priority-heading"
+            title="Priority Decisions"
+            badge="Leadership Focus"
+            subtitle="Core policy compliance benchmarks, period cross-tabulations, and operational allocations."
           />
-        </div>
+          <ExecutiveVisualGrid
+            className="priority-visuals-grid"
+            data-testid="priority-visuals-grid"
+          >
+            {priority.map((topic, idx) => (
+              <ExecutiveVisualCard
+                key={topic.topic_id || idx}
+                topic={topic}
+                isHero={idx === 0 && (topic.slot_type === "hero" || topic.layout_hint === "HERO")}
+                datasetId={datasetId}
+                themeTokens={themeTokens}
+                isDark={isDark}
+                onInspect={onInspectInsight}
+              />
+            ))}
+          </ExecutiveVisualGrid>
+        </section>
       )}
 
-      {/* 3. SUPPORTING VISUAL STORIES & TOOL CARDS (Generic Visual Contract) */}
-      <div
-        className="supporting-visuals-grid"
-        data-testid="supporting-visuals-grid"
-      >
-        {supportingTopics.map((topic) => (
-          <ExecutiveVisualStory
-            key={topic.topic_id}
-            topic={topic}
-            isHero={false}
-            datasetId={datasetId}
-            themeTokens={themeTokens}
-            isDark={isDark}
-            onInspect={onInspectInsight}
-          />
-        ))}
-
-        {/* Compact Scenario Summary Tool Card - Governed by domain entitlement */}
-        {(domainProfile?.governed_scenario_domain || domainProfile?.domain === "workforce") && (
-          <ScenarioSummaryCard
-            themeTokens={themeTokens}
-            isDark={isDark}
-            onOpenExplorer={onOpenScenarioExplorer}
-          />
-        )}
-      </div>
-
-      {/* Governed KPI Evidence Drill-down Modal */}
-      {activeKpiEvidence && (
-        <div
-          className="kpi-modal-backdrop"
-          role="dialog"
-          aria-modal="true"
-          onClick={() => setActiveKpiEvidence(null)}
-          style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: "rgba(0, 0, 0, 0.5)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 1000,
-          }}
+      {/* 3. DIAGNOSTIC INSIGHTS SECTION (Distributions, Relationships, Benchmark Leaders) */}
+      {diagnostic.length > 0 && (
+        <section
+          className="dashboard-section dashboard-section--diagnostics"
+          aria-labelledby="section-diagnostics-heading"
         >
+          <SectionHeader
+            id="section-diagnostics-heading"
+            title="Diagnostic Insights"
+            badge="Distributions & Variance"
+            subtitle="Underlying statistical distributions, bivariate associations, and top benchmark performers."
+          />
+          <ExecutiveVisualGrid
+            className="diagnostic-visuals-grid"
+            data-testid="diagnostic-visuals-grid"
+          >
+            {diagnostic.map((topic, idx) => (
+              <ExecutiveVisualCard
+                key={topic.topic_id || idx}
+                topic={topic}
+                isHero={false}
+                datasetId={datasetId}
+                themeTokens={themeTokens}
+                isDark={isDark}
+                onInspect={onInspectInsight}
+              />
+            ))}
+          </ExecutiveVisualGrid>
+        </section>
+      )}
+
+      {/* 4. SUPPORTING ANALYSIS SECTION (Comparative Breakdowns & Outliers) */}
+      {supporting.length > 0 && (
+        <section
+          className="dashboard-section dashboard-section--supporting"
+          aria-labelledby="section-supporting-heading"
+        >
+          <SectionHeader
+            id="section-supporting-heading"
+            title="Supporting Analysis"
+            badge="Comparative Benchmarks"
+            subtitle="Entity-level comparative breakdowns and anomaly concentration patterns."
+          />
+          <ExecutiveVisualGrid
+            className="supporting-visuals-grid"
+            data-testid="supporting-visuals-grid"
+          >
+            {supporting.map((topic, idx) => (
+              <ExecutiveVisualCard
+                key={topic.topic_id || idx}
+                topic={topic}
+                isHero={false}
+                datasetId={datasetId}
+                themeTokens={themeTokens}
+                isDark={isDark}
+                onInspect={onInspectInsight}
+              />
+            ))}
+          </ExecutiveVisualGrid>
+        </section>
+      )}
+
+      {/* 5. SCENARIO ANALYSIS SECTION (Governed by Domain Entitlement) */}
+      {(domainProfile?.governed_scenario_domain || domainProfile?.domain === "workforce") && (
+        <section
+          className="dashboard-section dashboard-section--scenario"
+          aria-labelledby="section-scenario-heading"
+        >
+          <SectionHeader
+            id="section-scenario-heading"
+            title="Scenario Analysis"
+            badge="Decision Simulator"
+            subtitle="Interactive policy what-if models and threshold impact forecasting."
+          />
+          <div className="scenario-summary-wrapper" style={{ marginTop: "4px" }}>
+            <ScenarioSummaryCard
+              themeTokens={themeTokens}
+              isDark={isDark}
+              onOpenExplorer={onOpenScenarioExplorer}
+            />
+          </div>
+        </section>
+      )}
+
+      {/* Accessible KPI Evidence Drill-down Modal rendered via Portal */}
+      {activeKpiEvidence &&
+        typeof document !== "undefined" &&
+        ReactDOM.createPortal(
           <div
-            className="kpi-modal-card"
-            onClick={(e) => e.stopPropagation()}
+            className="kpi-modal-backdrop"
+            onClick={() => setActiveKpiEvidence(null)}
+            role="presentation"
             style={{
-              backgroundColor: themeTokens.colors.surface,
-              borderRadius: "12px",
-              padding: "20px 24px",
-              maxWidth: "460px",
-              width: "90%",
-              boxShadow: "0 10px 25px rgba(0,0,0,0.2)",
-              border: `1px solid ${themeTokens.colors.borderSubtle}`,
+              position: "fixed",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: "rgba(0, 0, 0, 0.5)",
+              backdropFilter: "blur(4px)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 9999,
+              padding: "16px",
             }}
           >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
-              <h3 style={{ margin: 0, fontSize: "1.1rem", fontWeight: 700, color: themeTokens.colors.textPrimary }}>
-                {activeKpiEvidence.label} Audit Detail
-              </h3>
-              <button
-                type="button"
-                onClick={() => setActiveKpiEvidence(null)}
-                style={{ background: "transparent", border: "none", cursor: "pointer", color: themeTokens.colors.textMuted }}
+            <dialog
+              open
+              ref={kpiModalRef}
+              className="kpi-modal-card"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="kpi-audit-modal-title"
+              onClick={(e) => e.stopPropagation()}
+              tabIndex={-1}
+              style={{
+                margin: 0,
+                backgroundColor: themeTokens.colors.surface,
+                borderRadius: "12px",
+                padding: "20px 24px",
+                maxWidth: "460px",
+                width: "100%",
+                boxShadow: "0 10px 25px rgba(0,0,0,0.2)",
+                border: `1px solid ${themeTokens.colors.borderSubtle}`,
+                color: themeTokens.colors.textPrimary,
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: "12px",
+                }}
               >
-                <X size={18} />
-              </button>
-            </div>
-
-            <div style={{ display: "flex", flexDirection: "column", gap: "10px", fontSize: "0.84rem" }}>
-              <div>
-                <span style={{ fontWeight: 600, color: themeTokens.colors.textSecondary }}>Value:</span>{" "}
-                <strong style={{ color: themeTokens.colors.textPrimary }}>
-                  {activeKpiEvidence.formatted_value || activeKpiEvidence.value}
-                </strong>
+                <h3
+                  id="kpi-audit-modal-title"
+                  style={{
+                    margin: 0,
+                    fontSize: "1.1rem",
+                    fontWeight: 700,
+                    color: themeTokens.colors.textPrimary,
+                  }}
+                >
+                  {activeKpiEvidence.label} Audit Detail
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setActiveKpiEvidence(null)}
+                  aria-label="Close KPI audit modal"
+                  style={{
+                    background: "transparent",
+                    border: "none",
+                    cursor: "pointer",
+                    color: themeTokens.colors.textMuted,
+                    padding: "4px",
+                    display: "flex",
+                  }}
+                >
+                  <X size={18} aria-hidden="true" />
+                </button>
               </div>
-              {activeKpiEvidence.definition && (
+
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "10px",
+                  fontSize: "0.84rem",
+                }}
+              >
                 <div>
-                  <span style={{ fontWeight: 600, color: themeTokens.colors.textSecondary }}>Definition:</span>
-                  <p style={{ margin: "3px 0 0 0", color: themeTokens.colors.textPrimary }}>
-                    {activeKpiEvidence.definition}
-                  </p>
+                  <span style={{ fontWeight: 600, color: themeTokens.colors.textSecondary }}>
+                    Value:
+                  </span>{" "}
+                  <strong style={{ color: themeTokens.colors.textPrimary }}>
+                    {activeKpiEvidence.formatted_value || activeKpiEvidence.value}
+                  </strong>
                 </div>
-              )}
-              {activeKpiEvidence.calculation && (
-                <div>
-                  <span style={{ fontWeight: 600, color: themeTokens.colors.textSecondary }}>Formula:</span>
-                  <pre
+                {activeKpiEvidence.definition && (
+                  <div>
+                    <span style={{ fontWeight: 600, color: themeTokens.colors.textSecondary }}>
+                      Definition:
+                    </span>
+                    <p style={{ margin: "3px 0 0 0", color: themeTokens.colors.textPrimary }}>
+                      {activeKpiEvidence.definition}
+                    </p>
+                  </div>
+                )}
+                {activeKpiEvidence.calculation && (
+                  <div>
+                    <span style={{ fontWeight: 600, color: themeTokens.colors.textSecondary }}>
+                      Formula:
+                    </span>
+                    <pre
+                      style={{
+                        margin: "4px 0 0 0",
+                        padding: "6px 8px",
+                        borderRadius: "6px",
+                        backgroundColor: isDark ? "#0f172a" : "#f1f5f9",
+                        fontSize: "0.78rem",
+                        overflowX: "auto",
+                      }}
+                    >
+                      {activeKpiEvidence.calculation}
+                    </pre>
+                  </div>
+                )}
+                {activeKpiEvidence.evidence_id && (
+                  <div
                     style={{
-                      margin: "4px 0 0 0",
-                      padding: "6px 8px",
-                      borderRadius: "6px",
-                      backgroundColor: isDark ? "#0f172a" : "#f1f5f9",
-                      fontSize: "0.78rem",
-                      overflowX: "auto",
+                      fontSize: "0.76rem",
+                      color: themeTokens.colors.textMuted,
+                      marginTop: "4px",
                     }}
                   >
-                    {activeKpiEvidence.calculation}
-                  </pre>
-                </div>
-              )}
-              {activeKpiEvidence.evidence_id && (
-                <div style={{ fontSize: "0.76rem", color: themeTokens.colors.textMuted, marginTop: "4px" }}>
-                  Evidence ID: <code>{activeKpiEvidence.evidence_id}</code>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-    </section>
+                    Evidence ID: <code>{activeKpiEvidence.evidence_id}</code>
+                  </div>
+                )}
+              </div>
+            </dialog>
+          </div>,
+          document.body
+        )}
+    </div>
   );
 }

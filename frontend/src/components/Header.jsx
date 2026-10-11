@@ -28,7 +28,7 @@ export default function Header({ activeTab, onSelectTab, onOpenUploadModal, acti
             <img src={highviewLogo} alt="HighView Logo" className="brand-logo-img" />
           </div>
           <div className="brand-text-block">
-            <h1 className="brand-title">HighView</h1>
+            <span className="brand-title">HighView</span>
             <p className="subtitle">Clarity From Every Sheet.</p>
           </div>
         </div>
