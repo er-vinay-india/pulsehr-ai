@@ -78,33 +78,67 @@ h3.visual-card__title,
   white-space: nowrap;
 }
 
-/* 3. Action Icon Button Styling */
-.hv-action-icon-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
+/* 3. Action Icon Button Styling (Strict Square Invariant) */
+.hv-action-icon-btn,
+button.hv-action-icon-btn,
+a.hv-action-icon-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: var(--action-icon-size, 28px) !important;
+  height: var(--action-icon-size, 28px) !important;
+  min-width: var(--action-icon-size, 28px) !important;
+  max-width: var(--action-icon-size, 28px) !important;
+  min-height: var(--action-icon-size, 28px) !important;
+  max-height: var(--action-icon-size, 28px) !important;
+  aspect-ratio: 1 / 1 !important;
+  box-sizing: border-box !important;
   border-radius: 6px;
   background-color: var(--action-icon-bg, rgba(0, 0, 0, 0.04));
   color: var(--action-icon-text, #334B57);
   border: 1px solid var(--action-icon-border, #D4DDD6);
   cursor: pointer;
-  padding: 0;
+  padding: 0 !important;
+  margin: 0;
+  line-height: 1 !important;
   transition: all 0.15s ease;
-  flex-shrink: 0;
+  flex-shrink: 0 !important;
+  text-decoration: none;
 }
 
-.hv-action-icon-btn:hover {
+.hv-action-icon-btn:hover,
+button.hv-action-icon-btn:hover,
+a.hv-action-icon-btn:hover {
   background-color: var(--action-icon-hover-bg, #EAF0F5);
   color: var(--action-icon-hover-text, #234E70);
   border-color: var(--action-icon-hover-border, #234E70);
   transform: translateY(-1px);
 }
 
-.hv-action-icon-btn:focus-visible {
+.hv-action-icon-btn:focus-visible,
+button.hv-action-icon-btn:focus-visible,
+a.hv-action-icon-btn:focus-visible {
   outline: none;
   box-shadow: 0 0 0 2px var(--action-focus-ring, rgba(7, 84, 67, 0.4));
+}
+
+/* Product-wide Square Icon Button Rule: If an action button is icon-only, it must be strictly square (aspect-ratio: 1/1) */
+.btn-icon,
+.btn-icon-subtle,
+.btn-icon-close,
+.btn-icon-refresh,
+.modal-close-btn,
+.upload-modal-close-btn,
+.dialog-close-btn,
+[data-icon-only="true"] {
+  aspect-ratio: 1 / 1 !important;
+  box-sizing: border-box !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 0 !important;
+  line-height: 1 !important;
+  flex-shrink: 0 !important;
 }
 
 /* 4. Executive Visual Card Header Layout (Grid Title Protection) */

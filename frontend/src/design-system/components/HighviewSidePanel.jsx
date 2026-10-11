@@ -218,17 +218,28 @@ export default function HighviewSidePanel({
             onClick={onClose}
             aria-label="Close side panel"
             title="Close (ESC)"
+            data-icon-only="true"
+            className="hv-sidepanel-close-btn"
             style={{
+              width: "32px",
+              height: "32px",
+              minWidth: "32px",
+              maxWidth: "32px",
+              minHeight: "32px",
+              maxHeight: "32px",
+              aspectRatio: "1 / 1",
+              boxSizing: "border-box",
               background: "transparent",
               border: "1px solid var(--action-icon-border, #D4DDD6)",
               borderRadius: "6px",
-              padding: "4px",
+              padding: 0,
               cursor: "pointer",
               color: "var(--color-text-secondary, #334B57)",
               display: "inline-flex",
               alignItems: "center",
               justifyContent: "center",
               transition: "all 0.15s ease",
+              flexShrink: 0,
             }}
           >
             <X size={18} aria-hidden="true" />

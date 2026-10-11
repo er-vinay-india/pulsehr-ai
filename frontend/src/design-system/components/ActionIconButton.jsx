@@ -19,6 +19,7 @@ export default function ActionIconButton({
   ariaLabel,
   tooltip,
   size = 14,
+  buttonSize = 28,
   className = "",
   style = {},
   variant = "icon", // "icon" | "ghost" | "primary"
@@ -29,20 +30,29 @@ export default function ActionIconButton({
   const resolvedAriaLabel = ariaLabel || meta.ariaLabel;
   const resolvedTooltip = tooltip || meta.tooltip;
   const Icon = meta.Icon;
+  const sizePx = `${buttonSize}px`;
 
   const baseStyle = {
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
-    width: "28px",
-    height: "28px",
+    width: sizePx,
+    height: sizePx,
+    minWidth: sizePx,
+    maxWidth: sizePx,
+    minHeight: sizePx,
+    maxHeight: sizePx,
+    aspectRatio: "1 / 1",
+    boxSizing: "border-box",
     borderRadius: "6px",
     cursor: disabled ? "not-allowed" : "pointer",
     opacity: disabled ? 0.5 : 1,
     transition: "all 0.15s ease",
     textDecoration: "none",
     padding: 0,
+    margin: 0,
     flexShrink: 0,
+    lineHeight: 1,
     backgroundColor: "var(--action-icon-bg, rgba(0, 0, 0, 0.04))",
     color: "var(--action-icon-text, #334B57)",
     border: "1px solid var(--action-icon-border, #D4DDD6)",
@@ -53,6 +63,7 @@ export default function ActionIconButton({
   const commonProps = {
     className: `hv-action-icon-btn action-icon-btn--${action} ${className}`.trim(),
     "data-action-key": meta.key || action,
+    "data-icon-only": "true",
     style: baseStyle,
     "aria-label": resolvedAriaLabel,
     title: resolvedTooltip,

@@ -8204,8 +8204,9 @@ html, body {
   min-height: 100vh;
 }
 
-/* Touch target minimum 44px for accessibility */
-button, 
+/* Touch target minimum 44px for accessibility on full text buttons;
+   Icon-only / square action buttons are explicitly excluded to preserve 1:1 square aspect ratio */
+button:not(.hv-action-icon-btn):not([class*="action-icon-btn"]):not([class*="btn-icon"]):not([data-icon-only="true"]), 
 .btn-primary, 
 .btn-secondary, 
 .btn-ghost-sm, 
