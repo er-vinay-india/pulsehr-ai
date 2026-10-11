@@ -186,18 +186,18 @@ export default function UnifiedExecutiveInsightsGrid({
             <div
               className="governance-status-compact"
               role="status"
+              title="Analysis uses only the active dataset and passed integrity checks."
               style={{
                 display: "flex",
                 alignItems: "center",
-                gap: "6px",
+                gap: "5px",
                 padding: "2px 0 8px 4px",
                 fontSize: "0.75rem",
                 color: "var(--color-text-muted, #78877f)",
               }}
             >
-              <ShieldCheck size={13} style={{ color: "var(--color-success, #075443)" }} aria-hidden="true" />
-              <span style={{ fontWeight: 600, color: "var(--color-text-secondary, #334b57)" }}>Governance ✓</span>
-              <span style={{ opacity: 0.85 }}>Verified Single-Domain Analysis</span>
+              <ShieldCheck size={12} style={{ color: "var(--color-success, #075443)" }} aria-hidden="true" />
+              <span style={{ fontWeight: 600, color: "var(--color-text-secondary, #334b57)" }}>✓ Verified</span>
             </div>
           );
         }
@@ -210,12 +210,14 @@ export default function UnifiedExecutiveInsightsGrid({
         <section
           className="dashboard-section dashboard-section--priority"
           aria-labelledby="section-priority-heading"
+          data-ai-section="priority_decisions"
+          data-analytical-family="LEADERSHIP_FOCUS"
         >
           <SectionHeader
             id="section-priority-heading"
             title="Priority Decisions"
-            badge="Leadership Focus"
-            subtitle="Core policy compliance benchmarks, period cross-tabulations, and operational allocations."
+            sectionType="priority_decisions"
+            analyticalFamily="LEADERSHIP_FOCUS"
           />
           <ExecutiveVisualGrid
             className="priority-visuals-grid"
@@ -241,12 +243,14 @@ export default function UnifiedExecutiveInsightsGrid({
         <section
           className="dashboard-section dashboard-section--diagnostics"
           aria-labelledby="section-diagnostics-heading"
+          data-ai-section="diagnostic_insights"
+          data-analytical-family="DISTRIBUTION_VARIANCE"
         >
           <SectionHeader
             id="section-diagnostics-heading"
             title="Diagnostic Insights"
-            badge="Distributions & Variance"
-            subtitle="Underlying statistical distributions, bivariate associations, and top benchmark performers."
+            sectionType="diagnostic_insights"
+            analyticalFamily="DISTRIBUTION_VARIANCE"
           />
           <ExecutiveVisualGrid
             className="diagnostic-visuals-grid"
@@ -272,12 +276,14 @@ export default function UnifiedExecutiveInsightsGrid({
         <section
           className="dashboard-section dashboard-section--supporting"
           aria-labelledby="section-supporting-heading"
+          data-ai-section="supporting_analysis"
+          data-analytical-family="COMPARATIVE_BENCHMARKS"
         >
           <SectionHeader
             id="section-supporting-heading"
             title="Supporting Analysis"
-            badge="Comparative Benchmarks"
-            subtitle="Entity-level comparative breakdowns and anomaly concentration patterns."
+            sectionType="supporting_analysis"
+            analyticalFamily="COMPARATIVE_BENCHMARKS"
           />
           <ExecutiveVisualGrid
             className="supporting-visuals-grid"
@@ -303,18 +309,25 @@ export default function UnifiedExecutiveInsightsGrid({
         <section
           className="dashboard-section dashboard-section--scenario"
           aria-labelledby="section-scenario-heading"
+          data-ai-section="scenario_analysis"
+          data-analytical-family="DECISION_SIMULATOR"
         >
           <SectionHeader
             id="section-scenario-heading"
             title="Scenario Analysis"
-            badge="Decision Simulator"
-            subtitle="Interactive policy what-if models and threshold impact forecasting."
+            sectionType="scenario_analysis"
+            analyticalFamily="DECISION_SIMULATOR"
           />
           <div className="scenario-summary-wrapper" style={{ marginTop: "4px" }}>
             <ScenarioSummaryCard
               themeTokens={themeTokens}
               isDark={isDark}
-              onOpenExplorer={onOpenScenarioExplorer}
+              onExplain={() => onInspectInsight && onInspectInsight({
+                topic_id: "scenario_methodology",
+                title: "Policy Scenario Simulation",
+                analytical_intent: "SCENARIO_SIMULATION",
+                primary_takeaway: "Counterfactual policy replay evaluating organizational compliance and capacity across thresholds."
+              })}
             />
           </div>
         </section>

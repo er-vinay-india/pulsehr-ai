@@ -6,8 +6,7 @@
  * or inconsistent action text.
  */
 import {
-  Search,
-  Eye,
+  Info,
   ArrowUpRight,
   ShieldCheck,
   Trophy,
@@ -19,28 +18,37 @@ import {
   Sliders,
   Presentation,
   RefreshCw,
-  Volume2,
   MoreHorizontal,
   X,
   Maximize2,
-  ChevronRight,
-  HelpCircle,
-  FileSpreadsheet
+  Search,
 } from "lucide-react";
 
 export const ACTION_DEFINITIONS = {
+  details: {
+    icon: Info,
+    label: "Details",
+    tooltip: "Explain details and underlying calculations",
+    ariaPattern: (title) => `Explain ${title || "details"}`
+  },
   inspect: {
-    icon: Search,
-    secondaryIcon: Eye,
-    label: "Inspect",
-    tooltip: "Quick Inspect details and underlying grain",
-    ariaPattern: (title) => `Inspect ${title || "finding"}`
+    // Standardized alias for details
+    icon: Info,
+    label: "Details",
+    tooltip: "Explain details and underlying calculations",
+    ariaPattern: (title) => `Explain ${title || "details"}`
   },
   deep_dive: {
     icon: ArrowUpRight,
-    label: "Deep Dive",
+    label: "Data Explorer",
     tooltip: "Open in Data Explorer",
     ariaPattern: (title) => `Open ${title || "finding"} in Data Explorer`
+  },
+  search: {
+    icon: Search,
+    label: "Search",
+    tooltip: "Search records",
+    ariaPattern: () => "Search records"
   },
   explorer: {
     icon: ArrowUpRight,
@@ -102,12 +110,6 @@ export const ACTION_DEFINITIONS = {
     label: "Refresh",
     tooltip: "Re-evaluate real-time metrics and evidence graph",
     ariaPattern: () => "Refresh live dashboard data"
-  },
-  listen: {
-    icon: Volume2,
-    label: "Listen",
-    tooltip: "Audio executive briefing with synthesized narration",
-    ariaPattern: () => "Listen to synthesized executive audio briefing"
   },
   more: {
     icon: MoreHorizontal,

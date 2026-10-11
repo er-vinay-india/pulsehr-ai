@@ -340,32 +340,6 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
               Automated spreadsheet intelligence, cross-functional KPI tracking, and decision discovery.
             </p>
           </div>
-          <div className="header-actions-row" style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            {Boolean(data?.domain_profile?.governed_scenario_domain || data?.domain_profile?.domain === "workforce") && (
-              <Button
-                variant={showScenarioExplorer ? "PRIMARY" : "SECONDARY"}
-                size="sm"
-                icon={Sparkles}
-                onClick={() => setShowScenarioExplorer((prev) => !prev)}
-                disabled={!selectedDatasetId || calculating}
-                title="Toggle Executive Scenario Explorer & What-If Simulator"
-                ariaLabel="Toggle Executive Scenario Explorer & What-If Simulator"
-              >
-                {showScenarioExplorer ? "Hide Scenario Explorer" : "Scenario Explorer"}
-              </Button>
-            )}
-            <Button
-              variant="PRIMARY"
-              size="sm"
-              icon={Presentation}
-              onClick={handleCreatePresentationFromDashboard}
-              disabled={!selectedDatasetId || calculating}
-              title="Generate a 16:9 executive presentation deck from active dashboard data"
-              ariaLabel="Generate executive presentation deck"
-            >
-              Create Presentation
-            </Button>
-          </div>
         </div>
 
         {/* Scope Bar: Dataset Context Only (ZERO Sheet Selector) */}
@@ -678,15 +652,6 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
               })()
             )}
 
-            {/* Phase 10: Executive Scenario Explorer (Governed Decision Simulator) */}
-            {!calcError && showScenarioExplorer && Boolean(data?.domain_profile?.governed_scenario_domain || data?.domain_profile?.domain === "workforce") && (
-              <div style={{ marginTop: "16px" }}>
-                <ExecutiveScenarioExplorer
-                  datasetId={selectedDatasetId || activeDataset?.id || 99747}
-                  onClose={() => setShowScenarioExplorer(false)}
-                />
-              </div>
-            )}
 
             {/* Level 2: Compact Contextual Evidence & Governance Handoff Strip */}
             {!calcError && (

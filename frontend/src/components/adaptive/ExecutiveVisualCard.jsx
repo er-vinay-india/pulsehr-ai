@@ -204,6 +204,14 @@ export default function ExecutiveVisualCard({
           </div>
 
           <div className="visual-card__actions-cell">
+            <ActionIconButton
+              action="details"
+              title={topic.title}
+              tooltip={`Explain ${topic.title}`}
+              ariaLabel={`Explain ${topic.title}`}
+              onClick={() => onInspect && onInspect(topic)}
+              size={14}
+            />
             {contextualTarget && (
               <ActionIconButton
                 action="deep_dive"
@@ -214,14 +222,6 @@ export default function ExecutiveVisualCard({
                 size={14}
               />
             )}
-            <ActionIconButton
-              action="inspect"
-              title={topic.title}
-              tooltip={`Inspect ${topic.title}`}
-              ariaLabel={`Inspect ${topic.title}`}
-              onClick={() => onInspect && onInspect(topic)}
-              size={14}
-            />
           </div>
         </header>
 
@@ -290,10 +290,6 @@ export default function ExecutiveVisualCard({
           <figcaption
             className="visual-card__figcaption card-short-insight"
             style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              gap: "8px",
               paddingTop: "8px",
               marginTop: "4px",
               borderTop: `1px solid ${themeTokens?.colors?.borderSubtle || "#e2e8f0"}`,
@@ -311,27 +307,6 @@ export default function ExecutiveVisualCard({
             >
               {microcopy.short_finding}
             </p>
-            {contextualTarget && (
-              <a
-                href={contextualTarget.url}
-                onClick={(e) => {
-                  e.preventDefault();
-                  window.location.href = contextualTarget.url;
-                }}
-                className="visual-card__deep-link"
-                style={{
-                  fontSize: "0.72rem",
-                  color: themeTokens?.colors?.brandBlue || "#2563eb",
-                  textDecoration: "none",
-                  fontWeight: 600,
-                  whiteSpace: "nowrap",
-                  flexShrink: 0,
-                }}
-                aria-label={`Deep dive into ${topic.title} in Data Explorer`}
-              >
-                Deep Dive →
-              </a>
-            )}
           </figcaption>
         </figure>
       </div>

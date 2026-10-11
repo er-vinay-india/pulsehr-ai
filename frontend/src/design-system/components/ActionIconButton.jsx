@@ -52,6 +52,7 @@ export default function ActionIconButton({
 
   const commonProps = {
     className: `hv-action-icon-btn action-icon-btn--${action} ${className}`.trim(),
+    "data-action-key": meta.key || action,
     style: baseStyle,
     "aria-label": resolvedAriaLabel,
     title: resolvedTooltip,

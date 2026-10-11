@@ -1,5 +1,5 @@
 import React from "react";
-import { Info } from "lucide-react";
+import ActionIconButton from "../../design-system/components/ActionIconButton";
 
 /**
  * Governed Executive KPI Grid using semantic definition-list `<dl>`, `<dt>`, `<dd>` markup.
@@ -74,11 +74,16 @@ export default function ExecutiveKPIGrid({
             >
               {kpi.label}
             </dt>
-            <Info
+            <ActionIconButton
+              action="details"
+              title={kpi.label}
+              tooltip={`Explain ${kpi.label} calculation & evidence`}
+              ariaLabel={`Explain ${kpi.label} calculation & evidence`}
+              onClick={(e) => {
+                e.stopPropagation();
+                onSelectKpi && onSelectKpi(kpi);
+              }}
               size={12}
-              className="kpi-info-icon"
-              color={themeTokens?.colors?.textMuted}
-              aria-hidden="true"
             />
           </div>
 
