@@ -7,7 +7,7 @@ from .db.database import init_db, get_connection
 from .services.sheet_catalog import migrate_existing, backfill_display_names
 from .routers import analytics, employees, upload, copilot, reports, sheets, presentations
 from .services.presentation.pipeline_orchestrator import recover_presentation_jobs
-from .routers import decision_brief, adaptive_dashboard, eda, workspace_context, decision_ledger
+from .routers import decision_brief, adaptive_dashboard, eda, workspace_context, decision_ledger, observability
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -50,6 +50,7 @@ app.include_router(adaptive_dashboard.router)
 app.include_router(eda.router)
 app.include_router(workspace_context.router)
 app.include_router(decision_ledger.router)
+app.include_router(observability.router)
 
 @app.get("/api/health")
 def health_check():

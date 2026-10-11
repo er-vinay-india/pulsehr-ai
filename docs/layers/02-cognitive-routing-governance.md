@@ -140,6 +140,33 @@ Implemented in `backend/app/agent/`:
 - **Bypass Audit Guarantee**:
   - `LangGraphBypassAuditor`: Scans `backend/app/agent/` to verify zero direct imports of SQLite, internal engines, or raw Ollama endpoints (0 violations).
 
+### J. AI Observability, Evaluation & Runtime Intelligence (Phase D)
+Implemented in `backend/app/observability/`:
+- **Unified Correlated Trace Model (`AITrace`)**:
+  - Correlates `WorkflowExecutionRecord`, `MCPExecutionRecord`, and `AIExecutionRecord` under a shared `trace_id`.
+  - Captures `request_id`, `conversation_id`, `dataset_id`, `status`, `total_latency_ms`, granular `NodeExecutionMetric` steps, tools invoked, model calls, pointer IDs (`evidence_ids`, `scenario_ids`, `provenance_ids`), human approvals, and sentence-level `ClaimAttribution` mappings.
+- **Continuous Evaluation Engine**:
+  - `AgentIntentAlignmentEvaluator`: Evaluates whether HRIDAY matched user inquiry to intent, workflow, and tools; computes `alignment_score`.
+  - `ToolSelectionQualityEvaluator`: Measures tool precision, recall, duplicate rates, and retry counts.
+  - `GroundingEvaluator`: Sentence-level attribution verifying that 100% of factual assertions map to `[EVID-xxx]` or `[SCEN-xxx]`. Detects ungrounded and conflicting assertions.
+  - `EvidenceQualityEvaluator`: Validates multi-dimensional evidence sufficiency (e.g. comparison + correlation for diagnostic 'why' questions).
+  - `ModelRoutingEvaluator` & `ComputeCostMetric`: Evaluates model cascade selection efficiency, token counts, and estimated CPU/GPU execution cost.
+  - `GovernanceHealthEvaluator`: Aggregates governance checks, isolation denials, entitlement rejections, and approval requests.
+  - `WorkflowOutcomeEvaluator`: Produces composite `RuntimeQualityScore` using weighted dimensions (grounding 25%, intent 20%, tool efficiency 15%, completion 15%, governance 10%, latency 10%, model routing 5%).
+- **Latency Budgets & SLA Compliance (`WorkflowLatencyBudget`)**:
+  - Quick Answer: P50 $\le 500\text{ms}$, P95 $\le 1500\text{ms}$.
+  - Analytical Investigation: P50 $\le 2.5\text{s}$, P95 $\le 6.0\text{s}$.
+  - Scenario Analysis: P50 $\le 3.0\text{s}$, P95 $\le 8.0\text{s}$.
+  - Presentation Creation: P50 $\le 8.0\text{s}$, P95 $\le 20.0\text{s}$.
+  - Capability groups: Dataset $\le 100\text{ms}$, Analytics $\le 300\text{ms}$, Evidence $\le 300\text{ms}$, Governance $\le 100\text{ms}$, Scenario $\le 500\text{ms}$, Presentation $\le 2500\text{ms}$.
+- **Deterministic Anomaly Detection (`AnomalyDetector`)**:
+  - Flags tool call overuse (> 8 tools), latency spikes (> 12s), grounding drops (< 95%), `FAILED_SAFE` halts, and scenario/evidence cross-contamination without using non-deterministic models.
+- **Benchmark Corpus & Evaluation Suite (`BenchmarkRunner`)**:
+  - 50+ diverse benchmark cases across 16 analytical categories and multiple domains (`workforce`, `environmental`, `retail`).
+  - Automated reporting on intent accuracy, workflow selection accuracy, grounding coverage, and P50/P95 latencies.
+- **Technical Explorer Surface**:
+  - Dedicated API router (`backend/app/routers/observability.py`) delivering compact health cards, KPIs, recent traces, anomaly alerts, and full execution drilldowns.
+
 ---
 
 ## 3. Layer Integration Contract (Output to Layer 3)

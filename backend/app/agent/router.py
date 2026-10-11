@@ -125,6 +125,12 @@ class HRIDAYOrchestrator:
         )
         self.ledger.record_workflow(rec)
 
+        try:
+            from ..observability import ai_observability_service
+            ai_observability_service.record_workflow_execution(state, rec, workflow_type=wf_name)
+        except Exception as obs_exc:
+            logger.debug(f"Observability recording skipped: {obs_exc}")
+
         return state
 
     def resume_workflow(
@@ -161,6 +167,12 @@ class HRIDAYOrchestrator:
             completed_at=end_time,
         )
         self.ledger.record_workflow(rec)
+
+        try:
+            from ..observability import ai_observability_service
+            ai_observability_service.record_workflow_execution(resumed_state, rec, workflow_type=f"{wf_name}_resumed")
+        except Exception as obs_exc:
+            logger.debug(f"Observability recording skipped: {obs_exc}")
 
         return resumed_state
 
