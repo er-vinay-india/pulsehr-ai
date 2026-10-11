@@ -96,6 +96,26 @@ Implemented in `backend/app/services/analyst/interpretation_validator.py` and `b
 - **Permutation-Only Prioritization**: AI prioritization is restricted to reordering existing finding IDs (`EVID-XXX` / `FACT-XXX`). The model cannot alter percentages, invert signs, or invent claims.
 - **Query Grain Invariant**: Retrieving a department-level average is never accepted as an answer for an employee-level calculation.
 
+### H. Governed MCP Capability Layer (Phase B)
+Implemented in `backend/app/mcp/`:
+- **Architecture**:
+  - Exposes governed tools across 6 distinct capability groups:
+    1. `Dataset MCP`: `get_schema`, `get_entities`, `get_measures`, `get_time_dimensions`, `get_dataset_profile`, `get_relationships`.
+    2. `Analytics MCP`: `rank_entities`, `compare_segments`, `calculate_distribution`, `get_trend`, `find_outliers`, `analyze_relationship`, `get_benchmark_comparison`.
+    3. `Evidence MCP`: `get_evidence`, `verify_claim`, `get_source_rows`, `trace_provenance`, `get_calculation`, `get_related_evidence`.
+    4. `Scenario MCP`: `get_valid_levers`, `run_counterfactual`, `compare_scenarios`, `get_scenario_assumptions` (enforces $EVID \neq SCEN$, prefixes $SCEN-$, stamps `evidence_class="SCENARIO"`).
+    5. `Presentation MCP`: `create_deck`, `regenerate_slide`, `generate_visual`, `export_pdf`, `get_presentation_status` (requires non-empty verified `evidence_ids`).
+    6. `Governance MCP`: `check_entitlement`, `check_dataset_scope`, `check_claim`, `check_scenario_permission`, `request_approval`, `get_decision_provenance`.
+- **Governed MCP Gateway (`GovernedMCPGateway`)**:
+  - Central pre-flight executor verifying tool definitions, risk levels (`LOW`, `MEDIUM`, `HIGH`, `CRITICAL`), and `DatasetIsolationIntegrity`.
+  - Rejects foreign dataset requests when active dataset scope is present.
+  - Validates typed Pydantic input and output schemas for every tool call.
+  - Zero model calls for deterministic operations; AI-requiring operations route strictly through `ModelGateway`.
+- **MCP Execution Ledger (`MCPExecutionLedger`)**:
+  - Thread-safe cryptographic audit ledger recording `execution_id`, `caller`, `dataset_id`, SHA-256 `arguments_hash`, `evidence_ids`, `governance_status`, and `duration_ms`.
+- **Bypass Auditors**:
+  - `ControlPlaneBypassAuditor` and `MCPBypassAuditor` scan the codebase to ensure 0 direct bypass violations.
+
 ---
 
 ## 3. Layer Integration Contract (Output to Layer 3)
