@@ -110,6 +110,13 @@ class AIObservabilityService:
             is_latency_compliant=is_compliant,
         )
 
+        # Resolve active policy version
+        try:
+            from app.optimization.policy_registry import policy_registry
+            active_policy_id = policy_registry.get_active_policy().policy_id
+        except Exception:
+            active_policy_id = "POLICY-DEFAULT-001"
+
         # Construct AITrace
         trace = AITrace(
             request_id=state.request_id,
@@ -118,6 +125,7 @@ class AIObservabilityService:
             workspace_id=state.workspace_id,
             workflow_id=wf_record.workflow_id if wf_record else f"wf-{uuid4().hex[:8]}",
             workflow_type=workflow_type,
+            policy_version=active_policy_id,
             started_at=start_time,
             completed_at=completed_time,
             total_latency_ms=round(latency_ms, 2),

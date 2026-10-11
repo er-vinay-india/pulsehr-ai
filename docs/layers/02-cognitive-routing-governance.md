@@ -167,6 +167,40 @@ Implemented in `backend/app/observability/`:
 - **Technical Explorer Surface**:
   - Dedicated API router (`backend/app/routers/observability.py`) delivering compact health cards, KPIs, recent traces, anomaly alerts, and full execution drilldowns.
 
+### K. Governed Adaptive Optimization & Policy Recommendation Engine (Phase E)
+Implemented in `backend/app/optimization/`:
+- **Core Governance Invariant**:
+  $$\text{OBSERVE} \longrightarrow \text{EVALUATE} \longrightarrow \text{RECOMMEND} \longrightarrow \text{BENCHMARK} \longrightarrow \text{HUMAN APPROVAL} \longrightarrow \text{ACTIVATE}$$
+  **Never**: $\text{OBSERVE} \longrightarrow \text{SELF-MODIFY PRODUCTION}$. "Highview may learn what should improve, but it may never silently decide to change itself."
+- **Immutable Policy Registry (`PolicyRegistry`, `HighviewPolicy`)**:
+  - Every policy configuration is an immutable snapshot with version number, author, creation timestamp, and explicit lifecycle status (`ACTIVE`, `CANDIDATE`, `APPROVED`, `REJECTED`, `RETIRED`).
+  - Strict single-active invariant: Exactly one policy is active in production at any time. Activating a candidate automatically marks the previous active policy as `RETIRED` in the history chain.
+  - Sub-policies: `WorkflowPolicy`, `ToolSelectionPolicy`, `ModelRoutingPolicy`, `EvidencePolicy`, `LatencyPolicy`, `RetryPolicy`.
+- **Deterministic Analyzers (`app/optimization/analyzers/`)**:
+  - `OverOrchestrationDetector`: Detects tool bloat (> 2.5 tools in QuickAnswer) and recommends preflight pruning.
+  - `ModelRoutingAnalyzer`: Computes composite `ModelRoutingScore` (0.35 quality, 0.25 structured output, 0.20 latency, 0.15 compute, 0.05 stability); flags fallback spikes (> 20%) and slow primaries (> 5000ms), proposing alternate cascade orders.
+  - `ToolEfficiencyAnalyzer`: Detects duplicate sequential tools and identifies parallel execution pairs (`compare_segments` + `analyze_relationship`).
+  - `EvidencePolicyAnalyzer`: Identifies redundant verification passes for certified rankings while guaranteeing 100% grounding.
+  - `RetryPolicyAnalyzer`: Recommends early fallback on low-probability retries.
+  - `LatencyAnalyzer`: Flags recurring SLA breaches across workflow tiers.
+- **Offline Benchmark Comparator & Hard Safety Gates (`PolicyComparator`, `PromotionGate`)**:
+  - Evaluates candidate policies against the active baseline on the benchmark corpus before any human review.
+  - **Hard Safety Gates**: 0 dataset isolation violations, 0 ungrounded claims, 0 EVID/SCEN contamination, 0 bypasses, 0 unauthorized actions, 0 causal language regressions.
+  - Hard safety strictly overrides performance gains: Any violation causes immediate `REJECT`, regardless of latency or compute improvements.
+- **Human Governance & Approval Integration**:
+  - Candidate policies require explicit human promotion (`approve_and_activate`), recording the approving human actor and timestamp.
+  - Human review rejection (`reject_candidate`) safely marks the candidate `REJECTED` and preserves production baseline.
+- **Shadow Policy Evaluation (`ShadowPolicyEvaluator`)**:
+  - Runs candidate policy decisions concurrently in shadow mode against live user queries.
+  - Strict zero-mutation invariant: Excludes external side effects (e.g. deck export, database writes); only user-visible active policy output is returned.
+- **Safe Rollback Engine (`RollbackManager`, `rollback.py`)**:
+  - Inspects real-time anomalies (`GROUNDING_DROP`, `FAILED_SAFE_HALT`, `LATENCY_SPIKE`).
+  - Generates `RollbackAdvisory` alerts and safely restores the prior verified baseline from `PolicyRegistry` history.
+- **Policy Provenance Injection**:
+  - Every `AITrace` stamps `policy_version` during trace finalization, ensuring full end-to-end traceability from recommendation to runtime execution.
+- **Technical Explorer REST API (`backend/app/routers/optimization.py`)**:
+  - Endpoints for policies, active policy, recommendations generation, candidate creation, benchmark comparison, approval, rejection, rollback, and shadow simulations under `/api/optimization/`.
+
 ---
 
 ## 3. Layer Integration Contract (Output to Layer 3)

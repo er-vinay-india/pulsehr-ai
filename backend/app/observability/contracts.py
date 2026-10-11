@@ -264,6 +264,7 @@ class AITrace(BaseModel):
 
     workflow_id: str | None = None
     workflow_type: str | None = None
+    policy_version: str | None = None
 
     started_at: float = Field(default_factory=time.time)
     completed_at: float = Field(default_factory=time.time)
