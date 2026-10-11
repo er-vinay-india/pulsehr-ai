@@ -116,6 +116,30 @@ Implemented in `backend/app/mcp/`:
 - **Bypass Auditors**:
   - `ControlPlaneBypassAuditor` and `MCPBypassAuditor` scan the codebase to ensure 0 direct bypass violations.
 
+### I. HRIDAY LangGraph Orchestration (Phase C)
+Implemented in `backend/app/agent/`:
+- **Lightweight Pointer State (`HighviewAgentState`)**:
+  - Contains IDs and metadata (`conversation_id`, `request_id`, `dataset_id`, `evidence_ids`, `scenario_ids`, `provenance_ids`, `verified_claims`, `tool_history`, `pending_approval`).
+  - Strict mathematical invariant: Never holds raw DataFrames, bulk tables, or SQL query records.
+  - Strict epistemological separation: Empirical observations (`[EVID-xxx]`) are strictly isolated from counterfactual scenario projections (`[SCEN-xxx]`).
+- **Deterministic StateGraph Execution Engine (`StateGraph`, `CompiledGraph`, `GraphInterrupt`)**:
+  - Native, typed LangGraph graph execution engine supporting static transitions, conditional edge branching, and execution step counting.
+  - Human-in-the-loop interruption: Raises `GraphInterrupt` on `ToolRiskLevel.CRITICAL` actions or required approvals, permitting safe pause and resumption.
+- **Four Bounded Workflows**:
+  1. `QuickAnswerWorkflow`: Fast-path execution for direct questions (ranking, comparison, trend, lookup) with deterministic bypass.
+  2. `AnalyticalInvestigationWorkflow`: Multi-step diagnostic loop for 'why' and root-cause questions, verifying claim grounding and evidence sufficiency across segments.
+  3. `ScenarioAnalysisWorkflow`: Counterfactual policy simulation, isolating simulations from historical observations.
+  4. `PresentationCreationWorkflow`: Grounded executive presentation deck creation requiring verified empirical evidence.
+- **Safety Boundaries & Guards**:
+  - `WorkflowLoopLimits`: Hard caps on iterations (`max_graph_steps = 16`, `max_tool_calls = 10`, `max_same_tool_calls = 3`, `max_retries_per_node = 2`) diverting safely to `FAILED_SAFE`.
+  - `CausalLanguageGuard`: Detects and converts unjustified causal verbs ("caused", "drove the decline of", "leads to") into associational language ("was associated with") unless counterfactual/experimental validation is established.
+  - `GovernanceCheckNode`: Validates dataset isolation and caller entitlement constraints before analytical execution.
+- **HRIDAY Orchestrator & Provenance Ledger (`HRIDAYOrchestrator`, `WorkflowExecutionLedger`)**:
+  - Master entry point routing user intent to designated bounded workflows.
+  - Thread-safe ledger recording execution history, tool sequences, evidence gathered, latencies, and final status (`COMPLETED`, `PARTIAL`, `DENIED`, `REVIEW_REQUIRED`, `FAILED_SAFE`).
+- **Bypass Audit Guarantee**:
+  - `LangGraphBypassAuditor`: Scans `backend/app/agent/` to verify zero direct imports of SQLite, internal engines, or raw Ollama endpoints (0 violations).
+
 ---
 
 ## 3. Layer Integration Contract (Output to Layer 3)
