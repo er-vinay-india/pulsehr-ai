@@ -124,6 +124,24 @@ class RetryPolicy(BaseModel):
     early_fallback_on_model_timeout: bool = True
 
 
+class EmergencyContainmentPolicy(BaseModel):
+    """Governed policy defining pre-authorized automatic emergency containment rules."""
+    model_config = ConfigDict(extra="ignore")
+
+    enabled: bool = True
+    auto_contain_isolation_breach: bool = True
+    auto_contain_evid_scen_contamination: bool = True
+    auto_contain_grounding_safety_failure: bool = True
+    auto_contain_unauthorized_actions: bool = True
+    allowed_operators: list[str] = Field(default_factory=lambda: ["system_emergency_containment", "governance_safety"])
+
+
+class AdvisorySeverity(str, enum.Enum):
+    """Severity tier for rollback advisories."""
+    NORMAL = "NORMAL"
+    CRITICAL_SAFETY = "CRITICAL_SAFETY"
+
+
 class HighviewPolicy(BaseModel):
     """Immutable policy snapshot defining Highview runtime execution rules."""
     model_config = ConfigDict(extra="ignore")
@@ -149,6 +167,7 @@ class HighviewPolicy(BaseModel):
     evidence_policy: EvidencePolicy = Field(default_factory=EvidencePolicy)
     latency_policy: LatencyPolicy = Field(default_factory=LatencyPolicy)
     retry_policy: RetryPolicy = Field(default_factory=RetryPolicy)
+    containment_policy: EmergencyContainmentPolicy = Field(default_factory=EmergencyContainmentPolicy)
 
 
 class OptimizationRecommendation(BaseModel):

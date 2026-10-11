@@ -193,9 +193,10 @@ Implemented in `backend/app/optimization/`:
 - **Shadow Policy Evaluation (`ShadowPolicyEvaluator`)**:
   - Runs candidate policy decisions concurrently in shadow mode against live user queries.
   - Strict zero-mutation invariant: Excludes external side effects (e.g. deck export, database writes); only user-visible active policy output is returned.
-- **Safe Rollback Engine (`RollbackManager`, `rollback.py`)**:
-  - Inspects real-time anomalies (`GROUNDING_DROP`, `FAILED_SAFE_HALT`, `LATENCY_SPIKE`).
-  - Generates `RollbackAdvisory` alerts and safely restores the prior verified baseline from `PolicyRegistry` history.
+- **Safe Rollback & Emergency Containment Engine (`RollbackManager`, `rollback.py`)**:
+  - Inspects real-time anomalies and classifies degradation into two distinct governance tiers:
+    - **NORMAL Performance Degradation** (`LATENCY_SPIKE`, `TOOL_COUNT_SPIKE`, `FAILED_SAFE_HALT`, `MODEL_FAILURE_SPIKE`): Emits a `RollbackAdvisory` with `AdvisorySeverity.NORMAL`; strictly requires explicit **Human Approval** before rollback execution. Highview never automatically rolls back production for performance issues.
+    - **CRITICAL SAFETY Breaches** (`DATASET_ISOLATION_VIOLATION`, `EVID_SCEN_CONTAMINATION`, `UNAUTHORIZED_ACTION`, `GROUNDING_SAFETY_FAILURE`): Governed by pre-authorized `EmergencyContainmentPolicy`, permitting immediate automated candidate deactivation and baseline restoration with immutable emergency audit logging.
 - **Policy Provenance Injection**:
   - Every `AITrace` stamps `policy_version` during trace finalization, ensuring full end-to-end traceability from recommendation to runtime execution.
 - **Technical Explorer REST API (`backend/app/routers/optimization.py`)**:

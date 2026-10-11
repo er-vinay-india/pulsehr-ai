@@ -58,6 +58,7 @@ class RejectRequest(BaseModel):
 
 class RollbackRequest(BaseModel):
     to_policy_id: str | None = None
+    human_approved: bool = False
     operator: str = "governance_safety"
 
 
@@ -164,6 +165,7 @@ def rollback_policy(req: RollbackRequest) -> dict[str, Any]:
     """Restores prior baseline policy."""
     success, msg = governed_optimizer.execute_rollback(
         to_policy_id=req.to_policy_id,
+        human_approved=req.human_approved,
         operator=req.operator,
     )
     if not success:

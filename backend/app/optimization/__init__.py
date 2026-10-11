@@ -20,6 +20,8 @@ from .contracts import (
     EvidencePolicy,
     LatencyPolicy,
     RetryPolicy,
+    EmergencyContainmentPolicy,
+    AdvisorySeverity,
 )
 from .policy_registry import PolicyRegistry, policy_registry
 from .recommendation_engine import OptimizationRecommendationEngine, recommendation_engine
@@ -43,6 +45,8 @@ __all__ = [
     "EvidencePolicy",
     "LatencyPolicy",
     "RetryPolicy",
+    "EmergencyContainmentPolicy",
+    "AdvisorySeverity",
     "PolicyRegistry",
     "policy_registry",
     "OptimizationRecommendationEngine",

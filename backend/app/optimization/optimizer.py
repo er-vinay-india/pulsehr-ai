@@ -212,10 +212,15 @@ class GovernedOptimizer:
     def execute_rollback(
         self,
         to_policy_id: str | None = None,
+        human_approved: bool = False,
         operator: str = "governance_safety",
     ) -> tuple[bool, str]:
-        """Rolls back active policy to previous immutable baseline."""
-        return self._rollback_mgr.execute_rollback(to_policy_id=to_policy_id, operator=operator)
+        """Rolls back active policy to previous immutable baseline, respecting severity approvals."""
+        return self._rollback_mgr.execute_rollback(
+            to_policy_id=to_policy_id,
+            human_approved=human_approved,
+            operator=operator,
+        )
 
     # 7. Shadow Policy Evaluation
     def run_shadow_evaluation(
@@ -250,6 +255,7 @@ class GovernedOptimizer:
         """Resets state for clean unit and integration testing."""
         self._registry.clear_for_test()
         self._rec_engine.clear_for_test()
+        self._rollback_mgr.clear_for_test()
         with self._lock:
             self._comparison_results.clear()
             self._shadow_evaluations.clear()

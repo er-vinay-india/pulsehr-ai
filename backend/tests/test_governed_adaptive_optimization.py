@@ -29,6 +29,8 @@ from app.optimization import (
     PolicyStatus,
     RecommendationCategory,
     RiskLevel,
+    AdvisorySeverity,
+    EmergencyContainmentPolicy,
     governed_optimizer,
     policy_registry,
     recommendation_engine,
@@ -379,49 +381,102 @@ def test_09_human_approves_candidate_activates_new_policy_and_retires_old():
     assert old_policy.status == PolicyStatus.RETIRED
 
 
-def test_10_rollback_restores_prior_policy_on_anomaly():
-    """Scenario 10: Rollback manager inspects telemetry degradation and restores baseline."""
-    # 1. Activate a new policy
-    candidate = HighviewPolicy(
+def test_10_rollback_governance_normal_vs_emergency_safety():
+    """Scenario 10: Performance degradation requires human approval; critical safety triggers emergency containment."""
+    # 1. Activate a new policy v2
+    candidate_v2 = HighviewPolicy(
         policy_id="POLICY-CANDIDATE-V2",
         version_number=2,
         status=PolicyStatus.CANDIDATE,
     )
-    policy_registry.register_candidate(candidate)
-    governed_optimizer.approve_and_activate(candidate.policy_id, approved_by="admin")
-
+    policy_registry.register_candidate(candidate_v2)
+    governed_optimizer.approve_and_activate(candidate_v2.policy_id, approved_by="admin")
     assert governed_optimizer.get_active_policy().policy_id == "POLICY-CANDIDATE-V2"
 
-    # 2. Simulate runtime degradation under v2
-    degraded_traces = [
+    # Part A: NORMAL Performance Degradation (LATENCY_SPIKE / SLA_VIOLATIONS)
+    perf_traces = [
         AITrace(
-            request_id=f"tr-deg-{i}",
-            conversation_id="conv-deg",
-            total_latency_ms=13000.0,
-            status="FAILED_SAFE" if i % 2 == 0 else "COMPLETED",
-            evaluation_summary={"grounding": {"grounding_rate": 0.88}},
+            request_id=f"tr-perf-{i}",
+            conversation_id="conv-perf",
+            total_latency_ms=13500.0,
+            status="COMPLETED",
+            evaluation_summary={"grounding": {"grounding_rate": 1.0}},
         )
-        for i in range(4)
+        for i in range(3)
+    ]
+    perf_anomalies = [
+        RuntimeAnomaly(
+            anomaly_type="LATENCY_SPIKE",
+            severity="MEDIUM",
+            message="Latency spike 13500ms > 12000ms",
+        )
     ]
 
-    anomalies = [
+    adv_normal = rollback_manager.inspect_telemetry(perf_traces, perf_anomalies)
+    assert adv_normal is not None
+    assert adv_normal.severity == AdvisorySeverity.NORMAL
+    assert adv_normal.requires_human_approval is True
+    assert adv_normal.emergency_containment_authorized is False
+
+    # Attempt rollback WITHOUT human approval -> MUST BE REFUSED
+    success_unapproved, msg_unapproved = governed_optimizer.execute_rollback(
+        to_policy_id=adv_normal.target_policy_id,
+        human_approved=False,
+    )
+    assert success_unapproved is False
+    assert "requires explicit human approval" in msg_unapproved
+    assert governed_optimizer.get_active_policy().policy_id == "POLICY-CANDIDATE-V2"  # Unchanged!
+
+    # Execute rollback WITH human approval -> SUCCEEDS
+    success_approved, msg_approved = governed_optimizer.execute_rollback(
+        to_policy_id=adv_normal.target_policy_id,
+        human_approved=True,
+        operator="admin_reviewer",
+    )
+    assert success_approved is True
+    assert governed_optimizer.get_active_policy().policy_id == "POLICY-DEFAULT-001"
+
+    # Part B: CRITICAL SAFETY Breach (GROUNDING_DROP / CONTAMINATION)
+    # Re-activate candidate v2 to test critical safety containment
+    candidate_v2_retry = HighviewPolicy(
+        policy_id="POLICY-CANDIDATE-V2-RETRY",
+        version_number=3,
+        status=PolicyStatus.CANDIDATE,
+    )
+    policy_registry.register_candidate(candidate_v2_retry)
+    governed_optimizer.approve_and_activate(candidate_v2_retry.policy_id, approved_by="admin")
+
+    safety_traces = [
+        AITrace(
+            request_id="tr-safety-1",
+            conversation_id="conv-safety",
+            total_latency_ms=900.0,
+            evaluation_summary={"grounding": {"grounding_rate": 0.85}},
+        )
+    ]
+    safety_anomalies = [
         RuntimeAnomaly(
             anomaly_type="GROUNDING_DROP",
             severity="CRITICAL",
-            message="Factual grounding fell to 88%",
+            message="Factual grounding fell to 85%",
         )
     ]
 
-    advisory = rollback_manager.inspect_telemetry(degraded_traces, anomalies)
-    assert advisory is not None
-    assert advisory.current_policy_id == "POLICY-CANDIDATE-V2"
-    assert advisory.target_policy_id == "POLICY-DEFAULT-001"
-    assert advisory.severity == "CRITICAL"
+    adv_safety = rollback_manager.inspect_telemetry(safety_traces, safety_anomalies)
+    assert adv_safety is not None
+    assert adv_safety.severity == AdvisorySeverity.CRITICAL_SAFETY
+    assert adv_safety.emergency_containment_authorized is True
 
-    # 3. Execute rollback
-    success, msg = governed_optimizer.execute_rollback(to_policy_id=advisory.target_policy_id)
-    assert success is True
+    # Critical safety containment permits immediate reversion under EmergencyContainmentPolicy
+    success_emergency, msg_emergency = governed_optimizer.execute_rollback(
+        to_policy_id=adv_safety.target_policy_id,
+        operator="system_emergency_containment",
+    )
+    assert success_emergency is True
     assert governed_optimizer.get_active_policy().policy_id == "POLICY-DEFAULT-001"
+
+    audit_log = rollback_manager.get_audit_log()
+    assert any(entry["action"] == "EMERGENCY_CONTAINMENT" for entry in audit_log)
 
 
 def test_11_policy_provenance_recorded_on_trace():
