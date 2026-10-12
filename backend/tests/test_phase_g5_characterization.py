@@ -217,8 +217,8 @@ def test_g5_1_architecture_boundary_purity():
     import ast
     from pathlib import Path
 
-    formatting_dir = Path("app/services/adaptive_dashboard/formatting")
-    assert formatting_dir.exists(), "formatting package must exist"
+    formatting_dir = Path(__file__).resolve().parent.parent / "app" / "services" / "adaptive_dashboard" / "formatting"
+    assert formatting_dir.exists(), f"formatting package must exist at {formatting_dir}"
 
     forbidden_modules = {"sqlite3", "duckdb", "ollama", "mcp", "requests", "httpx"}
     for py_file in formatting_dir.glob("*.py"):
@@ -236,4 +236,282 @@ def test_g5_1_architecture_boundary_purity():
                     assert top_pkg not in forbidden_modules, (
                         f"Architecture violation: {py_file} imports from forbidden '{top_pkg}'"
                     )
+
+
+# ------------------------------------------------------------------------------
+# Phase G5.2 Tests: Evidence Binding & Provenance Boundary
+# ------------------------------------------------------------------------------
+
+def test_g5_2_evidence_namespace_integrity():
+    """G5.2: Enforces namespace validity and semantic isolation across EVID, CTX, and SCEN."""
+    from app.services.adaptive_dashboard.evidence import EvidenceNamespaceIntegrity
+
+    # Valid namespaces pass
+    assert EvidenceNamespaceIntegrity.parse_namespace("EVID-001") == "EVID"
+    assert EvidenceNamespaceIntegrity.parse_namespace("CTX-POLICY-01") == "CTX"
+    assert EvidenceNamespaceIntegrity.parse_namespace("SCEN-HEADCOUNT-DROP") == "SCEN"
+    assert EvidenceNamespaceIntegrity.validate_id_format("EVID-HERO-123") is True
+    assert EvidenceNamespaceIntegrity.validate_id_format("CTX-RECON-TAX") is True
+    assert EvidenceNamespaceIntegrity.validate_id_format("SCEN-OPTIMISTIC-01") is True
+
+    # Invalid namespaces fail
+    assert EvidenceNamespaceIntegrity.parse_namespace("RAW-ROW-12") == "UNKNOWN"
+    assert EvidenceNamespaceIntegrity.validate_id_format("RAW-ROW-12") is False
+    assert EvidenceNamespaceIntegrity.validate_id_format("unprefixed_id") is False
+    violations = EvidenceNamespaceIntegrity.validate_namespaces(["EVID-001", "INVALID_REF", "CTX-10"])
+    assert len(violations) == 1
+    assert "INVALID_REF" in violations[0]
+
+    # Semantic conflicts
+    scen_conflict = EvidenceNamespaceIntegrity.audit_claim_semantics(
+        "This is an empirically observed result across the company.",
+        ["SCEN-001"]
+    )
+    assert len(scen_conflict) == 1
+    assert "empirically observed" in scen_conflict[0]
+
+    evid_conflict = EvidenceNamespaceIntegrity.audit_claim_semantics(
+        "Under this simulation we expect attrition to spike.",
+        ["EVID-001"]
+    )
+    assert len(evid_conflict) == 1
+    assert "simulation" in evid_conflict[0]
+
+
+def test_g5_2_evidence_ownership_integrity_dataset_isolation():
+    """G5.2: Fails closed when an analytical fact tries to bind evidence belonging to an unrelated dataset."""
+    from app.services.adaptive_dashboard.evidence import (
+        AnalyticalFact,
+        BoundEvidence,
+        EvidenceBindingService,
+        EvidenceOwnershipIntegrity,
+        EvidenceOwnershipMismatchError,
+    )
+
+    fact = AnalyticalFact(
+        fact_id="fact_att_01",
+        dataset_id=101,
+        subject="Operations",
+        metric="Total Attendance",
+        formatted_value="24.0 days",
+    )
+
+    valid_evidence = BoundEvidence(
+        evidence_id="EVID-101-01",
+        subject="Operations",
+        metric="Total Attendance",
+        formatted_value="24.0 days",
+        dataset_id=101,
+    )
+
+    # Valid binding succeeds
+    bound = EvidenceBindingService.bind_fact(fact=fact, topic_id="topic_hero", evidence=valid_evidence)
+    assert bound.fact.dataset_id == 101
+    assert bound.evidence.evidence_id == "EVID-101-01"
+
+    # Cross-dataset contamination fails closed
+    alien_evidence = BoundEvidence(
+        evidence_id="EVID-999-01",
+        subject="Sales",
+        metric="Weekly_Sales",
+        formatted_value="$1.6M",
+        dataset_id=999,
+    )
+
+    with pytest.raises(EvidenceOwnershipMismatchError, match="Cross-dataset evidence contamination detected"):
+        EvidenceBindingService.bind_fact(fact=fact, topic_id="topic_hero", evidence=alien_evidence)
+
+
+def test_g5_2_evidence_ownership_integrity_topic_parity():
+    """G5.2: Enforces topic parity across visual spec, story, and evidence binding."""
+    from app.services.adaptive_dashboard.evidence import (
+        EvidenceOwnershipIntegrity,
+        EvidenceOwnershipMismatchError,
+    )
+
+    # Coherent topic succeeds
+    assert EvidenceOwnershipIntegrity.verify_topic_ownership(
+        topic_id="topic_workforce_hero",
+        visual_spec_topic_id="topic_workforce_hero",
+        story_topic_id="topic_workforce_hero",
+        evidence_topic_id="topic_workforce_hero",
+    ) is True
+
+    # Mismatched visual spec fails closed
+    with pytest.raises(EvidenceOwnershipMismatchError, match="Topic ownership integrity violation"):
+        EvidenceOwnershipIntegrity.verify_topic_ownership(
+            topic_id="topic_workforce_hero",
+            visual_spec_topic_id="topic_retail_sales",
+            story_topic_id="topic_workforce_hero",
+        )
+
+
+def test_g5_2_grain_isolation():
+    """G5.2: Enforces grain isolation between employee (personnel) level and department level evidence."""
+    from app.services.adaptive_dashboard.evidence import (
+        AnalyticalFact,
+        BoundEvidence,
+        EvidenceBindingService,
+        EvidenceOwnershipMismatchError,
+    )
+
+    employee_fact = AnalyticalFact(
+        fact_id="fact_emp_podium_01",
+        dataset_id=101,
+        subject="Employee 1",
+        metric="Total Attendance",
+        formatted_value="24.0 days",
+        grain="employee",
+    )
+
+    employee_evidence = BoundEvidence(
+        evidence_id="EVID-RANK-Employee-Total-Attendance",
+        subject="Employee 1",
+        metric="Total Attendance",
+        formatted_value="24.0 days",
+        dataset_id=101,
+        grain="employee",
+    )
+
+    dept_evidence = BoundEvidence(
+        evidence_id="EVID-RANK-Department-Total-Attendance",
+        subject="Operations",
+        metric="Total Attendance",
+        formatted_value="24.0 days",
+        dataset_id=101,
+        grain="department",
+    )
+
+    # Same grain succeeds
+    bound = EvidenceBindingService.bind_fact(fact=employee_fact, topic_id="topic_podium", evidence=employee_evidence)
+    assert bound.fact.grain == "employee"
+
+    # Grain contamination fails closed
+    with pytest.raises(EvidenceOwnershipMismatchError, match="Grain contamination detected"):
+        EvidenceBindingService.bind_fact(fact=employee_fact, topic_id="topic_podium", evidence=dept_evidence)
+
+
+def test_g5_2_compound_claims_audit():
+    """G5.2: Audits compound claims citing both empirical EVID and policy CTX evidence."""
+    from app.services.adaptive_dashboard.evidence import (
+        BoundEvidence,
+        ClaimBindingService,
+        EvidenceGraph,
+        StructuredClaim,
+    )
+
+    graph = EvidenceGraph(
+        sheet_id=1,
+        snapshot="snap1",
+        nodes=[
+            BoundEvidence(
+                evidence_id="EVID-001",
+                subject="Operations",
+                metric="Total Attendance",
+                formatted_value="24.0 days",
+                causal_classification="ASSOCIATED",
+            )
+        ]
+    )
+
+    ctx_nodes = [
+        BoundEvidence(
+            evidence_id="CTX-POLICY-ATTENDANCE",
+            subject="Policy",
+            metric="Target Threshold",
+            formatted_value="22.0 days",
+            namespace="CTX",
+            causal_classification="OBSERVED",
+        )
+    ]
+
+    # Valid compound claim citing both EVID-001 and CTX-POLICY-ATTENDANCE without causal overreach
+    claim_valid = StructuredClaim(
+        claim_id="CLM-01",
+        claim_text="Operations attendance of 24.0 days was associated with exceeding the 22.0 day policy benchmark.",
+        evidence_ids=["EVID-001", "CTX-POLICY-ATTENDANCE"],
+    )
+
+    resp = ClaimBindingService.audit_response(
+        answer="Audited summary",
+        claims=[claim_valid],
+        graph=graph,
+        context_nodes=ctx_nodes,
+    )
+
+    assert resp.audit.grounding_validation == "PASSED"
+    assert resp.audit.evidence_coverage_pct == 100.0
+    assert resp.audit.unsupported_claims_count == 0
+    assert "EVID-001" in resp.audit.evidence_ids_cited
+    assert "CTX-POLICY-ATTENDANCE" in resp.audit.evidence_ids_cited
+    assert len(resp.audit.causal_violations) == 0
+
+    # Causal overreach violation on ASSOCIATED evidence
+    claim_invalid = StructuredClaim(
+        claim_id="CLM-02",
+        claim_text="The high attendance was caused by operations policy changes directly.",
+        evidence_ids=["EVID-001"],
+    )
+
+    resp_invalid = ClaimBindingService.audit_response(
+        answer="Audited summary",
+        claims=[claim_invalid],
+        graph=graph,
+    )
+
+    assert resp_invalid.audit.grounding_validation in ("WARNING", "FAILED")
+    assert len(resp_invalid.audit.causal_violations) == 1
+    assert "caused by" in resp_invalid.audit.causal_violations[0]
+
+
+def test_g5_2_provenance_binder():
+    """G5.2: Provenance records bind lineage without leaking internal filesystem paths."""
+    from app.services.adaptive_dashboard.evidence import ProvenanceBinder
+
+    record = ProvenanceBinder.build_provenance_record(
+        dataset_id=501,
+        snapshot="snap_abc123456789",
+        calculation_desc="sum_measure(Total Attendance)",
+        sheet_id=12,
+        logical_table="attendance_curated",
+        storage_plane="parquet_duckdb",
+        grain="employee",
+    )
+
+    citation = ProvenanceBinder.format_citation(record)
+    assert "dataset #501" in citation
+    assert "attendance_curated (sheet #12)" in citation
+    assert "parquet_duckdb" in citation
+    assert "grain: employee" in citation
+    # Never leaks absolute local filesystem paths
+    assert "/Users/" not in citation
+    assert "C:\\" not in citation
+    assert "/home/" not in citation
+
+
+def test_g5_2_architecture_boundary_purity():
+    """G5.2 Architecture Boundary Guard: Verifies evidence modules contain zero DB, zero AI, and zero MCP imports."""
+    import ast
+    from pathlib import Path
+
+    evidence_dir = Path(__file__).resolve().parent.parent / "app" / "services" / "adaptive_dashboard" / "evidence"
+    assert evidence_dir.exists(), f"evidence package must exist at {evidence_dir}"
+
+    forbidden_modules = {"sqlite3", "duckdb", "ollama", "openai", "google.genai", "mcp", "requests", "httpx"}
+    for py_file in evidence_dir.glob("*.py"):
+        tree = ast.parse(py_file.read_text(encoding="utf-8"), filename=str(py_file))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    top_pkg = alias.name.split(".")[0]
+                    assert top_pkg not in forbidden_modules, (
+                        f"Architecture violation: {py_file} imports forbidden '{top_pkg}'"
+                    )
+            elif isinstance(node, ast.ImportFrom):
+                if node.module:
+                    top_pkg = node.module.split(".")[0]
+                    assert top_pkg not in forbidden_modules, (
+                        f"Architecture violation: {py_file} imports from forbidden '{top_pkg}'"
+                    )
+
 
