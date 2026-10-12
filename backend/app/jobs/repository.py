@@ -15,6 +15,27 @@ from .contracts import JobRecord, JobStatus, JobType
 logger = logging.getLogger(__name__)
 
 
+def _sanitize_for_storage(data: Any, depth: int = 0) -> Any:
+    """Strips sensitive tabular row arrays and limits depth/size for SQLite ledger storage."""
+    if depth > 5:
+        return "<truncated_depth>"
+    if isinstance(data, dict):
+        sanitized = {}
+        for k, v in data.items():
+            if k in ("rows", "raw_data", "dataframe", "records", "table_data") and isinstance(v, list):
+                sanitized[k] = f"<{len(v)} records omitted for data governance>"
+            elif isinstance(v, list) and len(v) > 50 and all(isinstance(x, (dict, list)) for x in v[:5]):
+                sanitized[k] = f"<{len(v)} items omitted for data governance>"
+            else:
+                sanitized[k] = _sanitize_for_storage(v, depth + 1)
+        return sanitized
+    elif isinstance(data, list):
+        if len(data) > 50 and all(isinstance(x, (dict, list)) for x in data[:5]):
+            return f"<{len(data)} items omitted for data governance>"
+        return [_sanitize_for_storage(x, depth + 1) for x in data[:50]]
+    return data
+
+
 class BackgroundJobRepository:
     """SQLite repository for governed background jobs."""
 
@@ -26,6 +47,7 @@ class BackgroundJobRepository:
         payload: dict[str, Any],
         execution_id: str | None = None,
     ) -> JobRecord:
+        sanitized_payload = _sanitize_for_storage(payload)
         with session_scope() as conn:
             conn.execute(
                 """
@@ -38,7 +60,7 @@ class BackgroundJobRepository:
                     job_id,
                     job_type.value,
                     JobStatus.PENDING.value,
-                    json.dumps(payload),
+                    json.dumps(sanitized_payload),
                     os.getpid(),
                     execution_id,
                 ),
@@ -112,6 +134,7 @@ class BackgroundJobRepository:
         result: dict[str, Any] | None = None,
         artifact_path: str | None = None,
     ) -> None:
+        sanitized_result = _sanitize_for_storage(result or {})
         with session_scope() as conn:
             conn.execute(
                 """
@@ -124,7 +147,7 @@ class BackgroundJobRepository:
                 """,
                 (
                     JobStatus.COMPLETED.value,
-                    json.dumps(result or {}),
+                    json.dumps(sanitized_result),
                     artifact_path,
                     job_id,
                 ),

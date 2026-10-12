@@ -27,6 +27,15 @@ from app.jobs import (
 )
 
 
+from fastapi.testclient import TestClient
+from app.main import app
+
+
+@pytest.fixture
+def client():
+    return TestClient(app)
+
+
 @pytest.fixture(autouse=True)
 def clean_jobs():
     yield
@@ -176,3 +185,56 @@ def test_06_fast_deterministic_operations_remain_synchronous():
     # Fast columnar calculation completes synchronously in single-digit ms
     assert exec_ms < 30.0
     assert res.rows[0]["tot_tickets"] == 100
+
+
+def test_07_download_endpoint_path_traversal_protection(client):
+    """Test 7: Download endpoint verifies job ownership and rejects paths outside governed exports directory."""
+    # Create a job with an artifact path outside governed exports dir (e.g. /etc/passwd)
+    outside_job = BackgroundJobRepository.create_job(
+        job_id="JOB-TRAVERSAL-01",
+        job_type=JobType.PDF_EXPORT,
+        payload={},
+    )
+    BackgroundJobRepository.mark_completed(
+        job_id=outside_job.id,
+        result={},
+        artifact_path="/etc/passwd",
+    )
+
+    resp = client.get(f"/api/jobs/{outside_job.id}/download")
+    assert resp.status_code == 403
+    assert "outside governed directories" in resp.json()["detail"]
+
+
+def test_08_payload_and_result_sanitization_avoids_storing_raw_rows():
+    """Test 8: Sensitive tabular row arrays are not stored in SQLite background_jobs."""
+    sensitive_rows = [{"ssn": f"123-45-{i:04d}", "salary": 100000 + i} for i in range(100)]
+    job = BackgroundJobRepository.create_job(
+        job_id="JOB-SANITIZE-01",
+        job_type=JobType.EDA,
+        payload={"rows": sensitive_rows, "sheet_id": 42},
+    )
+
+    rec = BackgroundJobRepository.get_job(job.id)
+    assert rec is not None
+    assert rec.payload.get("sheet_id") == 42
+    # Verify rows were sanitized to governance placeholder
+    assert "omitted for data governance" in str(rec.payload.get("rows"))
+
+
+def test_09_async_submission_returns_202_accepted(client):
+    """Test 9: Async submission endpoints return HTTP 202 Accepted."""
+    resp = client.post(
+        "/api/presentations/export-pdf/async",
+        json={
+            "deck_spec": {
+                "metadata": {"title": "Async 202 Test", "objective": "Leadership", "audience": "Exec"},
+                "slides": [{"id": "s1", "title": "Test Slide", "layout": "headline_stat"}]
+            }
+        }
+    )
+    assert resp.status_code == 202
+    data = resp.json()
+    assert data["status"] in ("PENDING", "RUNNING")
+    assert data["job_id"].startswith("JOB-PDF_")
+

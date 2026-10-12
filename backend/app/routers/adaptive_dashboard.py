@@ -1,5 +1,5 @@
 from typing import Any
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from ..db.database import get_connection, session_scope
 from ..services.adaptive_dashboard import AdaptiveDashboardResponse, run_adaptive_dashboard
@@ -110,9 +110,9 @@ def invalidate_dataset_cache(dataset_id: int):
     return {"dataset_id": dataset_id, "evicted_entries": evicted, "status": "invalidated"}
 
 
-@router.post("/backfill/async")
+@router.post("/backfill/async", status_code=status.HTTP_202_ACCEPTED)
 def trigger_backfill_async(dataset_id: int | None = Query(None)):
-    """Phase G4: Enqueues large Parquet backfill/rebuild in background worker plane."""
+    """Phase G4: Enqueues large Parquet backfill/rebuild in background worker plane and returns HTTP 202."""
     from ..jobs import worker_plane, JobType
     job = worker_plane.submit_job(
         job_type=JobType.PARQUET_BACKFILL,

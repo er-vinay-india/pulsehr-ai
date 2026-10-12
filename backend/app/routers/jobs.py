@@ -9,6 +9,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse
 
+from ..core import config
 from ..jobs import BackgroundJobRepository, JobRecord, JobStatus, JobType, worker_plane
 
 logger = logging.getLogger(__name__)
@@ -64,9 +65,17 @@ def download_job_artifact(job_id: str):
     if not job.artifact_path:
         raise HTTPException(status_code=404, detail="Job has no generated file artifact")
 
-    artifact_file = Path(job.artifact_path)
-    if not artifact_file.exists():
+    artifact_file = Path(job.artifact_path).resolve()
+    exports_dir = config.EXPORTS_DIR.resolve()
+    data_dir = config.DATA_DIR.resolve()
+
+    # Verify requested job owns the artifact and path stays strictly inside governed directories
+    if not (artifact_file.is_relative_to(exports_dir) or artifact_file.is_relative_to(data_dir)):
+        logger.warning(f"Path traversal detected or ungoverned artifact path: {artifact_file} for job {job_id}")
+        raise HTTPException(status_code=403, detail="Access denied: Artifact path is outside governed directories")
+
+    if not artifact_file.exists() or not artifact_file.is_file():
         raise HTTPException(status_code=404, detail=f"Artifact file not found at {job.artifact_path}")
 
-    media_type = "application/pdf" if artifact_file.suffix == ".pdf" else "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+    media_type = "application/pdf" if artifact_file.suffix.lower() == ".pdf" else "application/vnd.openxmlformats-officedocument.presentationml.presentation"
     return FileResponse(path=str(artifact_file), filename=artifact_file.name, media_type=media_type)

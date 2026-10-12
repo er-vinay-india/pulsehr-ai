@@ -7,7 +7,7 @@ import re
 from functools import wraps
 from typing import Any, Literal
 from contextlib import contextmanager
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, status
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 import sqlite3
@@ -648,13 +648,17 @@ def export_presentation_to_pdf(req: ExportPptxRequest):
     return FileResponse(path=str(path), filename=f'{title}.pdf', media_type='application/pdf')
 
 
-@router.post("/export-pdf/async")
+@router.post("/export-pdf/async", status_code=status.HTTP_202_ACCEPTED)
 def export_presentation_to_pdf_async(req: ExportPptxRequest):
-    """Phase G4: Enqueues PDF generation in background worker plane and returns immediately."""
+    """Phase G4: Enqueues PDF generation in background worker plane and returns HTTP 202 immediately."""
     from ..jobs import worker_plane, JobType
+    payload: dict[str, Any] = {"deck_spec": req.deck_spec}
+    deck_id = req.deck_spec.get("metadata", {}).get("deck_id") or req.deck_spec.get("id")
+    if deck_id:
+        payload["deck_id"] = str(deck_id)
     job = worker_plane.submit_job(
         job_type=JobType.PDF_EXPORT,
-        payload={"deck_spec": req.deck_spec},
+        payload=payload,
     )
     return {
         "job_id": job.id,
@@ -667,13 +671,17 @@ def export_presentation_to_pdf_async(req: ExportPptxRequest):
     }
 
 
-@router.post("/export-pptx/async")
+@router.post("/export-pptx/async", status_code=status.HTTP_202_ACCEPTED)
 def export_presentation_to_pptx_async(req: ExportPptxRequest):
-    """Phase G4: Enqueues PowerPoint generation in background worker plane and returns immediately."""
+    """Phase G4: Enqueues PowerPoint generation in background worker plane and returns HTTP 202 immediately."""
     from ..jobs import worker_plane, JobType
+    payload: dict[str, Any] = {"deck_spec": req.deck_spec}
+    deck_id = req.deck_spec.get("metadata", {}).get("deck_id") or req.deck_spec.get("id")
+    if deck_id:
+        payload["deck_id"] = str(deck_id)
     job = worker_plane.submit_job(
         job_type=JobType.PPTX_EXPORT,
-        payload={"deck_spec": req.deck_spec},
+        payload=payload,
     )
     return {
         "job_id": job.id,

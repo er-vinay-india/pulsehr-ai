@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import math
 from typing import Any
-from fastapi import APIRouter, HTTPException, Query, Body
+from fastapi import APIRouter, HTTPException, Query, Body, status
 
 from ..db.database import get_connection
 from ..services.eda import run_eda_pipeline
@@ -218,9 +218,9 @@ def trigger_eda(sheet_ids: list[int] | None = Body(None)):
     return result
 
 
-@router.post("/run/async")
+@router.post("/run/async", status_code=status.HTTP_202_ACCEPTED)
 def trigger_eda_async(sheet_ids: list[int] | None = Body(None)):
-    """Phase G4: Enqueues heavy EDA in background worker plane and returns immediately with job ID."""
+    """Phase G4: Enqueues heavy EDA in background worker plane and returns HTTP 202 immediately with job ID."""
     from ..jobs import worker_plane, JobType
     job = worker_plane.submit_job(
         job_type=JobType.EDA,
