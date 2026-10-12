@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .core import config
-from .db.database import init_db, get_connection
+from .db.database import init_db, get_connection, session_scope
 from .services.sheet_catalog import migrate_existing, backfill_display_names
 from .routers import analytics, employees, upload, copilot, reports, sheets, presentations
 from .services.presentation.pipeline_orchestrator import recover_presentation_jobs
@@ -32,7 +32,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=config.ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -56,8 +56,7 @@ app.include_router(context.router)
 
 @app.get("/api/health")
 def health_check():
-    conn = get_connection()
-    try:
+    with session_scope() as conn:
         emp_count = conn.execute("SELECT COUNT(*) FROM employees").fetchone()[0]
         alert_count = conn.execute("SELECT COUNT(*) FROM hr_alerts").fetchone()[0]
         chunk_count = conn.execute("SELECT COUNT(*) FROM tabular_chunks").fetchone()[0]
@@ -78,8 +77,6 @@ def health_check():
                 "embedding_dimension": config.EMBEDDING_DIM
             }
         }
-    finally:
-        conn.close()
 
 if __name__ == "__main__":
     import uvicorn

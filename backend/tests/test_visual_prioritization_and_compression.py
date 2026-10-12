@@ -243,3 +243,54 @@ def test_heatmap_presence_audit():
     }
     invalid_audit = VisualDataPresenceIntegrity.evaluate(invalid_spec)
     assert not invalid_audit.is_valid
+
+
+def test_compress_title_cross_domain_isolation():
+    """Verifies that title compression NEVER injects foreign domain vocabulary into retail or environmental topics."""
+    # Retail relationship story: Temperature vs Fuel Price
+    retail_micro = SemanticVisualCompressionLayer.compress_topic(
+        title="Temperature vs Fuel Price Statistical Association",
+        takeaway="Observed statistical dependency across store locations.",
+        intent="RELATIONSHIP",
+        tokens={"x_measure": "Temperature", "y_measure": "Fuel_Price"},
+        domain="retail",
+    )
+    assert "attendance" not in retail_micro.short_title.lower()
+    assert "leave" not in retail_micro.short_title.lower()
+    assert "temperature" in retail_micro.short_title.lower()
+    assert "fuel" in retail_micro.short_title.lower()
+
+    # Retail distribution story: Store Sales Dispersion
+    retail_dist = SemanticVisualCompressionLayer.compress_topic(
+        title="Store Sales Quartile Dispersion & Spread",
+        takeaway="Interquartile sales spread demonstrates consistency.",
+        intent="DISTRIBUTION",
+        tokens={"primary_measure": "Store Sales"},
+        domain="retail",
+    )
+    assert "attendance" not in retail_dist.short_title.lower()
+    assert "Store Sales" in retail_dist.short_title
+
+    # Environmental relationship story: SO2 vs NO2
+    env_micro = SemanticVisualCompressionLayer.compress_topic(
+        title="SO2 vs NO2 Multi-Pollutant Association",
+        takeaway="Observed statistical dependency across monitored locations.",
+        intent="RELATIONSHIP",
+        tokens={"x_measure": "SO2 Annual Average", "y_measure": "NO2 Annual Average"},
+        domain="environmental",
+    )
+    assert "attendance" not in env_micro.short_title.lower()
+    assert "leave" not in env_micro.short_title.lower()
+    assert "SO2" in env_micro.short_title
+    assert "NO2" in env_micro.short_title
+
+    # Workforce relationship story: Attendance vs Leave
+    wf_micro = SemanticVisualCompressionLayer.compress_topic(
+        title="Attendance Rate vs Approved Leave Rate Statistical Association",
+        takeaway="Observed dependency between presence and leaves.",
+        intent="RELATIONSHIP",
+        tokens={"x_measure": "Attendance Rate", "y_measure": "Approved Leave Rate"},
+        domain="workforce",
+    )
+    assert "Attendance" in wf_micro.short_title
+    assert "Approved Leave" in wf_micro.short_title or "Leave" in wf_micro.short_title

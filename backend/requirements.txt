@@ -48,4 +48,6 @@ scipy==1.18.1
 scikit-learn==1.9.1
 featuretools==1.31.0
 visions==0.8.2
-pysr==2.6.0
+pydantic-settings>=2.15.0
+duckdb>=1.5.0
+pyarrow>=26.0.0

@@ -129,7 +129,7 @@ class SemanticVisualCompressionLayer:
         )
 
         # 2. Compressed Title (<= 7 words)
-        short_title = cls._compress_title(title, intent, tokens)
+        short_title = cls._compress_title(title, intent, tokens, domain=domain)
 
         # 3. Primary number & context (focal metrics)
         primary_number, short_context = cls._derive_metric_and_context(key_metric, intent, tokens)
@@ -150,44 +150,132 @@ class SemanticVisualCompressionLayer:
         )
 
     @classmethod
-    def _compress_title(cls, title: str, intent: str, tokens: dict[str, Any]) -> str:
-        """Generates an executive short title <= 7 words."""
-        # Check explicit short titles for standard templates
-        title_lower = title.lower()
-        if "attendance ranking & policy benchmark" in title_lower or "attendance ranking" in title_lower:
-            return "Department Attendance Ranking"
-        if "governed policy benchmark" in title_lower or "attendance vs governed policy" in title_lower:
-            return "WFO Policy Compliance"
-        if "top 3" in title_lower and "attendance" in title_lower:
-            return "Top 3 Attendance Leaders"
-        if "top 3" in title_lower and "pm10" in title_lower:
-            return "Top 3 PM10 Hotspots"
-        if "cross-source" in title_lower and "leave" in title_lower:
-            return "Attendance vs Leave Capacity"
-        if "multi-pollutant association" in title_lower or ("association" in title_lower and ("so2" in title_lower or "no2" in title_lower)):
-            return "SO2 vs NO2 Association"
-        if "statistical association" in title_lower or "rate association" in title_lower:
-            return "Attendance & Leave Correlation"
-        if "particulate" in title_lower and ("dispersion" in title_lower or "spread" in title_lower):
-            return "Particulate Quartile Dispersion"
-        if "variance & dispersion" in title_lower or "spread & quartile" in title_lower:
-            return "Attendance Spread & Dispersion"
-        if "leave allocation benchmark" in title_lower:
-            return "Department Leave Utilization"
-        if "pollutant" in title_lower and "disparity" in title_lower or (("so2" in title_lower or "no2" in title_lower) and "disparity" in title_lower):
-            return "SO2 vs NO2 Disparity"
-        if "disparity spread" in title_lower or "disparity range" in title_lower:
-            return "Presence vs Leave Disparity"
-        if "pollutant" in title_lower and ("matrix" in title_lower or "zone" in title_lower or "intensity" in title_lower):
-            return "Pollutant Zone Matrix"
-        if "weekly attendance heatmap" in title_lower or ("attendance" in title_lower and ("matrix" in title_lower or "heatmap" in title_lower)):
-            return "Weekly Attendance Heatmap"
-        if "outlier concentration" in title_lower or "outlier variance" in title_lower or "outlier spikes" in title_lower:
-            return "Pollution Outlier Spikes"
+    def _humanize_label(cls, label: str) -> str:
+        """Removes underscores and normalizes to clean executive title casing."""
+        if not label:
+            return ""
+        clean = re.sub(r"[_\s]+", " ", str(label)).strip()
+        acronyms = {"cpi", "gdp", "roi", "pm10", "pm25", "pm2.5", "so2", "no2", "co2", "aqi", "wfo", "hr", "kpi"}
+        words = []
+        for w in clean.split():
+            w_lower = w.lower()
+            if w_lower in acronyms:
+                words.append("PM2.5" if w_lower == "pm25" else w.upper())
+            elif w_lower in {"vs", "and", "of", "in", "on", "for", "to", "with", "by"}:
+                words.append(w_lower if words else w.title())
+            else:
+                words.append(w.title())
+        return " ".join(words)
 
-        # General truncation to <= 7 words
-        clean = re.sub(r"\b(how do|what is the|statistical|analysis of|breakdown of)\b", "", title, flags=re.IGNORECASE).strip()
-        return cls.truncate_words(clean or title, max_words=7, suffix="")
+    @classmethod
+    def _compress_title(
+        cls,
+        title: str,
+        intent: str,
+        tokens: dict[str, Any],
+        domain: str = "general",
+    ) -> str:
+        """Generates an executive short title <= 7 words strictly preserving domain and topic semantics."""
+        title_lower = title.lower()
+        domain_lower = (domain or "").lower()
+        is_workforce = "workforce" in domain_lower or domain_lower in ("hr", "workforce_hr")
+        is_env = "env" in domain_lower or "air" in domain_lower
+        is_retail = "retail" in domain_lower or "sales" in domain_lower or "commercial" in domain_lower
+
+        # 1. RELATIONSHIP / Scatter: derive strictly from measures or clean "X vs Y"
+        if intent == "RELATIONSHIP" or " vs " in title_lower:
+            x_m = tokens.get("x_measure")
+            y_m = tokens.get("y_measure")
+            if x_m and y_m:
+                clean_x = re.sub(r"\b(Annual Average|Rate|Total|Observed)\b", "", str(x_m), flags=re.IGNORECASE).strip()
+                clean_y = re.sub(r"\b(Annual Average|Rate|Total|Observed)\b", "", str(y_m), flags=re.IGNORECASE).strip()
+                clean_x = cls._humanize_label(clean_x or str(x_m))
+                clean_y = cls._humanize_label(clean_y or str(y_m))
+                short_rel = f"{clean_x} vs {clean_y}"
+                if len(short_rel.split()) <= 7:
+                    return short_rel
+                return cls.truncate_words(short_rel, max_words=7, suffix="")
+            if " vs " in title:
+                parts = title.split(" vs ", 1)
+                left = re.sub(r"\b(Statistical Association|Multi-Pollutant Association|Association|Relationship|Correlation|Analysis|Study)\b", "", parts[0], flags=re.IGNORECASE).strip()
+                right = re.sub(r"\b(Statistical Association|Multi-Pollutant Association|Association|Relationship|Correlation|Analysis|Study)\b", "", parts[1], flags=re.IGNORECASE).strip()
+                left = cls._humanize_label(left)
+                right = cls._humanize_label(right)
+                if left and right:
+                    short_rel = f"{left} vs {right}"
+                    if len(short_rel.split()) <= 7:
+                        return short_rel
+                    return cls.truncate_words(short_rel, max_words=7, suffix="")
+
+        # 2. TOP 3 PODIUM / LEADERS / HOTSPOTS / PERFORMERS
+        if "top 3" in title_lower:
+            meas = tokens.get("primary_measure") or tokens.get("measure_column") or ""
+            if not meas:
+                if is_workforce or "attendance" in title_lower:
+                    meas = "Attendance"
+                elif is_env or "pm10" in title_lower:
+                    meas = "PM10"
+                elif is_retail or "sales" in title_lower:
+                    meas = "Sales"
+            meas_str = cls._humanize_label(str(meas))
+            if meas_str:
+                if is_workforce:
+                    return f"Top 3 {meas_str} Leaders"
+                elif is_env:
+                    hot_name = meas_str.upper() if len(meas_str) <= 4 else meas_str
+                    return f"Top 3 {hot_name} Hotspots"
+                elif is_retail:
+                    return f"Top 3 {meas_str} Stores"
+                return f"Top 3 {meas_str} Performers"
+
+        # 3. Domain-specific verified patterns (ONLY when domain matches)
+        if is_workforce:
+            if "attendance ranking & policy benchmark" in title_lower or "attendance ranking" in title_lower:
+                return "Department Attendance Ranking"
+            if "governed policy benchmark" in title_lower or "attendance vs governed policy" in title_lower:
+                return "WFO Policy Compliance"
+            if "cross-source" in title_lower and "leave" in title_lower:
+                return "Attendance vs Leave Capacity"
+            if "variance & dispersion" in title_lower or "spread & quartile" in title_lower:
+                return "Attendance Spread & Dispersion"
+            if "leave allocation benchmark" in title_lower:
+                return "Department Leave Utilization"
+            if "weekly attendance heatmap" in title_lower or ("attendance" in title_lower and ("matrix" in title_lower or "heatmap" in title_lower)):
+                return "Weekly Attendance Heatmap"
+
+        elif is_env:
+            if "particulate" in title_lower and ("dispersion" in title_lower or "spread" in title_lower):
+                return "Particulate Quartile Dispersion"
+            if "pollutant" in title_lower and ("matrix" in title_lower or "zone" in title_lower or "intensity" in title_lower):
+                return "Pollutant Zone Matrix"
+            if "outlier concentration" in title_lower or "outlier variance" in title_lower or "outlier spikes" in title_lower:
+                return "Pollution Outlier Spikes"
+
+        elif is_retail:
+            if "store performance" in title_lower or "sales revenue ranking" in title_lower:
+                return "Store Sales Ranking"
+            if "store sales" in title_lower and ("dispersion" in title_lower or "spread" in title_lower or "quartile" in title_lower):
+                return "Store Sales Dispersion"
+            if "category revenue composition" in title_lower:
+                return "Merchandise Category Mix"
+
+        # 4. Standard intent-based compression if tokens provide clean measure
+        if intent == "DISTRIBUTION":
+            m = tokens.get("primary_measure")
+            if m:
+                clean_m = cls._humanize_label(str(m))
+                return f"{clean_m} Quartile Dispersion"
+
+        if intent == "ANOMALY":
+            m = tokens.get("primary_measure")
+            if m:
+                clean_m = cls._humanize_label(str(m))
+                return f"{clean_m} Outlier Exceptions"
+
+        # 5. General truncation to <= 7 words without corrupting domain words
+        clean = re.sub(r"\b(how do|what is the|statistical|analysis of|breakdown of|ranking & policy benchmark)\b", "", title, flags=re.IGNORECASE).strip()
+        clean = cls._humanize_label(clean or title)
+        return cls.truncate_words(clean, max_words=7, suffix="")
 
     @classmethod
     def _derive_metric_and_context(

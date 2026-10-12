@@ -34,8 +34,18 @@ const KNOWN_ACRONYMS = new Set([
   'API',
   'ID',
   'MT',
-  'ESG'
+  'ESG',
+  'CPI',
+  'GDP',
+  'ROI',
+  'USD',
+  'EUR',
+  'GBP',
+  'CAD',
+  'AUD',
 ]);
+
+const CONNECTORS = new Set(['vs', 'and', 'of', 'in', 'on', 'for', 'to', 'with', 'by']);
 
 const EXPLICIT_SEMANTIC_LABELS = {
   // Analytical Intents
@@ -78,12 +88,27 @@ const EXPLICIT_SEMANTIC_LABELS = {
   AVERAGE_PM25_LEVEL: 'Average PM2.5 Level',
   AVERAGE_NO2_LEVEL: 'Average NO2 Level',
   AVERAGE_SO2_LEVEL: 'Average SO2 Level',
-  MONITORED_COVERAGE: 'Monitored Coverage'
+  MONITORED_COVERAGE: 'Monitored Coverage',
+  FUEL_PRICE: 'Fuel Price',
+  WEEKLY_SALES: 'Weekly Sales',
+  HOLIDAY_FLAG: 'Holiday Flag',
 };
+
+function formatSubWord(word, isFirstWord = false) {
+  if (!word) return '';
+  const upperWord = word.toUpperCase();
+  if (KNOWN_ACRONYMS.has(upperWord)) {
+    return upperWord === 'PM25' ? 'PM2.5' : upperWord;
+  }
+  if (!isFirstWord && CONNECTORS.has(word.toLowerCase())) {
+    return word.toLowerCase();
+  }
+  return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+}
 
 /**
  * Resolves a raw machine key or identifier into a clean, human-readable label.
- * @param {string} rawKey - The incoming key (e.g. "LEADERSHIP_FOCUS", "target_vs_actual", "department_name")
+ * @param {string} rawKey - The incoming key (e.g. "LEADERSHIP_FOCUS", "Fuel_Price", "Temperature vs Fuel_Price")
  * @param {string} [fallback] - Optional fallback string if rawKey is empty
  * @returns {string} Human-readable formatted string
  */
@@ -101,25 +126,32 @@ export function resolvePresentationLabel(rawKey, fallback = '') {
     return EXPLICIT_SEMANTIC_LABELS[normalizedUpper];
   }
 
-  // 2. If it does not contain underscores and does not match machine patterns, return as-is
+  // 2. If it contains NO underscores and is not screaming SNAKE/ACRONYM, return as-is
   if (!trimmed.includes('_') && !/^[A-Z0-9]{3,}$/.test(trimmed)) {
     return trimmed;
   }
 
-  // 3. Fallback: split by underscores/hyphens and capitalize words while preserving acronyms
-  const words = trimmed
-    .split(/[_\-\s]+/)
-    .filter(Boolean)
-    .map(word => {
-      const upperWord = word.toUpperCase();
-      if (KNOWN_ACRONYMS.has(upperWord)) {
-        return upperWord === 'PM25' ? 'PM2.5' : upperWord;
-      }
-      // Standard title casing
-      return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
-    });
+  // 3. If it's a single word with screaming caps without underscores (e.g. "TARGET")
+  if (!trimmed.includes('_') && /^[A-Z0-9]+$/.test(trimmed)) {
+    if (KNOWN_ACRONYMS.has(trimmed)) return trimmed === 'PM25' ? 'PM2.5' : trimmed;
+    return trimmed.charAt(0).toUpperCase() + trimmed.slice(1).toLowerCase();
+  }
 
-  return words.join(' ');
+  // 4. Process tokens with underscores
+  // Split on whitespace first to preserve inter-token structure
+  const tokens = trimmed.split(/\s+/);
+  const formattedTokens = tokens.map((token, tokenIdx) => {
+    if (!token.includes('_')) {
+      return token;
+    }
+    // Token has underscores: split and format parts
+    const subWords = token.split('_').filter(Boolean);
+    return subWords
+      .map((sw, subIdx) => formatSubWord(sw, tokenIdx === 0 && subIdx === 0))
+      .join(' ');
+  });
+
+  return formattedTokens.join(' ');
 }
 
 export default resolvePresentationLabel;

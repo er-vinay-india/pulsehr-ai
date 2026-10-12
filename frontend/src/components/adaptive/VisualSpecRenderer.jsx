@@ -1,6 +1,7 @@
 import React, { useMemo } from "react";
 import SafeReactECharts from "../charts/SafeReactECharts";
 import { Award, Trophy } from "lucide-react";
+import { resolvePresentationLabel } from "../../design-system/registries/PresentationLabelResolver";
 
 /**
  * Executive Podium Top 3 Renderer.
@@ -17,8 +18,8 @@ function PodiumTop3View({ visualSpec, themeTokens, isDark, height = "250px" }) {
   const items = [
     {
       rank: 2,
-      label: podiumCats[1]?.display_label || categories[1] || "2nd Place",
-      fullLabel: podiumCats[1]?.full_label || categories[1] || "2nd Place",
+      label: resolvePresentationLabel(podiumCats[1]?.display_label || categories[1] || "2nd Place"),
+      fullLabel: resolvePresentationLabel(podiumCats[1]?.full_label || categories[1] || "2nd Place"),
       secondaryId: secondaryIds[1],
       value: values[1] != null ? values[1] : "-",
       pedestalHeight: "80px",
@@ -29,8 +30,8 @@ function PodiumTop3View({ visualSpec, themeTokens, isDark, height = "250px" }) {
     },
     {
       rank: 1,
-      label: podiumCats[0]?.display_label || categories[0] || "1st Place",
-      fullLabel: podiumCats[0]?.full_label || categories[0] || "1st Place",
+      label: resolvePresentationLabel(podiumCats[0]?.display_label || categories[0] || "1st Place"),
+      fullLabel: resolvePresentationLabel(podiumCats[0]?.full_label || categories[0] || "1st Place"),
       secondaryId: secondaryIds[0],
       value: values[0] != null ? values[0] : "-",
       pedestalHeight: "115px",
@@ -42,8 +43,8 @@ function PodiumTop3View({ visualSpec, themeTokens, isDark, height = "250px" }) {
     },
     {
       rank: 3,
-      label: podiumCats[2]?.display_label || categories[2] || "3rd Place",
-      fullLabel: podiumCats[2]?.full_label || categories[2] || "3rd Place",
+      label: resolvePresentationLabel(podiumCats[2]?.display_label || categories[2] || "3rd Place"),
+      fullLabel: resolvePresentationLabel(podiumCats[2]?.full_label || categories[2] || "3rd Place"),
       secondaryId: secondaryIds[2],
       value: values[2] != null ? values[2] : "-",
       pedestalHeight: "60px",
@@ -510,14 +511,14 @@ export default function VisualSpecRenderer({
         },
         series: [
           {
-            name: visualSpec.primary_label || "Primary",
+            name: resolvePresentationLabel(visualSpec.primary_label || "Primary"),
             type: "scatter",
             symbolSize: 11,
             data: [...val1].reverse(),
             itemStyle: { color: themeTokens?.colors?.brandBlue || "#2563eb" },
           },
           {
-            name: visualSpec.secondary_label || (benchmark != null ? "Benchmark" : "Secondary"),
+            name: resolvePresentationLabel(visualSpec.secondary_label || (benchmark != null ? "Benchmark" : "Secondary")),
             type: "scatter",
             symbolSize: 11,
             data: [...val2].reverse(),
@@ -626,8 +627,8 @@ export default function VisualSpecRenderer({
     // 9. SCATTER / CORRELATION (Relationship Archetype)
     if (chartType === "scatter" || chartType === "correlation_scatter") {
       const rawPoints = visualSpec.scatter_points || visualSpec.sample_points || visualSpec.points || [];
-      const xLabel = visualSpec.x_label || "Primary Metric";
-      const yLabel = visualSpec.y_label || "Secondary Metric";
+      const xLabel = resolvePresentationLabel(visualSpec.x_label, "Primary Metric");
+      const yLabel = resolvePresentationLabel(visualSpec.y_label, "Secondary Metric");
       const scatterData = rawPoints.map((p) => {
         if (Array.isArray(p)) return p;
         return [p.x, p.y, p.name || p.entity || ""];

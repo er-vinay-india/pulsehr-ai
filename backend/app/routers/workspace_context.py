@@ -16,7 +16,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Query, Body
 from pydantic import BaseModel, Field
 
-from ..db.database import get_connection
+from ..db.database import get_connection, session_scope
 from ..services.input_intelligence import (
     DashboardContextAdapter,
     DashboardPlanningContext,
@@ -65,7 +65,7 @@ def _resolve_workspace_context(workspace_id: str) -> WorkspaceContext:
         ds_num = int(workspace_id[3:])
 
     if ds_num is not None:
-        with get_connection() as conn:
+        with session_scope() as conn:
             row = conn.execute(
                 "SELECT id, filename, original_name, columns_json, sample_preview_json, analysis_context_json FROM dataset_uploads WHERE id=?",
                 (ds_num,)
@@ -119,7 +119,7 @@ def _persist_context_if_applicable(workspace_id: str, context: WorkspaceContext)
 
     if ds_num is not None:
         try:
-            with get_connection() as conn:
+            with session_scope() as conn:
                 ctx_json = context.model_dump_json()
                 conn.execute(
                     "UPDATE dataset_uploads SET analysis_context_json=? WHERE id=?",

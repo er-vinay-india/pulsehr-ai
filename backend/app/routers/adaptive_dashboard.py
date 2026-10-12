@@ -1,7 +1,7 @@
 from typing import Any
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
-from ..db.database import get_connection
+from ..db.database import get_connection, session_scope
 from ..services.adaptive_dashboard import AdaptiveDashboardResponse, run_adaptive_dashboard
 from ..services.adaptive_dashboard.dataset_orchestrator import DatasetIntelligenceResponse, run_dataset_intelligence
 from ..services.adaptive_dashboard.findings import UnifiedFinding, get_shared_findings_for_sheet
@@ -9,6 +9,7 @@ from ..services.adaptive_dashboard.scenario_engine import (
     DeterministicScenarioEngine,
     GovernedScenarioParameters,
 )
+from ..cache import build_cache_key, dashboard_cache
 
 router = APIRouter(prefix="/api/adaptive-dashboard", tags=["adaptive dashboard"])
 
@@ -37,13 +38,31 @@ def get_primary_element(
     try:
         target_dataset_id = dataset_id
         if target_dataset_id is None and sheet_id is not None:
-            conn = get_connection()
-            try:
+            with session_scope() as conn:
                 row = conn.execute("SELECT dataset_id FROM sheets WHERE id = ?", (sheet_id,)).fetchone()
                 if row and row[0]:
                     target_dataset_id = row[0]
-            finally:
-                conn.close()
+
+        if target_dataset_id:
+            key = build_cache_key(
+                dataset_id=target_dataset_id,
+                cache_type=f"primary_element_s{sheet_id or 'all'}",
+            )
+
+            cached_dict = dashboard_cache.get(key)
+            if cached_dict is not None:
+                return AdaptiveDashboardResponse.model_validate(cached_dict)
+
+            def _compute():
+                resp = run_adaptive_dashboard(
+                    sheet_id=sheet_id,
+                    dataset_id=target_dataset_id,
+                    include_dataset_intelligence=True,
+                )
+                return resp.model_dump()
+
+            computed_dict = dashboard_cache.get_or_compute(key, _compute)
+            return AdaptiveDashboardResponse.model_validate(computed_dict)
 
         return run_adaptive_dashboard(
             sheet_id=sheet_id,
@@ -60,11 +79,36 @@ def get_primary_element(
 def get_dataset_dashboard(dataset_id: int):
     """Returns authoritative dataset-wide intelligence, relationships, and globally ranked insights (WP-9.6)."""
     try:
-        return run_dataset_intelligence(dataset_id=dataset_id)
+        key = build_cache_key(dataset_id=dataset_id, cache_type="dataset_intelligence")
+
+        cached_dict = dashboard_cache.get(key)
+        if cached_dict is not None:
+            return DatasetIntelligenceResponse.model_validate(cached_dict)
+
+        def _compute():
+            resp = run_dataset_intelligence(dataset_id=dataset_id)
+            return resp.model_dump()
+
+        computed_dict = dashboard_cache.get_or_compute(key, _compute)
+        return DatasetIntelligenceResponse.model_validate(computed_dict)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Dataset intelligence error: {exc}") from exc
+
+
+@router.get("/cache/stats")
+def get_cache_stats():
+    """Returns Technical Explorer cache telemetry and health metrics."""
+    return dashboard_cache.stats()
+
+
+@router.delete("/cache/dataset/{dataset_id}")
+def invalidate_dataset_cache(dataset_id: int):
+    """Invalidates all cached intelligence entries for a specific dataset."""
+    evicted = dashboard_cache.invalidate_dataset(dataset_id)
+    return {"dataset_id": dataset_id, "evicted_entries": evicted, "status": "invalidated"}
+
 
 
 @router.get("/findings", response_model=list[UnifiedFinding])

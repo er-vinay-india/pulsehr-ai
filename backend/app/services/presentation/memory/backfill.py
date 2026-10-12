@@ -14,7 +14,7 @@ import json
 import logging
 import sys
 
-from ....db.database import get_connection
+from ....db.database import session_scope
 from .memory_indexer import memory_indexer
 from .memory_store import memory_store
 
@@ -36,7 +36,7 @@ def run_backfill(limit: int | None = None, force: bool = False) -> dict[str, int
     }
 
     # 1. Backfill Presentation Decks
-    with get_connection() as conn:
+    with session_scope() as conn:
         query = "SELECT id, title, spec_json, created_at FROM presentation_decks ORDER BY created_at DESC"
         if limit:
             query += f" LIMIT {int(limit)}"
@@ -64,7 +64,7 @@ def run_backfill(limit: int | None = None, force: bool = False) -> dict[str, int
             stats["failures"] += 1
 
     # 2. Backfill Dataset Sheet Profiles
-    with get_connection() as conn:
+    with session_scope() as conn:
         sheet_rows = conn.execute("SELECT id, name FROM sheets ORDER BY id ASC").fetchall()
 
     stats["total_sheets_scanned"] = len(sheet_rows)

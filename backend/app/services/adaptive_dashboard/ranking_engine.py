@@ -608,8 +608,60 @@ class GenericEntityRankingEngine:
 
             sql_base += " GROUP BY 1"
 
-            # Execute and retrieve full grouped population
-            all_groups = conn.execute(sql_base, params).fetchall()
+            # Phase G3: DuckDB Columnar Acceleration
+            all_groups = None
+            try:
+                from app.analytics import AnalyticalQueryService, MeasureSpec, AggregationType, FilterSpec, FilterOperator
+                target_ds_id = dataset_id
+                if target_ds_id is None:
+                    row_ds = conn.execute("SELECT dataset_id FROM sheets WHERE id = ?", (sheet_id,)).fetchone()
+                    if row_ds and row_ds[0]:
+                        target_ds_id = row_ds[0]
+
+                if target_ds_id:
+                    agg_type = AggregationType.AVG if agg_func == "AVG" else AggregationType.SUM
+                    measures_spec = [
+                        MeasureSpec(field=measure_column, aggregation=agg_type, alias="metric_val"),
+                        MeasureSpec(field=measure_column, aggregation=AggregationType.COUNT, alias="record_count")
+                    ]
+                    filter_specs = [
+                        FilterSpec(field=measure_column, operator=FilterOperator.IS_NOT_NULL),
+                    ]
+                    for f_col, f_val in filter_context.items():
+                        if f_val is not None:
+                            filter_specs.append(FilterSpec(field=f_col, operator=FilterOperator.EQUALS, value=f_val))
+
+                    if is_person and person_id_col and person_label_col:
+                        dims = [person_id_col, person_label_col]
+                        filter_specs.extend([
+                            FilterSpec(field=person_id_col, operator=FilterOperator.IS_NOT_NULL),
+                            FilterSpec(field=person_label_col, operator=FilterOperator.IS_NOT_NULL),
+                        ])
+                    else:
+                        dims = [group_col]
+                        filter_specs.append(FilterSpec(field=group_col, operator=FilterOperator.IS_NOT_NULL))
+
+                    q_res = AnalyticalQueryService.group_by(
+                        dataset_id=target_ds_id,
+                        logical_table_id=f"sheet_{sheet_id}",
+                        dimensions=dims,
+                        measures=measures_spec,
+                        filters=filter_specs,
+                    )
+                    all_groups = []
+                    for r in q_res.rows:
+                        if is_person and person_id_col and person_label_col:
+                            all_groups.append((r.get(person_id_col), r.get(person_label_col), r.get("metric_val"), r.get("record_count")))
+                        else:
+                            all_groups.append((r.get(group_col), "", r.get("metric_val"), r.get("record_count")))
+            except Exception as ddb_err:
+                logger.debug("Falling back to SQLite JSON for ranking query: %s", ddb_err)
+                all_groups = None
+
+            if all_groups is None:
+                # Execute and retrieve full grouped population via SQLite
+                all_groups = conn.execute(sql_base, params).fetchall()
+
             population_count = len(all_groups)
 
             if population_count == 0:

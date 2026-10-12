@@ -13,7 +13,7 @@ from fastapi.responses import FileResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field, StrictInt
 
 from ..core import config
-from ..db.database import get_connection
+from ..db.database import get_connection, session_scope
 from ..services.sheet_catalog import read_sheets, prepare_sheets, insert_sheets, rebuild_relationships, prepare_existing_column_vectors
 from ..services.industrial_analytics import run_ingestion_industrial_pipeline
 from ..services.sheet_naming_pipeline import generate_sheet_display_name
@@ -171,6 +171,13 @@ def execute_ingestion_job(
                     if enrich_json_str and not all_enrichment_summaries:
                         conn.execute('UPDATE sheets SET enrichment_json=? WHERE dataset_id=?', (enrich_json_str, dataset_id))
 
+                    # Phase G3: Governed Columnar Parquet Materialization
+                    try:
+                        from ..analytics.backfill import DatasetParquetBackfill
+                        DatasetParquetBackfill.backfill_dataset(dataset_id)
+                    except Exception as p_err:
+                        logger.error(f"Parquet materialization non-fatal error for dataset {dataset_id}: {p_err}")
+
                     # Stage 7: Statistical Exploratory Data Analysis (EDA) & Outlier Profiling
                     ingestion_job_manager.update_progress(
                         job_id, step=7,
@@ -262,7 +269,7 @@ def execute_ingestion_job(
         # Asynchronously pre-warm visual analytics, persona detection, and evidence ledger to eliminate PPT cold start
         def _prewarm_presentation_cache(ds_id: int):
             try:
-                with get_connection() as warm_conn:
+                with session_scope() as warm_conn:
                     from ..services.visuals.workspace_visual_dashboard import build_workspace_visual_dashboard
                     from ..services.presentation.scope_detector import collect_workspace_evidence, capture_dataset_context
                     from ..services.presentation.persona_router import detect_dataset_persona
@@ -276,6 +283,13 @@ def execute_ingestion_job(
                 logger.debug(f"Pre-warming presentation cache non-blocking notice: {warm_err}")
 
         threading.Thread(target=_prewarm_presentation_cache, args=(dataset_id,), daemon=True).start()
+
+        # Invalidate any stale analytics cache for this dataset ID
+        try:
+            from ..cache import dashboard_cache
+            dashboard_cache.invalidate_dataset(dataset_id)
+        except Exception as c_err:
+            logger.debug(f"Cache invalidation notice on upload: {c_err}")
 
         result_payload = {
             'status': 'success',
@@ -302,7 +316,7 @@ def execute_ingestion_job(
         }
 
         with data_lifecycle_lock:
-            with get_connection() as live_conn:
+            with session_scope() as live_conn:
                 if not live_conn.execute('SELECT 1 FROM dataset_uploads WHERE id=?', (dataset_id,)).fetchone():
                     raise ValueError('Workbook was deleted before ingestion finished.')
             ingestion_job_manager.complete_job(job_id, dataset_id, result_payload)

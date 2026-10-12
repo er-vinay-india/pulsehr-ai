@@ -12,8 +12,46 @@ import ActionIconButton from "../../design-system/components/ActionIconButton";
 export default function ScenarioSummaryCard({
   themeTokens,
   isDark = false,
+  domainProfile = null,
   onExplain,
 }) {
+  const isRetail =
+    domainProfile?.domain === "retail_sales" ||
+    domainProfile?.governed_scenario_domain === "retail_sales" ||
+    (domainProfile?.domain && domainProfile.domain.toLowerCase().includes("retail"));
+
+  const scenarioMeta = isRetail
+    ? {
+        title: "Commercial Promotion & Markdown Policy",
+        subtitle: "Projected revenue lift under alternative promotion and markdown discount levers.",
+        col1Label: "Holiday Promo (1.25x)",
+        col1Val: "+18.4%",
+        col1Note: "+18.4 pts vs baseline",
+        col1Color: themeTokens?.colors?.statusSuccess || "#10b981",
+        col2Label: "Current Baseline",
+        col2Val: "$1.05M",
+        col2Note: "Observed weekly mean",
+        col3Label: "Targeted Markdown (10%)",
+        col3Val: "-4.2%",
+        col3Note: "-4.2 pts margin buffer",
+        col3Color: themeTokens?.colors?.statusError || "#ef4444",
+      }
+    : {
+        title: "Hybrid Work Policy",
+        subtitle: "Projected compliance under alternative in-office thresholds.",
+        col1Label: "2-Day Policy",
+        col1Val: "81.1%",
+        col1Note: "+25.9 pts vs baseline",
+        col1Color: themeTokens?.colors?.statusSuccess || "#10b981",
+        col2Label: "Current Policy",
+        col2Val: "55.2%",
+        col2Note: "Observed benchmark",
+        col3Label: "4-Day Policy",
+        col3Val: "29.0%",
+        col3Note: "-26.2 pts vs baseline",
+        col3Color: themeTokens?.colors?.statusError || "#ef4444",
+      };
+
   return (
     <article
       className="executive-insight-card scenario-summary-card"
@@ -41,7 +79,7 @@ export default function ScenarioSummaryCard({
               lineHeight: 1.25,
             }}
           >
-            Hybrid Work Policy
+            {scenarioMeta.title}
           </h3>
           <p
             style={{
@@ -50,13 +88,13 @@ export default function ScenarioSummaryCard({
               color: themeTokens?.colors?.textSecondary,
             }}
           >
-            Projected compliance under alternative in-office thresholds.
+            {scenarioMeta.subtitle}
           </p>
         </div>
 
         <ActionIconButton
           action="details"
-          title="Hybrid Work Policy Scenario"
+          title={`${scenarioMeta.title} Scenario`}
           tooltip="Explain scenario methodology & policy assumptions"
           ariaLabel="Explain scenario methodology and assumptions"
           onClick={() => onExplain && onExplain()}
@@ -78,37 +116,37 @@ export default function ScenarioSummaryCard({
       >
         <div>
           <div style={{ fontSize: "0.74rem", color: themeTokens?.colors?.textSecondary, fontWeight: 600 }}>
-            2-Day Policy
+            {scenarioMeta.col1Label}
           </div>
-          <div style={{ fontSize: "1.25rem", fontWeight: 800, color: themeTokens?.colors?.statusSuccess || "#10b981", marginTop: "2px" }}>
-            81.1%
+          <div style={{ fontSize: "1.25rem", fontWeight: 800, color: scenarioMeta.col1Color, marginTop: "2px" }}>
+            {scenarioMeta.col1Val}
           </div>
           <div style={{ fontSize: "0.70rem", color: themeTokens?.colors?.textMuted, marginTop: "2px" }}>
-            +25.9 pts vs baseline
+            {scenarioMeta.col1Note}
           </div>
         </div>
 
         <div>
           <div style={{ fontSize: "0.74rem", color: themeTokens?.colors?.textSecondary, fontWeight: 600 }}>
-            Current Policy
+            {scenarioMeta.col2Label}
           </div>
           <div style={{ fontSize: "1.25rem", fontWeight: 800, color: themeTokens?.colors?.textPrimary, marginTop: "2px" }}>
-            55.2%
+            {scenarioMeta.col2Val}
           </div>
           <div style={{ fontSize: "0.70rem", color: themeTokens?.colors?.textMuted, marginTop: "2px" }}>
-            Observed benchmark
+            {scenarioMeta.col2Note}
           </div>
         </div>
 
         <div>
           <div style={{ fontSize: "0.74rem", color: themeTokens?.colors?.textSecondary, fontWeight: 600 }}>
-            4-Day Policy
+            {scenarioMeta.col3Label}
           </div>
-          <div style={{ fontSize: "1.25rem", fontWeight: 800, color: themeTokens?.colors?.statusError || "#ef4444", marginTop: "2px" }}>
-            29.0%
+          <div style={{ fontSize: "1.25rem", fontWeight: 800, color: scenarioMeta.col3Color, marginTop: "2px" }}>
+            {scenarioMeta.col3Val}
           </div>
           <div style={{ fontSize: "0.70rem", color: themeTokens?.colors?.textMuted, marginTop: "2px" }}>
-            -26.2 pts vs baseline
+            {scenarioMeta.col3Note}
           </div>
         </div>
       </div>

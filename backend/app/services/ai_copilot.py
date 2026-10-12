@@ -5,7 +5,7 @@ import time
 import httpx
 from typing import Generator
 from ..core import config
-from ..db.database import get_connection
+from ..db.database import get_connection, session_scope
 from .hybrid_retrieval import hybrid_search
 from .copilot_tools import ToolRequest, infer_tool, execute_tool
 from .display_formatters import format_display_label, sanitize_llm_text
@@ -111,7 +111,7 @@ def build_copilot_context(sheet_id: int | None = None, dataset_id: int | None = 
     """
     lines = []
     try:
-        with get_connection() as conn:
+        with session_scope() as conn:
             sheets = conn.execute(
                 "SELECT s.id, s.name, s.row_count, s.columns_json, s.profile_json, d.original_name, d.id as dataset_id "
                 "FROM sheets s JOIN dataset_uploads d ON d.id=s.dataset_id ORDER BY s.id ASC"
@@ -272,7 +272,7 @@ def query_copilot(
     active_sheet_name = ""
     column_mapping = {}
     try:
-        with get_connection() as conn:
+        with session_scope() as conn:
             sheet = None
             if sheet_id:
                 sheet = conn.execute("SELECT name, columns_json FROM sheets WHERE id=?", (sheet_id,)).fetchone()
@@ -452,7 +452,7 @@ def stream_copilot_generator(
     active_sheet_name = ""
     column_mapping = {}
     try:
-        with get_connection() as conn:
+        with session_scope() as conn:
             sheet = None
             if sheet_id:
                 sheet = conn.execute("SELECT name, columns_json FROM sheets WHERE id=?", (sheet_id,)).fetchone()

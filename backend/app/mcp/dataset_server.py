@@ -16,7 +16,7 @@ import logging
 import sqlite3
 from typing import Any
 
-from ..db.database import get_connection
+from ..db.database import get_connection, session_scope
 from .contracts import (
     EntityCohortItem,
     GetDatasetProfileInput,
@@ -51,7 +51,7 @@ def handle_get_schema(args: dict[str, Any], context: Any = None) -> GetSchemaOut
     inp = GetSchemaInput.model_validate(args)
     dataset_id = inp.dataset_id
 
-    with get_connection() as conn:
+    with session_scope() as conn:
         cursor = conn.cursor()
         # Find primary sheet for dataset
         cursor.execute(
@@ -100,7 +100,7 @@ def handle_get_entities(args: dict[str, Any], context: Any = None) -> GetEntitie
     limit = inp.limit
 
     entities: list[EntityCohortItem] = []
-    with get_connection() as conn:
+    with session_scope() as conn:
         cursor = conn.cursor()
         cursor.execute(
             "SELECT id FROM sheets WHERE dataset_id = ? ORDER BY id ASC LIMIT 1",
@@ -142,7 +142,7 @@ def handle_get_measures(args: dict[str, Any], context: Any = None) -> GetMeasure
     dataset_id = inp.dataset_id
 
     measures: list[MeasureDescriptor] = []
-    with get_connection() as conn:
+    with session_scope() as conn:
         cursor = conn.cursor()
         cursor.execute(
             "SELECT id FROM sheets WHERE dataset_id = ? ORDER BY id ASC LIMIT 1",
@@ -179,7 +179,7 @@ def handle_get_time_dimensions(args: dict[str, Any], context: Any = None) -> Get
     dataset_id = inp.dataset_id
 
     time_dims: list[TimeDimensionItem] = []
-    with get_connection() as conn:
+    with session_scope() as conn:
         cursor = conn.cursor()
         cursor.execute(
             "SELECT id FROM sheets WHERE dataset_id = ? ORDER BY id ASC LIMIT 1",
@@ -217,7 +217,7 @@ def handle_get_dataset_profile(args: dict[str, Any], context: Any = None) -> Get
     total_records = 0
     domain = "general"
 
-    with get_connection() as conn:
+    with session_scope() as conn:
         cursor = conn.cursor()
         cursor.execute(
             "SELECT id, name FROM sheets WHERE dataset_id = ?",
@@ -253,7 +253,7 @@ def handle_get_relationships(args: dict[str, Any], context: Any = None) -> GetRe
     dataset_id = inp.dataset_id
 
     relationships: list[SheetRelationshipItem] = []
-    with get_connection() as conn:
+    with session_scope() as conn:
         cursor = conn.cursor()
         cursor.execute(
             """

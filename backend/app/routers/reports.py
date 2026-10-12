@@ -41,12 +41,12 @@ def create_presentation(req: PresentationRequest | None = None):
     # Check for available uploaded sheet
     import json
     import pandas as pd
-    from ..db.database import get_connection
+    from ..db.database import get_connection, session_scope
     from ..services.reporting.workflow_orchestrator import WorkflowOrchestrator
 
     df = None
     dataset_name = "Uploaded Dataset"
-    with get_connection() as conn:
+    with session_scope() as conn:
         sheet = None
         if sheet_id is not None:
             sheet = conn.execute(
@@ -131,12 +131,12 @@ def orchestrate_evidence_report(req: WorkflowReportRequest):
     """Executes the full 7-stage role-based deterministic AI reporting workflow."""
     import json
     import pandas as pd
-    from ..db.database import get_connection
+    from ..db.database import get_connection, session_scope
     from ..services.reporting.workflow_orchestrator import WorkflowOrchestrator
     from ..services.data_engine.analysis_context import AnalysisContext
 
     ctx = None
-    with get_connection() as conn:
+    with session_scope() as conn:
         if req.sheet_id is not None:
             sheet = conn.execute(
                 'SELECT s.*, d.original_name, d.analysis_context_json as d_ctx FROM sheets s JOIN dataset_uploads d ON d.id=s.dataset_id WHERE s.id=?',

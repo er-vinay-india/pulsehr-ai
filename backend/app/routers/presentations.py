@@ -5,14 +5,37 @@ import json
 import logging
 import re
 from functools import wraps
-from typing import Any, Literal
+from contextlib import contextmanager
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
+import sqlite3
 
 from ..core import config
 from ..db.database import get_connection
 from ..services.data_lifecycle import data_lifecycle_lock
+
+
+@contextmanager
+def session_scope(db_path: Any = None):
+    """Module-level session scope delegating to get_connection, respecting test monkeypatching."""
+    conn_obj = get_connection(db_path) if db_path else get_connection()
+    if hasattr(conn_obj, "__enter__") and hasattr(conn_obj, "__exit__") and not isinstance(conn_obj, sqlite3.Connection):
+        with conn_obj as c:
+            yield c
+    else:
+        try:
+            yield conn_obj
+            if hasattr(conn_obj, "commit"):
+                conn_obj.commit()
+        except Exception:
+            if hasattr(conn_obj, "rollback"):
+                conn_obj.rollback()
+            raise
+        finally:
+            if hasattr(conn_obj, "close"):
+                conn_obj.close()
+
 from ..services.dataset_deletion import require_live_sources
 from ..services.presentation_service import (
     THEMES,
@@ -202,7 +225,7 @@ def get_similar_presentation_decks(
 @router.post("/scope-preview")
 def get_scope_preview(req: ScopePreviewRequest):
     """Preflights presentation scope, reporting periods, partial-year status, and relationship coverage."""
-    with get_connection() as conn:
+    with session_scope() as conn:
         res = preview_presentation_scope(conn, req.model_dump())
     return res
 
@@ -249,7 +272,7 @@ def start_presentation_generation(req: GeneratePresentationRequest):
 @router.get("/decks/{deck_id}/evidence")
 def get_deck_evidence(deck_id: str):
     """Returns the frozen evidence ledger, snapshot hash, and claim verification summary."""
-    with get_connection() as conn:
+    with session_scope() as conn:
         row = conn.execute("SELECT spec_json FROM presentation_decks WHERE id = ?", (deck_id,)).fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Presentation deck not found")
@@ -280,7 +303,7 @@ def get_presentation_job_status(job_id: str):
         raise HTTPException(status_code=404, detail="Presentation job not found")
     if job.get("status") == "ready" and job.get("deck_id"):
         try:
-            with get_connection() as conn:
+            with session_scope() as conn:
                 row = conn.execute("SELECT spec_json FROM presentation_decks WHERE id = ?", (job["deck_id"],)).fetchone()
                 if row and row["spec_json"]:
                     job["deck"] = json.loads(row["spec_json"])
@@ -301,7 +324,7 @@ def cancel_presentation_job(job_id: str):
 @router.get("/decks")
 def list_presentation_decks(limit: int = Query(20, ge=1, le=100)):
     """Lists saved presentation decks from persistent storage."""
-    with get_connection() as conn:
+    with session_scope() as conn:
         rows = conn.execute(
             """
             SELECT id, title, dataset_id, sheet_id, theme_id, pptx_filename, created_at, updated_at
@@ -333,7 +356,7 @@ def get_dataset_personas(sheet_id: int | None = Query(None)):
     from ..services.presentation.persona_router import detect_dataset_persona, get_relevant_personas_for_dataset
     from ..services.presentation.scope_detector import capture_dataset_context
 
-    with get_connection() as conn:
+    with session_scope() as conn:
         ctx = capture_dataset_context(conn, sheet_id)
         detected = detect_dataset_persona(ctx, conn)
         relevant = get_relevant_personas_for_dataset(ctx, conn)
@@ -347,7 +370,7 @@ def get_dataset_personas(sheet_id: int | None = Query(None)):
 @router.get("/decks/latest")
 def get_latest_presentation_deck():
     """Retrieves the most recently generated PresentationDeckSpec."""
-    with get_connection() as conn:
+    with session_scope() as conn:
         row = conn.execute(
             """
             SELECT id, title, dataset_id, sheet_id, theme_id, spec_json, pptx_filename, created_at, updated_at
@@ -378,7 +401,7 @@ def get_latest_presentation_deck():
 @router.delete("/decks/{deck_id}")
 def delete_presentation_deck(deck_id: str):
     """Permanently deletes a saved presentation deck and cleans up export artifacts."""
-    with get_connection() as conn:
+    with session_scope() as conn:
         row = conn.execute("SELECT id, pptx_filename FROM presentation_decks WHERE id = ?", (deck_id,)).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="Presentation deck not found")
@@ -400,7 +423,7 @@ def delete_presentation_deck(deck_id: str):
 @router.get("/decks/{deck_id}")
 def get_presentation_deck(deck_id: str):
     """Retrieves full PresentationDeckSpec by deck_id."""
-    with get_connection() as conn:
+    with session_scope() as conn:
         row = conn.execute(
             "SELECT spec_json FROM presentation_decks WHERE id = ?",
             (deck_id,)
@@ -420,7 +443,7 @@ def get_presentation_deck(deck_id: str):
 @router.get("/decks/{deck_id}/review-gates")
 def get_deck_review_gates(deck_id: str):
     """Returns the five review gates evaluation and human approval status."""
-    with get_connection() as conn:
+    with session_scope() as conn:
         row = conn.execute("SELECT spec_json FROM presentation_decks WHERE id = ?", (deck_id,)).fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Presentation deck not found")
@@ -430,7 +453,7 @@ def get_deck_review_gates(deck_id: str):
         from ..services.presentation.review_gates import initialize_review_gates, evaluate_automated_gates
         rg = evaluate_automated_gates(spec)
         spec.setdefault("metadata", {})["review_gates"] = rg
-        with get_connection() as conn:
+        with session_scope() as conn:
             conn.execute("UPDATE presentation_decks SET spec_json = ? WHERE id = ?", (json.dumps(spec), deck_id))
             conn.commit()
     return rg
@@ -439,7 +462,7 @@ def get_deck_review_gates(deck_id: str):
 @router.post("/decks/{deck_id}/review-gates/{gate_id}/approve")
 def approve_review_gate(deck_id: str, gate_id: str, req: ReviewGateSignoffRequest):
     """Records an explicit human approval or rejection for one of the five review gates."""
-    with get_connection() as conn:
+    with session_scope() as conn:
         row = conn.execute("SELECT spec_json FROM presentation_decks WHERE id = ?", (deck_id,)).fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Presentation deck not found")
@@ -463,7 +486,7 @@ def approve_review_gate(deck_id: str, gate_id: str, req: ReviewGateSignoffReques
     except KeyError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     spec.setdefault("metadata", {})["review_gates"] = updated_rg
-    with get_connection() as conn:
+    with session_scope() as conn:
         conn.execute("UPDATE presentation_decks SET spec_json = ? WHERE id = ?", (json.dumps(spec), deck_id))
         conn.commit()
     return updated_rg
@@ -479,7 +502,7 @@ def update_presentation_deck(deck_id: str, deck_spec: dict[str, Any]):
 
     # Retrieve current stored revision from database to guarantee monotonic revision increment
     stored_rev = 0
-    with get_connection() as conn:
+    with session_scope() as conn:
         row = conn.execute("SELECT spec_json FROM presentation_decks WHERE id = ?", (deck_id,)).fetchone()
         if row:
             try:
@@ -499,7 +522,7 @@ def update_presentation_deck(deck_id: str, deck_spec: dict[str, Any]):
     pptx_filename = deck_spec.get("pptx_filename")
     spec_json = json.dumps(deck_spec)
 
-    with get_connection() as conn:
+    with session_scope() as conn:
         conn.execute(
             """
             INSERT INTO presentation_decks (id, title, dataset_id, sheet_id, theme_id, spec_json, pptx_filename, updated_at)
@@ -629,7 +652,7 @@ def export_presentation_to_pdf(req: ExportPptxRequest):
 def download_deck_pptx(deck_id: str):
     """Exports or serves a PowerPoint presentation for a stored deck."""
     deck_spec = None
-    with get_connection() as conn:
+    with session_scope() as conn:
         row = conn.execute("SELECT spec_json FROM presentation_decks WHERE id = ?", (deck_id,)).fetchone()
     if row:
         deck_spec = json.loads(row["spec_json"])
@@ -681,7 +704,7 @@ def download_deck_pdf(deck_id: str):
     """Exports or serves a PDF document for a stored deck."""
     from ..services.report_generator import export_spec_to_pdf
     deck_spec = None
-    with get_connection() as conn:
+    with session_scope() as conn:
         row = conn.execute("SELECT spec_json FROM presentation_decks WHERE id = ?", (deck_id,)).fetchone()
     if row:
         deck_spec = json.loads(row["spec_json"])

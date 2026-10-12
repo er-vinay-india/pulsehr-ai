@@ -1159,31 +1159,31 @@ class AnalyticalStoryBuilder:
             corr_val = (rep.tokens or {}).get("correlation")
 
             if is_workforce:
-                clean_x = str(x_m or "Attendance Rate")
-                clean_y = str(y_m or "Approved Leave Rate")
+                clean_x = str(x_m or "Attendance Rate").replace("_", " ").title()
+                clean_y = str(y_m or "Approved Leave Rate").replace("_", " ").title()
                 title = f"{clean_x} vs {clean_y} Statistical Association"
                 question = f"What is the operational correlation between {clean_x.lower()} and {clean_y.lower()}?"
                 takeaway = f"Observed operational dependency (r = {corr_val:+.2f}) between {clean_x.lower()} and {clean_y.lower()} across department cohorts." if corr_val is not None else f"Observed statistical dependency: {rep.formatted_value} across evaluated population."
                 recommended_action = "Incorporate attendance-leave interaction elasticity into workforce capacity models."
             elif is_env:
-                clean_x = str(x_m or "SO2 Annual Average")
-                clean_y = str(y_m or "NO2 Annual Average")
+                clean_x = str(x_m or "SO2 Annual Average").replace("_", " ").title()
+                clean_y = str(y_m or "NO2 Annual Average").replace("_", " ").title()
                 title = f"{clean_x} vs {clean_y} Multi-Pollutant Association"
                 question = f"What is the statistical association between {clean_x} and {clean_y} concentrations?"
                 takeaway = f"Observed statistical dependency ({rep.formatted_value}) across {rep.population or 429} monitored locations."
                 recommended_action = "Prioritize multi-pollutant monitoring stations where both pollutants exhibit concurrent elevation."
             elif is_retail:
-                clean_x = str(x_m or "Foot Traffic")
-                clean_y = str(y_m or "Store Revenue")
+                clean_x = str(x_m or "Foot Traffic").replace("_", " ").title()
+                clean_y = str(y_m or "Store Revenue").replace("_", " ").title()
                 title = f"{clean_x} vs {clean_y} Statistical Association"
-                question = f"What is the correlation between foot traffic and realized revenue?"
+                question = f"What is the correlation between {clean_x.lower()} and {clean_y.lower()}?"
                 takeaway = f"Observed statistical dependency: {rep.formatted_value} across store locations."
                 recommended_action = "Optimize storefront visibility to maximize footfall conversion."
             else:
-                clean_x = str(x_m or "Primary Metric")
-                clean_y = str(y_m or "Secondary Metric")
+                clean_x = str(x_m or "Primary Metric").replace("_", " ").title()
+                clean_y = str(y_m or "Secondary Metric").replace("_", " ").title()
                 title = f"{clean_x} vs {clean_y} Statistical Association"
-                question = f"What is the correlation between {clean_x} and {clean_y}?"
+                question = f"What is the correlation between {clean_x.lower()} and {clean_y.lower()}?"
                 takeaway = f"Observed statistical dependency: {rep.formatted_value} across population."
                 recommended_action = "Incorporate interaction elasticity into monthly planning models."
             biz_val, stat_sig, imp = 0.85, 0.88, 0.82

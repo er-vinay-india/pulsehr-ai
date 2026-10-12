@@ -252,13 +252,12 @@ def regenerate_single_slide(
     deck_id = updated_deck.get("id")
     if deck_id:
         try:
-            from ...db.database import get_connection
-            with get_connection() as conn:
+            from ...db.database import session_scope
+            with session_scope() as conn:
                 conn.execute(
                     "UPDATE presentation_decks SET spec_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
                     (json.dumps(updated_deck), deck_id)
                 )
-                conn.commit()
         except Exception as exc:
             logger.debug(f"Deck database update during slide regeneration skipped: {exc}")
 

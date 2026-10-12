@@ -26,6 +26,7 @@ PERIOD_REGEX = re.compile(
 from .domain_governance import DatasetDomain
 from .evidence_graph import EvidenceGraph, EvidenceItem
 from .global_ranker import InsightCandidate
+from .dataset_isolation_integrity import TopicVisualBindingIntegrity, AxisNarrativeIntegrity
 from .visual_decision import (
     AnalyticalIntent,
     AudienceType,
@@ -60,6 +61,8 @@ class ExecutiveTopic(BaseModel):
     title: str
     subtitle: str = ""
     slot_type: Literal["hero", "supporting", "risk_anomaly", "action_scenario"] = "supporting"
+    dataset_id: int | None = None
+    domain: str = "general"
     insight_ids: list[str] = Field(default_factory=list)
     metric_family: str = "general"
     periods: list[str] = Field(default_factory=list)
@@ -399,11 +402,17 @@ class DynamicExecutiveComposition:
                 "topic_id": topic_id,
             }
 
+            v_spec["dataset_id"] = dataset_id
+            v_spec["domain"] = domain
+            v_spec["topic_id"] = topic_id
+
             topic = ExecutiveTopic(
                 topic_id=topic_id,
                 title=title,
                 subtitle=subtitle,
                 slot_type="supporting",
+                dataset_id=dataset_id,
+                domain=domain,
                 insight_ids=[cand.candidate_id],
                 metric_family=cand.redundancy_group or "general",
                 periods=v_spec.get("categories") if intent in ("TREND", "COMPOSITION") else [],
@@ -436,10 +445,29 @@ class DynamicExecutiveComposition:
                     takeaway=top.primary_takeaway or top.takeaway or top.title,
                     intent=top.analytical_intent,
                     key_metric=top.key_metric,
+                    tokens={
+                        "primary_measure": top.key_metric,
+                        "x_measure": top.visual_spec.get("x_label"),
+                        "y_measure": top.visual_spec.get("y_label"),
+                        "categories": top.visual_spec.get("categories"),
+                        "values": top.visual_spec.get("values"),
+                        "benchmark": top.visual_spec.get("benchmark"),
+                        "unit": top.visual_spec.get("unit"),
+                    },
                     domain=domain,
                 )
 
-        return topics
+        # TopicVisualBindingIntegrity & AxisNarrativeIntegrity validation
+        validated_topics: list[ExecutiveTopic] = []
+        for top in topics:
+            AxisNarrativeIntegrity.evaluate(top)
+            ok, err = TopicVisualBindingIntegrity.evaluate(top)
+            if not ok:
+                logger.warning("TopicVisualBindingIntegrity: Suppressed invalid topic '%s': %s", top.topic_id, err)
+                continue
+            validated_topics.append(top)
+
+        return validated_topics
 
 
 # ==============================================================================
@@ -1290,6 +1318,8 @@ class ExecutiveCompositionPlanner:
                 scatter_pts = tokens.get("scatter_points") or tokens.get("sample_points") or []
                 x_measure_name = tokens.get("x_measure") or (getattr(story, "primary_measure", None) if getattr(story, "primary_measure", None) != "metric" else None) or ("Total Attendance" if is_workforce else ("SO2 Annual Average" if "air" in domain_name.lower() or "env" in domain_name.lower() else "Primary Metric"))
                 y_measure_name = tokens.get("y_measure") or ("Approved Leaves" if is_workforce else ("NO2 Annual Average" if "air" in domain_name.lower() or "env" in domain_name.lower() else "Secondary Metric"))
+                x_measure_name = SemanticVisualCompressionLayer._humanize_label(x_measure_name)
+                y_measure_name = SemanticVisualCompressionLayer._humanize_label(y_measure_name)
                 v_spec = {
                     "chart_type": "scatter",
                     "scatter_points": scatter_pts,
@@ -1462,11 +1492,18 @@ class ExecutiveCompositionPlanner:
                     if not s.get("evidence_id"):
                         s["evidence_id"] = e_ids[s_idx % len(e_ids)] if e_ids else f"EVID-SERIES-{s_idx:02d}"
 
+            t_id = f"TOPIC-{out_idx:03d}"
+            v_spec["topic_id"] = t_id
+            v_spec["dataset_id"] = dataset_id
+            v_spec["domain"] = domain_name
+
             topic = ExecutiveTopic(
-                topic_id=f"TOPIC-{out_idx:03d}",
+                topic_id=t_id,
                 title=getattr(story, "title", f"Topic {out_idx}"),
                 subtitle=getattr(story, "business_question", ""),
                 slot_type="hero" if item.is_hero else (item.suggested_role if item.suggested_role in ("hero", "supporting", "risk_anomaly", "action_scenario") else "supporting"),
+                dataset_id=dataset_id,
+                domain=domain_name,
                 evidence_ids=e_ids,
                 evidence_ref=e_ids[0] if e_ids else "",
                 metric_family=item.semantic_family,
@@ -1490,7 +1527,7 @@ class ExecutiveCompositionPlanner:
                     "selected_chart": item.chart_archetype,
                     "decision_audit": decision.get("audit", {}),
                     "evidence_ids": getattr(story, "evidence_ids", []),
-                    "topic_id": f"TOPIC-{out_idx:03d}",
+                    "topic_id": t_id,
                     "ranking_metadata": ranking_meta,
                 },
                 priority=out_idx,
@@ -1501,6 +1538,17 @@ class ExecutiveCompositionPlanner:
                 selected_or_suppressed="SELECTED",
             )
             topics.append(topic)
+
+        # TopicVisualBindingIntegrity & AxisNarrativeIntegrity validation
+        validated_topics: list[ExecutiveTopic] = []
+        for t in topics:
+            AxisNarrativeIntegrity.evaluate(t)
+            ok, err = TopicVisualBindingIntegrity.evaluate(t)
+            if not ok:
+                logger.warning("TopicVisualBindingIntegrity: Suppressed invalid topic '%s': %s", t.topic_id, err)
+                continue
+            validated_topics.append(t)
+        topics = validated_topics
 
         # Optimize spatial composition and assign row/column placements
         SpatialCompositionOptimizer.optimize_layout(topics, domain=domain_name)

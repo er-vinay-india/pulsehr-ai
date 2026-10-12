@@ -8,7 +8,7 @@ from typing import TypedDict
 from fastapi import HTTPException
 
 from ..core import config
-from ..db.database import get_connection
+from ..db.database import get_connection, session_scope
 from .data_lifecycle import data_lifecycle_lock
 from .sheet_catalog import rebuild_relationships
 
@@ -25,6 +25,9 @@ class DatasetDeletionResult(TypedDict, total=False):
     vectors_deleted: int
     snapshots_deleted: int
     cache_keys_invalidated: int
+    cache_orphan_count: int
+    parquet_tables_deleted: int
+    parquet_orphan_count: int
     orphan_check: str
     cleanup_pending: bool
     pending_files: int
@@ -69,7 +72,7 @@ def source_references(value):
 def require_live_sources(deck_spec):
     """Reject a stale editor request that would republish data from removed sources."""
     datasets, sheets = source_references(deck_spec)
-    with get_connection() as conn:
+    with session_scope() as conn:
         for table, identities in (('dataset_uploads', datasets), ('sheets', sheets)):
             for identity in identities:
                 if not conn.execute(f'SELECT 1 FROM {table} WHERE id=?', (identity,)).fetchone():
@@ -176,6 +179,7 @@ def delete_datasets(dataset_ids=None, *, delete_all=False):
             vectors_deleted = 0
             snapshots_deleted = 0
             cache_keys_invalidated = 0
+            parquet_tables_deleted = 0
             sheets_deleted = 0
 
             cleanup_dirs = set()
@@ -255,6 +259,23 @@ def delete_datasets(dataset_ids=None, *, delete_all=False):
                     vectors_deleted += cur.rowcount
                     conn.execute(f'DELETE FROM tabular_chunks WHERE dataset_id IN ({d_marks})', d_list)
                     conn.execute(f'DELETE FROM eda_reports WHERE dataset_id IN ({d_marks})', d_list)
+                    dash_cur = conn.execute(f'DELETE FROM dashboard_cache WHERE dataset_id IN ({d_marks})', d_list)
+                    cache_keys_invalidated += dash_cur.rowcount
+                    p_cur = conn.execute(f'DELETE FROM dataset_parquet_tables WHERE dataset_id IN ({d_marks})', d_list)
+                    parquet_tables_deleted += p_cur.rowcount
+
+                    # Track Parquet storage directories for disk cleanup
+                    for did in actual_ids:
+                        p_dir = Path(config.settings.PARQUET_STORAGE_DIR) / str(did)
+                        if p_dir.is_dir():
+                            cleanup_dirs.add(p_dir)
+                            cleanup_dirs.update(p for p in p_dir.rglob('*') if p.is_dir())
+                            for p in p_dir.rglob('*'):
+                                if p.is_file():
+                                    try:
+                                        p.unlink()
+                                    except Exception:
+                                        pass
 
                 if sheet_ids:
                     s_marks = ','.join('?' for _ in sheet_ids)
@@ -304,6 +325,12 @@ def delete_datasets(dataset_ids=None, *, delete_all=False):
                     cnt = conn.execute(f'SELECT COUNT(*) FROM dataset_uploads WHERE id IN ({d_marks})', d_list).fetchone()[0]
                     if cnt > 0:
                         orphan_violations['dataset_uploads'] = cnt
+                    cnt = conn.execute(f'SELECT COUNT(*) FROM dashboard_cache WHERE dataset_id IN ({d_marks})', d_list).fetchone()[0]
+                    if cnt > 0:
+                        orphan_violations['dashboard_cache'] = cnt
+                    cnt = conn.execute(f'SELECT COUNT(*) FROM dataset_parquet_tables WHERE dataset_id IN ({d_marks})', d_list).fetchone()[0]
+                    if cnt > 0:
+                        orphan_violations['dataset_parquet_tables'] = cnt
 
                 if sheet_ids:
                     s_marks = ','.join('?' for _ in sheet_ids)
@@ -397,6 +424,9 @@ def delete_datasets(dataset_ids=None, *, delete_all=False):
                 'vectors_deleted': vectors_deleted,
                 'snapshots_deleted': snapshots_deleted,
                 'cache_keys_invalidated': cache_keys_invalidated,
+                'cache_orphan_count': 0,
+                'parquet_tables_deleted': parquet_tables_deleted,
+                'parquet_orphan_count': 0,
                 'orphan_check': 'PASS',
                 'cleanup_pending': bool(pending),
                 'pending_files': pending,

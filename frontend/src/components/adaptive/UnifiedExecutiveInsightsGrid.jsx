@@ -324,6 +324,7 @@ export default function UnifiedExecutiveInsightsGrid({
             <ScenarioSummaryCard
               themeTokens={themeTokens}
               isDark={isDark}
+              domainProfile={domainProfile}
               onExplain={() => onInspectInsight && onInspectInsight({
                 topic_id: "scenario_methodology",
                 title: "Policy Scenario Simulation",

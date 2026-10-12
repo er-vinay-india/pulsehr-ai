@@ -7,7 +7,7 @@ import logging
 from typing import Any
 
 from ....core import config
-from ....db.database import get_connection
+from ....db.database import session_scope
 from .memory_models import MemoryRecord, MemoryType, EvidenceStatus
 from .embedding_service import embedding_service
 from .memory_store import memory_store
@@ -265,7 +265,7 @@ class PresentationMemoryIndexer:
 
     def index_dataset_sheet(self, sheet_id: int, force: bool = False) -> int:
         """Indexes dataset metadata and profile into DATASET_PROFILE memory chunk."""
-        with get_connection() as conn:
+        with session_scope() as conn:
             sheet_row = conn.execute("""
                 SELECT s.id, s.name, s.display_name, s.columns_json, s.profile_json, s.row_count,
                        d.original_name, d.filename, d.id as dataset_id

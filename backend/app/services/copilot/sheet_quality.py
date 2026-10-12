@@ -7,7 +7,7 @@ from typing import Any
 import pandas as pd
 
 from ...core import config
-from ...db.database import get_connection
+from ...db.database import session_scope
 from ..sheet_catalog import read_sheets
 
 
@@ -36,7 +36,7 @@ def missing_value_summary(frame: pd.DataFrame) -> dict[str, Any]:
 
 def answer_missing_values(query: str, sheet_id: int | None, dataset_id: int | None = None) -> dict[str, Any]:
     start = time.perf_counter()
-    with get_connection() as conn:
+    with session_scope() as conn:
         sql = "SELECT s.id, s.dataset_id, s.name, s.display_name, d.filename FROM sheets s JOIN dataset_uploads d ON d.id=s.dataset_id"
         args = []
         if sheet_id is not None:

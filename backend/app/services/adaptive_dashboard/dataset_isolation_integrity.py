@@ -33,6 +33,12 @@ class DatasetIsolationIntegrity:
         "clock_in", "clock_out", "present_days", "leave_days"
     }
 
+    RETAIL_TOKENS = {
+        "store", "fuel_price", "fuel price", "weekly_sales", "weekly sales",
+        "cpi", "unemployment", "markdown", "holiday_flag", "holiday flag",
+        "foot traffic", "footfall"
+    }
+
     @classmethod
     def validate_sheet_relationship(
         cls,
@@ -138,11 +144,33 @@ class DatasetIsolationIntegrity:
                     reason = f"FOREIGN_DATASET_EVIDENCE: Pollutant token '{bad_tok}' detected in workforce evidence '{node.evidence_id}'."
                     logger.warning(reason)
                     return False, reason
+            for bad_tok in cls.RETAIL_TOKENS:
+                if re.search(r'\b' + re.escape(bad_tok) + r'\b', node_text):
+                    reason = f"FOREIGN_DATASET_EVIDENCE: Retail token '{bad_tok}' detected in workforce evidence '{node.evidence_id}'."
+                    logger.warning(reason)
+                    return False, reason
 
         elif "environmental" in domain_norm or "air" in domain_norm:
             for bad_tok in cls.WORKFORCE_TOKENS:
                 if re.search(r'\b' + re.escape(bad_tok) + r'\b', node_text):
                     reason = f"FOREIGN_DATASET_EVIDENCE: Workforce token '{bad_tok}' detected in environmental evidence '{node.evidence_id}'."
+                    logger.warning(reason)
+                    return False, reason
+            for bad_tok in cls.RETAIL_TOKENS:
+                if re.search(r'\b' + re.escape(bad_tok) + r'\b', node_text):
+                    reason = f"FOREIGN_DATASET_EVIDENCE: Retail token '{bad_tok}' detected in environmental evidence '{node.evidence_id}'."
+                    logger.warning(reason)
+                    return False, reason
+
+        elif "retail" in domain_norm or "commercial" in domain_norm or "sales" in domain_norm:
+            for bad_tok in cls.WORKFORCE_TOKENS:
+                if re.search(r'\b' + re.escape(bad_tok) + r'\b', node_text):
+                    reason = f"FOREIGN_DATASET_EVIDENCE: Workforce token '{bad_tok}' detected in retail evidence '{node.evidence_id}'."
+                    logger.warning(reason)
+                    return False, reason
+            for bad_tok in cls.ENVIRONMENTAL_POLLUTANT_TOKENS:
+                if re.search(r'\b' + re.escape(bad_tok) + r'\b', node_text):
+                    reason = f"FOREIGN_DATASET_EVIDENCE: Pollutant token '{bad_tok}' detected in retail evidence '{node.evidence_id}'."
                     logger.warning(reason)
                     return False, reason
 
@@ -203,10 +231,141 @@ class DatasetIsolationIntegrity:
             for bad_tok in cls.ENVIRONMENTAL_POLLUTANT_TOKENS:
                 if re.search(r'\b' + re.escape(bad_tok) + r'\b', text_corpus):
                     return False, f"FOREIGN_DATASET_EVIDENCE: Story '{story_title}' contains pollutant signature '{bad_tok}'."
+            for bad_tok in cls.RETAIL_TOKENS:
+                if re.search(r'\b' + re.escape(bad_tok) + r'\b', text_corpus):
+                    return False, f"FOREIGN_DATASET_EVIDENCE: Story '{story_title}' contains retail signature '{bad_tok}'."
 
         elif "environmental" in domain_norm or "air" in domain_norm:
             for bad_tok in cls.WORKFORCE_TOKENS:
                 if re.search(r'\b' + re.escape(bad_tok) + r'\b', text_corpus):
                     return False, f"FOREIGN_DATASET_EVIDENCE: Story '{story_title}' contains workforce signature '{bad_tok}'."
+            for bad_tok in cls.RETAIL_TOKENS:
+                if re.search(r'\b' + re.escape(bad_tok) + r'\b', text_corpus):
+                    return False, f"FOREIGN_DATASET_EVIDENCE: Story '{story_title}' contains retail signature '{bad_tok}'."
+
+        elif "retail" in domain_norm or "commercial" in domain_norm or "sales" in domain_norm:
+            for bad_tok in cls.WORKFORCE_TOKENS:
+                if re.search(r'\b' + re.escape(bad_tok) + r'\b', text_corpus):
+                    return False, f"FOREIGN_DATASET_EVIDENCE: Story '{story_title}' contains workforce signature '{bad_tok}'."
+            for bad_tok in cls.ENVIRONMENTAL_POLLUTANT_TOKENS:
+                if re.search(r'\b' + re.escape(bad_tok) + r'\b', text_corpus):
+                    return False, f"FOREIGN_DATASET_EVIDENCE: Story '{story_title}' contains pollutant signature '{bad_tok}'."
+
+        return True, None
+
+
+class TopicVisualBindingIntegrity:
+    """Guards immutable topic identity and validates topic-to-visual binding integrity."""
+
+    @classmethod
+    def evaluate(cls, topic: Any) -> tuple[bool, str | None]:
+        """Validates dataset_id, domain, topic_id alignment and vocabulary purity between topic and visual_spec."""
+        v_spec = getattr(topic, "visual_spec", {}) or {}
+        topic_id = getattr(topic, "topic_id", "")
+        topic_ds = getattr(topic, "dataset_id", None)
+        topic_dom = getattr(topic, "domain", "general")
+
+        v_spec_topic_id = v_spec.get("topic_id")
+        v_spec_ds = v_spec.get("dataset_id")
+        v_spec_dom = v_spec.get("domain")
+
+        # 1. Dataset ID scoping alignment
+        if topic_ds is not None and v_spec_ds is not None and topic_ds != v_spec_ds:
+            reason = f"TOPIC_VISUAL_BINDING_VIOLATION [DATASET_MISMATCH]: Topic dataset {topic_ds} != VisualSpec dataset {v_spec_ds}"
+            logger.error(reason)
+            return False, reason
+
+        # 2. Domain alignment
+        if topic_dom and v_spec_dom and topic_dom.lower() != v_spec_dom.lower():
+            reason = f"TOPIC_VISUAL_BINDING_VIOLATION [DOMAIN_MISMATCH]: Topic domain {topic_dom} != VisualSpec domain {v_spec_dom}"
+            logger.error(reason)
+            return False, reason
+
+        # 3. Topic ID alignment
+        if topic_id and v_spec_topic_id and topic_id != v_spec_topic_id:
+            reason = f"TOPIC_VISUAL_BINDING_VIOLATION [TOPIC_ID_MISMATCH]: Topic ID {topic_id} != VisualSpec topic_id {v_spec_topic_id}"
+            logger.error(reason)
+            return False, reason
+
+        # 4. Domain vocabulary purity
+        domain_norm = (topic_dom or v_spec_dom or "").lower()
+        micro = getattr(topic, "visual_microcopy", None)
+        texts = " ".join([
+            str(getattr(topic, "title", "") or ""),
+            str(getattr(topic, "subtitle", "") or ""),
+            str(getattr(micro, "short_title", "") or "") if micro else "",
+            str(getattr(topic, "primary_takeaway", "") or ""),
+            str(getattr(topic, "takeaway", "") or ""),
+        ]).lower()
+
+        if "retail" in domain_norm or "commercial" in domain_norm or "sales" in domain_norm:
+            for bad_tok in DatasetIsolationIntegrity.WORKFORCE_TOKENS:
+                if re.search(r'\b' + re.escape(bad_tok) + r'\b', texts):
+                    return False, f"FOREIGN_VOCABULARY_VIOLATION: Workforce token '{bad_tok}' in retail topic '{topic_id}'."
+            for bad_tok in DatasetIsolationIntegrity.ENVIRONMENTAL_POLLUTANT_TOKENS:
+                if re.search(r'\b' + re.escape(bad_tok) + r'\b', texts):
+                    return False, f"FOREIGN_VOCABULARY_VIOLATION: Pollutant token '{bad_tok}' in retail topic '{topic_id}'."
+
+        elif domain_norm in ("workforce", "workforce_hr", "hr"):
+            for bad_tok in DatasetIsolationIntegrity.ENVIRONMENTAL_POLLUTANT_TOKENS:
+                if re.search(r'\b' + re.escape(bad_tok) + r'\b', texts):
+                    return False, f"FOREIGN_VOCABULARY_VIOLATION: Pollutant token '{bad_tok}' in workforce topic '{topic_id}'."
+            for bad_tok in DatasetIsolationIntegrity.RETAIL_TOKENS:
+                if re.search(r'\b' + re.escape(bad_tok) + r'\b', texts):
+                    return False, f"FOREIGN_VOCABULARY_VIOLATION: Retail token '{bad_tok}' in workforce topic '{topic_id}'."
+
+        elif "environmental" in domain_norm or "air" in domain_norm:
+            for bad_tok in DatasetIsolationIntegrity.WORKFORCE_TOKENS:
+                if re.search(r'\b' + re.escape(bad_tok) + r'\b', texts):
+                    return False, f"FOREIGN_VOCABULARY_VIOLATION: Workforce token '{bad_tok}' in environmental topic '{topic_id}'."
+            for bad_tok in DatasetIsolationIntegrity.RETAIL_TOKENS:
+                if re.search(r'\b' + re.escape(bad_tok) + r'\b', texts):
+                    return False, f"FOREIGN_VOCABULARY_VIOLATION: Retail token '{bad_tok}' in environmental topic '{topic_id}'."
+
+        return True, None
+
+
+class AxisNarrativeIntegrity:
+    """Enforces narrative and title consistency with visual axes for relationship / scatter cards."""
+
+    @classmethod
+    def evaluate(cls, topic: Any) -> tuple[bool, str | None]:
+        """Validates that relationship / scatter titles match the underlying x and y axes."""
+        v_spec = getattr(topic, "visual_spec", {}) or {}
+        chart_type = v_spec.get("chart_type") or getattr(topic, "recommended_visual", "")
+        intent = getattr(topic, "analytical_intent", "")
+
+        if chart_type != "scatter" and intent != "RELATIONSHIP":
+            return True, None
+
+        x_label = str(v_spec.get("x_label", "") or "").strip()
+        y_label = str(v_spec.get("y_label", "") or "").strip()
+        if not x_label or not y_label:
+            return True, None
+
+        micro = getattr(topic, "visual_microcopy", None)
+        short_title = str(getattr(micro, "short_title", "") or "").strip()
+        title = str(getattr(topic, "title", "") or "").strip()
+        text_corpus = f"{title} {short_title}".lower()
+
+        # Check for cross-domain contamination between axes and narrative
+        domain_norm = (getattr(topic, "domain", "") or v_spec.get("domain", "")).lower()
+        axes_corpus = f"{x_label} {y_label}".lower()
+
+        # If axes are retail/commercial, title must NEVER contain workforce or environmental terms
+        is_retail_axes = any(k in axes_corpus for k in ["temperature", "fuel", "traffic", "revenue", "sales", "cpi", "store"])
+        if is_retail_axes or "retail" in domain_norm:
+            for bad_tok in DatasetIsolationIntegrity.WORKFORCE_TOKENS | DatasetIsolationIntegrity.ENVIRONMENTAL_POLLUTANT_TOKENS:
+                if re.search(r'\b' + re.escape(bad_tok) + r'\b', text_corpus):
+                    # Auto-repair title to clean axis narrative
+                    x_clean = re.sub(r"[_\s]+", " ", x_label).strip().title()
+                    y_clean = re.sub(r"[_\s]+", " ", y_label).strip().title()
+                    repaired_title = f"{x_clean} vs {y_clean}"
+                    if hasattr(topic, "title"):
+                        topic.title = repaired_title
+                    if micro and hasattr(micro, "short_title"):
+                        micro.short_title = repaired_title
+                    logger.warning("AxisNarrativeIntegrity: Repaired title from '%s' to '%s'", title, repaired_title)
+                    return True, f"REPAIRED_AXIS_NARRATIVE: Repaired title to '{repaired_title}'"
 
         return True, None

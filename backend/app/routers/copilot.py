@@ -9,7 +9,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from ..db.database import get_connection
+from ..db.database import get_connection, session_scope
 from ..services.gateway.assistant_identity import public_identity, finalize_identity_response
 from ..services.copilot_tools import ToolRequest, CalculationRequest, load_frame
 from ..services.copilot_query_planner import plan_analytical_query, execute_analytical_plan
@@ -50,7 +50,7 @@ class CopilotQueryRequest(BaseModel):
 
 def _load_active_sheet_dataframe(sheet_id: int | None = None, dataset_id: int | None = None) -> tuple[pd.DataFrame | None, str | None, AnalysisContext | None, int | None]:
     """Loads active or requested tabular sheet as DataFrame and associated AnalysisContext from database."""
-    with get_connection() as conn:
+    with session_scope() as conn:
         du_cols = {r[1] for r in conn.execute('PRAGMA table_info(dataset_uploads)').fetchall()}
         d_ctx_sel = 'd.analysis_context_json as d_ctx' if 'analysis_context_json' in du_cols else 'NULL as d_ctx'
         sheet = None
@@ -893,7 +893,7 @@ def ask_copilot(req: CopilotQueryRequest):
         deck_id = req.prior_context.get("deck_id") if req.prior_context else None
         if not deck_spec:
             try:
-                with get_connection() as conn:
+                with session_scope() as conn:
                     if deck_id:
                         row = conn.execute("SELECT spec_json FROM presentation_decks WHERE id=?", (deck_id,)).fetchone()
                     else:
@@ -916,7 +916,7 @@ def ask_copilot(req: CopilotQueryRequest):
             if mut_res.success:
                 if deck_id:
                     try:
-                        with get_connection() as conn:
+                        with session_scope() as conn:
                             conn.execute(
                                 "UPDATE presentation_decks SET spec_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
                                 (json.dumps(mut_res.updated_deck_spec), deck_id)
@@ -1127,7 +1127,7 @@ def ask_copilot_stream(req: CopilotQueryRequest):
         deck_id = req.prior_context.get("deck_id") if req.prior_context else None
         if not deck_spec:
             try:
-                with get_connection() as conn:
+                with session_scope() as conn:
                     if deck_id:
                         row = conn.execute("SELECT spec_json FROM presentation_decks WHERE id=?", (deck_id,)).fetchone()
                     else:
@@ -1150,7 +1150,7 @@ def ask_copilot_stream(req: CopilotQueryRequest):
             if mut_res.success:
                 if deck_id:
                     try:
-                        with get_connection() as conn:
+                        with session_scope() as conn:
                             conn.execute(
                                 "UPDATE presentation_decks SET spec_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
                                 (json.dumps(mut_res.updated_deck_spec), deck_id)

@@ -7,7 +7,7 @@ import threading
 import uuid
 from typing import Any
 
-from ...db.database import get_connection
+from ...db.database import session_scope
 
 logger = logging.getLogger(__name__)
 RELOAD_INTERRUPTION_ERROR = "Generation was interrupted by server reload. Please click Generate Again to rebuild."
@@ -38,7 +38,7 @@ class PresentationJobManager:
 
     def _ensure_extra_column(self):
         try:
-            with get_connection() as conn:
+            with session_scope() as conn:
                 cols = [r[1] for r in conn.execute("PRAGMA table_info(presentation_jobs)").fetchall()]
                 if "extra_json" not in cols:
                     conn.execute("ALTER TABLE presentation_jobs ADD COLUMN extra_json TEXT DEFAULT '{}'")
@@ -46,7 +46,6 @@ class PresentationJobManager:
                     conn.execute("ALTER TABLE presentation_jobs ADD COLUMN worker_pid INTEGER")
                 if "recovery_attempts" not in cols:
                     conn.execute("ALTER TABLE presentation_jobs ADD COLUMN recovery_attempts INTEGER NOT NULL DEFAULT 0")
-                conn.commit()
         except Exception as exc:
             logger.debug(f"Could not check/add extra_json column: {exc}")
 
@@ -58,7 +57,7 @@ class PresentationJobManager:
         """
         self._ensure_extra_column()
         recovered = []
-        with self._lock, get_connection() as conn:
+        with self._lock, session_scope() as conn:
             if job_id is None:
                 rows = conn.execute(
                     "SELECT * FROM presentation_jobs WHERE status IN ('in_progress', 'pending')"
@@ -145,13 +144,12 @@ class PresentationJobManager:
 
         # Persist to database
         try:
-            with get_connection() as conn:
+            with session_scope() as conn:
                 conn.execute(
                     "INSERT INTO presentation_jobs (id, status, stage, stage_label, progress_pct, scope_json, created_at, updated_at, worker_pid) "
                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (job_id, job["status"], job["stage"], job["stage_label"], job["progress_pct"], json.dumps(scope), now, now, os.getpid())
                 )
-                conn.commit()
         except Exception as exc:
             with self._lock:
                 self._jobs.pop(job_id, None)
@@ -169,13 +167,12 @@ class PresentationJobManager:
 
     def cancel_job(self, job_id: str) -> bool:
         now = datetime.datetime.now(datetime.timezone.utc).isoformat()
-        with get_connection() as conn:
+        with session_scope() as conn:
             cancelled = conn.execute(
                 "UPDATE presentation_jobs SET status='cancelled', stage='cancelled', "
                 "stage_label='Generation cancelled by user', updated_at=? "
                 "WHERE id=? AND status IN ('in_progress', 'pending')", (now, job_id),
             )
-            conn.commit()
             if cancelled.rowcount != 1:
                 return False
         with self._lock:
@@ -228,20 +225,19 @@ class PresentationJobManager:
             }
 
         try:
-            with get_connection() as conn:
+            with session_scope() as conn:
                 conn.execute(
                     "UPDATE presentation_jobs SET status=?, stage=?, stage_label=?, progress_pct=?, deck_id=?, error=?, extra_json=?, updated_at=? "
                     "WHERE id=? AND status IN ('in_progress', 'pending') AND worker_pid=?",
                     (job["status"], stage, stage_label, progress_pct, job.get("deck_id"), error, json.dumps(extra_to_save), now, job_id, os.getpid())
                 )
-                conn.commit()
         except Exception as exc:
             logger.debug(f"Could not update presentation_jobs in DB: {exc}")
 
     def get_job(self, job_id: str) -> dict[str, Any] | None:
         # Persisted state also reflects cancellation by another API worker.
         try:
-            with get_connection() as conn:
+            with session_scope() as conn:
                 r = conn.execute("SELECT * FROM presentation_jobs WHERE id=?", (job_id,)).fetchone()
                 if r:
                     res = {

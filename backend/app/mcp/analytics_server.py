@@ -21,7 +21,7 @@ from typing import Any
 
 import numpy as np
 
-from ..db.database import get_connection
+from ..db.database import get_connection, session_scope
 from .contracts import (
     AnalyzeRelationshipInput,
     AnalyzeRelationshipOutput,
@@ -51,7 +51,7 @@ logger = logging.getLogger(__name__)
 def _extract_column_series(dataset_id: int | str, col_name: str) -> list[float]:
     """Helper extracting numeric values from sheet_records."""
     values: list[float] = []
-    with get_connection() as conn:
+    with session_scope() as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT id FROM sheets WHERE dataset_id = ? ORDER BY id ASC LIMIT 1", (dataset_id,))
         s_row = cursor.fetchone()
@@ -85,8 +85,44 @@ def handle_rank_entities(args: dict[str, Any], context: Any = None) -> RankEntit
     direction = inp.direction
     limit = inp.limit
 
+    # Phase G3: DuckDB Columnar Acceleration
+    try:
+        from ..analytics import AnalyticalQueryService, AggregationType
+        res = AnalyticalQueryService.rank(
+            dataset_id=int(dataset_id),
+            logical_table_id="table",
+            entity_col=dim,
+            measure_col=measure,
+            aggregation=AggregationType.AVG,
+            is_lower_better=(direction == "asc"),
+            limit=limit,
+        )
+        if res.rows:
+            total_sum = sum(float(r.get("metric_val", 0.0) or 0.0) for r in res.rows)
+            ranked_items = []
+            for rank_idx, r in enumerate(res.rows, start=1):
+                val = float(r.get("metric_val", 0.0) or 0.0)
+                ent = str(r.get(dim, "Unknown"))
+                share = round((val / total_sum * 100.0), 1) if total_sum > 0 else 0.0
+                ranked_items.append(RankedEntityItem(
+                    rank=rank_idx,
+                    entity=ent,
+                    value=round(val, 2),
+                    formatted_value=f"{val:.1f}",
+                    share_of_total_pct=share,
+                ))
+            return RankEntitiesOutput(
+                dataset_id=dataset_id,
+                measure=measure,
+                total_evaluated=res.total_rows,
+                ranked_items=ranked_items,
+                evidence_id="EVID-RANK-01",
+            )
+    except Exception as exc:
+        logger.debug("Falling back to legacy ranking in MCP: %s", exc)
+
     grouped: dict[str, list[float]] = {}
-    with get_connection() as conn:
+    with session_scope() as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT id FROM sheets WHERE dataset_id = ? ORDER BY id ASC LIMIT 1", (dataset_id,))
         s_row = cursor.fetchone()
@@ -145,7 +181,7 @@ def handle_compare_segments(args: dict[str, Any], context: Any = None) -> Compar
     vals_a: list[float] = []
     vals_b: list[float] = []
 
-    with get_connection() as conn:
+    with session_scope() as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT id FROM sheets WHERE dataset_id = ? ORDER BY id ASC LIMIT 1", (dataset_id,))
         s_row = cursor.fetchone()
@@ -189,6 +225,34 @@ def handle_calculate_distribution(args: dict[str, Any], context: Any = None) -> 
     dataset_id = inp.dataset_id
     measure = inp.measure
 
+    # Phase G3: DuckDB Columnar Acceleration
+    try:
+        from ..analytics import AnalyticalQueryService
+        dist = AnalyticalQueryService.distribution(
+            dataset_id=int(dataset_id),
+            logical_table_id="table",
+            measure_col=measure,
+        )
+        s = dist.get("summary", {})
+        if s.get("count", 0) > 0:
+            p25 = round(s["q1"], 2)
+            p75 = round(s["q3"], 2)
+            return CalculateDistributionOutput(
+                dataset_id=dataset_id,
+                measure=measure,
+                count=int(s["count"]),
+                min=round(s["min"], 2),
+                p25=p25,
+                median=round(s["median"], 2),
+                p75=p75,
+                max=round(s["max"], 2),
+                iqr=round(p75 - p25, 2),
+                distribution_id=f"DIST-{abs(hash((str(dataset_id), measure))) % 10000:04d}",
+                evidence_id="EVID-DIST-01",
+            )
+    except Exception as exc:
+        logger.debug("Falling back to legacy distribution in MCP: %s", exc)
+
     values = _extract_column_series(dataset_id, measure)
     if not values:
         values = [0.0]
@@ -225,7 +289,7 @@ def handle_get_trend(args: dict[str, Any], context: Any = None) -> GetTrendOutpu
     measure = inp.measure
 
     points: list[TrendPoint] = []
-    with get_connection() as conn:
+    with session_scope() as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT id FROM sheets WHERE dataset_id = ? ORDER BY id ASC LIMIT 1", (dataset_id,))
         s_row = cursor.fetchone()
@@ -268,7 +332,7 @@ def handle_find_outliers(args: dict[str, Any], context: Any = None) -> FindOutli
     threshold = inp.threshold_sigma
 
     records: list[tuple[str, float]] = []
-    with get_connection() as conn:
+    with session_scope() as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT id FROM sheets WHERE dataset_id = ? ORDER BY id ASC LIMIT 1", (dataset_id,))
         s_row = cursor.fetchone()
@@ -326,8 +390,40 @@ def handle_analyze_relationship(args: dict[str, Any], context: Any = None) -> An
     x_col = inp.measure_x
     y_col = inp.measure_y
 
+    # Phase G3: DuckDB Columnar Acceleration
+    try:
+        from ..analytics import AnalyticalQueryService
+        corr_res = AnalyticalQueryService.correlate(
+            dataset_id=int(dataset_id),
+            logical_table_id="table",
+            measure_x=x_col,
+            measure_y=y_col,
+        )
+        if corr_res.get("sample_size", 0) >= 3:
+            corr = float(corr_res["correlation"])
+            abs_c = abs(corr)
+            strength = "negligible"
+            if abs_c >= 0.7:
+                strength = "strong"
+            elif abs_c >= 0.4:
+                strength = "moderate"
+            elif abs_c >= 0.2:
+                strength = "weak"
+            return AnalyzeRelationshipOutput(
+                dataset_id=dataset_id,
+                measure_x=x_col,
+                measure_y=y_col,
+                correlation_coefficient=round(corr, 3),
+                association_strength=strength,
+                sample_size=corr_res["sample_size"],
+                is_causal=False,
+                evidence_id="EVID-REL-01",
+            )
+    except Exception as exc:
+        logger.debug("Falling back to legacy correlation in MCP: %s", exc)
+
     pairs: list[tuple[float, float]] = []
-    with get_connection() as conn:
+    with session_scope() as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT id FROM sheets WHERE dataset_id = ? ORDER BY id ASC LIMIT 1", (dataset_id,))
         s_row = cursor.fetchone()

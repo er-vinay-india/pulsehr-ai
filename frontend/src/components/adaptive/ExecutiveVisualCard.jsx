@@ -127,6 +127,29 @@ export default function ExecutiveVisualCard({
     };
   }, [topic]);
 
+  // Client-side Axis Narrative Integrity Guard: Prevents cross-domain title corruption
+  const displayTitle = useMemo(() => {
+    let rawTitle = microcopy.short_title || topic.title || "";
+    const vSpec = topic.visual_spec;
+    if (vSpec) {
+      // Check relationship / scatter cards
+      if (topic.analytical_intent === "RELATIONSHIP" || vSpec.chart_type === "scatter") {
+        const xLabel = vSpec.x_label;
+        const yLabel = vSpec.y_label;
+        if (xLabel && yLabel) {
+          const titleLower = rawTitle.toLowerCase();
+          const axesLower = `${xLabel} ${yLabel}`.toLowerCase();
+          const isNonWorkforceAxes = /temperature|fuel|traffic|revenue|sales|store|cpi|unemployment|pm10|so2|no2/i.test(axesLower);
+          const hasWorkforceTokens = /\b(attendance|leave|leaves|employee|wfo)\b/i.test(titleLower);
+          if (isNonWorkforceAxes && hasWorkforceTokens) {
+            rawTitle = `${xLabel} vs ${yLabel}`;
+          }
+        }
+      }
+    }
+    return resolvePresentationLabel(rawTitle);
+  }, [microcopy.short_title, topic.title, topic.visual_spec, topic.analytical_intent]);
+
   // Server-driven Spatial Placement (SpatialCompositionOptimizer)
   const colSpan = topic.spatial_placement?.column_span || (isHero ? 12 : topic.layout_hint === "LARGE" ? 8 : topic.layout_hint === "COMPACT" ? 4 : 6);
   const heightClass = topic.spatial_placement?.height_class || (isHero ? "standard" : "standard");
@@ -190,7 +213,7 @@ export default function ExecutiveVisualCard({
               id={`topic-title-${topic.topic_id}`}
               className="visual-card__title card-compressed-title"
               title={topic.title}
-              aria-label={topic.title}
+              aria-label={displayTitle}
               style={{
                 margin: 0,
                 fontSize: isHero ? "1.15rem" : "0.98rem",
@@ -199,7 +222,7 @@ export default function ExecutiveVisualCard({
                 lineHeight: 1.25,
               }}
             >
-              {microcopy.short_title || topic.title}
+              {displayTitle}
             </h3>
           </div>
 

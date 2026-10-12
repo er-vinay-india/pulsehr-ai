@@ -17,7 +17,7 @@ import json
 import logging
 from typing import Any
 
-from ..db.database import get_connection
+from ..db.database import get_connection, session_scope
 from ..services.copilot.control_plane.claim_governor import ClaimEntitlementGovernor
 from ..services.copilot.control_plane.contracts import ClaimType, EvidenceTypeEntitlement
 from .contracts import (
@@ -109,7 +109,7 @@ def handle_get_source_rows(args: dict[str, Any], context: Any = None) -> GetSour
     rows: list[dict[str, Any]] = []
     total = 0
 
-    with get_connection() as conn:
+    with session_scope() as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT id FROM sheets WHERE dataset_id = ? ORDER BY id ASC LIMIT 1", (dataset_id,))
         s_row = cursor.fetchone()

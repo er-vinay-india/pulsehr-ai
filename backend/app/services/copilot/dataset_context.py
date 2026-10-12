@@ -2,7 +2,7 @@
 from dataclasses import dataclass, field
 import json
 import pandas as pd
-from ...db.database import get_connection
+from ...db.database import session_scope
 from ..data_engine.analysis_context import AnalysisContext
 
 
@@ -38,7 +38,7 @@ class DatasetContext:
         if self._frame is None:
             if self.record_count > 20000:
                 raise ValueError('On-demand analysis exceeds the existing 20,000-record interactive query budget.')
-            with get_connection() as conn:
+            with session_scope() as conn:
                 rows = conn.execute('SELECT data_json FROM sheet_rows WHERE sheet_id=? ORDER BY row_index', (self.sheet_id,)).fetchall()
             self._frame = pd.DataFrame([json.loads(r['data_json']) for r in rows], columns=self.columns)
         return self._frame
@@ -47,7 +47,7 @@ class DatasetContext:
 class DatasetContextProvider:
     @staticmethod
     def resolve(dataset_id=None, sheet_id=None):
-        with get_connection() as conn:
+        with session_scope() as conn:
             sql = 'SELECT s.*, d.analysis_context_json AS dataset_context FROM sheets s JOIN dataset_uploads d ON d.id=s.dataset_id'
             args = []
             if sheet_id is not None:

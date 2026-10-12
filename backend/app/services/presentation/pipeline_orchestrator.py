@@ -4,7 +4,7 @@ import logging
 import threading
 from typing import Any
 
-from ...db.database import get_connection
+from ...db.database import session_scope
 from ..data_lifecycle import data_lifecycle_lock
 from .claim_verifier import verify_presentation_claims
 from .job_manager import PresentationJobManager, job_manager
@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 def _index_persisted_deck(deck_spec):
     # Deletion and indexing cannot pass each other and resurrect removed memories.
     with data_lifecycle_lock:
-        with get_connection() as conn:
+        with session_scope() as conn:
             if not conn.execute('SELECT 1 FROM presentation_decks WHERE id=?', (deck_spec['id'],)).fetchone():
                 return
         from .memory import memory_indexer
@@ -192,7 +192,7 @@ def execute_presentation_pipeline_async(
         if mgr.is_cancelled(job_id):
             return
 
-        with get_connection() as conn:
+        with session_scope() as conn:
             preflight = preview_presentation_scope(conn, scope)
             if not preflight["eligible"]:
                 raise ValueError("No uploaded datasets eligible for presentation generation.")
@@ -601,7 +601,7 @@ def execute_presentation_pipeline_async(
             # Persist presentation deck
             now = datetime.datetime.now(datetime.timezone.utc).isoformat()
             try:
-                with get_connection() as conn:
+                with session_scope() as conn:
                     conn.execute(
                         "INSERT INTO presentation_decks (id, title, dataset_id, sheet_id, theme_id, spec_json, pptx_filename, created_at, updated_at) "
                         "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -617,7 +617,6 @@ def execute_presentation_pipeline_async(
                             now
                         )
                     )
-                    conn.commit()
             except Exception as exc:
                 raise RuntimeError("The deck was generated but could not be saved to persistent database. Please retry.") from exc
 
