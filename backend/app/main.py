@@ -5,8 +5,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from .core import config
 from .db.database import init_db, get_connection, session_scope
 from .services.sheet_catalog import migrate_existing, backfill_display_names
-from .routers import analytics, employees, upload, copilot, reports, sheets, presentations
+from .routers import analytics, employees, upload, copilot, reports, sheets, presentations, jobs
 from .services.presentation.pipeline_orchestrator import recover_presentation_jobs
+from .jobs import BackgroundJobRepository
 from .routers import decision_brief, adaptive_dashboard, eda, workspace_context, decision_ledger, observability, optimization, context
 
 @asynccontextmanager
@@ -19,6 +20,7 @@ async def lifespan(app: FastAPI):
     from .services.dataset_deletion import retry_file_cleanup
     retry_file_cleanup()
     recover_presentation_jobs()
+    BackgroundJobRepository.recover_interrupted_jobs()
     print("[HighView] Startup completed. System ready on port", config.PORT)
     yield
     print("[HighView] Shutting down...")
@@ -46,6 +48,7 @@ app.include_router(copilot.router)
 app.include_router(reports.router)
 app.include_router(sheets.router)
 app.include_router(presentations.router)
+app.include_router(jobs.router)
 app.include_router(adaptive_dashboard.router)
 app.include_router(eda.router)
 app.include_router(workspace_context.router)

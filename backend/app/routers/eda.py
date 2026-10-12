@@ -216,3 +216,22 @@ def trigger_eda(sheet_ids: list[int] | None = Body(None)):
     """Triggers the EDA normalization and multi-sheet intelligence pipeline."""
     result = run_eda_pipeline(sheet_ids=sheet_ids)
     return result
+
+
+@router.post("/run/async")
+def trigger_eda_async(sheet_ids: list[int] | None = Body(None)):
+    """Phase G4: Enqueues heavy EDA in background worker plane and returns immediately with job ID."""
+    from ..jobs import worker_plane, JobType
+    job = worker_plane.submit_job(
+        job_type=JobType.EDA,
+        payload={"sheet_ids": sheet_ids},
+    )
+    return {
+        "job_id": job.id,
+        "job_type": job.job_type.value,
+        "status": job.status.value,
+        "stage": job.stage,
+        "progress_pct": job.progress_pct,
+        "poll_url": f"/api/jobs/{job.id}",
+        "message": "EDA processing job submitted to background worker plane",
+    }

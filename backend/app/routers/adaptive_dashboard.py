@@ -110,6 +110,25 @@ def invalidate_dataset_cache(dataset_id: int):
     return {"dataset_id": dataset_id, "evicted_entries": evicted, "status": "invalidated"}
 
 
+@router.post("/backfill/async")
+def trigger_backfill_async(dataset_id: int | None = Query(None)):
+    """Phase G4: Enqueues large Parquet backfill/rebuild in background worker plane."""
+    from ..jobs import worker_plane, JobType
+    job = worker_plane.submit_job(
+        job_type=JobType.PARQUET_BACKFILL,
+        payload={"dataset_id": dataset_id},
+    )
+    return {
+        "job_id": job.id,
+        "job_type": job.job_type.value,
+        "status": job.status.value,
+        "stage": job.stage,
+        "progress_pct": job.progress_pct,
+        "poll_url": f"/api/jobs/{job.id}",
+        "message": f"Parquet backfill job for dataset {dataset_id or 'all'} submitted to worker plane",
+    }
+
+
 
 @router.get("/findings", response_model=list[UnifiedFinding])
 def get_dashboard_findings(sheet_id: int = Query(..., description="Target sheet ID")):

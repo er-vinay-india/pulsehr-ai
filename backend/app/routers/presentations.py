@@ -5,6 +5,7 @@ import json
 import logging
 import re
 from functools import wraps
+from typing import Any, Literal
 from contextlib import contextmanager
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse
@@ -645,6 +646,44 @@ def export_presentation_to_pdf(req: ExportPptxRequest):
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     title = re.sub(r'[^a-zA-Z0-9_-]', '_', deck.get('metadata', {}).get('title') or deck.get('title') or 'Presentation')[:40]
     return FileResponse(path=str(path), filename=f'{title}.pdf', media_type='application/pdf')
+
+
+@router.post("/export-pdf/async")
+def export_presentation_to_pdf_async(req: ExportPptxRequest):
+    """Phase G4: Enqueues PDF generation in background worker plane and returns immediately."""
+    from ..jobs import worker_plane, JobType
+    job = worker_plane.submit_job(
+        job_type=JobType.PDF_EXPORT,
+        payload={"deck_spec": req.deck_spec},
+    )
+    return {
+        "job_id": job.id,
+        "job_type": job.job_type.value,
+        "status": job.status.value,
+        "stage": job.stage,
+        "progress_pct": job.progress_pct,
+        "poll_url": f"/api/jobs/{job.id}",
+        "message": "PDF export job submitted to background worker plane",
+    }
+
+
+@router.post("/export-pptx/async")
+def export_presentation_to_pptx_async(req: ExportPptxRequest):
+    """Phase G4: Enqueues PowerPoint generation in background worker plane and returns immediately."""
+    from ..jobs import worker_plane, JobType
+    job = worker_plane.submit_job(
+        job_type=JobType.PPTX_EXPORT,
+        payload={"deck_spec": req.deck_spec},
+    )
+    return {
+        "job_id": job.id,
+        "job_type": job.job_type.value,
+        "status": job.status.value,
+        "stage": job.stage,
+        "progress_pct": job.progress_pct,
+        "poll_url": f"/api/jobs/{job.id}",
+        "message": "PowerPoint export job submitted to background worker plane",
+    }
 
 
 @router.get("/download/{deck_id}")
