@@ -145,9 +145,11 @@ def test_no_4_col_squeeze_for_long_label_rankings():
     assert plan.readability_violations_count == 0
 
     # The ranked bar must be allocated 8 columns, and lollipop 4 columns (8+4)
-    assert topic_ranked.spatial_placement.column_span == 8
-    assert topic_lollipop.spatial_placement.column_span == 4
-    assert topic_ranked.spatial_placement.pattern == "8+4"
+    item_ranked = plan.get_placement(topic_ranked.topic_id)
+    item_lollipop = plan.get_placement(topic_lollipop.topic_id)
+    assert item_ranked.column_span == 8
+    assert item_lollipop.column_span == 4
+    assert item_ranked.pattern == "8+4"
 
 
 def test_adjacency_complementarity_scoring():
@@ -274,11 +276,13 @@ def test_row_utilization_and_readability_invariants():
 
     # Invariant 3: Hero receives span 12
     hero_card = topics[0]
-    assert hero_card.spatial_placement.column_span == 12
+    hero_item = plan.get_placement(hero_card.topic_id)
+    assert hero_item.column_span == 12
 
     # Invariant 4: Long-label ranked bar receives 8 columns
     ranked_card = topics[6]
-    assert ranked_card.spatial_placement.column_span == 8
+    ranked_item = plan.get_placement(ranked_card.topic_id)
+    assert ranked_item.column_span == 8
 
     # Invariant 5: HeightBalanceIntegrity (all cards on a row share synchronized height)
     for sec in plan.sections:

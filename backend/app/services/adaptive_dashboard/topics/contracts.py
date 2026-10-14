@@ -167,8 +167,21 @@ class ExecutiveTopic(BaseModel):
     confidence: float = 0.90
 
     def __setattr__(self, name: str, value: Any) -> None:
-        """Protects semantic identity invariants from downstream mutation."""
-        immutable_fields = {
+        """Protects semantic identity and composition boundaries from downstream mutation."""
+        spatial_layout_fields = {
+            "spatial_placement",
+            "row",
+            "column",
+            "span",
+            "height",
+        }
+        if name in spatial_layout_fields and value is not None:
+            raise AttributeError(
+                f"COMPOSITION_MUTATION_VIOLATION: Spatial layout field '{name}' cannot be assigned to ExecutiveTopic('{getattr(self, 'topic_id', '')}'). "
+                f"Composition layout must be planned separately via DashboardLayoutPlan and CompositionItem."
+            )
+
+        immutable_semantic_fields = {
             "topic_id",
             "semantic_topic_key",
             "analytical_intent",
@@ -176,7 +189,7 @@ class ExecutiveTopic(BaseModel):
             "dataset_id",
             "evidence_ids",
         }
-        if name in immutable_fields and hasattr(self, name):
+        if name in immutable_semantic_fields and hasattr(self, name):
             cur = getattr(self, name)
             if cur is not None and cur != value:
                 raise AttributeError(

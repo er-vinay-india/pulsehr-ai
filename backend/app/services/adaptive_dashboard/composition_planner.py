@@ -1553,9 +1553,6 @@ class ExecutiveCompositionPlanner:
             validated_topics.append(t)
         topics = validated_topics
 
-        # Optimize spatial composition and assign row/column placements
-        SpatialCompositionOptimizer.optimize_layout(topics, domain=domain_name)
-
         return topics
 
     @classmethod

@@ -458,11 +458,10 @@ def run_dataset_intelligence(dataset_id: int) -> DatasetIntelligenceResponse:
                 gov_metrics=gov_metrics,
             )
 
-        # 7.6 SpatialCompositionOptimizer: Plan deterministic 12-column row layouts
-        from .spatial_composition_optimizer import SpatialCompositionOptimizer
-        layout_plan = SpatialCompositionOptimizer.optimize_layout(
+        # 7.6 SpatialCompositionPlanner: Plan deterministic 12-column row layouts (Phase G5.6)
+        from .composition import SpatialCompositionPlanner
+        layout_plan = SpatialCompositionPlanner.plan_layout(
             topics=executive_topics,
-            domain=domain_name,
         )
 
         funnel_trace = GlobalCandidatePoolEngine.build_funnel_trace(
@@ -531,7 +530,29 @@ def run_dataset_intelligence(dataset_id: int) -> DatasetIntelligenceResponse:
             story_plan=story_plan,
             evidence_graph=unified_graph,
             executive_integrity=executive_integrity,
-            executive_topics=[t.model_dump() for t in executive_topics],
+            executive_topics=[
+                {
+                    **t.model_dump(),
+                    **(
+                        {
+                            "spatial_placement": {
+                                "column_span": layout_plan.items_by_topic_id[t.topic_id].span,
+                                "height_class": layout_plan.items_by_topic_id[t.topic_id].height,
+                                "row_index": layout_plan.items_by_topic_id[t.topic_id].row,
+                                "row_id": f"{layout_plan.items_by_topic_id[t.topic_id].section_id}-r{layout_plan.items_by_topic_id[t.topic_id].row + 1}",
+                                "pattern": layout_plan.items_by_topic_id[t.topic_id].pattern,
+                                "section_id": layout_plan.items_by_topic_id[t.topic_id].section_id,
+                                "order_index": layout_plan.items_by_topic_id[t.topic_id].display_order,
+                                "effective_min_span": layout_plan.items_by_topic_id[t.topic_id].span,
+                                "readable_span_score": layout_plan.items_by_topic_id[t.topic_id].readable_span_score,
+                            }
+                        }
+                        if t.topic_id in layout_plan.items_by_topic_id
+                        else {}
+                    ),
+                }
+                for t in executive_topics
+            ],
             executive_kpis=executive_kpis,
             domain_profile=gov_metrics.get("domain_profile", {}),
             analytical_opportunities=[o.model_dump() for o in planned_opps[:20]],

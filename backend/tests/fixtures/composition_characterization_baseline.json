@@ -1,0 +1,812 @@
+{
+  "Workforce": {
+    "dataset_id": 99770,
+    "total_cards": 8,
+    "total_rows": 5,
+    "sections": [
+      {
+        "section_id": "priority",
+        "title": "Priority Decisions",
+        "rows": [
+          {
+            "row_id": "priority-r1",
+            "pattern": "12",
+            "total_span": 12,
+            "cards": [
+              {
+                "topic_id": "TOPIC-bb0e253c",
+                "title": "Workforce Attendance vs Governed Policy Benchmark",
+                "chart_archetype": "bullet",
+                "column_span": 12,
+                "height_class": "short",
+                "order_index": 0
+              }
+            ]
+          },
+          {
+            "row_id": "priority-r2",
+            "pattern": "8+4",
+            "total_span": 12,
+            "cards": [
+              {
+                "topic_id": "TOPIC-c714e976",
+                "title": "Department Attendance Matrix Across Periods",
+                "chart_archetype": "heatmap",
+                "column_span": 8,
+                "height_class": "tall",
+                "order_index": 1
+              },
+              {
+                "topic_id": "TOPIC-6879d161",
+                "title": "Top 3 Employee Attendance Leaders",
+                "chart_archetype": "podium_top_3",
+                "column_span": 4,
+                "height_class": "tall",
+                "order_index": 2
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "section_id": "diagnostic",
+        "title": "Diagnostic Insights",
+        "rows": [
+          {
+            "row_id": "diagnostic-r1",
+            "pattern": "6+6",
+            "total_span": 12,
+            "cards": [
+              {
+                "topic_id": "TOPIC-4f5a1e21",
+                "title": "Cross-Source Attendance vs Leave Capacity Distribution",
+                "chart_archetype": "100_percent_stacked_bar",
+                "column_span": 6,
+                "height_class": "standard",
+                "order_index": 3
+              },
+              {
+                "topic_id": "TOPIC-92ca6c06",
+                "title": "Total Attendance vs Approved Leaves Statistical Association",
+                "chart_archetype": "scatter",
+                "column_span": 6,
+                "height_class": "standard",
+                "order_index": 4
+              }
+            ]
+          },
+          {
+            "row_id": "diagnostic-r2",
+            "pattern": "12",
+            "total_span": 12,
+            "cards": [
+              {
+                "topic_id": "TOPIC-83f0b262",
+                "title": "Department Attendance Variance & Dispersion",
+                "chart_archetype": "box_plot",
+                "column_span": 12,
+                "height_class": "standard",
+                "order_index": 5
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "section_id": "supporting",
+        "title": "Supporting Analysis",
+        "rows": [
+          {
+            "row_id": "supporting-r1",
+            "pattern": "8+4",
+            "total_span": 12,
+            "cards": [
+              {
+                "topic_id": "TOPIC-8a2627e4",
+                "title": "Department Attendance Ranking & Policy Benchmark",
+                "chart_archetype": "ranked_bar",
+                "column_span": 8,
+                "height_class": "standard",
+                "order_index": 6
+              },
+              {
+                "topic_id": "TOPIC-d3fa27d0",
+                "title": "Department Leave Allocation Benchmark",
+                "chart_archetype": "lollipop",
+                "column_span": 4,
+                "height_class": "standard",
+                "order_index": 7
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "topics": [
+      {
+        "topic_id": "TOPIC-bb0e253c",
+        "title": "Workforce Attendance vs Governed Policy Benchmark",
+        "slot_type": "hero",
+        "display_order": 1,
+        "spatial_placement": {
+          "column_span": 12,
+          "height_class": "short",
+          "row_index": 0,
+          "row_id": "priority-r1",
+          "pattern": "12",
+          "section_id": "priority",
+          "order_index": 0,
+          "effective_min_span": 5,
+          "readable_span_score": 1.0
+        },
+        "chart_type": "bullet"
+      },
+      {
+        "topic_id": "TOPIC-4f5a1e21",
+        "title": "Cross-Source Attendance vs Leave Capacity Distribution",
+        "slot_type": "action_scenario",
+        "display_order": 2,
+        "spatial_placement": {
+          "column_span": 6,
+          "height_class": "standard",
+          "row_index": 2,
+          "row_id": "diagnostic-r1",
+          "pattern": "6+6",
+          "section_id": "diagnostic",
+          "order_index": 3,
+          "effective_min_span": 5,
+          "readable_span_score": 1.0
+        },
+        "chart_type": "100_percent_stacked_bar"
+      },
+      {
+        "topic_id": "TOPIC-c714e976",
+        "title": "Department Attendance Matrix Across Periods",
+        "slot_type": "supporting",
+        "display_order": 3,
+        "spatial_placement": {
+          "column_span": 8,
+          "height_class": "tall",
+          "row_index": 1,
+          "row_id": "priority-r2",
+          "pattern": "8+4",
+          "section_id": "priority",
+          "order_index": 1,
+          "effective_min_span": 7,
+          "readable_span_score": 1.0
+        },
+        "chart_type": "heatmap"
+      },
+      {
+        "topic_id": "TOPIC-83f0b262",
+        "title": "Department Attendance Variance & Dispersion",
+        "slot_type": "supporting",
+        "display_order": 4,
+        "spatial_placement": {
+          "column_span": 12,
+          "height_class": "standard",
+          "row_index": 3,
+          "row_id": "diagnostic-r2",
+          "pattern": "12",
+          "section_id": "diagnostic",
+          "order_index": 5,
+          "effective_min_span": 4,
+          "readable_span_score": 1.0
+        },
+        "chart_type": "box_plot"
+      },
+      {
+        "topic_id": "TOPIC-92ca6c06",
+        "title": "Total Attendance vs Approved Leaves Statistical Association",
+        "slot_type": "supporting",
+        "display_order": 5,
+        "spatial_placement": {
+          "column_span": 6,
+          "height_class": "standard",
+          "row_index": 2,
+          "row_id": "diagnostic-r1",
+          "pattern": "6+6",
+          "section_id": "diagnostic",
+          "order_index": 4,
+          "effective_min_span": 5,
+          "readable_span_score": 1.0
+        },
+        "chart_type": "scatter"
+      },
+      {
+        "topic_id": "TOPIC-6879d161",
+        "title": "Top 3 Employee Attendance Leaders",
+        "slot_type": "supporting",
+        "display_order": 6,
+        "spatial_placement": {
+          "column_span": 4,
+          "height_class": "tall",
+          "row_index": 1,
+          "row_id": "priority-r2",
+          "pattern": "8+4",
+          "section_id": "priority",
+          "order_index": 2,
+          "effective_min_span": 3,
+          "readable_span_score": 1.0
+        },
+        "chart_type": "podium_top_3"
+      },
+      {
+        "topic_id": "TOPIC-8a2627e4",
+        "title": "Department Attendance Ranking & Policy Benchmark",
+        "slot_type": "hero",
+        "display_order": 7,
+        "spatial_placement": {
+          "column_span": 8,
+          "height_class": "standard",
+          "row_index": 4,
+          "row_id": "supporting-r1",
+          "pattern": "8+4",
+          "section_id": "supporting",
+          "order_index": 6,
+          "effective_min_span": 8,
+          "readable_span_score": 1.0
+        },
+        "chart_type": "ranked_bar"
+      },
+      {
+        "topic_id": "TOPIC-d3fa27d0",
+        "title": "Department Leave Allocation Benchmark",
+        "slot_type": "supporting",
+        "display_order": 8,
+        "spatial_placement": {
+          "column_span": 4,
+          "height_class": "standard",
+          "row_index": 4,
+          "row_id": "supporting-r1",
+          "pattern": "8+4",
+          "section_id": "supporting",
+          "order_index": 7,
+          "effective_min_span": 4,
+          "readable_span_score": 0.8
+        },
+        "chart_type": "lollipop"
+      }
+    ]
+  },
+  "Retail": {
+    "dataset_id": 99771,
+    "total_cards": 8,
+    "total_rows": 5,
+    "sections": [
+      {
+        "section_id": "priority",
+        "title": "Priority Decisions",
+        "rows": [
+          {
+            "row_id": "priority-r1",
+            "pattern": "12",
+            "total_span": 12,
+            "cards": [
+              {
+                "topic_id": "TOPIC-a503738a",
+                "title": "Store Sales Revenue Ranking & Regional Benchmark",
+                "chart_archetype": "ranked_bar",
+                "column_span": 12,
+                "height_class": "standard",
+                "order_index": 0
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "section_id": "diagnostic",
+        "title": "Diagnostic Insights",
+        "rows": [
+          {
+            "row_id": "diagnostic-r1",
+            "pattern": "6+6",
+            "total_span": 12,
+            "cards": [
+              {
+                "topic_id": "TOPIC-e3e00a21",
+                "title": "Foot Traffic vs Store Revenue Association",
+                "chart_archetype": "scatter",
+                "column_span": 6,
+                "height_class": "standard",
+                "order_index": 1
+              },
+              {
+                "topic_id": "TOPIC-08ce7f4b",
+                "title": "Store Sales Quartile Dispersion & Spread",
+                "chart_archetype": "box_plot",
+                "column_span": 6,
+                "height_class": "standard",
+                "order_index": 2
+              }
+            ]
+          },
+          {
+            "row_id": "diagnostic-r2",
+            "pattern": "8+4",
+            "total_span": 12,
+            "cards": [
+              {
+                "topic_id": "TOPIC-5ea5d717",
+                "title": "Weekly Store Sales Cadence Trend",
+                "chart_archetype": "line",
+                "column_span": 8,
+                "height_class": "standard",
+                "order_index": 3
+              },
+              {
+                "topic_id": "TOPIC-2d0762c2",
+                "title": "Top 3 High-Velocity Store Locations",
+                "chart_archetype": "podium_top_3",
+                "column_span": 4,
+                "height_class": "standard",
+                "order_index": 4
+              }
+            ]
+          },
+          {
+            "row_id": "diagnostic-r3",
+            "pattern": "6+6",
+            "total_span": 12,
+            "cards": [
+              {
+                "topic_id": "TOPIC-bfef08ca",
+                "title": "Merchandise Category Revenue Composition",
+                "chart_archetype": "treemap",
+                "column_span": 6,
+                "height_class": "standard",
+                "order_index": 5
+              },
+              {
+                "topic_id": "TOPIC-7e1f4486",
+                "title": "Store Performance vs Monthly Quota Target",
+                "chart_archetype": "bullet",
+                "column_span": 6,
+                "height_class": "standard",
+                "order_index": 6
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "section_id": "supporting",
+        "title": "Supporting Analysis",
+        "rows": [
+          {
+            "row_id": "supporting-r1",
+            "pattern": "12",
+            "total_span": 12,
+            "cards": [
+              {
+                "topic_id": "TOPIC-53de27d4",
+                "title": "Revenue vs Operating Margin Disparity Range",
+                "chart_archetype": "dumbbell",
+                "column_span": 12,
+                "height_class": "standard",
+                "order_index": 7
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "topics": [
+      {
+        "topic_id": "TOPIC-a503738a",
+        "title": "Store Sales Revenue Ranking & Regional Benchmark",
+        "slot_type": "hero",
+        "display_order": 1,
+        "spatial_placement": {
+          "column_span": 12,
+          "height_class": "standard",
+          "row_index": 0,
+          "row_id": "priority-r1",
+          "pattern": "12",
+          "section_id": "priority",
+          "order_index": 0,
+          "effective_min_span": 7,
+          "readable_span_score": 1.0
+        },
+        "chart_type": "ranked_bar"
+      },
+      {
+        "topic_id": "TOPIC-e3e00a21",
+        "title": "Foot Traffic vs Store Revenue Association",
+        "slot_type": "action_scenario",
+        "display_order": 2,
+        "spatial_placement": {
+          "column_span": 6,
+          "height_class": "standard",
+          "row_index": 1,
+          "row_id": "diagnostic-r1",
+          "pattern": "6+6",
+          "section_id": "diagnostic",
+          "order_index": 1,
+          "effective_min_span": 5,
+          "readable_span_score": 1.0
+        },
+        "chart_type": "scatter"
+      },
+      {
+        "topic_id": "TOPIC-08ce7f4b",
+        "title": "Store Sales Quartile Dispersion & Spread",
+        "slot_type": "supporting",
+        "display_order": 3,
+        "spatial_placement": {
+          "column_span": 6,
+          "height_class": "standard",
+          "row_index": 1,
+          "row_id": "diagnostic-r1",
+          "pattern": "6+6",
+          "section_id": "diagnostic",
+          "order_index": 2,
+          "effective_min_span": 4,
+          "readable_span_score": 1.0
+        },
+        "chart_type": "box_plot"
+      },
+      {
+        "topic_id": "TOPIC-5ea5d717",
+        "title": "Weekly Store Sales Cadence Trend",
+        "slot_type": "supporting",
+        "display_order": 4,
+        "spatial_placement": {
+          "column_span": 8,
+          "height_class": "standard",
+          "row_index": 2,
+          "row_id": "diagnostic-r2",
+          "pattern": "8+4",
+          "section_id": "diagnostic",
+          "order_index": 3,
+          "effective_min_span": 5,
+          "readable_span_score": 1.0
+        },
+        "chart_type": "line"
+      },
+      {
+        "topic_id": "TOPIC-bfef08ca",
+        "title": "Merchandise Category Revenue Composition",
+        "slot_type": "supporting",
+        "display_order": 5,
+        "spatial_placement": {
+          "column_span": 6,
+          "height_class": "standard",
+          "row_index": 3,
+          "row_id": "diagnostic-r3",
+          "pattern": "6+6",
+          "section_id": "diagnostic",
+          "order_index": 5,
+          "effective_min_span": 6,
+          "readable_span_score": 0.75
+        },
+        "chart_type": "treemap"
+      },
+      {
+        "topic_id": "TOPIC-53de27d4",
+        "title": "Revenue vs Operating Margin Disparity Range",
+        "slot_type": "supporting",
+        "display_order": 6,
+        "spatial_placement": {
+          "column_span": 12,
+          "height_class": "standard",
+          "row_index": 4,
+          "row_id": "supporting-r1",
+          "pattern": "12",
+          "section_id": "supporting",
+          "order_index": 7,
+          "effective_min_span": 4,
+          "readable_span_score": 1.0
+        },
+        "chart_type": "dumbbell"
+      },
+      {
+        "topic_id": "TOPIC-2d0762c2",
+        "title": "Top 3 High-Velocity Store Locations",
+        "slot_type": "supporting",
+        "display_order": 7,
+        "spatial_placement": {
+          "column_span": 4,
+          "height_class": "standard",
+          "row_index": 2,
+          "row_id": "diagnostic-r2",
+          "pattern": "8+4",
+          "section_id": "diagnostic",
+          "order_index": 4,
+          "effective_min_span": 3,
+          "readable_span_score": 1.0
+        },
+        "chart_type": "podium_top_3"
+      },
+      {
+        "topic_id": "TOPIC-7e1f4486",
+        "title": "Store Performance vs Monthly Quota Target",
+        "slot_type": "risk_anomaly",
+        "display_order": 8,
+        "spatial_placement": {
+          "column_span": 6,
+          "height_class": "standard",
+          "row_index": 3,
+          "row_id": "diagnostic-r3",
+          "pattern": "6+6",
+          "section_id": "diagnostic",
+          "order_index": 6,
+          "effective_min_span": 5,
+          "readable_span_score": 1.0
+        },
+        "chart_type": "bullet"
+      }
+    ]
+  },
+  "Environmental": {
+    "dataset_id": 99772,
+    "total_cards": 8,
+    "total_rows": 5,
+    "sections": [
+      {
+        "section_id": "priority",
+        "title": "Priority Decisions",
+        "rows": [
+          {
+            "row_id": "priority-r1",
+            "pattern": "12",
+            "total_span": 12,
+            "cards": [
+              {
+                "topic_id": "TOPIC-4b5b55c6",
+                "title": "Ambient PM10 Particulate Concentration Ranking",
+                "chart_archetype": "ranked_bar",
+                "column_span": 12,
+                "height_class": "standard",
+                "order_index": 0
+              }
+            ]
+          },
+          {
+            "row_id": "priority-r2",
+            "pattern": "8+4",
+            "total_span": 12,
+            "cards": [
+              {
+                "topic_id": "TOPIC-c1c797b4",
+                "title": "Pollutant Intensity Across Monitoring Zones",
+                "chart_archetype": "heatmap",
+                "column_span": 8,
+                "height_class": "tall",
+                "order_index": 1
+              },
+              {
+                "topic_id": "TOPIC-4ca3b41f",
+                "title": "Top 3 Peak PM10 Non-Attainment Urban Hotspots",
+                "chart_archetype": "podium_top_3",
+                "column_span": 4,
+                "height_class": "tall",
+                "order_index": 2
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "section_id": "diagnostic",
+        "title": "Diagnostic Insights",
+        "rows": [
+          {
+            "row_id": "diagnostic-r1",
+            "pattern": "6+6",
+            "total_span": 12,
+            "cards": [
+              {
+                "topic_id": "TOPIC-31687d54",
+                "title": "SO2 vs NO2 Multi-Pollutant Association",
+                "chart_archetype": "scatter",
+                "column_span": 6,
+                "height_class": "standard",
+                "order_index": 3
+              },
+              {
+                "topic_id": "TOPIC-90970299",
+                "title": "Particulate Concentration Quartile Dispersion",
+                "chart_archetype": "box_plot",
+                "column_span": 6,
+                "height_class": "standard",
+                "order_index": 4
+              }
+            ]
+          },
+          {
+            "row_id": "diagnostic-r2",
+            "pattern": "6+6",
+            "total_span": 12,
+            "cards": [
+              {
+                "topic_id": "TOPIC-3ab71aa8",
+                "title": "Clean Air NAAQS (60 \u00b5g/m\u00b3) Standard Adherence",
+                "chart_archetype": "bullet",
+                "column_span": 6,
+                "height_class": "standard",
+                "order_index": 5
+              },
+              {
+                "topic_id": "TOPIC-9d0090ee",
+                "title": "PM10 Outlier Variance & Excess Concentration",
+                "chart_archetype": "variance_bar",
+                "column_span": 6,
+                "height_class": "standard",
+                "order_index": 6
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "section_id": "supporting",
+        "title": "Supporting Analysis",
+        "rows": [
+          {
+            "row_id": "supporting-r1",
+            "pattern": "12",
+            "total_span": 12,
+            "cards": [
+              {
+                "topic_id": "TOPIC-1934092a",
+                "title": "SO2 vs NO2 Multi-Pollutant Disparity Range",
+                "chart_archetype": "dumbbell",
+                "column_span": 12,
+                "height_class": "standard",
+                "order_index": 7
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "topics": [
+      {
+        "topic_id": "TOPIC-4b5b55c6",
+        "title": "Ambient PM10 Particulate Concentration Ranking",
+        "slot_type": "hero",
+        "display_order": 1,
+        "spatial_placement": {
+          "column_span": 12,
+          "height_class": "standard",
+          "row_index": 0,
+          "row_id": "priority-r1",
+          "pattern": "12",
+          "section_id": "priority",
+          "order_index": 0,
+          "effective_min_span": 7,
+          "readable_span_score": 1.0
+        },
+        "chart_type": "ranked_bar"
+      },
+      {
+        "topic_id": "TOPIC-31687d54",
+        "title": "SO2 vs NO2 Multi-Pollutant Association",
+        "slot_type": "action_scenario",
+        "display_order": 2,
+        "spatial_placement": {
+          "column_span": 6,
+          "height_class": "standard",
+          "row_index": 2,
+          "row_id": "diagnostic-r1",
+          "pattern": "6+6",
+          "section_id": "diagnostic",
+          "order_index": 3,
+          "effective_min_span": 5,
+          "readable_span_score": 1.0
+        },
+        "chart_type": "scatter"
+      },
+      {
+        "topic_id": "TOPIC-90970299",
+        "title": "Particulate Concentration Quartile Dispersion",
+        "slot_type": "supporting",
+        "display_order": 3,
+        "spatial_placement": {
+          "column_span": 6,
+          "height_class": "standard",
+          "row_index": 2,
+          "row_id": "diagnostic-r1",
+          "pattern": "6+6",
+          "section_id": "diagnostic",
+          "order_index": 4,
+          "effective_min_span": 4,
+          "readable_span_score": 1.0
+        },
+        "chart_type": "box_plot"
+      },
+      {
+        "topic_id": "TOPIC-c1c797b4",
+        "title": "Pollutant Intensity Across Monitoring Zones",
+        "slot_type": "supporting",
+        "display_order": 4,
+        "spatial_placement": {
+          "column_span": 8,
+          "height_class": "tall",
+          "row_index": 1,
+          "row_id": "priority-r2",
+          "pattern": "8+4",
+          "section_id": "priority",
+          "order_index": 1,
+          "effective_min_span": 7,
+          "readable_span_score": 1.0
+        },
+        "chart_type": "heatmap"
+      },
+      {
+        "topic_id": "TOPIC-1934092a",
+        "title": "SO2 vs NO2 Multi-Pollutant Disparity Range",
+        "slot_type": "supporting",
+        "display_order": 5,
+        "spatial_placement": {
+          "column_span": 12,
+          "height_class": "standard",
+          "row_index": 4,
+          "row_id": "supporting-r1",
+          "pattern": "12",
+          "section_id": "supporting",
+          "order_index": 7,
+          "effective_min_span": 4,
+          "readable_span_score": 1.0
+        },
+        "chart_type": "dumbbell"
+      },
+      {
+        "topic_id": "TOPIC-4ca3b41f",
+        "title": "Top 3 Peak PM10 Non-Attainment Urban Hotspots",
+        "slot_type": "supporting",
+        "display_order": 6,
+        "spatial_placement": {
+          "column_span": 4,
+          "height_class": "tall",
+          "row_index": 1,
+          "row_id": "priority-r2",
+          "pattern": "8+4",
+          "section_id": "priority",
+          "order_index": 2,
+          "effective_min_span": 3,
+          "readable_span_score": 1.0
+        },
+        "chart_type": "podium_top_3"
+      },
+      {
+        "topic_id": "TOPIC-3ab71aa8",
+        "title": "Clean Air NAAQS (60 \u00b5g/m\u00b3) Standard Adherence",
+        "slot_type": "risk_anomaly",
+        "display_order": 7,
+        "spatial_placement": {
+          "column_span": 6,
+          "height_class": "standard",
+          "row_index": 3,
+          "row_id": "diagnostic-r2",
+          "pattern": "6+6",
+          "section_id": "diagnostic",
+          "order_index": 5,
+          "effective_min_span": 5,
+          "readable_span_score": 1.0
+        },
+        "chart_type": "bullet"
+      },
+      {
+        "topic_id": "TOPIC-9d0090ee",
+        "title": "PM10 Outlier Variance & Excess Concentration",
+        "slot_type": "supporting",
+        "display_order": 8,
+        "spatial_placement": {
+          "column_span": 6,
+          "height_class": "standard",
+          "row_index": 3,
+          "row_id": "diagnostic-r2",
+          "pattern": "6+6",
+          "section_id": "diagnostic",
+          "order_index": 6,
+          "effective_min_span": 4,
+          "readable_span_score": 1.0
+        },
+        "chart_type": "variance_bar"
+      }
+    ]
+  }
+}

@@ -1670,13 +1670,15 @@ def test_g5_5_executive_topic_semantic_immutability():
     with pytest.raises(AttributeError, match="IMMUTABILITY_VIOLATION"):
         topic.evidence_ids = ["EVID-MUTATED"]
 
-    # Non-semantic presentation / spatial fields are allowed to update
+    # Non-semantic presentation fields are allowed to update
     topic.display_order = 2
     assert topic.display_order == 2
     topic.rank = 2
     assert topic.rank == 2
-    topic.spatial_placement = {"row": 1, "col": 0, "width": 6}
-    assert topic.spatial_placement["width"] == 6
+
+    # G5.6: Spatial placement fields cannot be mutated on ExecutiveTopic
+    with pytest.raises(AttributeError, match="COMPOSITION_MUTATION_VIOLATION"):
+        topic.spatial_placement = {"row": 1, "col": 0, "width": 6}
 
 
 def test_g5_5_cache_topic_id_stability():
@@ -1701,6 +1703,297 @@ def test_g5_5_cache_topic_id_stability():
     assert ids_run1 == ids_run2, f"Topic IDs drifted between runs: {ids_run1} vs {ids_run2}"
     for tid in ids_run1:
         assert tid.startswith("TOPIC-"), f"Expected canonical TOPIC- prefix, got: {tid}"
+
+
+# ------------------------------------------------------------------------------
+# Phase G5.6: Spatial & Composition Boundary Extraction Tests
+# ------------------------------------------------------------------------------
+
+def test_g5_6_composition_cannot_mutate_executive_topic():
+    """Phase G5.6: Verifies that ExecutiveTopic is protected against composition/spatial layout mutation."""
+    from app.services.adaptive_dashboard.topics import (
+        ExecutiveTopicDraft,
+        ExecutiveTopicFactory,
+    )
+
+    draft = ExecutiveTopicDraft(
+        topic_id="TOPIC-g56-spatial-01",
+        semantic_topic_key="workforce:composition:department:presence",
+        display_order=1,
+        rank=1,
+        portfolio_position=1,
+        dataset_id=500,
+        domain="workforce",
+        analytical_intent="COMPOSITION",
+        evidence_ids=["EVID-01", "EVID-02"],
+        narrative={"topic_id": "TOPIC-g56-spatial-01", "title": "Department Capacity"},
+    )
+    topic = ExecutiveTopicFactory.create_topic(draft)
+
+    # Attempting to assign layout fields directly to ExecutiveTopic must raise AttributeError
+    for field, val in [
+        ("spatial_placement", {"column_span": 8, "height_class": "tall"}),
+        ("row", 1),
+        ("column", 0),
+        ("span", 8),
+        ("height", "tall"),
+    ]:
+        with pytest.raises(AttributeError, match="COMPOSITION_MUTATION_VIOLATION"):
+            setattr(topic, field, val)
+
+
+def test_g5_6_composition_cannot_mutate_visual_spec():
+    """Phase G5.6: Verifies that layout planning does not mutate the input VisualSpec in any way."""
+    from app.services.adaptive_dashboard.composition import (
+        SpatialCompositionPlanner,
+        CompositionIntegrity,
+    )
+    from app.services.adaptive_dashboard.composition_planner import ExecutiveTopic
+
+    visual_spec = {
+        "chart_type": "ranked_bar",
+        "title": "Department Headcount",
+        "categories": ["Engineering", "Product", "Operations"],
+        "values": [45, 20, 30],
+        "unit": "people",
+    }
+    topic = ExecutiveTopic(
+        topic_id="TOPIC-vspec-test",
+        title="Department Headcount",
+        analytical_intent="RANKING",
+        recommended_visual="ranked_bar",
+        visual_spec=visual_spec,
+    )
+
+    fp_before = CompositionIntegrity.compute_visual_semantic_fingerprint(topic.visual_spec)
+    plan = SpatialCompositionPlanner.plan_layout([topic], domain="workforce")
+    fp_after = CompositionIntegrity.compute_visual_semantic_fingerprint(topic.visual_spec)
+
+    assert fp_before == fp_after, "VisualSpec was mutated during composition planning!"
+    assert topic.visual_spec == visual_spec
+
+
+def test_g5_6_composition_item_independent_of_topic():
+    """Phase G5.6: Verifies layout coordinates live on CompositionItem in DashboardLayoutPlan, not on topic."""
+    from app.services.adaptive_dashboard.composition import (
+        SpatialCompositionPlanner,
+        DashboardLayoutPlan,
+        CompositionItem,
+    )
+    from app.services.adaptive_dashboard.composition_planner import ExecutiveTopic
+
+    t1 = ExecutiveTopic(
+        topic_id="TOPIC-item-01",
+        title="Metric Overview",
+        analytical_intent="METRIC",
+        recommended_visual="bullet",
+        visual_spec={"chart_type": "bullet"},
+    )
+    t2 = ExecutiveTopic(
+        topic_id="TOPIC-item-02",
+        title="Trend Analysis",
+        analytical_intent="TREND",
+        recommended_visual="trend_line",
+        visual_spec={"chart_type": "trend_line"},
+    )
+
+    plan = SpatialCompositionPlanner.plan_layout([t1, t2], domain="workforce")
+
+    assert isinstance(plan, DashboardLayoutPlan)
+    assert len(plan.items) == 2
+    assert "TOPIC-item-01" in plan.items_by_topic_id
+    assert "TOPIC-item-02" in plan.items_by_topic_id
+
+    item1 = plan.get_placement("TOPIC-item-01")
+    assert isinstance(item1, CompositionItem)
+    assert item1.span > 0
+    assert item1.height_class in ("short", "standard", "tall")
+    assert item1.topic_id == "TOPIC-item-01"
+
+    # ExecutiveTopic instances remain unmutated by layout
+    assert not hasattr(t1, "span")
+    assert getattr(t1, "spatial_placement", None) is None
+
+
+def test_g5_6_composition_integrity_validation():
+    """Phase G5.6: Verifies CompositionIntegrity validates topic existence, non-overlapping columns, positive dimensions, and readability minimums."""
+    from app.services.adaptive_dashboard.composition import (
+        CompositionIntegrity,
+        CompositionIntegrityError,
+        DashboardLayoutPlan,
+        CompositionItem,
+        CompositionRow,
+        CompositionSection,
+    )
+    from app.services.adaptive_dashboard.composition_planner import ExecutiveTopic
+
+    t1 = ExecutiveTopic(topic_id="T1", title="Card 1", analytical_intent="RANKING", recommended_visual="ranked_bar", visual_spec={"chart_type": "ranked_bar"})
+    t2 = ExecutiveTopic(topic_id="T2", title="Card 2", analytical_intent="COMPARISON", recommended_visual="lollipop", visual_spec={"chart_type": "lollipop"})
+
+    item1 = CompositionItem(topic_id="T1", span=8, height="standard", row=0, column=0, pattern="8+4", section_id="sec-1")
+    item2 = CompositionItem(topic_id="T2", span=4, height="standard", row=0, column=8, pattern="8+4", section_id="sec-1")
+
+    # Valid plan
+    valid_plan = DashboardLayoutPlan(
+        plan_id="plan-valid",
+        dataset_id=1,
+        dataset_version=1,
+        domain="workforce",
+        grid_columns=12,
+        items=[item1, item2],
+        items_by_topic_id={"T1": item1, "T2": item2},
+        sections=[
+            CompositionSection(
+                section_id="sec-1",
+                title="Section 1",
+                rows=[
+                    CompositionRow(
+                        row_id="r-1",
+                        section_id="sec-1",
+                        row_index=0,
+                        total_span=12,
+                        pattern="8+4",
+                        cards=[item1, item2],
+                    )
+                ]
+            )
+        ]
+    )
+    CompositionIntegrity.assert_valid_plan(valid_plan, [t1, t2])
+
+    # 1. Unknown topic ID rejection
+    bad_item = CompositionItem(topic_id="UNKNOWN_TOPIC", span=12, height="standard", row=0, column=0)
+    plan_unknown_topic = DashboardLayoutPlan(
+        plan_id="plan-unknown",
+        dataset_id=1,
+        dataset_version=1,
+        domain="workforce",
+        items=[bad_item],
+        items_by_topic_id={"UNKNOWN_TOPIC": bad_item},
+        sections=[
+            CompositionSection(
+                section_id="sec-1",
+                title="Section 1",
+                rows=[
+                    CompositionRow(
+                        row_id="r-1",
+                        section_id="sec-1",
+                        cards=[bad_item],
+                    )
+                ]
+            )
+        ]
+    )
+    with pytest.raises(CompositionIntegrityError, match="COMPOSITION_UNKNOWN_TOPIC"):
+        CompositionIntegrity.assert_valid_plan(plan_unknown_topic, [t1, t2])
+
+    # 2. Overlapping columns rejection (col 0 span 8 + col 6 span 6 = overlap at cols 6-7)
+    overlap_item1 = CompositionItem(topic_id="T1", span=8, height="standard", row=0, column=0)
+    overlap_item2 = CompositionItem(topic_id="T2", span=6, height="standard", row=0, column=6)
+    plan_overlap = DashboardLayoutPlan(
+        plan_id="plan-overlap",
+        dataset_id=1,
+        dataset_version=1,
+        domain="workforce",
+        items=[overlap_item1, overlap_item2],
+        items_by_topic_id={"T1": overlap_item1, "T2": overlap_item2},
+        sections=[
+            CompositionSection(
+                section_id="sec-1",
+                title="Section 1",
+                rows=[
+                    CompositionRow(
+                        row_id="r-1",
+                        section_id="sec-1",
+                        cards=[overlap_item1, overlap_item2],
+                    )
+                ]
+            )
+        ]
+    )
+    with pytest.raises(CompositionIntegrityError, match="COMPOSITION_GRID_OVERLAP"):
+        CompositionIntegrity.assert_valid_plan(plan_overlap, [t1, t2])
+
+    # 3. Readability minimum rejection (ranked bar forced into 4 cols)
+    unreadable_item = CompositionItem(topic_id="T1", span=4, height="standard", row=0, column=0)
+    plan_unreadable = DashboardLayoutPlan(
+        plan_id="plan-unreadable",
+        dataset_id=1,
+        dataset_version=1,
+        domain="workforce",
+        items=[unreadable_item],
+        items_by_topic_id={"T1": unreadable_item},
+        sections=[
+            CompositionSection(
+                section_id="sec-1",
+                title="Section 1",
+                rows=[
+                    CompositionRow(
+                        row_id="r-1",
+                        section_id="sec-1",
+                        cards=[unreadable_item],
+                    )
+                ]
+            )
+        ]
+    )
+    with pytest.raises(CompositionIntegrityError, match="COMPOSITION_READABILITY_VIOLATION"):
+        CompositionIntegrity.assert_valid_plan(plan_unreadable, [t1])
+
+
+def test_g5_6_composition_ast_purity():
+    """Phase G5.6: Verifies that adaptive_dashboard/composition/ has zero DB, AI/LLM, MCP, or Theme dependencies."""
+    from app.services.adaptive_dashboard.composition import CompositionIntegrity
+
+    violations = CompositionIntegrity.audit_ast_purity()
+    assert violations == [], f"AST purity audit failed in composition package: {violations}"
+
+
+def test_g5_6_characterization_equivalence():
+    """Phase G5.6: Verifies layout plans for Workforce, Retail, and Environmental match characterization baseline."""
+    import os
+    from pathlib import Path
+
+    # If running in pytest with isolated temporary database, ensure canonical benchmark rows are seeded
+    real_db = Path(__file__).resolve().parents[1] / "data" / "db" / "pulsehr.sqlite3"
+    with session_scope() as conn:
+        has_99770 = conn.execute("SELECT 1 FROM dataset_uploads WHERE id = 99770").fetchone()
+        if not has_99770 and real_db.exists():
+            conn.execute(f'ATTACH DATABASE "{real_db}" AS real_source')
+            conn.execute("INSERT OR REPLACE INTO dataset_uploads (id, filename, original_name, file_type, display_name) SELECT id, filename, original_name, file_type, display_name FROM real_source.dataset_uploads WHERE id IN (99770, 99771, 99772)")
+            conn.execute("INSERT OR REPLACE INTO sheets (id, dataset_id, name, display_name, columns_json, profile_json, row_count) SELECT id, dataset_id, name, display_name, columns_json, profile_json, row_count FROM real_source.sheets WHERE dataset_id IN (99770, 99771, 99772)")
+            conn.execute("INSERT OR REPLACE INTO sheet_rows (id, sheet_id, row_index, data_json) SELECT id, sheet_id, row_index, data_json FROM real_source.sheet_rows WHERE sheet_id IN (SELECT id FROM real_source.sheets WHERE dataset_id IN (99770, 99771, 99772))")
+            try:
+                conn.execute("INSERT OR REPLACE INTO sheet_relationships SELECT * FROM real_source.sheet_relationships WHERE left_sheet_id IN (SELECT id FROM real_source.sheets WHERE dataset_id IN (99770, 99771, 99772))")
+            except Exception:
+                pass
+            conn.commit()
+            conn.execute("DETACH DATABASE real_source")
+
+    baseline_path = os.path.join(
+        os.path.dirname(__file__), "fixtures", "composition_characterization_baseline.json"
+    )
+    with open(baseline_path, "r", encoding="utf-8") as f:
+        baseline = json.load(f)
+
+    for domain_name, ds_id in [("Workforce", 99770), ("Retail", 99771), ("Environmental", 99772)]:
+        res = run_dataset_intelligence(dataset_id=ds_id).model_dump()
+        lp = res.get("layout_plan")
+        assert lp is not None, f"Layout plan missing for {domain_name} ({ds_id})"
+        assert lp["total_cards"] == baseline[domain_name]["total_cards"]
+        assert lp["total_rows"] == baseline[domain_name]["total_rows"]
+
+        for exp_sec, act_sec in zip(baseline[domain_name]["sections"], lp["sections"]):
+            assert exp_sec["section_id"] == act_sec["section_id"]
+            assert len(exp_sec["rows"]) == len(act_sec["rows"])
+            for exp_row, act_row in zip(exp_sec["rows"], act_sec["rows"]):
+                assert exp_row["pattern"] == act_row["pattern"]
+                assert exp_row["total_span"] == act_row["total_span"]
+                assert len(exp_row["cards"]) == len(act_row["cards"])
+                for exp_c, act_c in zip(exp_row["cards"], act_row["cards"]):
+                    assert exp_c["column_span"] == act_c["column_span"]
+                    assert exp_c["chart_archetype"] == act_c["chart_archetype"]
+
 
 
 

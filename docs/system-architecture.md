@@ -212,3 +212,15 @@ React Frontend Presentation (ECharts / SCSS Tokens)
   - Fail-closed validation: any mismatch across `narrative.topic_id`, `evidence_binding.topic_id`, `executive_topic.topic_id`, or `visual_spec.topic_id` raises `StoryAssemblyIntegrityError`.
   - Verified across 20-thread concurrency, portfolio permutation invariance (`[A, B, C]` vs `[C, A, B]`), insertion invariance (`[A, B, C]` vs `[A, X, B, C]`), cold/warm cache consistency, AST purity, and full multi-viewport browser testing.
 
+* **Phase G5.6 — Spatial Composition & Placement Boundary Decoupling:**
+  - Dedicated spatial layout package (`composition/`): `CompositionItem`, `CompositionRow`, `CompositionSection`, `DashboardLayoutPlan`, `CompositionCandidate`, `CompositionCandidateBuilder`, `SpatialCompositionPlanner`, `CompositionIntegrity`.
+  - **Composition Invariant:** *"ExecutiveTopic owns governed meaning. VisualSpec owns governed representation. Composition owns placement only. Composition may decide where and how much space a topic receives, but it must never mutate what the topic means or how the visual is semantically defined."*
+  - **ExecutiveTopic Immutability Guard:** `ExecutiveTopic` is protected against layout mutations; setting spatial layout attributes (`spatial_placement`, `row`, `column`, `span`, `height`) on an `ExecutiveTopic` instance raises `AttributeError: COMPOSITION_MUTATION_VIOLATION`.
+  - **VisualSpec Immutability:** Pre-layout and post-layout SHA-256 semantic fingerprints of `VisualSpec` must strictly match. Zero visual chart mutations during layout planning.
+  - **Semantically Blind Composition:** Layout derivation contains strictly zero domain branches (`if workforce:`, `if retail:`, etc.). Derived entirely from structural archetype legibility profiles and content density metrics (longest label length, category count, information density).
+  - **Reference by Identity Only:** No positional or index-based binding; topics are referenced strictly by canonical `topic_id` (`items_by_topic_id`).
+  - **12-Column Responsive Grid Preservation:** Balanced layout templates (`12`, `8+4`, `4+8`, `6+6`, `7+5`, `5+7`, `4+4+4`) and intentional partials maintained with &ge; 85% row utilization.
+  - **CompositionIntegrity Enforcement:** Validates topic existence, grid bounds, non-overlapping column coordinates, positive dimensions, and readability minimums (preventing squeeze of complex ranking charts into narrow columns).
+  - **AST Architecture Purity:** Complete isolation verified via static AST audit (`audit_ast_purity()`) ensuring zero dependencies on database engines (`sqlite3`, `duckdb`), AI/LLM SDKs (`ollama`), MCP services, or React/theme tokens.
+  - Multi-viewport Puppeteer closure verified across 1440px desktop, 1024px tablet, 390px mobile, and same-session dataset switching (Workforce &rarr; Retail &rarr; Environmental &rarr; Workforce) with 0 layout overlaps and 0 console errors.
+
