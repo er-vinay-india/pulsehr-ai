@@ -199,3 +199,12 @@ React Frontend Presentation (ECharts / SCSS Tokens)
   - Strict title-axis semantic consistency preventing cross-domain contamination (e.g. retail axes with workforce titles).
   - Immutability guarantee (`VisualSemanticsMutationIntegrity`): composition may adjust layout/span, but cannot mutate chart type, series, axes, or measures.
   - Full titles preserved alongside responsive display titles.
+
+* **Phase G5.5 — Analytical Story & ExecutiveTopic Factory Extraction:**
+  - Dedicated story and topic assembly package (`topics/`): `ExecutiveTopicDraft`, `ExecutiveTopic`, `ExecutiveTopicFactory`, `TopicIdGenerator`, `StoryAssemblyIntegrity`.
+  - **Story Assembly Invariant:** *"A story does not calculate facts, create evidence, choose chart mechanics, or decide layout. It assembles already-governed meaning into one immutable topic identity."*
+  - Centralized monotonic topic identifier generation (`TopicIdGenerator` &rarr; `TOPIC-001`, `TOPIC-002`, ...).
+  - Strict identity-based assembly: binds narrative, evidence, topic, and visual spec strictly by `topic_id`, permanently eliminating positional array zipping.
+  - Fail-closed validation: any mismatch across `narrative.topic_id`, `evidence_binding.topic_id`, `executive_topic.topic_id`, or `visual_spec.topic_id` raises `StoryAssemblyIntegrityError`.
+  - Protected by executable AST boundary purity tests preventing DB, AI/LLM, MCP, or layout dependencies.
+

@@ -1283,3 +1283,155 @@ def test_g5_4_architecture_boundary_purity():
             )
 
 
+# ==============================================================================
+# Phase G5.5 Characterization Tests: Story & ExecutiveTopic Factory Boundary
+# ==============================================================================
+
+def test_g5_5_topic_id_centralization():
+    """Phase G5.5: Verifies central topic identifier generation."""
+    from app.services.adaptive_dashboard.topics import TopicIdGenerator
+
+    assert TopicIdGenerator.format_id(1) == "TOPIC-001"
+    assert TopicIdGenerator.format_id(42) == "TOPIC-042"
+    assert TopicIdGenerator.format_id(100) == "TOPIC-100"
+    assert TopicIdGenerator.parse_index("TOPIC-001") == 1
+    assert TopicIdGenerator.parse_index("TOPIC-042") == 42
+
+
+def test_g5_5_executive_topic_factory_identity_assembly():
+    """Phase G5.5: Verifies strict identity-based assembly in ExecutiveTopicFactory."""
+    from app.services.adaptive_dashboard.topics import (
+        ExecutiveTopicDraft,
+        ExecutiveTopicFactory,
+        StoryAssemblyIntegrityError,
+    )
+
+    t_id = "TOPIC-005"
+    valid_draft = ExecutiveTopicDraft(
+        topic_id=t_id,
+        dataset_id=99770,
+        domain="workforce",
+        analytical_intent="RANKING",
+        entity_grain="PERSON",
+        narrative={
+            "topic_id": t_id,
+            "title": "Top 3 Employee Attendance Leaders",
+            "subtitle": "Individual attendance ranking",
+            "finding": "Top performers maintain 100% presence.",
+            "takeaway": "Top performers maintain 100% presence.",
+            "recommended_action": "Recognize leaders.",
+        },
+        evidence_binding={
+            "topic_id": t_id,
+            "evidence_id": "EVID-PODIUM-01",
+        },
+        priority=5,
+    )
+
+    topic = ExecutiveTopicFactory.create_topic(valid_draft)
+    assert topic.topic_id == t_id
+    assert topic.title == "Top 3 Employee Attendance Leaders"
+    assert topic.takeaway == "Top performers maintain 100% presence."
+    assert "EVID-PODIUM-01" in topic.evidence_ids
+
+    # Mismatched narrative topic_id must fail closed
+    invalid_narrative_draft = valid_draft.model_copy(deep=True)
+    invalid_narrative_draft.narrative["topic_id"] = "TOPIC-999"
+    with pytest.raises(StoryAssemblyIntegrityError, match="IDENTITY_MISMATCH"):
+        ExecutiveTopicFactory.create_topic(invalid_narrative_draft)
+
+    # Mismatched evidence binding topic_id must fail closed
+    invalid_evidence_draft = valid_draft.model_copy(deep=True)
+    invalid_evidence_draft.evidence_binding["topic_id"] = "TOPIC-888"
+    with pytest.raises(StoryAssemblyIntegrityError, match="IDENTITY_MISMATCH"):
+        ExecutiveTopicFactory.create_topic(invalid_evidence_draft)
+
+
+def test_g5_5_visual_spec_binding_by_identity():
+    """Phase G5.5: Verifies that visual specs are bound strictly by matching topic identity."""
+    from app.services.adaptive_dashboard.topics import (
+        ExecutiveTopicDraft,
+        ExecutiveTopicFactory,
+        StoryAssemblyIntegrityError,
+    )
+
+    t_id = "TOPIC-003"
+    draft = ExecutiveTopicDraft(
+        topic_id=t_id,
+        dataset_id=99770,
+        domain="workforce",
+        analytical_intent="COMPOSITION",
+        narrative={"topic_id": t_id, "title": "Weekly Capacity Distribution"},
+        priority=3,
+    )
+    topic = ExecutiveTopicFactory.create_topic(draft)
+
+    # Aligned visual spec succeeds
+    matching_spec = {
+        "topic_id": t_id,
+        "chart_type": "100_percent_stacked_bar",
+        "categories": ["W1", "W2"],
+        "values": [80, 20],
+    }
+    ExecutiveTopicFactory.bind_visual_spec(topic, matching_spec)
+    assert topic.visual_spec["topic_id"] == t_id
+    assert topic.visual_spec["chart_type"] == "100_percent_stacked_bar"
+
+    # Mismatched visual spec must fail closed
+    mismatched_spec = {
+        "topic_id": "TOPIC-DIFFERENT",
+        "chart_type": "scatter",
+    }
+    with pytest.raises(StoryAssemblyIntegrityError, match="IDENTITY_MISMATCH"):
+        ExecutiveTopicFactory.bind_visual_spec(topic, mismatched_spec)
+
+
+def test_g5_5_portfolio_assembly_rejects_positional_binding():
+    """Phase G5.5: Verifies that assemble_portfolio_with_visuals binds by identity lookup, not array position."""
+    from app.services.adaptive_dashboard.topics import (
+        ExecutiveTopicDraft,
+        ExecutiveTopicFactory,
+        StoryAssemblyIntegrityError,
+    )
+
+    drafts = [
+        ExecutiveTopicDraft(
+            topic_id="TOPIC-001",
+            priority=1,
+            narrative={"topic_id": "TOPIC-001", "title": "Topic One"},
+        ),
+        ExecutiveTopicDraft(
+            topic_id="TOPIC-002",
+            priority=2,
+            narrative={"topic_id": "TOPIC-002", "title": "Topic Two"},
+        ),
+    ]
+
+    # Map provides specs by topic_id in reversed key order
+    specs_by_id = {
+        "TOPIC-002": {"topic_id": "TOPIC-002", "chart_type": "scatter"},
+        "TOPIC-001": {"topic_id": "TOPIC-001", "chart_type": "ranked_bar"},
+    }
+
+    portfolio = ExecutiveTopicFactory.assemble_portfolio_with_visuals(drafts, specs_by_id)
+    assert len(portfolio) == 2
+    assert portfolio[0].topic_id == "TOPIC-001"
+    assert portfolio[0].visual_spec["chart_type"] == "ranked_bar"
+    assert portfolio[1].topic_id == "TOPIC-002"
+    assert portfolio[1].visual_spec["chart_type"] == "scatter"
+
+    # Missing topic in identity map must fail closed
+    incomplete_map = {"TOPIC-001": {"topic_id": "TOPIC-001", "chart_type": "ranked_bar"}}
+    with pytest.raises(StoryAssemblyIntegrityError, match="STORY_ASSEMBLY_UNBOUND_TOPIC"):
+        ExecutiveTopicFactory.assemble_portfolio_with_visuals(drafts, incomplete_map)
+
+
+def test_g5_5_topics_package_ast_purity():
+    """Phase G5.5: Validates AST purity of topics package (zero DB, AI, MCP, theme, layout)."""
+    from app.services.adaptive_dashboard.topics import StoryAssemblyIntegrity
+
+    violations = StoryAssemblyIntegrity.audit_ast_purity()
+    assert violations == [], f"Topics package AST violations: {violations}"
+
+
+

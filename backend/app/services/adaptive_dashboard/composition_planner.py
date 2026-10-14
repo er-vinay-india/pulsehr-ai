@@ -53,39 +53,13 @@ from .spatial_composition_optimizer import (
 logger = logging.getLogger(__name__)
 
 
-class ExecutiveTopic(BaseModel):
-    """Executive analytical topic synthesizing multiple related candidate insights into a unified visual story."""
-    model_config = ConfigDict(extra="ignore")
-
-    topic_id: str
-    title: str
-    subtitle: str = ""
-    slot_type: Literal["hero", "supporting", "risk_anomaly", "action_scenario"] = "supporting"
-    dataset_id: int | None = None
-    domain: str = "general"
-    insight_ids: list[str] = Field(default_factory=list)
-    metric_family: str = "general"
-    periods: list[str] = Field(default_factory=list)
-    dimensions: list[str] = Field(default_factory=list)
-    recommended_visual: str = "ranked_bar"
-    layout_hint: str = "MEDIUM"
-    primary_takeaway: str = ""
-    takeaway: str = ""
-    recommended_action: str = ""
-    evidence_ids: list[str] = Field(default_factory=list)
-    evidence_ref: str = ""
-    priority: int = 1
-    key_metric: str = ""
-    analytical_intent: str = "RANKING"
-    visual_spec: dict[str, Any] = Field(default_factory=dict)
-    inspect_payload: dict[str, Any] = Field(default_factory=dict)
-    source_opportunity_id: str = ""
-    renderable_series_count: int = 1
-    rendered_mark_count: int = 1
-    selected_or_suppressed: str = "SELECTED"
-    suppression_reason: str | None = None
-    visual_microcopy: VisualMicrocopy | None = None
-    spatial_placement: SpatialPlacement | None = None
+from .topics import (
+    ExecutiveTopic,
+    ExecutiveTopicDraft,
+    ExecutiveTopicFactory,
+    TopicIdGenerator,
+    StoryAssemblyIntegrity,
+)
 
 
 class ICompositionStrategy(ABC):
@@ -1492,31 +1466,43 @@ class ExecutiveCompositionPlanner:
                     if not s.get("evidence_id"):
                         s["evidence_id"] = e_ids[s_idx % len(e_ids)] if e_ids else f"EVID-SERIES-{s_idx:02d}"
 
-            t_id = f"TOPIC-{out_idx:03d}"
+            t_id = TopicIdGenerator.format_id(out_idx)
             v_spec["topic_id"] = t_id
             v_spec["dataset_id"] = dataset_id
             v_spec["domain"] = domain_name
 
-            topic = ExecutiveTopic(
+            narrative_dict = {
+                "topic_id": t_id,
+                "title": getattr(story, "title", f"Topic {out_idx}"),
+                "subtitle": getattr(story, "business_question", ""),
+                "finding": getattr(story, "takeaway", ""),
+                "takeaway": getattr(story, "takeaway", ""),
+                "recommended_action": getattr(story, "recommended_action", ""),
+            }
+
+            draft = ExecutiveTopicDraft(
                 topic_id=t_id,
-                title=getattr(story, "title", f"Topic {out_idx}"),
-                subtitle=getattr(story, "business_question", ""),
-                slot_type="hero" if item.is_hero else (item.suggested_role if item.suggested_role in ("hero", "supporting", "risk_anomaly", "action_scenario") else "supporting"),
                 dataset_id=dataset_id,
                 domain=domain_name,
-                evidence_ids=e_ids,
-                evidence_ref=e_ids[0] if e_ids else "",
-                metric_family=item.semantic_family,
+                analytical_intent=item.intent,
+                entity_grain=v_spec.get("entity_grain"),
+                semantic_family=item.semantic_family,
                 periods=getattr(story, "periods", []),
-                recommended_visual=item.chart_archetype,
-                layout_hint=item.layout_hint.value,
-                primary_takeaway=getattr(story, "takeaway", ""),
-                takeaway=getattr(story, "takeaway", ""),
+                slot_type="hero" if item.is_hero else (item.suggested_role if item.suggested_role in ("hero", "supporting", "risk_anomaly", "action_scenario") else "supporting"),
+                priority=out_idx,
+                priority_score=item.portfolio_score,
+                confidence=item.confidence,
                 recommended_action=getattr(story, "recommended_action", ""),
                 key_metric=getattr(story, "key_metric", ""),
-                analytical_intent=item.intent,
-                visual_spec=v_spec,
-                visual_microcopy=item.visual_microcopy,
+                narrative=narrative_dict,
+                evidence_ids=e_ids,
+                tokens={
+                    "recommended_visual": item.chart_archetype,
+                    "layout_hint": item.layout_hint.value,
+                    "renderable_series_count": mark_audit.renderable_series_count,
+                    "rendered_mark_count": mark_audit.rendered_mark_count,
+                    "visual_spec": v_spec,
+                },
                 inspect_payload={
                     "story_id": item.item_id,
                     "title": getattr(story, "title", ""),
@@ -1530,13 +1516,11 @@ class ExecutiveCompositionPlanner:
                     "topic_id": t_id,
                     "ranking_metadata": ranking_meta,
                 },
-                priority=out_idx,
-                priority_score=item.portfolio_score,
-                confidence=item.confidence,
-                renderable_series_count=max(1, mark_audit.renderable_series_count),
-                rendered_mark_count=max(1, mark_audit.rendered_mark_count),
-                selected_or_suppressed="SELECTED",
+                visual_microcopy=item.visual_microcopy,
             )
+
+            topic = ExecutiveTopicFactory.create_topic(draft)
+            ExecutiveTopicFactory.bind_visual_spec(topic, v_spec)
             topics.append(topic)
 
         # TopicVisualBindingIntegrity & AxisNarrativeIntegrity validation
