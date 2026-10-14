@@ -158,9 +158,10 @@ export default function ExecutiveVisualCard({
 
   // Synchronized chart height based on row height class
   const chartHeight = useMemo(() => {
+    if (isHero) return "320px";
     if (heightClass === "tall") return "320px";
     if (heightClass === "short") return "190px";
-    return isHero ? "320px" : "230px";
+    return "230px";
   }, [heightClass, isHero]);
 
   const accessibleChartDescription = topic.primary_takeaway || topic.takeaway || topic.title || "Visual analytics chart.";
@@ -169,6 +170,7 @@ export default function ExecutiveVisualCard({
     <article
       className={`executive-visual-card executive-insight-card ${isHero ? "hero-card visual-card--hero" : "supporting-card"} ${layoutClass}`}
       data-testid={isHero ? "hero-card" : `supporting-card-${topic.topic_id}`}
+      data-topic-id={topic.topic_id}
       data-column-span={colSpan}
       data-height-class={heightClass}
       aria-labelledby={`topic-title-${topic.topic_id}`}

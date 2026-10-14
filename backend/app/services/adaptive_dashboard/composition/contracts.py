@@ -25,11 +25,16 @@ class VisualLegibilityProfile(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     chart_archetype: str
+    min_width: int = 280
+    min_height: int = 250
+    preferred_aspect_ratio: float = 1.6
+    label_density: str = "moderate"
+    legend_footprint: str = "compact"
+    long_label_requirement: str = "horizontal_ranking"
+
     min_readable_span: int = 4
     preferred_span: int = 6
     max_useful_span: int = 8
-    min_height: int = 250
-    preferred_aspect_ratio: float = 1.6
     preferred_height: VisualHeightClass = VisualHeightClass.STANDARD
     allowed_heights: list[VisualHeightClass] = Field(default_factory=lambda: [VisualHeightClass.STANDARD])
     is_hero_eligible: bool = False
@@ -60,6 +65,10 @@ class VisualLegibilityProfile(BaseModel):
     @property
     def natural_aspect_ratio(self) -> float:
         return self.preferred_aspect_ratio
+
+
+# Backward-compatible alias for Track 2.3 Chart Readability Profile
+ChartReadabilityProfile = VisualLegibilityProfile
 
 
 ARCHETYPE_PROFILES: dict[str, VisualLegibilityProfile] = {
@@ -379,6 +388,10 @@ class CompositionRow(BaseModel):
     @property
     def items(self) -> list[CompositionItem]:
         return self.cards
+
+    @property
+    def height_class(self) -> str:
+        return self.cards[0].height_class if self.cards else "standard"
 
 
 DashboardRowLayout = CompositionRow

@@ -65,8 +65,8 @@ function PodiumTop3View({ visualSpec, themeTokens, isDark, height = "250px" }) {
         display: "flex",
         alignItems: "flex-end",
         justifyContent: "center",
-        gap: "12px",
-        padding: "10px 16px 6px",
+        gap: "8px",
+        padding: "10px 8px 6px",
         boxSizing: "border-box",
       }}
     >
@@ -240,6 +240,11 @@ export default function VisualSpecRenderer({
       return Number.isInteger(v) ? v : v.toFixed(1);
     };
 
+    const formatCategoryLabel = (val, maxLen = 18) => {
+      if (typeof val !== "string") return val;
+      return val.length > maxLen ? `${val.slice(0, maxLen - 2)}…` : val;
+    };
+
     const categories = visualSpec.categories || [];
     const values = visualSpec.values || [];
     const series = visualSpec.series || [];
@@ -279,6 +284,7 @@ export default function VisualSpecRenderer({
         tooltip: {
           trigger: "axis",
           axisPointer: { type: "shadow" },
+          confine: true,
           backgroundColor: isDark ? "#1e293b" : "#ffffff",
           borderColor: isDark ? "#334155" : "#e2e8f0",
           textStyle: { color: isDark ? "#f1f5f9" : "#0f172a", fontSize: 12 },
@@ -296,12 +302,12 @@ export default function VisualSpecRenderer({
           right: 10,
           textStyle: { color: textColor, fontSize: 11 },
         },
-        grid: { top: 35, right: 15, bottom: 25, left: 45, containLabel: true },
+        grid: { top: 35, right: 15, bottom: 25, left: 15, containLabel: true },
         xAxis: {
           type: "category",
           data: categories,
           axisLine: { lineStyle: { color: isDark ? "#334155" : "#cbd5e1" } },
-          axisLabel: { color: textColor, fontSize: 11 },
+          axisLabel: { color: textColor, fontSize: 11, formatter: (v) => formatCategoryLabel(v, 16) },
         },
         yAxis: {
           type: "value",
@@ -323,17 +329,18 @@ export default function VisualSpecRenderer({
         backgroundColor: "transparent",
         tooltip: {
           trigger: "axis",
+          confine: true,
           backgroundColor: isDark ? "#1e293b" : "#ffffff",
           borderColor: isDark ? "#334155" : "#e2e8f0",
           textStyle: { color: isDark ? "#f1f5f9" : "#0f172a", fontSize: 12 },
           formatter: (p) => `${p[0].name}: <strong>${p[0].value} ${unit}</strong>`,
         },
-        grid: { top: 25, right: 20, bottom: 25, left: 45, containLabel: true },
+        grid: { top: 25, right: 20, bottom: 25, left: 15, containLabel: true },
         xAxis: {
           type: "category",
           data: categories,
           axisLine: { lineStyle: { color: isDark ? "#334155" : "#cbd5e1" } },
-          axisLabel: { color: textColor, fontSize: 11 },
+          axisLabel: { color: textColor, fontSize: 11, formatter: (v) => formatCategoryLabel(v, 16) },
         },
         yAxis: {
           type: "value",
@@ -362,22 +369,23 @@ export default function VisualSpecRenderer({
         backgroundColor: "transparent",
         tooltip: {
           trigger: "axis",
+          confine: true,
           backgroundColor: isDark ? "#1e293b" : "#ffffff",
           borderColor: isDark ? "#334155" : "#e2e8f0",
           textStyle: { color: isDark ? "#f1f5f9" : "#0f172a", fontSize: 12 },
           formatter: (p) => `${p[0].name}: <strong>${p[0].value} ${unit}</strong>`,
         },
-        grid: { top: 20, right: 20, bottom: 25, left: 45, containLabel: true },
+        grid: { top: 20, right: 20, bottom: 25, left: 15, containLabel: true },
         xAxis: {
           type: "category",
           data: categories,
           axisLine: { lineStyle: { color: isDark ? "#334155" : "#cbd5e1" } },
-          axisLabel: { color: textColor, fontSize: 11 },
+          axisLabel: { color: textColor, fontSize: 11, formatter: (v) => formatCategoryLabel(v, 16) },
         },
         yAxis: {
           type: "value",
           splitLine: { lineStyle: { color: splitLineColor } },
-          axisLabel: { color: textColor, fontSize: 11 },
+          axisLabel: { color: textColor, fontSize: 11, formatter: formatAxisValue },
         },
         series: [
           {
@@ -402,21 +410,22 @@ export default function VisualSpecRenderer({
         backgroundColor: "transparent",
         tooltip: {
           trigger: "axis",
+          confine: true,
           backgroundColor: isDark ? "#1e293b" : "#ffffff",
           borderColor: isDark ? "#334155" : "#e2e8f0",
           textStyle: { color: isDark ? "#f1f5f9" : "#0f172a", fontSize: 12 },
           formatter: (p) => `${p[0].name}: <strong>${p[0].value} ${unit}</strong> (Benchmark: ${bench} ${unit})`,
         },
-        grid: { top: 20, right: 30, bottom: 20, left: 120, containLabel: true },
+        grid: { top: 20, right: 25, bottom: 20, left: 10, containLabel: true },
         xAxis: {
           type: "value",
           splitLine: { lineStyle: { color: splitLineColor } },
-          axisLabel: { color: textColor, fontSize: 11 },
+          axisLabel: { color: textColor, fontSize: 11, formatter: formatAxisValue },
         },
         yAxis: {
           type: "category",
           data: categories,
-          axisLabel: { color: textColor, fontSize: 11 },
+          axisLabel: { color: textColor, fontSize: 11, formatter: (v) => formatCategoryLabel(v, 18) },
         },
         series: [
           {
@@ -451,12 +460,13 @@ export default function VisualSpecRenderer({
         tooltip: {
           trigger: "axis",
           axisPointer: { type: "shadow" },
+          confine: true,
           backgroundColor: isDark ? "#1e293b" : "#ffffff",
           borderColor: isDark ? "#334155" : "#e2e8f0",
           textStyle: { color: isDark ? "#f1f5f9" : "#0f172a", fontSize: 12 },
           formatter: (p) => `${p[0].name}: <strong>${p[0].value} ${unit}</strong>`,
         },
-        grid: { top: 15, right: 30, bottom: 15, left: 120, containLabel: true },
+        grid: { top: 15, right: 25, bottom: 20, left: 10, containLabel: true },
         xAxis: {
           type: "value",
           splitLine: { lineStyle: { color: splitLineColor } },
@@ -465,7 +475,7 @@ export default function VisualSpecRenderer({
         yAxis: {
           type: "category",
           data: [...categories].reverse(),
-          axisLabel: { color: textColor, fontSize: 11 },
+          axisLabel: { color: textColor, fontSize: 11, formatter: (v) => formatCategoryLabel(v, 18) },
         },
         series: [
           {
@@ -499,6 +509,7 @@ export default function VisualSpecRenderer({
         backgroundColor: "transparent",
         tooltip: {
           trigger: "axis",
+          confine: true,
           backgroundColor: isDark ? "#1e293b" : "#ffffff",
           borderColor: isDark ? "#334155" : "#e2e8f0",
           textStyle: { color: isDark ? "#f1f5f9" : "#0f172a", fontSize: 12 },
@@ -512,13 +523,13 @@ export default function VisualSpecRenderer({
         },
         legend: {
           show: true,
-          top: 0,
+          top: 4,
           right: 15,
           textStyle: { color: textColor, fontSize: 11 },
           itemWidth: 10,
           itemHeight: 10,
         },
-        grid: { top: 25, right: 30, bottom: 15, left: 120, containLabel: true },
+        grid: { top: 34, right: 25, bottom: 20, left: 10, containLabel: true },
         xAxis: {
           type: "value",
           splitLine: { lineStyle: { color: splitLineColor } },
@@ -527,7 +538,7 @@ export default function VisualSpecRenderer({
         yAxis: {
           type: "category",
           data: [...categories].reverse(),
-          axisLabel: { color: textColor, fontSize: 11 },
+          axisLabel: { color: textColor, fontSize: 11, formatter: (v) => formatCategoryLabel(v, 18) },
         },
         series: [
           {
@@ -569,6 +580,7 @@ export default function VisualSpecRenderer({
         backgroundColor: "transparent",
         tooltip: {
           trigger: "item",
+          confine: true,
           backgroundColor: isDark ? "#1e293b" : "#ffffff",
           borderColor: isDark ? "#334155" : "#e2e8f0",
           textStyle: { color: isDark ? "#f1f5f9" : "#0f172a", fontSize: 12 },
@@ -577,17 +589,17 @@ export default function VisualSpecRenderer({
             return `<strong>${p.name}</strong><br/>Max: ${d[5] ?? d[4]} ${unit}<br/>Q3: ${d[4] ?? d[3]} ${unit}<br/>Median: ${d[3] ?? d[2]} ${unit}<br/>Q1: ${d[2] ?? d[1]} ${unit}<br/>Min: ${d[1] ?? d[0]} ${unit}`;
           },
         },
-        grid: { top: 20, right: 25, bottom: 25, left: 45, containLabel: true },
+        grid: { top: 20, right: 25, bottom: 25, left: 15, containLabel: true },
         xAxis: {
           type: "category",
           data: boxCats,
           axisLine: { lineStyle: { color: isDark ? "#334155" : "#cbd5e1" } },
-          axisLabel: { color: textColor, fontSize: 11 },
+          axisLabel: { color: textColor, fontSize: 11, formatter: (v) => formatCategoryLabel(v, 16) },
         },
         yAxis: {
           type: "value",
           splitLine: { lineStyle: { color: splitLineColor } },
-          axisLabel: { color: textColor, fontSize: 11 },
+          axisLabel: { color: textColor, fontSize: 11, formatter: formatAxisValue },
         },
         series: [
           {
@@ -658,6 +670,7 @@ export default function VisualSpecRenderer({
         backgroundColor: "transparent",
         tooltip: {
           trigger: "item",
+          confine: true,
           backgroundColor: isDark ? "#1e293b" : "#ffffff",
           borderColor: isDark ? "#334155" : "#e2e8f0",
           textStyle: { color: isDark ? "#f1f5f9" : "#0f172a", fontSize: 12 },
@@ -668,24 +681,24 @@ export default function VisualSpecRenderer({
             return `${nameStr}${xLabel}: <strong>${data[0]}${unitSuffix}</strong><br/>${yLabel}: <strong>${data[1]}${unitSuffix}</strong>`;
           },
         },
-        grid: { top: 20, right: 30, bottom: 45, left: 50, containLabel: true },
+        grid: { top: 20, right: 25, bottom: 42, left: 15, containLabel: true },
         xAxis: {
           type: "value",
           name: xLabel,
           nameLocation: "middle",
-          nameGap: 28,
+          nameGap: 24,
           nameTextStyle: { color: textColor, fontSize: 11, fontWeight: 600 },
           splitLine: { lineStyle: { color: splitLineColor } },
-          axisLabel: { color: textColor, fontSize: 11 },
+          axisLabel: { color: textColor, fontSize: 11, formatter: formatAxisValue },
         },
         yAxis: {
           type: "value",
           name: yLabel,
           nameLocation: "middle",
-          nameGap: 35,
+          nameGap: 30,
           nameTextStyle: { color: textColor, fontSize: 11, fontWeight: 600 },
           splitLine: { lineStyle: { color: splitLineColor } },
-          axisLabel: { color: textColor, fontSize: 11 },
+          axisLabel: { color: textColor, fontSize: 11, formatter: formatAxisValue },
         },
         series: [
           {
@@ -715,6 +728,7 @@ export default function VisualSpecRenderer({
         backgroundColor: "transparent",
         tooltip: {
           position: "top",
+          confine: true,
           backgroundColor: isDark ? "#1e293b" : "#ffffff",
           borderColor: isDark ? "#334155" : "#e2e8f0",
           textStyle: { color: isDark ? "#f1f5f9" : "#0f172a", fontSize: 12 },
@@ -726,18 +740,24 @@ export default function VisualSpecRenderer({
             return `<strong>${yLabel} × ${xLabel}</strong><br/>Value: <strong>${val}${unitSuffix}</strong>`;
           },
         },
-        grid: { top: 20, right: 30, bottom: 45, left: 100, containLabel: true },
+        grid: { top: 20, right: 25, bottom: 45, left: 15, containLabel: true },
         xAxis: {
           type: "category",
           data: xCats,
           splitArea: { show: true },
-          axisLabel: { color: textColor, fontSize: 11 },
+          axisLabel: {
+            color: textColor,
+            fontSize: 10,
+            interval: 0,
+            rotate: xCats.length > 5 ? 25 : 0,
+            formatter: (v) => formatCategoryLabel(v, 14),
+          },
         },
         yAxis: {
           type: "category",
           data: yCats,
           splitArea: { show: true },
-          axisLabel: { color: textColor, fontSize: 11 },
+          axisLabel: { color: textColor, fontSize: 11, formatter: (v) => formatCategoryLabel(v, 18) },
         },
         visualMap: {
           min: minVal,
@@ -782,21 +802,22 @@ export default function VisualSpecRenderer({
       tooltip: {
         trigger: "axis",
         axisPointer: { type: "shadow" },
+        confine: true,
         backgroundColor: isDark ? "#1e293b" : "#ffffff",
         borderColor: isDark ? "#334155" : "#e2e8f0",
         textStyle: { color: isDark ? "#f1f5f9" : "#0f172a", fontSize: 12 },
         formatter: (p) => `${p[0].name}: <strong>${p[0].value} ${unit}</strong>`,
       },
-      grid: { top: 15, right: 30, bottom: 15, left: 130, containLabel: true },
+      grid: { top: 15, right: 25, bottom: 20, left: 10, containLabel: true },
       xAxis: {
         type: "value",
         splitLine: { lineStyle: { color: splitLineColor } },
-        axisLabel: { color: textColor, fontSize: 11 },
+        axisLabel: { color: textColor, fontSize: 11, formatter: formatAxisValue },
       },
       yAxis: {
         type: "category",
         data: [...categories].reverse(),
-        axisLabel: { color: textColor, fontSize: 11 },
+        axisLabel: { color: textColor, fontSize: 11, formatter: (v) => formatCategoryLabel(v, 18) },
       },
       series: [
         {

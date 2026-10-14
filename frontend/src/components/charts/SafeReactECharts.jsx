@@ -220,9 +220,9 @@ function minimalOptions(option, isDark = false) {
     textStyle: { color: baseTextColor, fontFamily: 'Figtree, system-ui, sans-serif' },
     ...option,
     tooltip: option.tooltip ? {
-      confine: true,
       borderWidth: 1,
       ...option.tooltip,
+      confine: true,
       backgroundColor: tooltipBg,
       borderColor: tooltipBorder,
       textStyle: {

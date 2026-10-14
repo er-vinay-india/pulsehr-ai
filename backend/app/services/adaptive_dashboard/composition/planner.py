@@ -573,6 +573,8 @@ class SpatialCompositionPlanner:
             return VisualHeightClass.STANDARD
 
         for c in cards_in_row:
+            if getattr(c["topic"], "slot_type", "") == "hero" or getattr(c["topic"], "layout_hint", "") == "HERO":
+                return VisualHeightClass.TALL
             chart = getattr(c["topic"], "recommended_visual", "") or getattr(c["topic"], "visual_spec", {}).get("chart_type", "")
             prof = get_legibility_profile(chart)
             if prof.preferred_height == VisualHeightClass.TALL:

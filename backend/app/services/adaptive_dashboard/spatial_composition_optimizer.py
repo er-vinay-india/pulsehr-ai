@@ -7,6 +7,7 @@ from __future__ import annotations
 from .composition import (
     ARCHETYPE_PROFILES,
     DEFAULT_PROFILE,
+    ChartReadabilityProfile,
     CompositionCandidate,
     CompositionCandidateBuilder,
     CompositionIntegrity,
@@ -33,6 +34,7 @@ from .composition import (
 
 __all__ = [
     "ARCHETYPE_PROFILES",
+    "ChartReadabilityProfile",
     "CompositionCandidate",
     "CompositionCandidateBuilder",
     "CompositionIntegrity",

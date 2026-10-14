@@ -7,6 +7,7 @@ from __future__ import annotations
 from .contracts import (
     ARCHETYPE_PROFILES,
     DEFAULT_PROFILE,
+    ChartReadabilityProfile,
     CompositionCandidate,
     CompositionItem,
     CompositionRow,
@@ -41,6 +42,7 @@ SpatialCompositionOptimizer = SpatialCompositionPlanner
 
 __all__ = [
     "ARCHETYPE_PROFILES",
+    "ChartReadabilityProfile",
     "CompositionCandidate",
     "CompositionCandidateBuilder",
     "CompositionIntegrity",
