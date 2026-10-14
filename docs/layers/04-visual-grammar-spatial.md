@@ -193,7 +193,7 @@ Implemented in `backend/app/services/adaptive_dashboard/visuals/`:
   - **Theme-Agnostic Representation**: Colors are mapped by semantic role (`primary`, `benchmark`, `target`, `anomaly`), not raw hex codes or dark/light palette overrides.
 - **Visual Capability Registry (`VisualCapabilityRegistry`)**:
   - Deterministic mapping from analytical intent and entity grain to visual chart archetypes.
-  - Automatically recommends secondary morphologies when intent allows (e.g. `podium_top_3` for workforce rankings, `scatter` for relationships).
+  - Determines secondary morphologies from intent and grain: for a PERSON-grain top-N ranking where compact executive emphasis is appropriate, the registry may deterministically select `podium_top_3`, or `scatter` for bivariate relationships.
 - **Integrity Gates**:
   - `VisualSemanticAlignmentIntegrity`: Bans theme contamination, enforces domain purity (preventing retail measures from appearing in workforce visuals), validates entity grain consistency, and verifies title-axis semantic alignment.
   - `VisualSemanticsMutationIntegrity`: Immutability invariant protecting visual specifications against downstream mutation during spatial composition optimization. Layout may allocate span, but cannot rewrite chart type, series, axes, or measures.

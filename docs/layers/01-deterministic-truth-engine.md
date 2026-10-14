@@ -124,7 +124,7 @@ flowchart TD
 
 ### M. Deterministic Version-Aware Analytics Cache (Phase G2)
 - **Directory**: `backend/app/cache/`
-- **Service**: `AnalyticalCacheService`
+- **Service**: `DashboardCacheService`
 - **Guarantees**:
   - Sub-millisecond to ~10ms warm P50 response times, eliminating redundant analytical scans.
   - Canonical version-aware key hashing based on `(dataset_id, dataset_version, topic_id, analytical_intent)`.

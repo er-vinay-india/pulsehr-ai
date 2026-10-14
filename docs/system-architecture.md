@@ -160,7 +160,7 @@ React Frontend Presentation (ECharts / SCSS Tokens)
   - Explicit CORS governance and strongly typed Pydantic application settings.
 
 * **Phase G2 — Deterministic Version-Aware Analytics Cache:**
-  - Low-latency (`~10ms` warm P50) caching layer via `AnalyticalCacheService`.
+  - Low-latency (`~10ms` warm P50) caching layer via `DashboardCacheService`.
   - Version-aware canonical cache keys (`dataset_id`, `version`, `topic_id`, `intent`).
   - Strict theme independence: dark/light theme switching never bypasses or pollutes cached data.
   - Single-flight thundering-herd protection and fail-closed cross-dataset guards.
