@@ -184,3 +184,28 @@ Implemented in `backend/app/services/adaptive_dashboard/visual_portfolio_optimiz
      - **Tablet ($\le 1024\mathrm{px}$)**: Cards with span $>6$ collapse to span 12; cards with span $\le 6$ scale to span 6 (balanced 2-column grid).
      - **Mobile ($\le 768\mathrm{px}$)**: All cards collapse to full width (`span 1` in single-column grid) with zero horizontal overflow.
 
+### F. Visual Specification Boundary & ExecutiveTopic Hardening (Phase G5.4)
+Implemented in `backend/app/services/adaptive_dashboard/visuals/`:
+- **Core Principle**: VisualSpec answers *"How should this already-understood analytical story be shown?"* It does not invent facts, words, or layout coordinates.
+- **Typed Contracts**:
+  - `VisualInput`: Strict input contract requiring verified `topic_id`, `analytical_intent`, `entity_grain`, `metric_names`, `dataset_domain`, and `data_points`.
+  - `VisualSpec`: Semantic visual specification specifying `chart_type`, `morphology`, `series`, `axes`, `reference_lines`, and `tooltip_spec`.
+  - **Theme-Agnostic Representation**: Colors are mapped by semantic role (`primary`, `benchmark`, `target`, `anomaly`), not raw hex codes or dark/light palette overrides.
+- **Visual Capability Registry (`VisualCapabilityRegistry`)**:
+  - Deterministic mapping from analytical intent and entity grain to visual chart archetypes.
+  - Automatically recommends secondary morphologies when intent allows (e.g. `podium_top_3` for workforce rankings, `scatter` for relationships).
+- **Integrity Gates**:
+  - `VisualSemanticAlignmentIntegrity`: Bans theme contamination, enforces domain purity (preventing retail measures from appearing in workforce visuals), validates entity grain consistency, and verifies title-axis semantic alignment.
+  - `VisualSemanticsMutationIntegrity`: Immutability invariant protecting visual specifications against downstream mutation during spatial composition optimization. Layout may allocate span, but cannot rewrite chart type, series, axes, or measures.
+  - `ExecutiveTopicBindingIntegrity`: Asserts cross-layer topic identity matching across Story, Narrative, Evidence, and VisualSpec before serialization.
+
+---
+
+## 3. Layer Integration Contract (Output to Consumers)
+
+| Exposed Artifact | Contract Model | Downstream Consumers | Invariant Guarantee |
+| :--- | :--- | :--- | :--- |
+| **Visual Specifications** | `VisualSpec` (`visuals/`) | `VisualSpecRenderer.jsx`, PPTX Exporter | Theme-agnostic; semantic roles; bound to verified grains and measures. |
+| **Spatial Layout Plan** | `DashboardLayoutPlan` | `ExecutiveVisualCard.jsx`, Grid Layout | 100% row utilization; synchronized row heights; zero CSS order overrides. |
+| **HighView Design Tokens** | SCSS Variables (`_tokens.scss`) | React Web, SVG Icons, Export CSS | WCAG AAA contrast ratio compliance (>= 7:1); unified dark/light surfaces. |
+

@@ -110,6 +110,14 @@ Implemented in `backend/app/services/copilot/` and `backend/app/routers/copilot.
 - **Grounded Chat Visuals**: Resolves charts dynamically into ECharts specifications.
 - **Query Grain Invariant**: Maintains requested grain (employee vs department vs city) across conversation turns.
 
+### Consumer 3F: Slow-Path Worker Plane & Request-Execution Decoupling (Phase G4)
+Implemented in `backend/app/jobs/` and `backend/app/routers/jobs.py`:
+- **Bounded Worker Plane**: In-process `ThreadPoolExecutor(max_workers=4)` executing heavy workloads (export, presentation generation, deep EDA) without blocking HTTP workers.
+- **Detached Execution Lifecycle**: Long-running requests return `202 Accepted` immediately with `{ "job_id": ..., "status": "QUEUED" }`.
+- **Persistent State Ledger**: Backed by SQLite table `background_jobs` tracking transitions (`QUEUED` &rarr; `RUNNING` &rarr; `COMPLETED` / `FAILED` / `CANCELLED`).
+- **Crash Recovery**: Server restarts scan for orphaned `RUNNING` or `QUEUED` jobs and mark them `FAILED` with explicit crash recovery reason.
+- **Path Confinement**: Artifact downloads strictly confined within `ARTIFACTS_DIR` (`backend/data/exports`), preventing path traversal attacks.
+
 ---
 
 ## 3. Layer Integration Contract (Output to Layer 4)
@@ -120,3 +128,4 @@ Implemented in `backend/app/services/copilot/` and `backend/app/routers/copilot.
 | **Slide Deck Spec** | `dict[str, Any]` | Layer 4 PPTX, PDF, React Studio | Standardized 16:9 spatial baseline (`960 × 540 pt`). |
 | **Chart Specifications** | `list[VisualChartSpec]` | Layer 4 `echarts` / `python-pptx` | Bound to verified `FACT-XXX` data points. |
 | **Data Tables** | `dict[str, Any]` | Layer 4 Table Wrapper | Weighted column widths with multi-page continuation. |
+| **Background Jobs** | `JobRecord` (`/api/jobs/`) | Frontend Download/Polling | Non-blocking execution; HTTP 202 detached jobs; confined artifact delivery. |

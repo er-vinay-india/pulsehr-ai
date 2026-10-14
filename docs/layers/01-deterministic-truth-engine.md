@@ -105,7 +105,8 @@ flowchart TD
   1. **Bidirectional Relationship Purge**: Explicitly executes `DELETE FROM sheet_relationships WHERE left_sheet IN (...) OR right_sheet IN (...)` to guarantee no detached links survive.
   2. **Descendant Table Cascade**: Transactionally deletes rows across `sheet_curated_rows`, `sheet_rows`, `sheet_cells`, `tabular_vectors`, `tabular_chunks`, `sheets`, `dataset_uploads`, `derived_tables`, and presentation jobs.
   3. **In-Memory Cache Invalidation**: Completely clears in-memory caches across `SnapshotManager._SNAPSHOT_CACHE`, workflow orchestrator (`_GENERIC_WORKFLOW_CACHE`), insight registry (`_facts_by_snapshot`), and presentation embedding memories.
-  4. **Deterministic Post-Deletion Orphan Integrity Check**: Verifies 0 orphan rows across all database tables (`orphan_check = "PASS"`) before releasing lifecycle lock.
+  4. **Analytical Plane & Disk Cleanups**: Unlinks on-disk Parquet files (`data/datasets/<id>/`) and invalidates deterministic SQLite cache records (`dashboard_cache`).
+  5. **Deterministic Post-Deletion Orphan Integrity Check**: Verifies 0 orphan rows across all database tables (`orphan_check = "PASS"`) before releasing lifecycle lock.
 
 ### K. Bidirectional A &rarr; Delete &rarr; B Regression Contract
 - **Test Suite**: `backend/tests/test_dataset_isolation_and_deletion_cascade.py`
@@ -114,6 +115,32 @@ flowchart TD
   2. **Reverse Path**: Upload Dataset B &rarr; generate dashboard &rarr; execute cascaded deletion &rarr; upload Dataset A &rarr; assert exactly zero tokens of Dataset B exist in Dataset A's serialized JSON payload.
   3. **Co-existence Path**: When both datasets reside simultaneously in the database, `sheet_relationships` contains strictly zero cross-dataset joins (`left_ds == right_ds` for 100% of rows).
 
+### L. Scoped Database Lifecycle & Numbered Migrations (Phase G1)
+- **Files**: `backend/app/db/session.py`, `backend/app/db/database.py`, `backend/app/db/migration_runner.py`, `backend/app/db/migrations/`
+- **Guarantees**:
+  - Deterministic connection scoping using `session_scope()` context manager preventing lingering SQLite locks and thread leaks.
+  - Numbered forward-only idempotent migrations (`0001` through `0009`) managed via SQLite PRAGMA checks and schema version tracking table.
+  - Safe concurrent access with PRAGMA WAL mode, busy timeouts, and explicit rollback on failure.
+
+### M. Deterministic Version-Aware Analytics Cache (Phase G2)
+- **Directory**: `backend/app/cache/`
+- **Service**: `AnalyticalCacheService`
+- **Guarantees**:
+  - Sub-millisecond to ~10ms warm P50 response times, eliminating redundant analytical scans.
+  - Canonical version-aware key hashing based on `(dataset_id, dataset_version, topic_id, analytical_intent)`.
+  - **Theme Independence**: Theme changes (dark/light) never invalidate or contaminate cache keys.
+  - **Single-Flight Concurrency Protection**: Thundering-herd lock ensures only one worker recomputes cold cache misses while concurrent requests await result.
+  - Whole-topic payload atomic serialization with fail-closed schema integrity validation.
+
+### N. Columnar Parquet Analytical Data Plane & DuckDB Query Engine (Phase G3)
+- **Directory**: `backend/app/analytics/`
+- **Modules**: `parquet_materializer.py`, `duckdb_engine.py`, `query_service.py`, `storage_integrity.py`
+- **Guarantees**:
+  - Clean separation: SQLite serves as control/metadata plane while Parquet files serve as the immutable columnar analytical store (`data/datasets/<id>/v<ver>/<table_name>.parquet`).
+  - Read-only in-memory DuckDB query sessions via `AnalyticalQueryService`.
+  - Full source fidelity preserving sentinels (`NM`, `NR`, `BDL`) and ordinal column constraints.
+  - Complete memory decompression of Python heap during large dataset aggregations and group-bys.
+
 ---
 
 ## 3. Layer Integration Contract (Output to Layer 2 & 3)
@@ -121,6 +148,8 @@ flowchart TD
 | Exposed Artifact | Contract Model | Downstream Consumers | Invariant Guarantee |
 | :--- | :--- | :--- | :--- |
 | **Reconstructed Logical Table** | `pd.DataFrame` / SQLite | Profiler, Catalog, Explorer | 100% logical record integrity; sentinels preserved as non-zeros. |
+| **Columnar Parquet Store** | Parquet Files / DuckDB | `AnalyticalQueryService`, Cache | Immutable columnar storage; sub-millisecond analytical aggregations. |
+| **Deterministic Cache** | `dashboard_cache` / SQLite | Primary Dashboard Element API | Zero recomputation on warm reads; theme-independent cache identity. |
 | **Candidate Facts** | `list[CandidateFact]` | Layer 2 `AnalystAgent`, `FactInterestingnessRanker` | Pure numerical observations; zero LLM interpretation. |
 | **Evidence Ledger** | `list[dict]` (`EVID-XXX`) | Layer 2 `CriticAgent`, Layer 3 `PresentationEngine` | Cell-level source coordinates; immutable audit trail. |
 | **Domain Profiles** | `DomainProfile` | Layer 3 Dashboard & Story Planner | Governed capabilities & vocabulary strictly bound to domain. |
