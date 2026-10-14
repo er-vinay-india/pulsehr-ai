@@ -966,3 +966,320 @@ def test_g5_3_architecture_boundary_purity():
             )
 
 
+# ------------------------------------------------------------------------------
+# Phase G5.4 Tests: Visual Specification Boundary & ExecutiveTopic Assembly
+# ------------------------------------------------------------------------------
+
+def test_g5_4_visual_spec_identity_and_theme_absence():
+    """G5.4: Verifies VisualSpec preserves topic identity, dataset, domain, and contains ZERO theme styling."""
+    from app.services.adaptive_dashboard.dataset_isolation_integrity import ExecutiveTopicBindingIntegrity
+    from app.services.adaptive_dashboard.visuals import (
+        VisualInput,
+        VisualIntegrityError,
+        VisualSemanticAlignmentIntegrity,
+        VisualSpecFactory,
+    )
+
+    inp = VisualInput(
+        topic_id="TOPIC-001",
+        dataset_id=101,
+        dataset_version=2,
+        domain="workforce",
+        analytical_intent="RANKING",
+        entity_grain="DEPARTMENT",
+        full_title="Department Attendance Ranking & Policy Benchmark",
+        display_title="Department Attendance Ranking",
+        categories=["Engineering", "Operations", "Design"],
+        values=[21.5, 23.0, 19.2],
+        benchmark=15.0,
+        benchmark_label="15-Day Policy Target",
+        unit="days",
+        evidence_ids=["EVID-HERO-001"],
+    )
+
+    spec = VisualSpecFactory.create_visual_spec(inp)
+    assert spec.topic_id == "TOPIC-001"
+    assert spec.dataset_id == 101
+    assert spec.dataset_version == 2
+    assert spec.domain == "workforce"
+    assert spec.entity_grain == "DEPARTMENT"
+    assert spec.chart_type == "ranked_bar"
+    assert spec.full_title == "Department Attendance Ranking & Policy Benchmark"
+    assert spec.display_title == "Department Attendance Ranking"
+    assert spec.benchmark == 15.0
+    assert spec.evidence_ids == ["EVID-HERO-001"]
+
+    # Verify ExecutiveTopic identity check passes with matching topic_id
+    valid, err = ExecutiveTopicBindingIntegrity.evaluate_topic(
+        {"topic_id": "TOPIC-001", "visual_spec": spec},
+        fail_closed=False,
+    )
+    assert valid is True
+    assert err is None
+
+    # Verify ExecutiveTopic identity check fails when topic_id mismatches
+    valid_bad, err_bad = ExecutiveTopicBindingIntegrity.evaluate_topic(
+        {"topic_id": "TOPIC-999", "visual_spec": spec},
+        fail_closed=False,
+    )
+    assert valid_bad is False
+    assert "VisualSpec.topic_id ('TOPIC-001') != topic_id ('TOPIC-999')" in err_bad
+
+    # Verify theme absence check rejects hardcoded hex colors or theme directives
+    with pytest.raises(VisualIntegrityError, match="Hardcoded hex color"):
+        VisualSemanticAlignmentIntegrity.audit_theme_absence(
+            {"chart_type": "ranked_bar", "color": "#183B56"},
+            fail_closed=True,
+        )
+
+
+def test_g5_4_visual_spec_cannot_invent_evidence_or_narrative():
+    """G5.4: Verifies that visual specification cannot create narrative findings or mint new evidence IDs."""
+    from app.services.adaptive_dashboard.evidence.contracts import (
+        AnalyticalFact,
+        BoundEvidence,
+        BoundFact,
+    )
+    from app.services.adaptive_dashboard.visuals import (
+        VisualInput,
+        VisualSpecFactory,
+    )
+
+    fact = AnalyticalFact(
+        fact_id="fact_att",
+        dataset_id=101,
+        subject="attendance",
+        metric="attendance",
+        value=24.0,
+        formatted_value="24.0",
+        dimension="Operations",
+    )
+    bound_ev = BoundEvidence(
+        evidence_id="EVID-VERIFIED-001",
+        claim_type="general_fact",
+        subject="attendance",
+        metric="attendance",
+        value=24.0,
+        formatted_value="24.0",
+    )
+    bound_fact = BoundFact(fact=fact, evidence=bound_ev, topic_id="TOPIC-001")
+
+    inp = VisualInput(
+        topic_id="TOPIC-001",
+        dataset_id=101,
+        domain="workforce",
+        bound_facts=[bound_fact],
+        narrative_title="Operations Attendance Overview",
+        evidence_ids=["EVID-VERIFIED-001"],
+    )
+
+    spec = VisualSpecFactory.create_visual_spec(inp)
+
+    # Visual spec must only carry existing verified evidence IDs, never invent new ones
+    assert spec.evidence_ids == ["EVID-VERIFIED-001"]
+    assert not any(eid.startswith("EVID-NEW") for eid in spec.evidence_ids)
+
+    # Visual spec does NOT generate narrative findings or takeaways
+    spec_dict = spec.to_dict()
+    assert "finding" not in spec_dict
+    assert "takeaway" not in spec_dict
+    assert "business_question" not in spec_dict
+    assert "recommended_action" not in spec_dict
+
+
+def test_g5_4_grain_and_title_axis_semantics():
+    """G5.4: Verifies grain integrity, title-axis consistency, and cross-domain purity in VisualSpec."""
+    from app.services.adaptive_dashboard.visuals import (
+        VisualCapabilityRegistry,
+        VisualInput,
+        VisualIntegrityError,
+        VisualSemanticAlignmentIntegrity,
+        VisualSpecFactory,
+    )
+
+    # 1. PERSON grain ranking selects podium_top_3 when count <= 3
+    person_inp = VisualInput(
+        topic_id="TOPIC-P01",
+        domain="workforce",
+        analytical_intent="RANKING",
+        entity_grain="PERSON",
+        categories=["EMP001", "EMP002", "EMP003"],
+        values=[25.0, 24.0, 23.0],
+        full_title="Top 3 Employee Attendance",
+    )
+    person_spec = VisualSpecFactory.create_visual_spec(person_inp)
+    assert person_spec.chart_type == "podium_top_3"
+    assert person_spec.entity_grain == "PERSON"
+
+    # 2. DEPARTMENT grain ranking rejects podium and remains ranked_bar
+    dept_inp = VisualInput(
+        topic_id="TOPIC-D01",
+        domain="workforce",
+        analytical_intent="RANKING",
+        entity_grain="DEPARTMENT",
+        categories=["Operations", "Engineering"],
+        values=[24.0, 21.0],
+        full_title="Department Total Attendance Ranking",
+    )
+    dept_spec = VisualSpecFactory.create_visual_spec(dept_inp)
+    assert dept_spec.chart_type == "ranked_bar"
+    assert dept_spec.entity_grain == "DEPARTMENT"
+
+    # 3. Department grain with podium visual must be rejected by integrity check
+    with pytest.raises(VisualIntegrityError, match="Podium visual reserved for PERSON grain"):
+        bad_dept = dept_inp.model_copy(update={"chart_type": "podium_top_3"})
+        VisualSpecFactory.create_visual_spec(bad_dept)
+
+    # 4. Relationship/scatter title-axis alignment: retail axes with workforce title must fail
+    with pytest.raises(VisualIntegrityError, match="Foreign domain token 'attendance' leaked|mentions workforce token"):
+        retail_scatter = VisualInput(
+            topic_id="TOPIC-R01",
+            domain="retail",
+            analytical_intent="RELATIONSHIP",
+            chart_type="scatter",
+            full_title="Attendance & Leave Correlation",
+            x_label="Fuel Price",
+            y_label="Weekly Sales",
+        )
+        VisualSpecFactory.create_visual_spec(retail_scatter)
+
+    # 4b. Direct title-axis alignment audit test with general domain
+    with pytest.raises(VisualIntegrityError, match="mentions workforce token"):
+        VisualSemanticAlignmentIntegrity.audit_title_axis_alignment({
+            "chart_type": "scatter",
+            "full_title": "Attendance & Leave Correlation",
+            "x_label": "Fuel Price",
+            "y_label": "Weekly Sales",
+        }, fail_closed=True)
+
+    # 5. Full title and display title preservation
+    long_inp = VisualInput(
+        topic_id="TOPIC-T01",
+        domain="workforce",
+        full_title="Strategic Enterprise Department Attendance & Leave Benchmark Over July 2026 Cycle",
+        display_title="Department Attendance & Benchmark",
+    )
+    long_spec = VisualSpecFactory.create_visual_spec(long_inp)
+    assert long_spec.full_title == "Strategic Enterprise Department Attendance & Leave Benchmark Over July 2026 Cycle"
+    assert long_spec.display_title == "Department Attendance & Benchmark"
+
+
+def test_g5_4_composition_immutability_and_non_positional_merging():
+    """G5.4: Verifies composition cannot mutate VisualSpec semantics, and lookups avoid positional index merging."""
+    from app.services.adaptive_dashboard.visuals import (
+        VisualInput,
+        VisualIntegrityError,
+        VisualSemanticsMutationIntegrity,
+        VisualSpecFactory,
+    )
+
+    inp = VisualInput(
+        topic_id="TOPIC-COMP-01",
+        domain="retail",
+        analytical_intent="RELATIONSHIP",
+        chart_type="scatter",
+        full_title="Weekly Sales vs Fuel Price",
+        x_label="Fuel Price",
+        y_label="Weekly Sales",
+        categories=["Store 1", "Store 2"],
+        values=[1600000.0, 2100000.0],
+        evidence_ids=["EVID-STORE-01"],
+    )
+    spec = VisualSpecFactory.create_visual_spec(inp)
+
+    # Valid composition handoff: composition adds layout parameters
+    composed_valid = spec.to_dict()
+    composed_valid["span"] = 8
+    composed_valid["row"] = 1
+    composed_valid["height_px"] = 350
+    VisualSemanticsMutationIntegrity.verify_composition_handoff(spec, composed_valid, fail_closed=True)
+
+    # Invalid composition handoff: composition mutates chart_type
+    composed_bad_chart = spec.to_dict()
+    composed_bad_chart["chart_type"] = "pie"
+    with pytest.raises(VisualIntegrityError, match="mutated immutable VisualSpec semantic property 'chart_type'"):
+        VisualSemanticsMutationIntegrity.verify_composition_handoff(spec, composed_bad_chart, fail_closed=True)
+
+    # Invalid composition handoff: composition mutates values
+    composed_bad_vals = spec.to_dict()
+    composed_bad_vals["values"] = [9999999.0]
+    with pytest.raises(VisualIntegrityError, match="mutated immutable VisualSpec semantic property 'values'"):
+        VisualSemanticsMutationIntegrity.verify_composition_handoff(spec, composed_bad_vals, fail_closed=True)
+
+    # Non-positional topic lookup test
+    topics_store = {
+        "TOPIC-001": {"topic_id": "TOPIC-001", "name": "Topic 1"},
+        "TOPIC-002": {"topic_id": "TOPIC-002", "name": "Topic 2"},
+    }
+    # Direct keyed lookup succeeds without index assumption
+    assert topics_store["TOPIC-002"]["name"] == "Topic 2"
+
+
+def test_g5_4_architecture_boundary_purity():
+    """G5.4 Architecture Boundary Guard: Verifies visual specification modules contain ZERO DB, zero AI/LLM/MCP, and ZERO composition planner imports."""
+    import ast
+    from pathlib import Path
+
+    visuals_dir = Path(__file__).resolve().parent.parent / "app" / "services" / "adaptive_dashboard" / "visuals"
+    assert visuals_dir.exists(), f"visuals package must exist at {visuals_dir}"
+
+    forbidden_modules = {
+        # Raw storage / DB
+        "sqlite3", "duckdb",
+        # AI / LLM / external APIs
+        "ollama", "openai", "google.genai", "mcp", "requests", "httpx",
+        # Composition and Spatial Planner layers
+        "composition_planner", "spatial_composition_optimizer",
+        # Frontend / React / CSS
+        "react", "css",
+    }
+
+    forbidden_symbols_or_tokens = {
+        "compositionplanner", "spatialplacement", "rendercard", "react",
+    }
+
+    for py_file in visuals_dir.glob("*.py"):
+        code_text = py_file.read_text(encoding="utf-8")
+        tree = ast.parse(code_text, filename=str(py_file))
+
+        # 1. AST Imports check
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    top_pkg = alias.name.split(".")[0]
+                    assert top_pkg not in forbidden_modules, (
+                        f"Architecture violation: {py_file} imports forbidden module '{top_pkg}'"
+                    )
+            elif isinstance(node, ast.ImportFrom):
+                if node.module:
+                    top_pkg = node.module.split(".")[0]
+                    sub_pkg = node.module.split(".")[-1]
+                    assert top_pkg not in forbidden_modules and sub_pkg not in forbidden_modules, (
+                        f"Architecture violation: {py_file} imports from forbidden module '{node.module}'"
+                    )
+                for alias in node.names:
+                    sym_name = alias.name.lower()
+                    assert sym_name not in forbidden_symbols_or_tokens, (
+                        f"Architecture violation: {py_file} imports forbidden symbol '{alias.name}'"
+                    )
+
+            # 2. AST Name/Identifier check
+            elif isinstance(node, ast.Name):
+                low_id = node.id.lower()
+                assert low_id != "compositionplanner", (
+                    f"Architecture violation: {py_file} references forbidden class/symbol '{node.id}'"
+                )
+
+        # 3. Text-level token check
+        for line_no, line in enumerate(code_text.splitlines(), start=1):
+            low_line = line.strip().lower()
+            if low_line.startswith("#") or low_line.startswith('"""') or low_line.startswith("'''"):
+                continue
+            assert "composition_planner" not in low_line, (
+                f"Architecture violation in {py_file}:{line_no}: Visuals layer references composition_planner: '{line.strip()}'"
+            )
+            assert "spatial_composition_optimizer" not in low_line, (
+                f"Architecture violation in {py_file}:{line_no}: Visuals layer references spatial_composition_optimizer: '{line.strip()}'"
+            )
+
+

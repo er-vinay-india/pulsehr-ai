@@ -399,8 +399,8 @@ class ExecutiveTopicBindingIntegrity:
 
         # 1. VisualSpec check
         v_spec = getattr(topic, "visual_spec", None) or (topic.get("visual_spec") if isinstance(topic, dict) else None)
-        if isinstance(v_spec, dict):
-            v_topic_id = v_spec.get("topic_id")
+        if v_spec:
+            v_topic_id = getattr(v_spec, "topic_id", None) or (v_spec.get("topic_id") if isinstance(v_spec, dict) else None)
             if v_topic_id and v_topic_id != topic_id:
                 mismatches.append(f"VisualSpec.topic_id ('{v_topic_id}') != topic_id ('{topic_id}')")
 

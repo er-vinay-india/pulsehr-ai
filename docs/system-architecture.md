@@ -129,3 +129,73 @@ The platform is architected into **5 cohesive, integrated layers** supported by 
 8. **Permutation-Only Prioritization Guarantee:** AI models can only reorder verified finding IDs; they cannot mutate mathematical values or invent ungrounded assertions.
 9. **Worker Resilience Guarantee:** Background generation jobs survive server reloads through PID-aware SQLite job recovery with bounded retries.
 10. **Dataset Boundary & Isolation Invariant:** Analytical artifacts and relationship joins must strictly satisfy `artifact.dataset_id == active_dataset_id`. Cross-dataset joins are permanently barred, deletion cascades bidirectionally with verified zero-orphan checks (`orphan_check="PASS"`), and all in-memory snapshot caches are completely purged upon source deletion.
+
+---
+
+## 5. Modernization & Strangler Architecture (Phases G1 – G5)
+
+To decouple HighView's deterministic core from monolithic engine dependencies, the platform implements a disciplined strangler refactoring model:
+
+```text
+AnalyticalFact
+      ↓  (app/services/adaptive_dashboard/evidence/)
+BoundFact / EvidenceBinding
+      ↓  (app/services/adaptive_dashboard/narrative/)
+NarrativeResult / Executive Briefing
+      ↓  (app/services/adaptive_dashboard/composition_planner.py)
+ExecutiveTopic (Immutable Aggregate)
+      ↓  (app/services/adaptive_dashboard/visuals/)
+VisualSpec (Theme-Agnostic)
+      ↓  (app/services/adaptive_dashboard/spatial_composition_optimizer.py)
+Spatial Composition (12-Col Responsive Grid)
+      ↓
+React Frontend Presentation (ECharts / SCSS Tokens)
+```
+
+### Strangler Milestone Highlights
+
+* **Phase G1 — Scoped Lifecycle & Idempotent Migrations:**
+  - Guaranteed deterministic connection scoping via `session_scope()` context managers.
+  - Numbered, idempotent forward schema migrations (`0001` to `0006`) managed via SQLite PRAGMA checks.
+  - Explicit CORS governance and strongly typed Pydantic application settings.
+
+* **Phase G2 — Deterministic Version-Aware Analytics Cache:**
+  - Low-latency (`~10ms` warm P50) caching layer via `AnalyticalCacheService`.
+  - Version-aware canonical cache keys (`dataset_id`, `version`, `topic_id`, `intent`).
+  - Strict theme independence: dark/light theme switching never bypasses or pollutes cached data.
+  - Single-flight thundering-herd protection and fail-closed cross-dataset guards.
+
+* **Phase G3 — Columnar Parquet Data Plane & DuckDB Query Engine:**
+  - Immutable versioned storage: `data/datasets/<id>/v<ver>/<logical_table>.parquet`.
+  - Process-safe in-memory read-only DuckDB analytical sessions via `AnalyticalQueryService`.
+  - Source provenance and sentinel fidelity (NM, NR, BDL) preserved throughout analytical queries.
+  - High-concurrency query execution with significant Python heap decompression.
+
+* **Phase G4 — Slow-Path Worker Plane & Request-Execution Decoupling:**
+  - Long-running presentation and export generation detached from HTTP request lifecycles.
+  - Immediate `202 Accepted` response with asynchronous job tracking (`/api/jobs/{job_id}`).
+  - Strict path confinement on artifact downloads preventing directory traversal.
+
+* **Phase G5.1 — Presentation Formatting & Labels Strangler Decoupling:**
+  - Isolated zero-dependency presentation label and title utilities (`formatting/presentation_labels.py`).
+  - Guaranteed elimination of underscores and kebab-case in human-facing titles.
+  - Multi-domain characterization baseline protecting workforce, retail, and environmental boundaries.
+
+* **Phase G5.2 — Evidence Binding & Lineage Provenance:**
+  - Hard boundary establishing typed contracts (`BoundFact`, `BoundEvidence`, `ProvenanceRecord`).
+  - Complete decoupling from visual and presentation specifications (`EvidenceOwnershipIntegrity`).
+  - Absolute local filesystem paths sanitized from lineage citations.
+  - Protected by executable AST boundary purity tests preventing DB, AI, or visual leakage.
+
+* **Phase G5.3 — Briefing & Narrative Extraction:**
+  - Dedicated business wording package (`narrative/`): `NarrativeInput`, `NarrativeResult`, `TitleBuilder`, `FindingBuilder`, `NarrativeDeduplicationIntegrity`, `ExecutiveBriefingService`.
+  - **Narrative Invariant:** *"Evidence establishes what is true. Narrative explains that truth. Narrative may simplify wording, but it may never create, alter, or reclassify analytical truth."*
+  - Complete elimination of internal machine taxonomy (*"Semantic Family"*, *"Visual Morphology"*, *"Distributions & Variance"*).
+  - Numeric entitlement audits preventing hallucinated or recomputed numbers in narrative text.
+
+* **Phase G5.4 — Visual Specification Boundary & ExecutiveTopic Assembly Hardening:**
+  - Theme-agnostic visual specification domain (`visuals/`): `VisualInput`, `VisualSpec`, `VisualSpecFactory`, `VisualCapabilityRegistry`.
+  - **Visual Invariant:** Answers *"How should this already-understood analytical story be shown?"* without inventing business meaning, narrative, or evidence.
+  - Strict title-axis semantic consistency preventing cross-domain contamination (e.g. retail axes with workforce titles).
+  - Immutability guarantee (`VisualSemanticsMutationIntegrity`): composition may adjust layout/span, but cannot mutate chart type, series, axes, or measures.
+  - Full titles preserved alongside responsive display titles.
