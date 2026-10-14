@@ -1,4 +1,4 @@
-import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ArrowUp, ArrowDown, Square, SquarePen, X, Maximize2, Minimize2, Copy, ThumbsUp, ThumbsDown, RefreshCw, Download, Sparkles } from 'lucide-react';
 import AnimatedAcousticOrb from '../presentation/AnimatedAcousticOrb.jsx';
 import MarkdownView from '../MarkdownView.jsx';
@@ -8,6 +8,28 @@ import IconButton from './IconButton.jsx';
 import HRIDAYActivity from './HRIDAYActivity.jsx';
 import SlideChart from '../presentation/slides/SlideChart.jsx';
 import { useTheme } from '../../context/ThemeContext.jsx';
+
+const HRIDAYAnswer = memo(MarkdownView);
+
+// Text ticks must not rebuild chart options or reset chart interactions.
+const HRIDAYCharts = memo(function HRIDAYCharts({ charts, isDark }) {
+  if (!charts?.length) return null;
+  return <div className="hriday-chat-visuals">
+    {charts.map((vc, vIdx) => <div key={vc.chart_id || `chat-chart-${vIdx}`} className="hriday-chat-chart-wrapper">
+      <SlideChart chart={vc} theme={{ is_dark: isDark }} />
+      {vc.categories?.length > 0 && vc.series?.length > 0 && <details className="hriday-chart-data">
+        <summary>View chart data</summary>
+        <div><table>
+          <caption>{vc.title || 'Chart data'}</caption>
+          <thead><tr><th scope="col">{vc.dimension_col || 'Cohort'}</th>{vc.series.map((series, index) => <th scope="col" key={index}>{series.name}</th>)}</tr></thead>
+          <tbody>{vc.categories.map((category, index) => <tr key={index}>
+            <th scope="row">{category}</th>{vc.series.map((series, seriesIndex) => <td key={seriesIndex}>{series.values?.[index] ?? series.data?.[index] ?? '—'}{vc.unit ? ` ${vc.unit}` : ''}</td>)}
+          </tr>)}</tbody>
+        </table></div>
+      </details>}
+    </div>)}
+  </div>;
+});
 
 export default function HRIDAYChat({ scope = {}, onClose, expanded = false, onExpand, inputRef, mobile = false, fullPage = false }) {
   const { conversation, messages, draft, loading, activity, announcement, identity } = useHRIDAY();
@@ -70,7 +92,7 @@ export default function HRIDAYChat({ scope = {}, onClose, expanded = false, onEx
       {messages.map(message => <article key={message.id} className={`hriday-message hriday-message--${message.role}`} aria-label={message.role === 'user' ? 'You' : identity.name}>
         <div className="hriday-message-author">{message.role === 'user' ? 'You' : identity.name}</div>
         {message.role === 'user' ? <div className="hriday-user-bubble">{message.content}</div> : <>
-          {message.content && <MarkdownView content={message.content} className="hriday-answer" />}
+          {message.content && <HRIDAYAnswer content={message.content} className="hriday-answer" streaming={message.phase !== 'complete'} />}
           {message.mutation && (
             <div
               className="hriday-chat-mutation-badge"
@@ -92,28 +114,7 @@ export default function HRIDAYChat({ scope = {}, onClose, expanded = false, onEx
               <span><strong>Slide #{message.mutation.slide_index + 1} Mutated:</strong> {message.mutation.diff_summary}</span>
             </div>
           )}
-          {message.visual_charts && message.visual_charts.length > 0 && (
-            <div className="hriday-chat-visuals">
-              {message.visual_charts.map((vc, vIdx) => (
-                <div
-                  key={vc.chart_id || `chat-chart-${vIdx}`}
-                  className="hriday-chat-chart-wrapper"
-                >
-                  <SlideChart chart={vc} theme={{ is_dark: isDark }} />
-                  {vc.categories?.length > 0 && vc.series?.length > 0 && <details className="hriday-chart-data">
-                    <summary>View chart data</summary>
-                    <div><table>
-                      <caption>{vc.title || 'Chart data'}</caption>
-                      <thead><tr><th scope="col">{vc.dimension_col || 'Cohort'}</th>{vc.series.map((series, index) => <th scope="col" key={index}>{series.name}</th>)}</tr></thead>
-                      <tbody>{vc.categories.map((category, index) => <tr key={index}>
-                        <th scope="row">{category}</th>{vc.series.map((series, seriesIndex) => <td key={seriesIndex}>{series.values?.[index] ?? series.data?.[index] ?? '—'}{vc.unit ? ` ${vc.unit}` : ''}</td>)}
-                      </tr>)}</tbody>
-                    </table></div>
-                  </details>}
-                </div>
-              ))}
-            </div>
-          )}
+          <HRIDAYCharts charts={message.visual_charts} isDark={isDark} />
           {message.phase === 'loading' && <HRIDAYActivity activity={activity} />}
           {message.phase === 'stopped' && <p className="hriday-recovery">{message.content ? 'Response stopped. This answer is incomplete.' : 'Stopped. You can ask again or change your question.'}</p>}
           {message.phase === 'error' && <div className="hriday-recovery">

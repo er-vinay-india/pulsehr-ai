@@ -1,10 +1,12 @@
 import { DEFAULT_ASSISTANT_IDENTITY } from './identity.js';
 import { inferHRIDAYTool, presentHRIDAYAnswer } from './presentation.js';
 import { initialHRIDAYActivity, advanceHRIDAYActivity } from './activity.js';
+import { CharacterDelivery } from './characterDelivery.js';
 
 export class HRIDAYConversation {
-  constructor(transport) {
+  constructor(transport, { delivery = {} } = {}) {
     this.transport = transport;
+    this.deliveryOptions = delivery;
     this.listeners = new Set();
     this.diagnostics = new Map();
     this.sequence = 0;
@@ -33,7 +35,8 @@ export class HRIDAYConversation {
     if (!text || this.request) return;
     const controller = new AbortController();
     const id = retryId || `hriday-${++this.sequence}`;
-    const request = { id, controller, rawAnswer: '', delegates: [], terminal: false, activity: initialHRIDAYActivity(this.state.identity.name) };
+    const request = { id, controller, rawAnswer: '', delegates: [], terminal: false, resultReceived: false, activity: initialHRIDAYActivity(this.state.identity.name) };
+    const deliveryDone = new Promise(resolve => { request.resolveDelivery = resolve; });
     const requestDetails = { query: text, scope: { ...scope }, tool };
     this.request = request;
     const diagnostic = { events: [], result: null, request: requestDetails };
@@ -44,7 +47,11 @@ export class HRIDAYConversation {
       : [...this.state.messages, { id: `${id}-user`, role: 'user', content: text }, assistant];
     this.publish({ messages, draft: retryId ? this.state.draft : '', loading: true, status: request.activity.text, activity: request.activity, announcement: request.activity.text });
 
-    const current = () => this.request === request && !controller.signal.aborted && !request.terminal;
+    const active = () => this.request === request && !controller.signal.aborted && !request.terminal;
+    const current = () => active() && !request.resultReceived;
+    request.delivery = new CharacterDelivery(content => {
+      if (active()) this.updateMessage(id, { content, phase: content ? 'streaming' : 'loading' });
+    }, this.deliveryOptions);
     const activityEvent = event => {
       if (!current()) return;
       const next = advanceHRIDAYActivity(request.activity, event, tool);
@@ -61,8 +68,10 @@ export class HRIDAYConversation {
     const finishError = error => {
       if (!current()) return;
       diagnostic.error = error;
+      request.delivery.stop();
       request.terminal = true;
       this.request = null;
+      request.resolveDelivery();
       this.updateMessage(id, { phase: 'error' }, { loading: false, activity: null, announcement: `${this.state.identity.name} couldn’t finish. Your question is saved.` });
     };
     try {
@@ -75,6 +84,7 @@ export class HRIDAYConversation {
         onReset: data => {
           if (!current()) return;
           request.rawAnswer = '';
+          request.delivery.reset();
           activityEvent({ type: 'answer_reset', data });
           this.updateMessage(id, { content: '', phase: 'loading' });
         },
@@ -83,7 +93,7 @@ export class HRIDAYConversation {
           if (!request.rawAnswer) activityEvent({ type: 'token', data: { token } });
           request.rawAnswer += token || '';
           const content = presentHRIDAYAnswer(request.rawAnswer, { streaming: true, delegates: request.delegates, assistantName: this.state.identity.name });
-          this.updateMessage(id, { content, phase: content ? 'streaming' : 'loading' });
+          request.delivery.setText(content);
         },
         onDone: data => {
           if (!current()) return;
@@ -91,34 +101,48 @@ export class HRIDAYConversation {
           if (data.assistant_identity?.name) this.setIdentity(data.assistant_identity);
           if (data.prior_context) this.priorContext = data.prior_context;
           const content = presentHRIDAYAnswer(data.answer || request.rawAnswer, { delegates: request.delegates, assistantName: this.state.identity.name });
-          request.terminal = true;
-          this.request = null;
+          if (content) activityEvent({ type: 'token', data: { token: content } });
+          request.resultReceived = true;
           const visualCharts = Array.isArray(data.visual_charts) && data.visual_charts.length
             ? data.visual_charts : (data.visual_chart ? [data.visual_chart] : (data.chart ? [data.chart] : []));
           const ready = Boolean(content || visualCharts.length);
           if (data.mutation?.updated_deck_spec && typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('presentation:deck-mutated', { detail: data.mutation }));
           }
+          // Structured results are complete payloads, independent of text pacing.
+          // Keep their references stable while the answer continues to reveal.
           this.updateMessage(id, {
-            content,
-            phase: ready ? 'complete' : 'error',
             artifacts: data.artifacts || [],
             visual_charts: visualCharts,
             mutation: data.mutation || null,
-          }, { loading: false, activity: null, announcement: ready ? `${this.state.identity.name}’s response is ready.` : `${this.state.identity.name} couldn’t finish. Your question is saved.` });
+          });
+          request.delivery.setText(content);
+          request.delivery.finish(() => {
+            if (!active()) return;
+            request.terminal = true;
+            this.request = null;
+            this.updateMessage(id, {
+              content,
+              phase: ready ? 'complete' : 'error',
+            }, { loading: false, activity: null, announcement: ready ? `${this.state.identity.name}’s response is ready.` : `${this.state.identity.name} couldn’t finish. Your question is saved.` });
+            request.resolveDelivery();
+          });
         },
         onError: finishError,
       }, controller.signal, this.priorContext, scope.snapshotId ?? null, scope.page ?? null, 60.0);
       if (current()) finishError(new Error('Response ended without a completion event.'));
+      await deliveryDone;
     } catch (error) { finishError(error); }
   }
 
   stop = () => {
     const request = this.request;
     if (!request) return;
+    request.delivery.stop();
     request.terminal = true;
     request.controller.abort();
     this.request = null;
+    request.resolveDelivery();
     this.updateMessage(request.id, { phase: 'stopped' }, { loading: false, activity: null, announcement: 'Response stopped.' });
   };
   retry = message => this.send(message.request.query, { ...message.request, retryId: message.id });

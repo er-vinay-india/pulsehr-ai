@@ -113,4 +113,62 @@ This dataset reveals critical insights into Walmart's workforce operations and d
   assert(!html.includes('katex'), "No math mode triggered on cached narrative");
 }
 
-console.log("\n🎉 ALL 8 MARKDOWN & MATH RENDERING TEST SUITES PASSED SUCCESSFULLY!\n");
+// 9. User-reported attendance answer with inline LaTeX and protected code.
+{
+  const input = String.raw`For the **attendance rate**, use **Final Attendance** from **'Sheet1'**.
+
+### 1. Using Final Attendance
+
+The column is pre-calculated as: \`Total Attendance−Approved Leaves\`
+
+- **Source:** \`WFO_July_2026_Test.xlsx\`, Sheet: \`Sheet1\`
+- **Evidence:** Row 259 shows \`Total Attendance: 11\`, \`Approved Leaves: 2\`, and \`Final Attendance: 9\`.
+- **Formula:** $\text{Derived Attendance} = \text{Total Working Days in Period} - \text{Total approved leaves}$
+
+### Recommendation
+
+Use **Final Attendance** for standard reporting.`.replace(/\\`/g, '`');
+  const html = renderToStaticMarkup(React.createElement(MarkdownView, { content: input }));
+  assert(html.includes('class="katex"') && !html.includes('katex-error'), 'Attendance formula renders as valid math');
+  assert(html.includes('<mtext>Derived Attendance</mtext>'), 'Attendance formula retains readable word spacing');
+  assert(html.includes('<h3>1. Using Final Attendance</h3>'), 'Attendance section headings render correctly');
+  assert(html.includes('<code>Total Attendance−Approved Leaves</code>'), 'Inline calculation code preserves spaces and minus sign');
+  assert(html.includes('<code>WFO_July_2026_Test.xlsx</code>'), 'Source filename remains unchanged');
+}
+
+// 10. Explicit inline math must not revive the currency-rendering regression.
+{
+  const input = String.raw`Budget: $5 and $10; peak **$80.93M**. Formula: $\text{Cost} = \$5$. Inline: \(x + y\). Display: \[y = \beta x\]. Literal: \`$\text{Cost} = \$5$\`.`.replace(/\\`/g, '`');
+  const html = renderToStaticMarkup(React.createElement(MarkdownView, { content: input }));
+  assert(html.includes('Budget: $5 and $10; peak <strong class="md-bold">$80.93M</strong>'), 'Currency remains literal beside LaTeX');
+  assert((html.match(/class="katex"/g) || []).length === 3, 'Single-dollar LaTeX, explicit inline and display delimiters render');
+  assert(html.includes('katex-display'), 'Explicit display math remains a display block');
+  assert(!html.includes('katex-error'), 'Escaped dollars within math do not cause parse errors');
+  assert(html.includes('<code>$\\text{Cost} = \\$5$</code>'), 'LaTeX inside code is not interpreted');
+}
+
+// 11. Character-by-character delivery must not flash raw formatting syntax.
+{
+  const bold = 'Use **Final Attendance** and *actual utilization* from `Sheet1`.';
+  let cleanAtEveryPrefix = true;
+  for (let end = 1; end <= bold.length; end++) {
+    const html = renderToStaticMarkup(React.createElement(MarkdownView, { content: bold.slice(0, end), streaming: true }));
+    if (html.replace(/<[^>]*>/g, '').includes('*')) cleanAtEveryPrefix = false;
+  }
+  assert(cleanAtEveryPrefix, 'Bold and italic markers stay hidden at every typing boundary');
+  const html = renderToStaticMarkup(React.createElement(MarkdownView, { content: 'Use **Final Att', streaming: true }));
+  assert(html.includes('<strong class="md-bold">Final Att</strong>'), 'Partial bold text is styled while it reveals');
+  const code = renderToStaticMarkup(React.createElement(MarkdownView, { content: 'Use `**literal', streaming: true }));
+  assert(code.includes('<code>**literal</code>'), 'Unfinished code spans remain literal during typing');
+  const formula = String.raw`- **Formula:** $\text{Derived Attendance} = \text{Working Days} - \text{Approved Leaves}$`;
+  let mathAtEveryPrefix = true;
+  for (let end = formula.indexOf('$') + 2; end <= formula.length; end++) {
+    const html = renderToStaticMarkup(React.createElement(MarkdownView, { content: formula.slice(0, end), streaming: true }));
+    if (html.includes('katex-error') || (end < formula.length && html.includes('\\text'))) mathAtEveryPrefix = false;
+  }
+  assert(mathAtEveryPrefix, 'Incomplete LaTeX stays buffered without raw commands or parse errors');
+  const completed = renderToStaticMarkup(React.createElement(MarkdownView, { content: formula, streaming: true }));
+  assert(completed.includes('class="katex"'), 'Formula appears once its closing delimiter arrives');
+}
+
+console.log("\n🎉 ALL 11 MARKDOWN & MATH RENDERING TEST SUITES PASSED SUCCESSFULLY!\n");

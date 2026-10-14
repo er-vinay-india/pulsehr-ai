@@ -7,13 +7,15 @@ import { activateUploadedSheet } from '../src/components/hriday/datasetScope.js'
 import { presentHRIDAYAnswer, inferHRIDAYTool, presentArtifacts } from '../src/components/hriday/presentation.js';
 import { initialHRIDAYActivity, advanceHRIDAYActivity } from '../src/components/hriday/activity.js';
 import { streamCopilotQuery } from '../src/api/client.js';
+import { CharacterDelivery } from '../src/components/hriday/characterDelivery.js';
 const delegates = [{ id: 'qwen', name: 'Qwen3.5', primary_model: 'qwen3.5', role_title: 'Chief Quantitative & Data Analytics Director' }];
 const banner = '### 🏆 Elected Council Replier: **Qwen3.5**\n*Chief Quantitative & Data Analytics Director* — *Elected with 3/5 Council Votes (60% Quorum)*\n\n';
 const greeting = 'Hello! I am Qwen3.5, serving as Chief Quantitative & Data Analytics Director on the HRIDAY Executive AI Council. Welcome to the War Room—how can I assist you with your datasets, workforce performance, or operational decisions today?';
 const evidence = '**Attendance** is 87.5% across 259 records. [Evidence](https://example.com/report)';
-function harness() {
+const instantDelivery = { instant: () => true };
+function harness(delivery = instantDelivery) {
   const calls = [];
-  const c = new HRIDAYConversation((...args) => new Promise(resolve => calls.push({ args, cb: args[5], resolve })));
+  const c = new HRIDAYConversation((...args) => new Promise(resolve => calls.push({ args, cb: args[5], resolve })), { delivery });
   return { c, calls };
 }
 test('new upload replaces a deleted source and stops late answers from restoring its context', async () => {
@@ -28,7 +30,8 @@ test('new upload replaces a deleted source and stops late answers from restoring
     dispatchEvent: event => { assert.equal(event.type, 'workbook-uploaded'); c.invalidateDatasetContext(); },
   };
   activateUploadedSheet({ dataset_id: 12, sheets: ['New Sheet'], sheet_ids: [99, 100] }, browser);
-  assert.equal(updatedUrl.searchParams.get('sheet_id'), '99');
+  assert.equal(updatedUrl.searchParams.get('dataset_id'), '12');
+  assert.equal(updatedUrl.searchParams.get('sheet_id'), null);
   assert.equal(updatedUrl.searchParams.get('derived_id'), null);
   assert(calls[0].args[6].aborted);
   calls[0].cb.onDone({ answer: 'Old data', prior_context: { sheet_id: 7 } });
@@ -104,7 +107,7 @@ test('retry keeps one question, original scope, draft; follow-up context resets 
   assert.deepEqual(c.state.messages, []); assert.equal(c.priorContext, null);
 });
 test('unexpected EOF exposes recoverable incomplete state', async () => {
-  const c = new HRIDAYConversation(async (...args) => args[5].onToken('Incomplete'));
+  const c = new HRIDAYConversation(async (...args) => args[5].onToken('Incomplete'), { delivery: instantDelivery });
   await c.send('Question'); assert.equal(c.state.messages[1].phase, 'error'); assert.equal(c.state.messages[1].content, 'Incomplete'); assert(!c.state.loading);
 });
 test('query tools preserve exact grammar and filters; artifact URLs stay local', () => {
@@ -223,4 +226,140 @@ test('SSE dispatches a real corrective reset without hiding diagnostics', async 
     await streamCopilotQuery('Question', null, null, null, null, { onReset: d => resets.push(d), onEvent: e => events.push(e) });
     assert.equal(resets.length, 1); assert.equal(events[0].type, 'answer_reset');
   } finally { globalThis.fetch = saved; }
+});
+
+function deliveryClock() {
+  let sequence = 0;
+  const timers = new Map();
+  const delays = [];
+  return {
+    delays,
+    options: {
+      instant: () => false,
+      schedule: (callback, delay) => { delays.push(delay); const id = ++sequence; timers.set(id, callback); return id; },
+      cancel: id => timers.delete(id),
+    },
+    nextCallback: () => timers.values().next().value,
+    tick() {
+      const [id, callback] = timers.entries().next().value || [];
+      if (!callback) return false;
+      timers.delete(id); callback(); return true;
+    },
+    drain(maxTicks = 300) {
+      let count = 0;
+      while (this.tick()) assert(++count <= maxTicks, 'Text delivery did not finish');
+      return count;
+    },
+    pending: () => timers.size,
+  };
+}
+
+test('bursty and final-only answers reveal characters while complete charts remain available and stable', async () => {
+  const clock = deliveryClock();
+  const { c, calls } = harness(clock.options);
+  const pending = c.send('Show attendance');
+  const cb = calls[0].cb;
+  const chart = { chart_id: 'attendance', categories: ['Sales'], series: [{ name: 'Attendance', values: [87.5] }] };
+  cb.onToken('Attendance is 87.5%.');
+  assert.equal(c.state.messages[1].content, '');
+  clock.tick(); assert.equal(c.state.messages[1].content, 'A');
+  cb.onDone({ answer: 'Attendance is 87.5%.', visual_charts: [chart], prior_context: { metric: 'attendance' } });
+  const charts = c.state.messages[1].visual_charts;
+  assert.equal(charts[0], chart);
+  assert(c.state.loading); assert.equal(c.state.messages[1].phase, 'streaming');
+  await c.send('Duplicate'); assert.equal(calls.length, 1);
+  cb.onToken('Late token'); cb.onReset({ reason: 'late' });
+  clock.tick(); assert.equal(c.state.messages[1].content, 'At');
+  assert.equal(c.state.messages[1].visual_charts, charts);
+  clock.drain(); calls[0].resolve(); await pending;
+  assert.equal(c.state.messages[1].content, 'Attendance is 87.5%.');
+  assert.equal(c.state.messages[1].phase, 'complete'); assert(!c.state.loading);
+  assert.equal(c.state.messages[1].visual_charts, charts);
+  const next = c.send('Next answer');
+  calls[1].cb.onDone({ answer: '**Ready**', visual_chart: chart });
+  assert.equal(c.state.messages[3].content, '');
+  assert.equal(c.state.messages[3].visual_charts[0], chart);
+  clock.tick(); assert.equal(c.state.messages[3].content, '*');
+  clock.drain(); calls[1].resolve(); await next;
+  assert.equal(c.state.messages[3].content, '**Ready**');
+});
+
+test('Stop cancels queued characters after network completion without losing the graph or draft', async () => {
+  const clock = deliveryClock(); const { c, calls } = harness(clock.options);
+  const pending = c.send('Chart and explanation');
+  const chart = { categories: ['Cohort'], series: [{ values: [12] }] };
+  calls[0].cb.onDone({ answer: 'Explanation', chart });
+  clock.tick(); const shown = c.state.messages[1].content;
+  const stale = clock.nextCallback();
+  c.setDraft('Follow up'); c.stop(); stale();
+  assert.equal(clock.pending(), 0);
+  assert.equal(c.state.messages[1].content, shown);
+  assert.equal(c.state.messages[1].phase, 'stopped');
+  assert.equal(c.state.messages[1].visual_charts[0], chart);
+  assert.equal(c.state.draft, 'Follow up'); assert(!c.state.loading);
+  calls[0].resolve(); await pending;
+});
+
+test('corrective resets and validated replacements cancel rejected text before continuing delivery', async () => {
+  const clock = deliveryClock(); const { c, calls } = harness(clock.options);
+  const pending = c.send('Explain'); const cb = calls[0].cb;
+  cb.onToken('Rejected'); clock.tick(); assert.equal(c.state.messages[1].content, 'R');
+  const stale = clock.nextCallback(); cb.onReset({ reason: 'validation' });
+  assert.equal(c.state.messages[1].content, ''); assert.equal(clock.pending(), 0);
+  cb.onToken('Corrected'); stale();
+  assert.equal(c.state.messages[1].content, '');
+  clock.tick(); assert.equal(c.state.messages[1].content, 'C');
+  cb.onDone({ answer: 'Final verified answer' });
+  assert.equal(c.state.messages[1].content, '');
+  clock.tick(); assert.equal(c.state.messages[1].content, 'F');
+  clock.drain(); calls[0].resolve(); await pending;
+  assert.equal(c.state.messages[1].content, 'Final verified answer');
+});
+
+test('new conversation, dataset invalidation and errors discard pending text and ignore late ticks', async () => {
+  for (const action of ['newChat', 'invalidateDatasetContext', 'error']) {
+    const clock = deliveryClock(); const { c, calls } = harness(clock.options);
+    const pending = c.send('Explain'); const cb = calls[0].cb;
+    cb.onToken('Response'); clock.tick(); const stale = clock.nextCallback();
+    if (action === 'error') cb.onError(new Error('Disconnected'));
+    else c[action]();
+    const messages = c.state.messages;
+    stale(); cb.onToken('Late'); cb.onDone({ answer: 'Late' });
+    assert.equal(c.state.messages, messages); assert.equal(clock.pending(), 0); assert(!c.state.loading);
+    calls[0].resolve(); await pending;
+  }
+});
+
+test('character delivery reveals one Unicode grapheme every 35ms, including long burst answers', () => {
+  const clock = deliveryClock(); const shown = [];
+  const delivery = new CharacterDelivery(text => shown.push(text), clock.options);
+  const characters = ['A', '👩🏽‍💻', 'e\u0301', '🇮🇳'];
+  delivery.setText(characters.join('')); clock.drain();
+  assert.deepEqual(shown, characters.map((_character, index) => characters.slice(0, index + 1).join('')));
+  assert.deepEqual(clock.delays, characters.map(() => 35));
+  const longClock = deliveryClock(); let result = '';
+  const long = new CharacterDelivery(text => {
+    assert.equal(text.length, result.length + 1, 'Long answers must not reveal multiple characters at once');
+    result = text;
+  }, longClock.options);
+  const answer = 'x'.repeat(10000); long.setText(answer);
+  assert.equal(result, '');
+  assert.equal(longClock.drain(answer.length), answer.length);
+  assert(longClock.delays.every(delay => delay === 35));
+  assert.equal(result, answer);
+});
+
+test('reduced-motion preference bypasses character pacing while preserving full text and charts', async () => {
+  const previous = globalThis.matchMedia;
+  globalThis.matchMedia = query => ({ matches: query === '(prefers-reduced-motion: reduce)' });
+  try {
+    const chart = { categories: ['Sales'], series: [{ values: [7] }] };
+    const c = new HRIDAYConversation(async (...args) => args[5].onDone({ answer: 'Complete', visual_charts: [chart] }));
+    await c.send('Explain');
+    assert.equal(c.state.messages[1].content, 'Complete');
+    assert.equal(c.state.messages[1].visual_charts[0], chart); assert(!c.state.loading);
+  } finally {
+    if (previous === undefined) delete globalThis.matchMedia;
+    else globalThis.matchMedia = previous;
+  }
 });
