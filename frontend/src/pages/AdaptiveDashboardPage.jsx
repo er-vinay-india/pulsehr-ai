@@ -96,6 +96,21 @@ function getEmptyStateExplanation(data, activeDataset) {
   };
 }
 
+function getDatasetIdFromUrl() {
+  try {
+    const searchP = new URLSearchParams(window.location.search);
+    const searchVal = searchP.get("dataset_id") || searchP.get("sheet_id");
+    if (searchVal) return searchVal;
+    const hash = window.location.hash || "";
+    if (hash.includes("?")) {
+      const hashP = new URLSearchParams(hash.substring(hash.indexOf("?")));
+      const hashVal = hashP.get("dataset_id") || hashP.get("sheet_id");
+      if (hashVal) return hashVal;
+    }
+  } catch {}
+  return "";
+}
+
 export default function AdaptiveDashboardPage({ onNavigateTab }) {
   const { isDark } = useTheme();
   const themeTokens = getThemeTokens(isDark);
@@ -104,14 +119,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
   const [sources, setSources] = useState([]);
   const [sourcesLoading, setSourcesLoading] = useState(true);
   const [sourcesError, setSourcesError] = useState(null);
-  const [selectedDatasetId, setSelectedDatasetId] = useState(() => {
-    try {
-      const p = new URLSearchParams(window.location.search);
-      return p.get("dataset_id") || p.get("sheet_id") || "";
-    } catch {
-      return "";
-    }
-  });
+  const [selectedDatasetId, setSelectedDatasetId] = useState(getDatasetIdFromUrl);
 
   // Analysis State
   const [data, setData] = useState(null);
@@ -163,8 +171,8 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
       .then((res) => {
         const list = Array.isArray(res) ? res : res.datasets || [];
         setSources(list);
+        const urlDatasetId = getDatasetIdFromUrl();
         const p = new URLSearchParams(window.location.search);
-        const urlDatasetId = p.get("dataset_id");
         const urlSheetId = p.get("sheet_id");
 
         let targetId = "";
@@ -200,6 +208,21 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
     window.addEventListener("workbook-uploaded", loadSources);
     return () => window.removeEventListener("workbook-uploaded", loadSources);
   }, []);
+
+  useEffect(() => {
+    const handleUrlChange = () => {
+      const idFromUrl = getDatasetIdFromUrl();
+      if (idFromUrl && idFromUrl !== selectedDatasetId) {
+        setSelectedDatasetId(idFromUrl);
+      }
+    };
+    window.addEventListener("popstate", handleUrlChange);
+    window.addEventListener("hashchange", handleUrlChange);
+    return () => {
+      window.removeEventListener("popstate", handleUrlChange);
+      window.removeEventListener("hashchange", handleUrlChange);
+    };
+  }, [selectedDatasetId]);
 
   const lastDatasetIdRef = useRef(null);
 
