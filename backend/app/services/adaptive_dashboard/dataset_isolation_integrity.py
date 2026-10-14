@@ -369,3 +369,68 @@ class AxisNarrativeIntegrity:
                     return True, f"REPAIRED_AXIS_NARRATIVE: Repaired title to '{repaired_title}'"
 
         return True, None
+
+
+class ExecutiveTopicBindingIntegrity:
+    """Enforces cross-layer topic identity across Story, VisualSpec, EvidenceBinding, and CompositionItem."""
+
+    @classmethod
+    def evaluate_topic(
+        cls,
+        topic: Any,
+        fail_closed: bool = True,
+    ) -> tuple[bool, str | None]:
+        """Validates that all facets of an assembled ExecutiveTopic share the identical topic_id.
+
+        Verifies:
+        - topic.topic_id == visual_spec.topic_id
+        - topic.topic_id == story.topic_id (if present)
+        - topic.topic_id == evidence_binding.topic_id (if present)
+        - topic.topic_id == composition_item.topic_id (if present)
+        """
+        topic_id = getattr(topic, "topic_id", "") or (topic.get("topic_id") if isinstance(topic, dict) else "")
+        if not topic_id:
+            msg = "EXECUTIVE_TOPIC_INTEGRITY_VIOLATION: ExecutiveTopic is missing mandatory 'topic_id'."
+            if fail_closed:
+                raise DatasetIsolationViolation(msg)
+            return False, msg
+
+        mismatches: list[str] = []
+
+        # 1. VisualSpec check
+        v_spec = getattr(topic, "visual_spec", None) or (topic.get("visual_spec") if isinstance(topic, dict) else None)
+        if isinstance(v_spec, dict):
+            v_topic_id = v_spec.get("topic_id")
+            if v_topic_id and v_topic_id != topic_id:
+                mismatches.append(f"VisualSpec.topic_id ('{v_topic_id}') != topic_id ('{topic_id}')")
+
+        # 2. Story check
+        story = getattr(topic, "story", None) or (topic.get("story") if isinstance(topic, dict) else None)
+        if story:
+            s_topic_id = getattr(story, "topic_id", None) or (story.get("topic_id") if isinstance(story, dict) else None)
+            if s_topic_id and s_topic_id != topic_id:
+                mismatches.append(f"Story.topic_id ('{s_topic_id}') != topic_id ('{topic_id}')")
+
+        # 3. EvidenceBinding check
+        ev_binding = getattr(topic, "evidence_binding", None) or (topic.get("evidence_binding") if isinstance(topic, dict) else None)
+        if ev_binding:
+            eb_topic_id = getattr(ev_binding, "topic_id", None) or (ev_binding.get("topic_id") if isinstance(ev_binding, dict) else None)
+            if eb_topic_id and eb_topic_id != topic_id:
+                mismatches.append(f"EvidenceBinding.topic_id ('{eb_topic_id}') != topic_id ('{topic_id}')")
+
+        # 4. CompositionItem check
+        comp_item = getattr(topic, "composition_item", None) or (topic.get("composition_item") if isinstance(topic, dict) else None)
+        if comp_item:
+            ci_topic_id = getattr(comp_item, "topic_id", None) or (comp_item.get("topic_id") if isinstance(comp_item, dict) else None)
+            if ci_topic_id and ci_topic_id != topic_id:
+                mismatches.append(f"CompositionItem.topic_id ('{ci_topic_id}') != topic_id ('{topic_id}')")
+
+        if mismatches:
+            msg = f"EXECUTIVE_TOPIC_INTEGRITY_VIOLATION: Cross-layer topic mismatch: {'; '.join(mismatches)}"
+            logger.error(msg)
+            if fail_closed:
+                raise DatasetIsolationViolation(msg)
+            return False, msg
+
+        return True, None
+

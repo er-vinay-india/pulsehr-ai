@@ -323,27 +323,96 @@ def test_g5_2_evidence_ownership_integrity_dataset_isolation():
 
 
 def test_g5_2_evidence_ownership_integrity_topic_parity():
-    """G5.2: Enforces topic parity across visual spec, story, and evidence binding."""
+    """G5.2: Enforces topic parity strictly within the evidence domain (zero visual/story coupling)."""
     from app.services.adaptive_dashboard.evidence import (
+        AnalyticalFact,
+        BoundEvidence,
+        EvidenceBinding,
         EvidenceOwnershipIntegrity,
         EvidenceOwnershipMismatchError,
     )
 
-    # Coherent topic succeeds
+    fact = AnalyticalFact(
+        fact_id="fact_01",
+        dataset_id=101,
+        topic_id="topic_workforce_hero",
+        subject="Operations",
+        metric="Total Attendance",
+        formatted_value="24.0 days",
+    )
+    evidence = BoundEvidence(
+        evidence_id="EVID-101-01",
+        dataset_id=101,
+        topic_id="topic_workforce_hero",
+        subject="Operations",
+        metric="Total Attendance",
+        formatted_value="24.0 days",
+    )
+    binding = EvidenceBinding(
+        topic_id="topic_workforce_hero",
+        dataset_id=101,
+        primary_evidence_id="EVID-101-01",
+    )
+
+    # Coherent topic succeeds within evidence domain
     assert EvidenceOwnershipIntegrity.verify_topic_ownership(
         topic_id="topic_workforce_hero",
-        visual_spec_topic_id="topic_workforce_hero",
-        story_topic_id="topic_workforce_hero",
-        evidence_topic_id="topic_workforce_hero",
+        fact=fact,
+        evidence=evidence,
+        evidence_binding=binding,
     ) is True
 
-    # Mismatched visual spec fails closed
-    with pytest.raises(EvidenceOwnershipMismatchError, match="Topic ownership integrity violation"):
+    # Mismatched fact topic fails closed
+    fact_alien = AnalyticalFact(
+        fact_id="fact_02",
+        dataset_id=101,
+        topic_id="topic_other",
+        subject="Operations",
+        metric="Total Attendance",
+        formatted_value="24.0 days",
+    )
+    with pytest.raises(EvidenceOwnershipMismatchError, match="Evidence topic ownership violation"):
         EvidenceOwnershipIntegrity.verify_topic_ownership(
             topic_id="topic_workforce_hero",
-            visual_spec_topic_id="topic_retail_sales",
-            story_topic_id="topic_workforce_hero",
+            fact=fact_alien,
         )
+
+
+def test_g5_2_executive_topic_cross_layer_binding_parity():
+    """G5.2: Enforces higher-level topic identity across Story, VisualSpec, and Evidence at ExecutiveTopic assembly."""
+    from app.services.adaptive_dashboard.dataset_isolation_integrity import (
+        ExecutiveTopicBindingIntegrity,
+        DatasetIsolationViolation,
+    )
+
+    coherent_topic = {
+        "topic_id": "topic_hero",
+        "title": "Store Revenue Ranking",
+        "visual_spec": {"topic_id": "topic_hero", "chart_type": "ranked_bar"},
+        "story": {"topic_id": "topic_hero", "headline": "Strong retail performance"},
+        "evidence_binding": {"topic_id": "topic_hero", "primary_evidence_id": "EVID-001"},
+    }
+    ok, err = ExecutiveTopicBindingIntegrity.evaluate_topic(coherent_topic)
+    assert ok is True
+    assert err is None
+
+    # Mismatched visual spec fails closed
+    corrupt_visual_topic = {
+        "topic_id": "topic_hero",
+        "title": "Store Revenue Ranking",
+        "visual_spec": {"topic_id": "topic_foreign_visual", "chart_type": "ranked_bar"},
+    }
+    with pytest.raises(DatasetIsolationViolation, match="Cross-layer topic mismatch"):
+        ExecutiveTopicBindingIntegrity.evaluate_topic(corrupt_visual_topic, fail_closed=True)
+
+    # Mismatched story topic fails closed
+    corrupt_story_topic = {
+        "topic_id": "topic_hero",
+        "title": "Store Revenue Ranking",
+        "story": {"topic_id": "topic_foreign_story"},
+    }
+    with pytest.raises(DatasetIsolationViolation, match="Cross-layer topic mismatch"):
+        ExecutiveTopicBindingIntegrity.evaluate_topic(corrupt_story_topic, fail_closed=True)
 
 
 def test_g5_2_grain_isolation():
@@ -490,28 +559,74 @@ def test_g5_2_provenance_binder():
 
 
 def test_g5_2_architecture_boundary_purity():
-    """G5.2 Architecture Boundary Guard: Verifies evidence modules contain zero DB, zero AI, and zero MCP imports."""
+    """G5.2 Architecture Boundary Guard: Verifies evidence modules contain ZERO DB, zero AI, zero MCP, and ZERO visual/composition/theme coupling."""
     import ast
     from pathlib import Path
 
     evidence_dir = Path(__file__).resolve().parent.parent / "app" / "services" / "adaptive_dashboard" / "evidence"
     assert evidence_dir.exists(), f"evidence package must exist at {evidence_dir}"
 
-    forbidden_modules = {"sqlite3", "duckdb", "ollama", "openai", "google.genai", "mcp", "requests", "httpx"}
+    forbidden_modules = {
+        # Raw storage / DB
+        "sqlite3", "duckdb",
+        # AI / LLM / external APIs
+        "ollama", "openai", "google.genai", "mcp", "requests", "httpx",
+        # Visual / Presentation / Theme / Composition layers
+        "visual_recommender", "composition_planner", "spatial_optimizer",
+        "theme_validator", "chart_engine", "presentation",
+    }
+
+    forbidden_symbols_or_tokens = {
+        "visualspec", "visual_spec", "visualrecommender", "compositionplanner",
+        "spatialplacement", "themevalidator", "rendercard", "react", "chart_type",
+    }
+
     for py_file in evidence_dir.glob("*.py"):
-        tree = ast.parse(py_file.read_text(encoding="utf-8"), filename=str(py_file))
+        code_text = py_file.read_text(encoding="utf-8")
+        tree = ast.parse(code_text, filename=str(py_file))
+
+        # 1. AST Imports check
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
                 for alias in node.names:
                     top_pkg = alias.name.split(".")[0]
                     assert top_pkg not in forbidden_modules, (
-                        f"Architecture violation: {py_file} imports forbidden '{top_pkg}'"
+                        f"Architecture violation: {py_file} imports forbidden module '{top_pkg}'"
                     )
             elif isinstance(node, ast.ImportFrom):
                 if node.module:
                     top_pkg = node.module.split(".")[0]
-                    assert top_pkg not in forbidden_modules, (
-                        f"Architecture violation: {py_file} imports from forbidden '{top_pkg}'"
+                    sub_pkg = node.module.split(".")[-1]
+                    assert top_pkg not in forbidden_modules and sub_pkg not in forbidden_modules, (
+                        f"Architecture violation: {py_file} imports from forbidden module '{node.module}'"
                     )
+                for alias in node.names:
+                    sym_name = alias.name.lower()
+                    assert sym_name not in forbidden_symbols_or_tokens, (
+                        f"Architecture violation: {py_file} imports forbidden visual/composition symbol '{alias.name}'"
+                    )
+
+            # 2. AST Name/Identifier check
+            elif isinstance(node, ast.Name):
+                low_id = node.id.lower()
+                assert low_id != "visualspec", (
+                    f"Architecture violation: {py_file} references forbidden class/symbol '{node.id}'"
+                )
+
+        # 3. Text-level token check for strict visual decoupling
+        for line_no, line in enumerate(code_text.splitlines(), start=1):
+            low_line = line.strip().lower()
+            # Ignore comments and docstrings
+            if low_line.startswith("#") or low_line.startswith('"""') or low_line.startswith("'''"):
+                continue
+            assert "visualspec" not in low_line, (
+                f"Architecture violation in {py_file}:{line_no}: Evidence layer references VisualSpec: '{line.strip()}'"
+            )
+            assert "composition_planner" not in low_line, (
+                f"Architecture violation in {py_file}:{line_no}: Evidence layer references composition_planner: '{line.strip()}'"
+            )
+            assert "visual_recommender" not in low_line, (
+                f"Architecture violation in {py_file}:{line_no}: Evidence layer references visual_recommender: '{line.strip()}'"
+            )
 
 

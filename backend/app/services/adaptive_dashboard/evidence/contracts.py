@@ -20,7 +20,9 @@ class AnalyticalFact(BaseModel):
 
     fact_id: str
     dataset_id: int
+    dataset_version: int | None = None
     sheet_id: int | None = None
+    topic_id: str | None = None
     subject: str
     metric: str
     value: float | int | None = None
@@ -79,6 +81,7 @@ class BoundEvidence(BaseModel):
 
     # Lineage and governance attributes
     dataset_id: int | None = None
+    dataset_version: int | None = None
     sheet_id: int | None = None
     topic_id: str | None = None
     grain: str = "aggregate"  # e.g., "employee", "department", "store", "location", "aggregate"
@@ -189,6 +192,7 @@ class EvidenceBinding(BaseModel):
 
     topic_id: str
     dataset_id: int
+    dataset_version: int | None = None
     primary_evidence_id: str
     supporting_evidence_ids: list[str] = Field(default_factory=list)
     bound_facts: list[BoundFact] = Field(default_factory=list)

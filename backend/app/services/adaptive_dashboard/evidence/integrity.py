@@ -81,7 +81,10 @@ class EvidenceNamespaceIntegrity:
 
 
 class EvidenceOwnershipIntegrity:
-    """Enforces strict dataset ownership, topic parity, and grain isolation."""
+    """Enforces strict dataset ownership, dataset version, topic parity, and grain isolation within the evidence domain.
+
+    Strictly evidence-domain: has zero knowledge of visual specifications, stories, charts, layouts, or UI themes.
+    """
 
     @classmethod
     def verify_dataset_ownership(
@@ -90,7 +93,7 @@ class EvidenceOwnershipIntegrity:
         evidence: BoundEvidence,
         fail_closed: bool = True,
     ) -> bool:
-        """Ensures an analytical fact only binds to evidence originating from the identical dataset."""
+        """Ensures an analytical fact only binds to evidence originating from the identical dataset and version."""
         if evidence.dataset_id is not None and fact.dataset_id != evidence.dataset_id:
             msg = (
                 f"Cross-dataset evidence contamination detected: Fact (dataset {fact.dataset_id}) "
@@ -99,28 +102,45 @@ class EvidenceOwnershipIntegrity:
             if fail_closed:
                 raise EvidenceOwnershipMismatchError(msg)
             return False
+
+        if (
+            fact.dataset_version is not None
+            and evidence.dataset_version is not None
+            and fact.dataset_version != evidence.dataset_version
+        ):
+            msg = (
+                f"Dataset version mismatch: Fact version {fact.dataset_version} "
+                f"!= Evidence version {evidence.dataset_version} for '{evidence.evidence_id}'."
+            )
+            if fail_closed:
+                raise EvidenceOwnershipMismatchError(msg)
+            return False
+
         return True
 
     @classmethod
     def verify_topic_ownership(
         cls,
         topic_id: str,
-        visual_spec_topic_id: str | None = None,
-        story_topic_id: str | None = None,
-        evidence_topic_id: str | None = None,
+        fact: AnalyticalFact | None = None,
+        evidence: BoundEvidence | None = None,
+        evidence_binding: EvidenceBinding | None = None,
         fail_closed: bool = True,
     ) -> bool:
-        """Enforces that all facets of a topic (story, visual spec, evidence binding) share the exact topic_id."""
+        """Enforces that an analytical fact and evidence bound to a topic share the exact topic_id.
+
+        Guaranteed pure evidence domain: zero knowledge of visual specifications, stories, charts, or layouts.
+        """
         mismatches: list[str] = []
-        if visual_spec_topic_id and visual_spec_topic_id != topic_id:
-            mismatches.append(f"VisualSpec topic '{visual_spec_topic_id}' != Topic '{topic_id}'")
-        if story_topic_id and story_topic_id != topic_id:
-            mismatches.append(f"Story topic '{story_topic_id}' != Topic '{topic_id}'")
-        if evidence_topic_id and evidence_topic_id != topic_id:
-            mismatches.append(f"EvidenceBinding topic '{evidence_topic_id}' != Topic '{topic_id}'")
+        if fact and fact.topic_id and fact.topic_id != topic_id:
+            mismatches.append(f"Fact topic '{fact.topic_id}' != Topic '{topic_id}'")
+        if evidence and evidence.topic_id and evidence.topic_id != topic_id:
+            mismatches.append(f"Evidence topic '{evidence.topic_id}' != Topic '{topic_id}'")
+        if evidence_binding and evidence_binding.topic_id != topic_id:
+            mismatches.append(f"EvidenceBinding topic '{evidence_binding.topic_id}' != Topic '{topic_id}'")
 
         if mismatches:
-            msg = f"Topic ownership integrity violation: {'; '.join(mismatches)}"
+            msg = f"Evidence topic ownership violation: {'; '.join(mismatches)}"
             if fail_closed:
                 raise EvidenceOwnershipMismatchError(msg)
             return False
@@ -152,18 +172,36 @@ class EvidenceOwnershipIntegrity:
         return True
 
     @classmethod
+    def verify_provenance_resolvable(
+        cls,
+        evidence: BoundEvidence,
+        fail_closed: bool = True,
+    ) -> bool:
+        """Ensures an evidence node contains valid lineage / provenance reference."""
+        if not evidence.provenance and not evidence.source_table:
+            msg = f"Evidence node '{evidence.evidence_id}' has unresolvable provenance (empty provenance and source table)."
+            if fail_closed:
+                raise EvidenceOwnershipMismatchError(msg)
+            return False
+        return True
+
+    @classmethod
     def validate_binding(
         cls,
         binding: EvidenceBinding,
         fail_closed: bool = True,
     ) -> bool:
         """Validates all bound facts inside an EvidenceBinding."""
+        cls.verify_topic_ownership(binding.topic_id, evidence_binding=binding, fail_closed=fail_closed)
         for bf in binding.bound_facts:
             cls.verify_dataset_ownership(bf.fact, bf.evidence, fail_closed=fail_closed)
+            cls.verify_topic_ownership(binding.topic_id, fact=bf.fact, evidence=bf.evidence, fail_closed=fail_closed)
             cls.verify_grain_isolation(bf.fact.grain, bf.evidence.grain, bf.evidence.evidence_id, fail_closed=fail_closed)
+            cls.verify_provenance_resolvable(bf.evidence, fail_closed=fail_closed)
             if bf.topic_id != binding.topic_id:
                 msg = f"BoundFact topic '{bf.topic_id}' does not match EvidenceBinding topic '{binding.topic_id}'."
                 if fail_closed:
                     raise EvidenceOwnershipMismatchError(msg)
                 return False
         return True
+
