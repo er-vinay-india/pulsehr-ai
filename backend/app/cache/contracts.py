@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 # -----------------------------------------------------------------------------
 SEMANTIC_SCHEMA_VERSION: str = "7"
 ANALYTICS_ENGINE_VERSION: str = "2026.10.1"
-COMPOSITION_ENGINE_VERSION: str = "2026.10.2"
+COMPOSITION_ENGINE_VERSION: str = "2026.10.4"
 POLICY_VERSION: str = "1.2.0"
 CONTEXT_VERSION: str = "2.4.0"
 

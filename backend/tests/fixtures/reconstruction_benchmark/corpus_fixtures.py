@@ -61,8 +61,8 @@ def generate_benchmark_corpus() -> List[GroundTruthBenchmarkCase]:
     # -------------------------------------------------------------
     # 1. ENV_01: CPCB Pollution Report (Real Golden Fixture)
     # -------------------------------------------------------------
-    # Reference real CPCB fixture if present in backend uploads
-    cpcb_golden = Path("backend/data/uploads/821964a8914147299f27c790eb371f54.csv")
+    _fixture_candidate = Path(__file__).resolve().parents[3] / "data" / "uploads" / "821964a8914147299f27c790eb371f54.csv"
+    cpcb_golden = _fixture_candidate if _fixture_candidate.exists() else Path("backend/data/uploads/821964a8914147299f27c790eb371f54.csv")
     env_01_path = FIXTURES_DIR / "env_01_cpcb_pollution.csv"
     if cpcb_golden.exists():
         env_01_path.write_bytes(cpcb_golden.read_bytes())

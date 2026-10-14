@@ -228,6 +228,18 @@ export default function VisualSpecRenderer({
     const textColor = isDark ? "#94a3b8" : "#475569";
     const splitLineColor = isDark ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 0, 0, 0.06)";
 
+    const formatAxisValue = (v) => {
+      if (typeof v !== "number") return v;
+      const abs = Math.abs(v);
+      if (abs >= 1000000) {
+        return `${(v / 1000000).toFixed(abs % 1000000 === 0 ? 0 : 1)}M`;
+      }
+      if (abs >= 1000) {
+        return `${(v / 1000).toFixed(abs % 1000 === 0 ? 0 : 1)}K`;
+      }
+      return Number.isInteger(v) ? v : v.toFixed(1);
+    };
+
     const categories = visualSpec.categories || [];
     const values = visualSpec.values || [];
     const series = visualSpec.series || [];
@@ -326,7 +338,7 @@ export default function VisualSpecRenderer({
         yAxis: {
           type: "value",
           splitLine: { lineStyle: { color: splitLineColor } },
-          axisLabel: { color: textColor, fontSize: 11 },
+          axisLabel: { color: textColor, fontSize: 11, formatter: formatAxisValue },
         },
         series: [
           {
@@ -448,7 +460,7 @@ export default function VisualSpecRenderer({
         xAxis: {
           type: "value",
           splitLine: { lineStyle: { color: splitLineColor } },
-          axisLabel: { color: textColor, fontSize: 11 },
+          axisLabel: { color: textColor, fontSize: 11, formatter: formatAxisValue },
         },
         yAxis: {
           type: "category",
@@ -498,11 +510,19 @@ export default function VisualSpecRenderer({
             return res;
           },
         },
-        grid: { top: 15, right: 30, bottom: 15, left: 120, containLabel: true },
+        legend: {
+          show: true,
+          top: 0,
+          right: 15,
+          textStyle: { color: textColor, fontSize: 11 },
+          itemWidth: 10,
+          itemHeight: 10,
+        },
+        grid: { top: 25, right: 30, bottom: 15, left: 120, containLabel: true },
         xAxis: {
           type: "value",
           splitLine: { lineStyle: { color: splitLineColor } },
-          axisLabel: { color: textColor, fontSize: 11 },
+          axisLabel: { color: textColor, fontSize: 11, formatter: formatAxisValue },
         },
         yAxis: {
           type: "category",

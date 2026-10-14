@@ -104,6 +104,42 @@ class ModelEscalator:
             "Never hallucinate column values or numbers. Do not include markdown codeblocks or chat prose."
         )
 
+        # If a custom or offline endpoint is provided, route directly to that URL
+        if self.ollama_url and self.ollama_url != config.OLLAMA_BASE_URL:
+            try:
+                with httpx.Client(timeout=12) as client:
+                    res = client.post(
+                        f"{self.ollama_url}/api/chat",
+                        json={
+                            "model": self.model_name,
+                            "messages": [
+                                {"role": "system", "content": system_instruction},
+                                {"role": "user", "content": prompt},
+                            ],
+                            "stream": False,
+                            "format": "json",
+                            "think": False,
+                            "options": {"temperature": temperature, "num_predict": 300},
+                        },
+                    )
+                    res.raise_for_status()
+                    data = res.json()
+                    raw_content = data.get("message", {}).get("content", "").strip()
+                    tokens = data.get("prompt_eval_count", 0) + data.get("eval_count", 0)
+                    self.telemetry.model_tokens += tokens
+
+                    elapsed_ms = (time.perf_counter() - start_time) * 1000
+                    self.telemetry.model_latency_ms += elapsed_ms
+
+                    parsed_json = json.loads(raw_content)
+                    validated_obj = response_model.model_validate(parsed_json)
+                    return validated_obj, parsed_json, elapsed_ms
+            except Exception as exc:
+                elapsed_ms = (time.perf_counter() - start_time) * 1000
+                self.telemetry.model_latency_ms += elapsed_ms
+                logger.warning(f"Custom endpoint model call failed or schema validation failed: {exc}")
+                return None, {"error": str(exc)}, elapsed_ms
+
         try:
             from ..gateway.contracts import AIRequest, AITaskType
             from ..gateway.model_gateway import ModelGateway, extract_json_payload

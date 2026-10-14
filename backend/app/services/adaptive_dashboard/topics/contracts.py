@@ -117,6 +117,7 @@ class ExecutiveTopicDraft(BaseModel):
     tokens: dict[str, Any] = Field(default_factory=dict)
     source_opportunity_id: str = ""
     inspect_payload: dict[str, Any] = Field(default_factory=dict)
+    technical_title: str = ""
     visual_microcopy: Any | None = None
     spatial_placement: Any | None = None
 
@@ -136,6 +137,7 @@ class ExecutiveTopic(BaseModel):
     rank: int = 1
     portfolio_position: int = 1
     title: str
+    technical_title: str = ""
     subtitle: str = ""
     slot_type: Literal["hero", "supporting", "risk_anomaly", "action_scenario"] = "supporting"
     dataset_id: int | None = None

@@ -74,7 +74,7 @@ class AnalyticalStoryBuilder:
         """Synthesizes evidence graph items into a governed portfolio of ranked analytical stories."""
         gov_metrics = gov_metrics or {}
         nodes = evidence_graph.nodes
-        if not nodes:
+        if not nodes and not gov_metrics:
             return []
 
         # 1. Cluster evidence items into semantic families
@@ -180,13 +180,15 @@ class AnalyticalStoryBuilder:
                     top_cats = cats[:3]
                     top_vals = vals[:3] if vals else [20.0, 16.0, 14.0]
                 formatted_podium = ChartCapabilityRegistry.format_podium_labels(top_cats)
+                entity_grain = s.tokens.get("entity_grain") or ("DEPARTMENT" if "department" in s.title.lower() else "COHORT")
+                entity_label = "Department" if entity_grain == "DEPARTMENT" else entity_grain.capitalize()
                 clean_meas = "Attendance" if (s.primary_measure and "attendance" in s.primary_measure.lower()) or "attendance" in s.title.lower() else (s.primary_measure or "Performance")
                 companion_stories.append(
                     AnalyticalStory(
                         story_id=f"STORY-{story_idx:03d}",
                         semantic_family=f"{s.semantic_family}_podium",
-                        title=f"Top 3 {clean_meas} Department Leaders",
-                        business_question=f"Which top 3 cohorts lead in {clean_meas.lower()}?",
+                        title=f"Top 3 {clean_meas} {entity_label} Leaders",
+                        business_question=f"Which top 3 {entity_label.lower()}s lead in {clean_meas.lower()}?",
                         intent="RANKING",
                         periods=s.periods,
                         key_metric=f"Top: {top_cats[0]} ({top_vals[0]} {s.tokens.get('unit', '')})",
@@ -204,7 +206,8 @@ class AnalyticalStoryBuilder:
                             "categories": top_cats,
                             "values": top_vals,
                             "podium_categories": formatted_podium,
-                            "entity_grain": "DEPARTMENT",
+                            "entity_grain": entity_grain,
+                            "measure_column": s.tokens.get("measure_column") or s.primary_measure or clean_meas,
                         },
                     )
                 )
@@ -414,6 +417,8 @@ class AnalyticalStoryBuilder:
                     "cats": ["Operations", "Engineering", "Functions", "Design"],
                     "vals": [21.2, 16.9, 13.5, 8.2],
                     "unit": "days",
+                    "primary_label": "Attendance",
+                    "secondary_label": "Approved Leaves",
                 },
                 {
                     "fam": "department_weekly_matrix",
@@ -457,6 +462,8 @@ class AnalyticalStoryBuilder:
                         "scatter_points": tpl.get("scatter_points"),
                         "x_measure": tpl.get("x_measure"),
                         "y_measure": tpl.get("y_measure"),
+                        "primary_label": tpl.get("primary_label"),
+                        "secondary_label": tpl.get("secondary_label"),
                         "heatmap_data": tpl.get("heatmap_data"),
                         "x_categories": tpl.get("x_categories"),
                         "y_categories": tpl.get("y_categories"),
@@ -515,51 +522,94 @@ class AnalyticalStoryBuilder:
                 story_idx += 1
 
         elif len(stories) < 8 and is_env:
+            # 1. Authoritative dynamic ranking from actual dataset or gov_metrics
+            env_hero = gov_metrics.get("hero") or {}
+            env_cats = list(env_hero.get("categories") or [])
+            env_vals = list(env_hero.get("values") or [])
+            env_meas = env_hero.get("measure_column") or "PM10"
+            env_unit = env_hero.get("unit") or "µg/m³"
+            env_bench = float(env_hero.get("benchmark", 60.0))
+
+            if not (env_cats and env_vals and len(env_cats) >= 3):
+                # Attempt GenericEntityRankingEngine query if dataset_id is available
+                ds_id = gov_metrics.get("dataset_id")
+                if ds_id:
+                    try:
+                        from .ranking_engine import GenericEntityRankingEngine
+                        rank_res = GenericEntityRankingEngine.build_entity_ranking_story(dataset_id=ds_id)
+                        if rank_res and rank_res.ranked_rows and len(rank_res.ranked_rows) >= 3:
+                            env_cats = [str(r.entity) for r in rank_res.ranked_rows]
+                            env_vals = [float(r.value) for r in rank_res.ranked_rows]
+                            env_meas = rank_res.measure or "PM10"
+                            env_unit = rank_res.unit or "µg/m³"
+                            if rank_res.benchmark:
+                                env_bench = float(rank_res.benchmark)
+                    except Exception as e_rank:
+                        logger.debug("Dynamic ranking derivation fallback: %s", e_rank)
+
+            if not (env_cats and env_vals and len(env_cats) >= 3):
+                env_cats = ["Delhi", "Brynihat", "Jharia", "Mumbai"]
+                env_vals = [210.0, 195.0, 140.5, 85.0]
+
+            # Enforce single authoritative sort: Rank once descending
+            sorted_pairs = sorted(zip(env_cats, env_vals), key=lambda x: x[1], reverse=True)
+            ranked_cats = [p[0] for p in sorted_pairs]
+            ranked_vals = [p[1] for p in sorted_pairs]
+            top_lead_cat = ranked_cats[0]
+            top_lead_val = ranked_vals[0]
+            lead_fact_id = f"FACT-RANK-{env_meas}-{top_lead_cat}"
+
             env_templates = [
                 {
                     "fam": "pm10_ranking",
-                    "title": "Ambient PM10 Particulate Concentration Ranking",
-                    "q": "How do PM10 particulate levels compare across monitored urban locations?",
+                    "title": f"Ambient {env_meas} Particulate Concentration Ranking",
+                    "q": f"How do {env_meas} particulate levels compare across monitored urban locations?",
                     "intent": "RANKING",
                     "arch": "ranked_bar",
                     "hint": "MEDIUM",
-                    "metric": "195 µg/m³ peak",
-                    "takeaway": "Brynihat and Jharia record peak PM10 levels, significantly exceeding the national annual standard.",
+                    "metric": f"{top_lead_val:.0f} {env_unit} peak" if top_lead_val >= 10 else f"{top_lead_val} {env_unit} peak",
+                    "takeaway": f"{top_lead_cat} leads particulate severity with {top_lead_val:.0f} {env_unit} {env_meas}, followed by {ranked_cats[1]} and {ranked_cats[2]} exceeding national clean air standards." if len(ranked_cats) >= 3 else f"{top_lead_cat} leads particulate severity with {top_lead_val:.0f} {env_unit} {env_meas}.",
                     "action": "Deploy targeted clean air action plans under NCAP for top non-attainment cities.",
-                    "cats": ["Brynihat", "Jharia", "Delhi", "Mumbai"],
-                    "vals": [195.0, 140.5, 210.0, 85.0],
-                    "bench": 60.0,
-                    "unit": "µg/m³",
+                    "cats": ranked_cats,
+                    "vals": ranked_vals,
+                    "leader_entity": top_lead_cat,
+                    "leader_value": top_lead_val,
+                    "fact_id": lead_fact_id,
+                    "bench": env_bench,
+                    "unit": env_unit,
                     "role": "hero",
                 },
                 {
                     "fam": "pm10_podium",
-                    "title": "Top 3 Peak PM10 Non-Attainment Urban Hotspots",
-                    "q": "Which top 3 monitored locations record highest annual particulate concentrations?",
+                    "title": f"Top 3 Peak {env_meas} Non-Attainment Urban Hotspots",
+                    "q": f"Which top 3 monitored locations record highest annual particulate concentrations?",
                     "intent": "RANKING",
                     "arch": "podium_top_3",
                     "hint": "COMPACT",
-                    "metric": "Top: Delhi (210 µg/m³)",
-                    "takeaway": "Delhi leads particulate severity, followed by Brynihat and Jharia.",
+                    "metric": f"Top: {top_lead_cat} ({top_lead_val:.0f} {env_unit})",
+                    "takeaway": f"{top_lead_cat} leads particulate severity, followed by {ranked_cats[1]} and {ranked_cats[2]}." if len(ranked_cats) >= 3 else f"{top_lead_cat} leads particulate severity.",
                     "action": "Prioritize immediate emission curtailment and source apportionment.",
-                    "cats": ["Delhi", "Brynihat", "Jharia"],
-                    "vals": [210.0, 195.0, 140.5],
-                    "unit": "µg/m³",
+                    "cats": ranked_cats[:3],
+                    "vals": ranked_vals[:3],
+                    "leader_entity": top_lead_cat,
+                    "leader_value": top_lead_val,
+                    "fact_id": f"FACT-PODIUM-{env_meas}-{top_lead_cat}",
+                    "unit": env_unit,
                 },
                 {
                     "fam": "pm10_target_exceedance",
-                    "title": "Clean Air NAAQS (60 µg/m³) Standard Adherence",
-                    "q": "How do monitored stations compare against the national 60 µg/m³ annual PM10 standard?",
+                    "title": f"Clean Air NAAQS ({env_bench:.0f} {env_unit}) Standard Adherence",
+                    "q": f"How do monitored stations compare against the national {env_bench:.0f} {env_unit} annual {env_meas} standard?",
                     "intent": "TARGET_VS_ACTUAL",
                     "arch": "bullet",
                     "hint": "COMPACT",
-                    "metric": "Standard: 60 µg/m³",
-                    "takeaway": "Multiple urban monitoring centers exceed the 60 µg/m³ national clean air benchmark.",
+                    "metric": f"Standard: {env_bench:.0f} {env_unit}",
+                    "takeaway": f"Multiple urban monitoring centers exceed the {env_bench:.0f} {env_unit} national clean air benchmark.",
                     "action": "Initiate non-attainment city review protocols under NCAP.",
-                    "cats": ["Delhi", "Brynihat", "Jharia", "Mumbai"],
-                    "vals": [210.0, 195.0, 140.5, 85.0],
-                    "bench": 60.0,
-                    "unit": "µg/m³",
+                    "cats": ranked_cats,
+                    "vals": ranked_vals,
+                    "bench": env_bench,
+                    "unit": env_unit,
                 },
                 {
                     "fam": "pollutant_correlation",
@@ -618,6 +668,8 @@ class AnalyticalStoryBuilder:
                     "cats": ["Delhi", "Meghalaya", "Jharkhand", "Maharashtra"],
                     "vals": [45.3, 32.1, 28.4, 22.0],
                     "unit": "µg/m³",
+                    "primary_label": "SO2 Concentration",
+                    "secondary_label": "NO2 Concentration",
                 },
                 {
                     "fam": "pm10_outlier_variance",
@@ -671,9 +723,14 @@ class AnalyticalStoryBuilder:
                         "values": tpl.get("vals", []),
                         "unit": tpl.get("unit", "µg/m³"),
                         "benchmark": tpl.get("bench"),
+                        "leader_entity": tpl.get("leader_entity"),
+                        "leader_value": tpl.get("leader_value"),
+                        "fact_id": tpl.get("fact_id"),
                         "scatter_points": tpl.get("scatter_points"),
                         "x_measure": tpl.get("x_measure"),
                         "y_measure": tpl.get("y_measure"),
+                        "primary_label": tpl.get("primary_label"),
+                        "secondary_label": tpl.get("secondary_label"),
                         "heatmap_data": tpl.get("heatmap_data"),
                         "x_categories": tpl.get("x_categories"),
                         "y_categories": tpl.get("y_categories"),
@@ -807,6 +864,8 @@ class AnalyticalStoryBuilder:
                     "cats": ["Store 1", "Store 2", "Store 3", "Store 4"],
                     "vals": [29500.0, 26000.0, 22500.0, 20500.0],
                     "unit": "usd",
+                    "primary_label": "Gross Revenue",
+                    "secondary_label": "Operating Margin",
                 },
             ]
             for tpl in ret_templates:
@@ -823,6 +882,8 @@ class AnalyticalStoryBuilder:
                         "scatter_points": tpl.get("scatter_points"),
                         "x_measure": tpl.get("x_measure"),
                         "y_measure": tpl.get("y_measure"),
+                        "primary_label": tpl.get("primary_label"),
+                        "secondary_label": tpl.get("secondary_label"),
                         "observation_count": tpl.get("obs_count", len(tpl.get("vals", []))),
                     }
                     if tpl["arch"] == "podium_top_3":

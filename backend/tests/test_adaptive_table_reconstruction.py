@@ -33,7 +33,8 @@ from app.services.adaptive_table_reconstruction import (
 from app.services.sheet_catalog import read_sheets, prepare_sheets, decompose_header_semantics
 
 
-GOLDEN_FIXTURE_PATH = Path("backend/data/uploads/821964a8914147299f27c790eb371f54.csv")
+_fixture_candidate = Path(__file__).resolve().parents[1] / "data" / "uploads" / "821964a8914147299f27c790eb371f54.csv"
+GOLDEN_FIXTURE_PATH = _fixture_candidate if _fixture_candidate.exists() else Path("backend/data/uploads/821964a8914147299f27c790eb371f54.csv")
 
 
 def test_golden_pollution_reconstruction():

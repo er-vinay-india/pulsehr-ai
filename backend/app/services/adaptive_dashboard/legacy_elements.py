@@ -3142,7 +3142,7 @@ def build_segment_disparity_element(
         None,
     )
 
-    if store_col and sales_col and (contract.domain == "commercial_retail" or not dept_col):
+    if store_col and sales_col and contract.domain == "commercial_retail":
         store_data: dict[str, dict[str, float]] = defaultdict(lambda: {"count": 0, "sum_sales": 0.0})
         for r in rows:
             s_raw = str(r.get(store_col, "")).strip()
@@ -3775,11 +3775,7 @@ def build_decision_focus_element(
             )
 
         # 1B. Retail / Commercial Store Sales Density Gap
-        is_retail = (
-            contract.domain == "commercial_retail"
-            or "retail" in quinary_element.business_concept
-            or "store" in quinary_element.dimension_name.lower()
-        )
+        is_retail = contract.domain == "commercial_retail"
         if is_retail:
             benchmark = float(quinary_element.benchmark_value or 0.0)
             valid_items.sort(key=lambda x: (x.primary_value, -x.sample_size, x.segment))

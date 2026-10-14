@@ -164,7 +164,7 @@ class SpatialCompositionPlanner:
                 all_row_utilizations.append(utilization)
 
                 is_partial = row_spec.get("is_intentional_partial", total_span < 12 and len(cards_in_row) == 1)
-                if is_partial and total_span >= 7:
+                if is_partial and total_span >= 6:
                     intentional_partial_count += 1
 
                 row_id = f"{sec_id}-r{len(sec_rows) + 1}"
@@ -220,7 +220,7 @@ class SpatialCompositionPlanner:
                 all_readability_scores.append(avg_row_readability)
 
                 # Orphan card check: single isolated card with span < 7 that wasn't intentional
-                if len(cards_in_row) == 1 and total_span < 7:
+                if not is_partial and len(cards_in_row) == 1 and total_span < 7:
                     orphan_count += 1
 
                 sec_rows.append(
@@ -440,14 +440,30 @@ class SpatialCompositionPlanner:
         while pool:
             n = len(pool)
 
-            # Case 1: Exactly 1 card left -> Dedicated row expands to 12
+            # Case 1: Exactly 1 card left -> Right-size low density card to 6 rather than stretching to 12
             if n == 1:
                 card = pool.pop(0)
-                rows.append({
-                    "pattern": "12",
-                    "cards": [{"topic": card, "column_span": 12}],
-                    "is_intentional_partial": False,
-                })
+                cid = str(getattr(card, "topic_id", "") or id(card))
+                m_card = metrics_map.get(cid, ContentDensityMetrics())
+                chart_t = getattr(card, "recommended_visual", "") or getattr(card, "visual_spec", {}).get("chart_type", "")
+                prof = get_legibility_profile(chart_t)
+
+                is_hero_card = getattr(card, "slot_type", "") == "hero"
+                cats_len = len(getattr(card, "visual_spec", {}).get("categories", []))
+                # Single low-density card (e.g. single boxplot, compact card, <= 4 categories) should be placed in a 6-column card
+                if not is_hero_card and prof.max_useful_span <= 8 and (cats_len <= 6 or chart_t in ("box_plot", "boxplot", "dumbbell", "bullet")):
+                    span = max(m_card.effective_min_span, min(6, prof.preferred_span))
+                    rows.append({
+                        "pattern": f"{span}",
+                        "cards": [{"topic": card, "column_span": span}],
+                        "is_intentional_partial": True,
+                    })
+                else:
+                    rows.append({
+                        "pattern": "12",
+                        "cards": [{"topic": card, "column_span": 12}],
+                        "is_intentional_partial": False,
+                    })
                 break
 
             # Case 2: Exactly 3 cards left

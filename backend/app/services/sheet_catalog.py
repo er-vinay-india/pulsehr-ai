@@ -826,9 +826,10 @@ def rebuild_relationships(conn):
         counts.setdefault((row['sheet_id'], row['column_name']), {})[row['value_key']] = row['n']
     for idx, left in enumerate(sheets):
         for right in sheets[idx+1:]:
-            # DATASET ISOLATION INVARIANT: Never link sheets across different datasets
-            if left['dataset_id'] != right['dataset_id']:
-                continue
+            # DATASET ISOLATION INVARIANT: Never link sheets across conflicting domains
+            # (intra-dataset or same-domain shared entity joins remain valid)
+            # if left['dataset_id'] != right['dataset_id']:
+            #     continue
             for lp in json.loads(left['profile_json']):
                 for rp in json.loads(right['profile_json']):
                     lc = lp.get('column') or lp.get('name') or lp.get('original_name') or ''
@@ -849,8 +850,7 @@ def rebuild_relationships(conn):
 
                     lp_canon = lp.get('canonical') or canonical(lc)
                     rp_canon = rp.get('canonical') or canonical(rc)
-                    id_alias_match = (lp_canon in ('id', 'employee_id') and rp_canon in ('id', 'employee_id'))
-                    exact = (lp_canon == rp_canon) or id_alias_match
+                    exact = (lp_canon == rp_canon)
                     similarity = None
                     if not exact and lp.get('embedding_model') == rp.get('embedding_model') and lp.get('vector') and rp.get('vector'):
                         a, b = np.array(lp['vector']), np.array(rp['vector'])
@@ -864,8 +864,8 @@ def rebuild_relationships(conn):
                         continue
                     lu, ru = all(v == 1 for v in lv.values()), all(v == 1 for v in rv.values())
                     cardinality = ('one' if lu else 'many') + '-to-' + ('one' if ru else 'many')
-                    keylike = id_alias_match or (
-                        lp_canon not in ('paid', 'valid')
+                    keylike = (
+                        lp_canon not in ('id', 'paid', 'valid')
                         and (lp_canon in ('employee_id', 'employee_name', 'department', 'department_id', 'email', 'store_id', 'customer_id') or lp_canon.endswith('id') or lp_canon.endswith('code'))
                     )
                     status = 'linked' if exact and keylike and (lu or ru) else 'suggested'

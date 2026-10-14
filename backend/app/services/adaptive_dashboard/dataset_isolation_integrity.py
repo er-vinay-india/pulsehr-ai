@@ -322,6 +322,46 @@ class TopicVisualBindingIntegrity:
                 if re.search(r'\b' + re.escape(bad_tok) + r'\b', texts):
                     return False, f"FOREIGN_VOCABULARY_VIOLATION: Retail token '{bad_tok}' in environmental topic '{topic_id}'."
 
+        # 5. Leader Fact & Visual Parity for Ranking Stories (DEF-T2-04)
+        intent = getattr(topic, "analytical_intent", "")
+        chart_type = v_spec.get("chart_type") or getattr(topic, "recommended_visual", "")
+        is_ranking = (intent == "RANKING" or v_spec.get("is_ranking_story") or chart_type in ("ranked_bar", "podium_top_3"))
+
+        if is_ranking:
+            # 5a. Visual rank #1 extraction
+            v_cats = v_spec.get("categories") or []
+            v_vals = v_spec.get("values") or []
+            v_leader_ent = str(v_spec.get("leader_entity") or (v_cats[0] if v_cats else "")).strip()
+            v_leader_val = v_spec.get("leader_value") if v_spec.get("leader_value") is not None else (v_vals[0] if v_vals else None)
+
+            # 5b. Narrative leader extraction
+            takeaway = str(getattr(topic, "primary_takeaway", "") or getattr(topic, "takeaway", "") or (getattr(topic, "narrative", {}) or {}).get("takeaway", "") or "")
+            micro = getattr(topic, "visual_microcopy", None)
+            short_finding = str(getattr(micro, "short_finding", "") or "") if micro else ""
+            narrative_corpus = f"{takeaway} {short_finding}"
+
+            # 5c. Check for contradiction: If a trailing category is claimed as leader or peak
+            trailing_cats = [str(c).strip() for c in v_cats[1:] if str(c).strip()]
+            for trailing in trailing_cats:
+                trailing_lead_patterns = [
+                    rf"\b{re.escape(trailing)}\b\s+(leads|records?\s+peak|is\s+the\s+leader|ranks?\s+#?1|takes?\s+first)",
+                    rf"peak\s+.*?\b{re.escape(trailing)}\b",
+                    rf"top:\s*{re.escape(trailing)}\b",
+                ]
+                for pat in trailing_lead_patterns:
+                    if re.search(pat, narrative_corpus, flags=re.IGNORECASE):
+                        reason = f"RANKING_LEADER_MISMATCH: Visual rank #1 '{v_leader_ent}' contradicts narrative claiming '{trailing}' as leader ({pat})."
+                        logger.error(reason)
+                        return False, reason
+
+            # 5d. Check Fact ID parity if present
+            v_fact_id = v_spec.get("fact_id") or v_spec.get("leader_fact_id")
+            n_fact_id = getattr(topic, "fact_id", None) or (getattr(topic, "narrative", {}) or {}).get("fact_id") or (getattr(topic, "inspect_payload", {}) or {}).get("fact_id")
+            if v_fact_id and n_fact_id and str(v_fact_id).strip() != str(n_fact_id).strip():
+                reason = f"RANKING_FACT_ID_MISMATCH: Visual fact_id '{v_fact_id}' != Narrative fact_id '{n_fact_id}'."
+                logger.error(reason)
+                return False, reason
+
         return True, None
 
 

@@ -120,54 +120,62 @@ def enrich_analytical_request(query, prior_context, df, dataset_id, sheet_id, ro
         }), None) if isinstance(value, str) else None
 
     if plan and plan.intent in ('ranking', 'breakdown', 'ambiguity_clarification'):
-        if measure and dimension:
-            plan = plan.model_copy(update={'intent': 'ranking' if plan.intent == 'ambiguity_clarification' else plan.intent,
-                'metric': _metric_key(measure), 'entity_dimension': dimension.name,
-                'clarification_question': None})
-            bindings = {'metric': measure.name, 'grouping': dimension.name}
-            method = 'semantic_catalog'
+        if plan.entity_grain == 'employee':
+            if plan.metric and measures:
+                resolved_measure = field_for(plan.metric, measures)
+                if resolved_measure:
+                    bindings = {'metric': resolved_measure.name, 'grouping': 'employee'}
+                elif plan.metric not in ('headcount', 'attendance'):
+                    plan = plan.model_copy(update={'intent': 'ambiguity_clarification', 'metric': None})
+        else:
+            if measure and dimension:
+                plan = plan.model_copy(update={'intent': 'ranking' if plan.intent == 'ambiguity_clarification' else plan.intent,
+                    'metric': _metric_key(measure), 'entity_dimension': dimension.name,
+                    'clarification_question': None})
+                bindings = {'metric': measure.name, 'grouping': dimension.name}
+                method = 'semantic_catalog'
 
-        # A bare "best department" has no measure meaning to enrich. A model
-        # must not supply a default just because several metrics are available.
-        cue_words = set(normalize(query).split())
-        for f in dimensions:
-            cue_words -= set(normalize(f.name).split())
-        cue_words -= {'which', 'what', 'who', 'has', 'have', 'is', 'are', 'had', 'department', 'dept',
-            'best', 'worst', 'highest', 'lowest', 'most', 'least', 'top', 'bottom', 'performing',
-            'performance', 'overall', 'in', 'of', 'our', 'by', 'and', 'please', 'show', 'me'}
-        cue_words = {w for w in cue_words if not w.isdigit()}
-        if (plan.intent == 'ambiguity_clarification' or not plan.metric) and cue_words and measures:
-            compact = {
-                'source': {'sheet_id': sheet_id, 'dataset_id': dataset_id},
-                'measures': [field_definition(f) for f in measures],
-                'dimensions': [field_definition(f) for f in dimensions],
-                'draft_plan': {k: v for k, v in plan.model_dump().items() if k != 'prior_context'},
-                'required_resolution': 'Map the requested measure and grouping to available fields. Do not choose a default business performance measure.',
-            }
-            if route_contract and route_contract.entities:
-                contract = route_contract
-            elif model_already_used:
-                contract = None
-            else:
-                contract = resolve_model(query, prior or None, [f.name for f in fields], compact)
-            if contract and contract.route == ExecutionRoute.DATASET_ENGINE and contract.confidence >= .8:
-                entities = contract.entities
-                proposed_measure = field_for(entities.get('metric'), measures)
-                proposed_dimension = field_for(entities.get('group_by', entities.get('dimension')), dimensions) or dimension
-                if proposed_measure and proposed_dimension and not proposed_measure.unresolved_definition:
-                    plan = plan.model_copy(update={'intent': 'ranking', 'metric': _metric_key(proposed_measure),
-                        'entity_dimension': proposed_dimension.name, 'clarification_question': None})
-                    bindings = {'metric': proposed_measure.name, 'grouping': proposed_dimension.name}
-                    method = 'coordinator_model'
+            # A bare "best department" has no measure meaning to enrich. A model
+            # must not supply a default just because several metrics are available.
+            cue_words = set(normalize(query).split())
+            for f in dimensions:
+                cue_words -= set(normalize(f.name).split())
+            cue_words -= {'which', 'what', 'who', 'has', 'have', 'is', 'are', 'had', 'department', 'dept',
+                'best', 'worst', 'highest', 'lowest', 'most', 'least', 'top', 'bottom', 'performing',
+                'performance', 'overall', 'in', 'of', 'our', 'by', 'and', 'please', 'show', 'me'}
+            cue_words = {w for w in cue_words if not w.isdigit()}
+            if (plan.intent == 'ambiguity_clarification' or not plan.metric) and cue_words and measures:
+                compact = {
+                    'source': {'sheet_id': sheet_id, 'dataset_id': dataset_id},
+                    'measures': [field_definition(f) for f in measures],
+                    'dimensions': [field_definition(f) for f in dimensions],
+                    'draft_plan': {k: v for k, v in plan.model_dump().items() if k != 'prior_context'},
+                    'required_resolution': 'Map the requested measure and grouping to available fields. Do not choose a default business performance measure.',
+                }
+                if route_contract and route_contract.entities:
+                    contract = route_contract
+                elif model_already_used:
+                    contract = None
+                else:
+                    contract = resolve_model(query, prior or None, [f.name for f in fields], compact)
+                if contract and contract.route == ExecutionRoute.DATASET_ENGINE and contract.confidence >= .8:
+                    entities = contract.entities
+                    proposed_measure = field_for(entities.get('metric'), measures)
+                    proposed_dimension = field_for(entities.get('group_by', entities.get('dimension')), dimensions) or dimension
+                    if proposed_measure and proposed_dimension and not proposed_measure.unresolved_definition:
+                        plan = plan.model_copy(update={'intent': 'ranking', 'metric': _metric_key(proposed_measure),
+                            'entity_dimension': proposed_dimension.name, 'clarification_question': None})
+                        bindings = {'metric': proposed_measure.name, 'grouping': proposed_dimension.name}
+                        method = 'coordinator_model'
 
-        if plan.metric and measures:
-            resolved_measure = field_for(plan.metric, measures)
-            resolved_dimension = field_for(plan.entity_dimension, dimensions)
-            # Headcount is a verified count capability, not an invented measure.
-            if (not resolved_measure and plan.metric != 'headcount') or not resolved_dimension:
-                plan = plan.model_copy(update={'intent': 'ambiguity_clarification', 'metric': None})
-            elif resolved_measure:
-                bindings = {'metric': resolved_measure.name, 'grouping': resolved_dimension.name}
+            if plan.metric and measures:
+                resolved_measure = field_for(plan.metric, measures)
+                resolved_dimension = field_for(plan.entity_dimension, dimensions)
+                # Headcount is a verified count capability, not an invented measure.
+                if (not resolved_measure and plan.metric != 'headcount') or not resolved_dimension:
+                    plan = plan.model_copy(update={'intent': 'ambiguity_clarification', 'metric': None})
+                elif resolved_measure:
+                    bindings = {'metric': resolved_measure.name, 'grouping': resolved_dimension.name}
 
     if plan is None:
         return None

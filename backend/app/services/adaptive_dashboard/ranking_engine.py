@@ -188,7 +188,6 @@ LOWER_IS_BETTER_KEYWORDS = {
     "latency", "downtime", "incident", "error", "delay", "absenteeism", "bounce",
     "leave", "leaves", "failure", "fail", "penalty", "complaint", "return", "returns",
     "return_rate", "cancellation", "rejection", "unemployment", "deviation", "variance",
-    "so2", "no2", "pm10", "pm2.5", "pm2_5", "pollution", "pollutant", "aqi", "emission", "contaminant",
 }
 
 NON_ENTITY_TOKENS = {
@@ -323,6 +322,22 @@ class GenericEntityRankingEngine:
                     is_numeric = bool(prof.get("numeric")) or prof.get("physical_type", "").lower() in ("float", "int", "numeric", "real")
                     card = prof.get("distinct") or prof.get("cardinality", 0)
                     role = prof.get("semantic_role") or prof.get("probable_semantic_role") or ""
+
+                    # Grounded fallback: If profile_json is missing or unprofiled, infer from sheet_rows sample
+                    if not prof and sid:
+                        try:
+                            sample_vals = conn.execute(
+                                f'SELECT json_extract(data_json, ?) FROM sheet_rows WHERE sheet_id = ? AND json_extract(data_json, ?) IS NOT NULL LIMIT 25',
+                                (f'$.\"{col}\"', sid, f'$.\"{col}\"'),
+                            ).fetchall()
+                            raw_vals = [r[0] for r in sample_vals if r[0] is not None]
+                            if raw_vals:
+                                num_count = sum(1 for v in raw_vals if isinstance(v, (int, float)) and not isinstance(v, bool) or (isinstance(v, str) and re.match(r'^-?\d+(\.\d+)?$', str(v).strip())))
+                                if num_count / len(raw_vals) >= 0.7:
+                                    is_numeric = True
+                                card = len(set(str(v) for v in raw_vals))
+                        except Exception:
+                            pass
 
                     # Filter out synthetic interaction and internal columns
                     if any(low_c.startswith(prefix) for prefix in ("interact_", "col_")) or " + " in col:

@@ -17,6 +17,7 @@ Verifies:
 from __future__ import annotations
 
 import time
+from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
@@ -347,6 +348,7 @@ def test_11_context_fabric_rest_api_endpoints():
 
 def test_12_mcp_bypass_auditor_reports_zero_violations():
     """Scenario 12: MCPBypassAuditor confirms zero direct DB or service bypasses in agent layer."""
-    res = MCPBypassAuditor.audit_agent_layer("backend/app/agent")
+    agent_path = "backend/app/agent" if Path("backend/app/agent").exists() else "app/agent"
+    res = MCPBypassAuditor.audit_agent_layer(agent_path)
     assert res.is_compliant is True
     assert res.violation_count == 0, f"Detected bypass violations: {[v.line_content for v in res.violations]}"

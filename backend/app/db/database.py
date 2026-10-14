@@ -60,7 +60,7 @@ def init_db(conn: sqlite3.Connection | None = None) -> None:
 
 @contextmanager
 def session_scope(db_path: Path | None = None):
-    conn = get_connection(db_path)
+    conn = get_connection(db_path) if db_path is not None else get_connection()
     try:
         yield conn
         conn.commit()

@@ -160,7 +160,7 @@ export default function ExecutiveVisualCard({
   const chartHeight = useMemo(() => {
     if (heightClass === "tall") return "320px";
     if (heightClass === "short") return "190px";
-    return isHero ? "280px" : "230px";
+    return isHero ? "320px" : "230px";
   }, [heightClass, isHero]);
 
   const accessibleChartDescription = topic.primary_takeaway || topic.takeaway || topic.title || "Visual analytics chart.";
@@ -212,7 +212,7 @@ export default function ExecutiveVisualCard({
             <h3
               id={`topic-title-${topic.topic_id}`}
               className="visual-card__title card-compressed-title"
-              title={topic.title}
+              title={topic.technical_title || topic.title}
               aria-label={displayTitle}
               style={{
                 margin: 0,
@@ -229,16 +229,16 @@ export default function ExecutiveVisualCard({
           <div className="visual-card__actions-cell">
             <ActionIconButton
               action="details"
-              title={topic.title}
-              tooltip={`Explain ${topic.title}`}
-              ariaLabel={`Explain ${topic.title}`}
+              title={topic.technical_title || topic.title}
+              tooltip={`Explain ${topic.technical_title || topic.title}`}
+              ariaLabel={`Explain ${topic.technical_title || topic.title}`}
               onClick={() => onInspect && onInspect(topic)}
               size={14}
             />
             {contextualTarget && (
               <ActionIconButton
                 action="deep_dive"
-                title={topic.title}
+                title={topic.technical_title || topic.title}
                 tooltip={`${contextualTarget.label} in Data Explorer`}
                 ariaLabel={`${contextualTarget.label} in Data Explorer`}
                 href={contextualTarget.url}
@@ -265,7 +265,7 @@ export default function ExecutiveVisualCard({
                 className="visual-card__metric card-primary-number"
                 style={{
                   fontWeight: 800,
-                  fontSize: "0.88rem",
+                  fontSize: isHero ? "1.05rem" : "0.88rem",
                   color: intentColor,
                 }}
               >

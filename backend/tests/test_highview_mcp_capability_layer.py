@@ -16,6 +16,7 @@ Verifies:
 """
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 import pytest
 
@@ -245,10 +246,12 @@ def test_mcp_execution_ledger_records_every_call():
 
 def test_both_bypass_auditors_report_zero_violations():
     """Verifies that ControlPlaneBypassAuditor and MCPBypassAuditor both report 0 violations."""
-    cp_res = ControlPlaneBypassAuditor.audit_repository("backend/app")
+    scan_path = "backend/app" if Path("backend/app").exists() else "app"
+    cp_res = ControlPlaneBypassAuditor.audit_repository(scan_path)
     assert cp_res.is_compliant is True
     assert cp_res.violation_count == 0
 
-    mcp_res = MCPBypassAuditor.audit_agent_layer("backend/app/mcp")
+    mcp_path = "backend/app/mcp" if Path("backend/app/mcp").exists() else "app/mcp"
+    mcp_res = MCPBypassAuditor.audit_agent_layer(mcp_path)
     assert mcp_res.is_compliant is True
     assert mcp_res.violation_count == 0

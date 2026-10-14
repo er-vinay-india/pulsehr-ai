@@ -124,8 +124,19 @@ def build_executive_briefing_element(
                 formatted_nums.append(float(s))
             except ValueError:
                 pass
+    period_nums: list[float] = []
+    if period_phrase:
+        for s in re.findall(r"\d+(?:\.\d+)?", str(period_phrase)):
+            try:
+                period_nums.append(float(s))
+            except ValueError:
+                pass
 
-    base_primary_nums = ([primary_val] if (primary_val is not None and isinstance(primary_val, (int, float))) else []) + formatted_nums
+    base_primary_nums = (
+        ([primary_val] if (primary_val is not None and isinstance(primary_val, (int, float))) else [])
+        + formatted_nums
+        + period_nums
+    )
 
     if domain in ("workforce_hr", "hr"):
         scope_text = f"The attendance data represents {primary_formatted} employees{period_phrase}."

@@ -69,7 +69,24 @@ def plan_report(brief, audience, intent):
                 context={"audience": audience, "evidence_count": len(evidence)},
             )
         )
-        sections = fallback[:8]
+        if control_response.is_blocked:
+            return result
+
+        with httpx.Client(timeout=httpx.Timeout(12, connect=2)) as client:
+            response = client.post(
+                f'{config.OLLAMA_BASE_URL}/api/generate',
+                json={
+                    'model': config.OLLAMA_MODEL,
+                    'stream': False,
+                    'format': 'json',
+                    'prompt': prompt + '\n' + json.dumps({'audience': audience, 'question': intent, 'evidence': evidence}),
+                    'options': {'temperature': 0, 'num_predict': 700}
+                }
+            )
+            response.raise_for_status()
+            sections = validate_plan(json.loads(response.json()['response']), findings)
+        if not sections:
+            return {'sections': [], 'mode': 'unsupported', 'message': 'The available findings do not answer this question. Related evidence is shown separately; try another question or upload the missing measures.'}
         return {
             'sections': sections,
             'mode': 'ai',

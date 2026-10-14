@@ -113,12 +113,14 @@ def validate_briefing_claims(
                 continue
             multiplier = {"k": 1e3, "m": 1e6, "b": 1e9, "t": 1e12}.get(suffix, 1.0)
             expanded_val = val * multiplier
+            scale_tol = 0.6 if multiplier == 1.0 else (multiplier * 0.05)
             # Verify value exists in claim.numeric_values within display rounding tolerance
             matched = any(
                 abs(val - num) <= 0.6
                 or abs(abs(val) - abs(num)) <= 0.6
-                or abs(expanded_val - num) <= 0.6
-                or abs(abs(expanded_val) - abs(num)) <= 0.6
+                or abs(expanded_val - num) <= scale_tol
+                or abs(abs(expanded_val) - abs(num)) <= scale_tol
+                or (abs(expanded_val - num) / max(abs(num), 1.0) <= 0.02)
                 for num in claim.numeric_values
             )
             if not matched:

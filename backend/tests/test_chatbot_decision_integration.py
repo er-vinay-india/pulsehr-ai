@@ -29,7 +29,7 @@ def test_db(tmp_path, monkeypatch):
     """Initializes a clean SQLite database for testing."""
     db_path = tmp_path / "test_chatbot.db"
 
-    def get_test_conn():
+    def get_test_conn(path=None):
         conn = sqlite3.connect(db_path)
         conn.row_factory = sqlite3.Row
         return conn

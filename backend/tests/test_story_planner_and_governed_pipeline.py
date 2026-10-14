@@ -157,8 +157,9 @@ def test_live_engine_governed_pipeline_integration(seeded_attendance_sheet):
 def seeded_environmental_dataset():
     from pathlib import Path
     from app.services import sheet_catalog
+    _fixture_candidate = Path(__file__).resolve().parents[1] / "data" / "uploads" / "821964a8914147299f27c790eb371f54.csv"
+    fixture_path = _fixture_candidate if _fixture_candidate.exists() else Path("backend/data/uploads/821964a8914147299f27c790eb371f54.csv")
     conn = get_connection()
-    fixture_path = Path("backend/data/uploads/821964a8914147299f27c790eb371f54.csv")
     conn.execute(
         "INSERT OR REPLACE INTO dataset_uploads (id, filename, original_name, display_name, file_type) VALUES (?, ?, ?, ?, ?)",
         (100, "Location_data_2022.csv", "Location_data_2022.csv", "CPCB Air Quality 2022", "csv"),

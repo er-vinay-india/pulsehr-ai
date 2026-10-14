@@ -29,8 +29,8 @@ def hriday_test_env(tmp_path, monkeypatch):
     """Sets up a controlled SQLite database with HR attendance data including leading-zero IDs and ties."""
     db_path = tmp_path / "hriday_test.db"
 
-    def connection():
-        conn = sqlite3.connect(db_path)
+    def connection(target_path=None):
+        conn = sqlite3.connect(target_path or db_path)
         conn.row_factory = sqlite3.Row
         return conn
 

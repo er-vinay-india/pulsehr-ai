@@ -29,6 +29,8 @@ class EntityGrain(str, Enum):
     EMPLOYEE = "employee"
     DEPARTMENT = "department"
     STORE = "store"
+    CITY = "city"
+    LOCATION = "location"
     GLOBAL = "global"
     STUDENT = "student"
     CUSTOMER = "customer"

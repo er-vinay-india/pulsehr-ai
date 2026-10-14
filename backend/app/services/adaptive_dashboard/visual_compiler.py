@@ -250,6 +250,8 @@ class VisualCompiler:
                 },
             ],
         }
+        return option
+
     @classmethod
     def compile_100_percent_stacked_bar(
         cls,

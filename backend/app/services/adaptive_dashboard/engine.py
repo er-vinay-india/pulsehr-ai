@@ -60,7 +60,7 @@ from .source_data_loader import (
 
 logger = logging.getLogger(__name__)
 
-ENGINE_VERSION = "5.7.0"
+ENGINE_VERSION = "5.7.2"
 
 # Phase G5.1: Delegated to adaptive_dashboard.formatting submodule
 from .formatting.metric_formatter import (

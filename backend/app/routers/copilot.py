@@ -22,6 +22,7 @@ from ..services.copilot.union_war_room import UnionWarRoomEngine, COUNCIL_DELEGA
 from ..services.copilot.coordinator_models import RoutingAssignment, WorkerTarget, CoordinatorDecision
 from ..services.copilot.council_coordinator import CouncilCoordinator
 from ..services.copilot.control_plane import HighviewAI, HighviewAIRequest
+from ..services.reporting.workflow_orchestrator import _GENERIC_WORKFLOW_CACHE
 from ..services.data_engine.analysis_context import AnalysisContext
 from ..services.presentation.slide_mutator import (
     SlideMutator,
@@ -106,6 +107,10 @@ def _answer_from_shared_findings(query: str, sheet_id: int, dataset_name: str) -
     is_employee_query = bool(re.search(r'\b(who|whom|employee|employees|person|people|staff|worker|workers|emp|id)\b', q_low))
     has_calc_request = bool(re.search(r'\b(calculate|compute|less than|<|more than|>|at least)\b', q_low))
     if (is_employee_query or has_calc_request) and not any(phrase in q_low for phrase in ["how many employees", "total employees", "most employees"]):
+        return None
+
+    # Analytical column/metric queries (e.g. "present in the office", specific column lookups) belong to CouncilCoordinator
+    if any(k in q_low for k in ["present", "office", "roster", "hours", "ratio", "rate", "overtime", "salary"]):
         return None
 
     # Detect target metrics and directions with token/word boundaries
@@ -237,7 +242,7 @@ def _answer_from_shared_findings(query: str, sheet_id: int, dataset_name: str) -
             }
 
         # 4. Highest Attendance Department Query
-        if ((is_highest and is_explicit_dept) or ("highest attendance" in q_low or "most attendance" in q_low)) and not is_leave:
+        if ("highest attendance" in q_low or "most attendance" in q_low or (is_highest and is_explicit_dept and "attendance" in q_low)) and not is_leave:
             if resp.quinary_element and resp.quinary_element.items:
                 items_sorted = sorted(resp.quinary_element.items, key=lambda x: x.primary_value, reverse=True)
                 top_unit = items_sorted[0]
@@ -270,7 +275,7 @@ def _answer_from_shared_findings(query: str, sheet_id: int, dataset_name: str) -
                 }
 
         # 5. Lowest Attendance Department Query
-        if ((is_lowest and is_explicit_dept) or ("lowest attendance" in q_low or "least attendance" in q_low or is_general_dept)) and not is_leave:
+        if (("worst" in q_low and is_explicit_dept) or "lowest attendance" in q_low or "least attendance" in q_low or (is_lowest and is_explicit_dept and "attendance" in q_low) or is_general_dept) and not is_leave:
             if resp.quinary_element and resp.quinary_element.items:
                 items_sorted = sorted(resp.quinary_element.items, key=lambda x: x.primary_value)
                 bot_unit = items_sorted[0]
@@ -846,6 +851,17 @@ def ask_copilot(req: CopilotQueryRequest):
     if control_response.is_blocked:
         return {"answer": control_response.answer, "error": control_response.block_reason}
 
+    # 0c. Fact retrieval via shared findings store (T30, T31)
+    if target_sheet_id is not None:
+        direct_ans = _answer_from_shared_findings(req.query, target_sheet_id, name or "Uploaded Dataset")
+        if direct_ans is not None:
+            res = direct_ans
+            if isinstance(res, dict):
+                res["control_plane_audit"] = control_response.audit_record.to_dict()
+                res["provenance"] = control_response.provenance.to_dict()
+                res.setdefault("citations", [])
+            return finalize_identity_response(res, req.query)
+
     # 1a. Authoritative Council Coordinator routing
     decision = CouncilCoordinator.coordinate(
         query=req.query,
@@ -873,6 +889,7 @@ def ask_copilot(req: CopilotQueryRequest):
         if isinstance(res, dict):
             res["control_plane_audit"] = control_response.audit_record.to_dict()
             res["provenance"] = control_response.provenance.to_dict()
+            res.setdefault("citations", [])
         return res
 
     intent_type = classify_analytical_intent(
@@ -1074,6 +1091,29 @@ def ask_copilot_stream(req: CopilotQueryRequest):
             force_council=getattr(req, "force_council", False),
         )
     )
+
+    # 0c. Fact retrieval via shared findings store (T30, T31)
+    if target_sheet_id is not None:
+        direct_ans = _answer_from_shared_findings(req.query, target_sheet_id, name or "Uploaded Dataset")
+        if direct_ans is not None:
+            direct_ans = finalize_identity_response(direct_ans, req.query)
+            if isinstance(direct_ans, dict):
+                direct_ans["control_plane_audit"] = control_response.audit_record.to_dict()
+                direct_ans["provenance"] = control_response.provenance.to_dict()
+                direct_ans.setdefault("citations", [])
+            def _direct_stream():
+                yield f"event: status\ndata: {json.dumps({'status': 'Authoritative shared findings loaded', 'step': 'ready'})}\n\n"
+                answer = direct_ans["answer"]
+                words = answer.split(" ")
+                for i in range(0, len(words), 4):
+                    chunk = " ".join(words[i:i+4]) + " "
+                    yield f"event: token\ndata: {json.dumps({'token': chunk})}\n\n"
+                yield f"event: done\ndata: {json.dumps(direct_ans)}\n\n"
+            return StreamingResponse(
+                _direct_stream(),
+                media_type="text/event-stream",
+                headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"}
+            )
 
     # 1a. Authoritative Council Coordinator routing
     decision = CouncilCoordinator.coordinate(

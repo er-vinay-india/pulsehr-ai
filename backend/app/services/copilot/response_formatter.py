@@ -60,13 +60,16 @@ def format_analytical_response(
 
     Preserves identical calculations, dense ranks, and ties between brief and detailed.
     """
+    plan = result.get('query_plan') or {}
+    if result.get('status') in ('source_unavailable', 'insufficient_evidence', 'ambiguity_clarification_required') or plan.get('intent') in ('insufficient_evidence', 'ambiguity_clarification'):
+        return result.get('answer', '')
+
     if response_detail == 'detailed':
         # Detailed mode: Return full structured answer with tables, recommendations, and governance notes
         return result.get('detailed_answer') or result.get('answer', '')
 
     # Brief mode: Produce direct, concise factual finding with necessary qualifications beside the answer
     findings = result.get('findings') or {}
-    plan = result.get('query_plan') or {}
     raw_analysis = result.get('raw_analysis') or {}
 
     # Case 1: HR Period Attendance Analytics

@@ -67,12 +67,17 @@ class ExecutiveTopicFactory:
         inspect_payload.update({
             "topic_id": topic_id,
             "title": title,
+            "technical_title": draft.technical_title or title,
             "business_question": subtitle,
             "primary_takeaway": takeaway,
             "recommended_action": recommended_action,
             "analytical_intent": draft.analytical_intent,
             "evidence_ids": evidence_ids,
         })
+        if "fact_id" not in inspect_payload:
+            inspect_payload["fact_id"] = draft.tokens.get("fact_id") or (draft.narrative.get("fact_id") if isinstance(draft.narrative, dict) else None)
+        if "leader_entity" not in inspect_payload:
+            inspect_payload["leader_entity"] = draft.tokens.get("leader_entity") or (draft.narrative.get("leader_entity") if isinstance(draft.narrative, dict) else None)
 
         return ExecutiveTopic(
             topic_id=topic_id,
@@ -81,6 +86,7 @@ class ExecutiveTopicFactory:
             rank=draft.rank,
             portfolio_position=draft.portfolio_position,
             title=title,
+            technical_title=draft.technical_title or title,
             subtitle=subtitle,
             slot_type=draft.slot_type,
             dataset_id=draft.dataset_id,

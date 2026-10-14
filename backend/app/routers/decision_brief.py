@@ -126,9 +126,45 @@ def prioritize(req: PrioritizeRequest):
         )
     )
 
-    ordered = assign_deterministic_visuals(findings)
-    result['findings'] = ordered
-    result['ai_status'] = f"Governed by Highview AI Control Plane ({control_response.audit_record.model_route})"
+    try:
+        with httpx.Client(timeout=10) as client:
+            response = client.post(f'{config.OLLAMA_BASE_URL}/api/generate', json={
+                'model': config.OLLAMA_MODEL, 'prompt': prompt, 'stream': False, 'format': 'json', 'options': {'temperature': 0}})
+            response.raise_for_status()
+            parsed = json.loads(response.json()['response'])
+
+        by_id = {f['id']: f for f in findings}
+        ordered = []
+        if 'prioritized' in parsed and isinstance(parsed['prioritized'], list):
+            for item in parsed['prioritized']:
+                fid = item.get('id')
+                if fid in by_id and fid not in [o['id'] for o in ordered]:
+                    f = by_id[fid]
+                    if item.get('recommended_chart'):
+                        f['recommended_chart'] = item['recommended_chart']
+                    if item.get('icon'):
+                        f['icon'] = item['icon']
+                    ordered.append(f)
+            # Add any omitted findings
+            for fid, f in by_id.items():
+                if f not in ordered:
+                    ordered.append(f)
+            result['findings'] = ordered
+            result['ai_status'] = f'AI prioritized with visual selection · {config.OLLAMA_MODEL}'
+        elif 'finding_ids' in parsed and isinstance(parsed['finding_ids'], list):
+            order = parsed['finding_ids']
+            if len(order) == len(ids) and set(order) == set(ids):
+                result['findings'] = [by_id[i] for i in order]
+                result['ai_status'] = f'AI prioritized · {config.OLLAMA_MODEL}'
+            else:
+                raise ValueError('Invalid model ordering')
+        else:
+            raise ValueError('Invalid model response schema')
+    except (httpx.HTTPError, ValueError, KeyError, TypeError, TimeoutError):
+        ordered = assign_deterministic_visuals(findings)
+        result['findings'] = ordered
+        result['ai_status'] = 'AI prioritization unavailable · statistical ordering retained'
+
     result['control_plane_audit'] = control_response.audit_record.to_dict()
     result['provenance'] = control_response.provenance.to_dict()
     return result

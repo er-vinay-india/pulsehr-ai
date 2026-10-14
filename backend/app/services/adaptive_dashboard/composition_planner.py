@@ -1316,9 +1316,9 @@ class ExecutiveCompositionPlanner:
                     "values": p_values,
                     "podium_categories": podium_cats,
                     "secondary_ids": tokens.get("secondary_ids", []),
-                    "entity_grain": tokens.get("entity_grain", "PERSON"),
+                    "entity_grain": tokens.get("entity_grain", "PERSON" if is_workforce else "COHORT"),
                     "entity_column": tokens.get("entity_column", "ID"),
-                    "measure_column": tokens.get("measure_column", "Final Attendance"),
+                    "measure_column": tokens.get("measure_column") or (getattr(story, "primary_measure", None) if getattr(story, "primary_measure", None) != "metric" else None) or ("Final Attendance" if is_workforce else ("PM10" if "env" in domain_name.lower() or "air" in domain_name.lower() else "Performance")),
                     "unit": unit,
                     "analytical_intent": "RANKING",
                     "is_ranking_story": True,
@@ -1338,6 +1338,10 @@ class ExecutiveCompositionPlanner:
                 }
                 if series_data:
                     v_spec["series"] = series_data
+                if "primary_label" in tokens and tokens["primary_label"]:
+                    v_spec["primary_label"] = tokens["primary_label"]
+                if "secondary_label" in tokens and tokens["secondary_label"]:
+                    v_spec["secondary_label"] = tokens["secondary_label"]
                 if "benchmark" in tokens:
                     v_spec["benchmark"] = tokens["benchmark"]
                 if "heatmap_data" in tokens:
@@ -1377,6 +1381,18 @@ class ExecutiveCompositionPlanner:
                 v_spec["measure_column"] = tokens.get("measure_column") or v_spec.get("measure_column") or getattr(story, "primary_measure", "") or m_name
                 v_spec["entity_grain"] = tokens.get("entity_grain", v_spec.get("entity_grain", "PERSON" if chart_type == "podium_top_3" else "DEPARTMENT"))
 
+                # Invariant: Sort once descending to establish ranked truth
+                v_c = v_spec.get("categories") or []
+                v_v = v_spec.get("values") or []
+                if v_c and v_v and len(v_c) == len(v_v):
+                    s_pairs = sorted(zip(v_c, v_v), key=lambda x: x[1], reverse=True)
+                    v_spec["categories"] = [p[0] for p in s_pairs]
+                    v_spec["values"] = [p[1] for p in s_pairs]
+
+                v_spec["leader_entity"] = tokens.get("leader_entity") or (v_spec["categories"][0] if v_spec.get("categories") else None)
+                v_spec["leader_value"] = tokens.get("leader_value") if tokens.get("leader_value") is not None else (v_spec["values"][0] if v_spec.get("values") else None)
+                v_spec["fact_id"] = tokens.get("fact_id") or f"FACT-RANK-{v_spec.get('entity_column')}-{v_spec.get('measure_column')}-{v_spec.get('leader_entity')}"
+
             mark_audit = VisualDataPresenceIntegrity.evaluate(v_spec)
             if not mark_audit.is_valid and chart_type != "podium_top_3":
                 continue
@@ -1404,6 +1420,9 @@ class ExecutiveCompositionPlanner:
                     visual_spec=v_spec,
                     tokens={
                         **tokens,
+                        "values": v_spec.get("values", []),
+                        "categories": v_spec.get("categories", []),
+                        "business_question": getattr(story, "business_question", ""),
                         "takeaway": getattr(story, "takeaway", ""),
                         "key_metric": getattr(story, "key_metric", ""),
                         "unit": unit,
@@ -1486,13 +1505,25 @@ class ExecutiveCompositionPlanner:
             v_spec["dataset_id"] = dataset_id
             v_spec["domain"] = domain_name
 
+            tech_title = getattr(story, "title", f"Topic {out_idx}")
+            exec_title = SemanticVisualCompressionLayer.derive_business_question_title(
+                title=tech_title,
+                subtitle=getattr(story, "business_question", "") or getattr(story, "subtitle", ""),
+                intent=item.intent,
+                tokens=item.tokens,
+                domain=domain_name,
+            )
             narrative_dict = {
                 "topic_id": t_id,
-                "title": getattr(story, "title", f"Topic {out_idx}"),
+                "title": exec_title,
+                "technical_title": tech_title,
                 "subtitle": getattr(story, "business_question", ""),
                 "finding": getattr(story, "takeaway", ""),
                 "takeaway": getattr(story, "takeaway", ""),
                 "recommended_action": getattr(story, "recommended_action", ""),
+                "fact_id": v_spec.get("fact_id"),
+                "leader_entity": v_spec.get("leader_entity"),
+                "leader_value": v_spec.get("leader_value"),
             }
 
             draft = ExecutiveTopicDraft(
@@ -1508,6 +1539,8 @@ class ExecutiveCompositionPlanner:
                 semantic_family=item.semantic_family,
                 periods=getattr(story, "periods", []),
                 slot_type="hero" if item.is_hero else (item.suggested_role if item.suggested_role in ("hero", "supporting", "risk_anomaly", "action_scenario") else "supporting"),
+                title=exec_title,
+                technical_title=tech_title,
                 priority=out_idx,
                 priority_score=item.portfolio_score,
                 confidence=item.confidence,
@@ -1521,6 +1554,9 @@ class ExecutiveCompositionPlanner:
                     "renderable_series_count": mark_audit.renderable_series_count,
                     "rendered_mark_count": mark_audit.rendered_mark_count,
                     "visual_spec": v_spec,
+                    "fact_id": v_spec.get("fact_id"),
+                    "leader_entity": v_spec.get("leader_entity"),
+                    "leader_value": v_spec.get("leader_value"),
                 },
                 inspect_payload={
                     "story_id": item.item_id,
@@ -1534,6 +1570,9 @@ class ExecutiveCompositionPlanner:
                     "evidence_ids": getattr(story, "evidence_ids", []),
                     "topic_id": t_id,
                     "ranking_metadata": ranking_meta,
+                    "fact_id": v_spec.get("fact_id"),
+                    "leader_entity": v_spec.get("leader_entity"),
+                    "leader_value": v_spec.get("leader_value"),
                 },
                 visual_microcopy=item.visual_microcopy,
             )

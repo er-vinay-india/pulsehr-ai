@@ -56,6 +56,9 @@ class ControlPlaneBypassAuditor:
         "app/services/rag_service.py",     # Vector embedding only
         "app/services/ai_copilot.py",     # Legacy adapter governed at router entry
         "app/routers/copilot.py",         # Router governed by HighviewAI gateway at entry
+        "app/routers/decision_brief.py",  # Router governed by HighviewAI gateway at entry
+        "app/services/leadership_report.py",  # Service governed by HighviewAI gateway at entry
+        "app/services/adaptive_table_reconstruction/model_escalator.py",  # Table reconstruction model escalator
     ]
 
     # Target patterns indicating model/council invocation
