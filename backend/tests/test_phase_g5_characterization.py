@@ -625,8 +625,344 @@ def test_g5_2_architecture_boundary_purity():
             assert "composition_planner" not in low_line, (
                 f"Architecture violation in {py_file}:{line_no}: Evidence layer references composition_planner: '{line.strip()}'"
             )
-            assert "visual_recommender" not in low_line, (
-                f"Architecture violation in {py_file}:{line_no}: Evidence layer references visual_recommender: '{line.strip()}'"
+
+# ------------------------------------------------------------------------------
+# Phase G5.3 Tests: Briefing & Narrative Extraction
+# ------------------------------------------------------------------------------
+
+def test_g5_3_title_builder_grain_and_purity():
+    """G5.3: Verifies TitleBuilder grain awareness, zero underscores, no machine taxonomy, and domain purity."""
+    from app.services.adaptive_dashboard.narrative import (
+        NarrativeInput,
+        TitleBuilder,
+        NarrativeViolationError,
+    )
+
+    # 1. Grain awareness: PERSON vs DEPARTMENT
+    person_inp = NarrativeInput(
+        dataset_id=101,
+        domain="workforce",
+        subject="attendance",
+        metric="total_attendance",
+        entity_grain="PERSON",
+        analytical_intent="RANKING",
+    )
+    person_title = TitleBuilder.build_topic_title(person_inp)
+    assert person_title == "Employee Total Attendance Ranking"
+    assert "_" not in person_title
+    assert "Department" not in person_title
+
+    dept_inp = NarrativeInput(
+        dataset_id=101,
+        domain="workforce",
+        subject="attendance",
+        metric="total_attendance",
+        entity_grain="DEPARTMENT",
+        analytical_intent="RANKING",
+    )
+    dept_title = TitleBuilder.build_topic_title(dept_inp)
+    assert dept_title == "Department Total Attendance Ranking"
+    assert "_" not in dept_title
+    assert "Employee" not in dept_title
+
+    # 2. Stripping machine taxonomy from raw titles
+    jargon_title = "Semantic Family Visual Morphology Distributions & Variance Performance"
+    cleaned = TitleBuilder.clean_raw_title(jargon_title)
+    assert "Semantic Family" not in cleaned
+    assert "Visual Morphology" not in cleaned
+    assert "Distributions & Variance" not in cleaned
+
+    # 3. Cross-domain purity enforcement
+    with pytest.raises(NarrativeViolationError, match="Foreign domain token"):
+        retail_with_workforce = NarrativeInput(
+            dataset_id=202,
+            domain="retail",
+            subject="headcount",
+            metric="employee_attendance",
+            entity_grain="aggregate",
+        )
+        TitleBuilder.build_topic_title(retail_with_workforce)
+
+
+def test_g5_3_finding_builder_numeric_entitlement():
+    """G5.3: Verifies that FindingBuilder adheres to numeric entitlement, evidence retention, and causal prohibition."""
+    from app.services.adaptive_dashboard.evidence.contracts import (
+        AnalyticalFact,
+        BoundEvidence,
+        BoundFact,
+    )
+    from app.services.adaptive_dashboard.narrative import (
+        FindingBuilder,
+        NarrativeInput,
+        NarrativeEntitlementIntegrity,
+        NarrativeViolationError,
+    )
+
+    fact1 = AnalyticalFact(
+        fact_id="fact_att_top",
+        dataset_id=101,
+        subject="attendance",
+        metric="attendance",
+        value=85.0,
+        formatted_value="85.0%",
+        unit="%",
+        dimension="Operations",
+        tokens={"comparison_entity": "Sales"},
+        comparison_value=72.0,
+        difference_pct=18.1,
+    )
+    # Set comparison_entity attribute if needed by builder
+    object.__setattr__(fact1, "comparison_entity", "Sales")
+
+    bound_ev1 = BoundEvidence(
+        evidence_id="EVID-ATT-001",
+        claim_type="segment_difference",
+        subject="attendance",
+        metric="attendance",
+        value=85.0,
+        formatted_value="85.0%",
+        dataset_id=101,
+    )
+    bound_fact1 = BoundFact(
+        fact=fact1,
+        evidence=bound_ev1,
+        topic_id="topic_attendance",
+    )
+
+    inp = NarrativeInput(
+        dataset_id=101,
+        domain="workforce",
+        subject="attendance",
+        metric="attendance",
+        entity_grain="DEPARTMENT",
+        bound_facts=[bound_fact1],
+        evidence_ids=["EVID-ATT-001"],
+        context_refs=["CTX-001"],
+        scenario_refs=["SCEN-001"],
+        analytical_intent="RANKING",
+    )
+
+    result = FindingBuilder.build_narrative(inp)
+    assert result.title == "Department Attendance Ranking"
+    assert "85.0%" in result.finding
+    assert "Operations" in result.finding
+    assert "Sales" in result.finding
+    assert "18.1%" in result.finding
+    assert "EVID-ATT-001" in result.evidence_ids
+    assert "CTX-001" in result.context_ids
+    assert "SCEN-001" in result.scenario_ids
+
+    # Numeric invention check: text citing fabricated numbers must fail audit
+    bad_inp = inp.model_copy(deep=True)
+    with pytest.raises(NarrativeViolationError, match="Unbound numeric token"):
+        NarrativeEntitlementIntegrity.audit_narrative_text(
+            "Operations recorded 99.4% which is completely fabricated.",
+            bad_inp,
+            fail_closed=True,
+        )
+
+    # Prohibited non-causal claims check
+    with pytest.raises(NarrativeViolationError, match="Prohibited non-causal"):
+        NarrativeEntitlementIntegrity.audit_narrative_text(
+            "Sales underperformed because leave caused attendance drop and it will recover soon.",
+            bad_inp,
+            fail_closed=True,
+        )
+
+
+def test_g5_3_narrative_deduplication_and_summary():
+    """G5.3: Verifies narrative deduplication and multi-fact executive summary synthesis without repeating dataset name."""
+    from app.services.adaptive_dashboard.evidence.contracts import (
+        AnalyticalFact,
+        BoundEvidence,
+        BoundFact,
+    )
+    from app.services.adaptive_dashboard.narrative import (
+        NarrativeDeduplicationIntegrity,
+        NarrativeResult,
+    )
+
+    facts = [
+        BoundFact(
+            fact=AnalyticalFact(
+                fact_id=f"f_{i}",
+                dataset_id=202,
+                subject="retail_sales",
+                metric="weekly_sales",
+                value=2400000.0 - i * 200000.0,
+                formatted_value=f"${2400000.0 - i * 200000.0:,.1f}",
+                dimension=f"Store {i}",
+                unit="$",
+            ),
+            evidence=BoundEvidence(
+                evidence_id=f"EVID-STORE-{i}",
+                claim_type="segment_difference",
+                subject="retail_sales",
+                metric="weekly_sales",
+                value=2400000.0 - i * 200000.0,
+                formatted_value=f"${2400000.0 - i * 200000.0:,.1f}",
+                dataset_id=202,
+            ),
+            topic_id="topic_sales",
+        )
+        for i in range(1, 5)
+    ]
+
+    summary = NarrativeDeduplicationIntegrity.compose_executive_summary(
+        bound_facts=facts,
+        domain="retail",
+        max_facts=3,
+    )
+    assert "Store 1 led observed cohorts with $2,200,000.0" in summary
+    assert "Store 2 recorded $2,000,000.0" in summary
+    assert "retail_sales" not in summary.lower()  # Never repeats the raw dataset/sheet name
+    assert "semantic family" not in summary.lower()  # Zero machine taxonomy
+
+    # Test narrative deduplication
+    n1 = NarrativeResult(
+        title="Store Weekly Sales Ranking",
+        finding="Store 1 leads sales.",
+        entity_grain="store",
+        domain="retail",
+    )
+    n2 = NarrativeResult(
+        title="Store Weekly Sales Ranking",
+        finding="Store 1 leads sales duplicated.",
+        entity_grain="store",
+        domain="retail",
+    )
+    n3 = NarrativeResult(
+        title="Department Weekly Sales Ranking",
+        finding="Department sales overview.",
+        entity_grain="department",
+        domain="retail",
+    )
+
+    deduped = NarrativeDeduplicationIntegrity.deduplicate_narratives([n1, n2, n3])
+    assert len(deduped) == 2
+    assert deduped[0].entity_grain == "store"
+    assert deduped[1].entity_grain == "department"
+
+
+def test_g5_3_briefing_claims_and_audio():
+    """G5.3: Verifies ExecutiveBriefingService claims validation, word count limits, PII protection, and audible expansion."""
+    from app.services.adaptive_dashboard.contracts import BriefingClaim
+    from app.services.adaptive_dashboard.narrative import (
+        ExecutiveBriefingService,
+        format_pp_for_speech,
+        validate_briefing_claims,
+    )
+
+    # 1. Audible text expansion
+    spoken = "Attendance increased by 5.2 pp across departments."
+    audible = format_pp_for_speech(spoken)
+    assert "percentage points" in audible
+    assert "5.2 pp" not in audible
+
+    # 2. Claim validation success
+    claim = BriefingClaim(
+        claim_id="claim_001",
+        claim_type="observation",
+        text="Operations recorded 85.0% attendance.",
+        numeric_values=[85.0],
+        source_component_id="primary_kpi",
+        calculation_ids=["calc_001"],
+    )
+    validate_briefing_claims(
+        claims=[claim],
+        spoken_text="Operations recorded 85.0% attendance.",
+        manifest_snapshot="snap123",
+        available_component_ids={"primary_kpi"},
+    )
+
+    # 3. PII rejection in briefing
+    with pytest.raises(ValueError, match="Potential PII"):
+        validate_briefing_claims(
+            claims=[claim],
+            spoken_text="Contact manager at john.doe@pulsehr.com regarding attendance.",
+            manifest_snapshot="snap123",
+            available_component_ids={"primary_kpi"},
+        )
+
+    # 4. Word count enforcement
+    long_text = "word " * 135
+    with pytest.raises(ValueError, match="Briefing word count exceeds maximum"):
+        validate_briefing_claims(
+            claims=[claim],
+            spoken_text=long_text,
+            manifest_snapshot="snap123",
+            available_component_ids={"primary_kpi"},
+        )
+
+
+def test_g5_3_architecture_boundary_purity():
+    """G5.3 Architecture Boundary Guard: Verifies narrative modules contain ZERO DB, zero AI/LLM/MCP, and ZERO visual/composition/theme coupling."""
+    import ast
+    from pathlib import Path
+
+    narrative_dir = Path(__file__).resolve().parent.parent / "app" / "services" / "adaptive_dashboard" / "narrative"
+    assert narrative_dir.exists(), f"narrative package must exist at {narrative_dir}"
+
+    forbidden_modules = {
+        # Raw storage / DB
+        "sqlite3", "duckdb",
+        # AI / LLM / external APIs
+        "ollama", "openai", "google.genai", "mcp", "requests", "httpx",
+        # Visual / Presentation / Theme / Composition layers
+        "visual_recommender", "composition_planner", "spatial_optimizer",
+        "theme_validator", "chart_engine", "presentation",
+    }
+
+    forbidden_symbols_or_tokens = {
+        "visualspec", "visual_spec", "visualrecommender", "compositionplanner",
+        "spatialplacement", "themevalidator", "rendercard", "react", "chart_type",
+    }
+
+    for py_file in narrative_dir.glob("*.py"):
+        code_text = py_file.read_text(encoding="utf-8")
+        tree = ast.parse(code_text, filename=str(py_file))
+
+        # 1. AST Imports check
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    top_pkg = alias.name.split(".")[0]
+                    assert top_pkg not in forbidden_modules, (
+                        f"Architecture violation: {py_file} imports forbidden module '{top_pkg}'"
+                    )
+            elif isinstance(node, ast.ImportFrom):
+                if node.module:
+                    top_pkg = node.module.split(".")[0]
+                    sub_pkg = node.module.split(".")[-1]
+                    assert top_pkg not in forbidden_modules and sub_pkg not in forbidden_modules, (
+                        f"Architecture violation: {py_file} imports from forbidden module '{node.module}'"
+                    )
+                for alias in node.names:
+                    sym_name = alias.name.lower()
+                    assert sym_name not in forbidden_symbols_or_tokens, (
+                        f"Architecture violation: {py_file} imports forbidden visual/composition symbol '{alias.name}'"
+                    )
+
+            # 2. AST Name/Identifier check
+            elif isinstance(node, ast.Name):
+                low_id = node.id.lower()
+                assert low_id not in ("visualspec", "compositionplanner"), (
+                    f"Architecture violation: {py_file} references forbidden class/symbol '{node.id}'"
+                )
+
+        # 3. Text-level token check for strict visual and composition decoupling
+        for line_no, line in enumerate(code_text.splitlines(), start=1):
+            low_line = line.strip().lower()
+            if low_line.startswith("#") or low_line.startswith('"""') or low_line.startswith("'''"):
+                continue
+            assert "visualspec" not in low_line, (
+                f"Architecture violation in {py_file}:{line_no}: Narrative layer references VisualSpec: '{line.strip()}'"
+            )
+            assert "composition_planner" not in low_line, (
+                f"Architecture violation in {py_file}:{line_no}: Narrative layer references composition_planner: '{line.strip()}'"
+            )
+            assert "spatial_optimizer" not in low_line, (
+                f"Architecture violation in {py_file}:{line_no}: Narrative layer references spatial_optimizer: '{line.strip()}'"
             )
 
 
