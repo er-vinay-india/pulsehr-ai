@@ -1995,5 +1995,144 @@ def test_g5_6_characterization_equivalence():
                     assert exp_c["chart_archetype"] == act_c["chart_archetype"]
 
 
+def test_g5_7_engine_ast_purity():
+    """Phase G5.7: Verifies that engine.py is a pure orchestration facade with ZERO raw DB, AI SDKs, theme, or spatial packing."""
+    import ast
+    from pathlib import Path
+
+    engine_file = Path(__file__).resolve().parent.parent / "app" / "services" / "adaptive_dashboard" / "engine.py"
+    assert engine_file.exists(), f"engine.py must exist at {engine_file}"
+
+    forbidden_modules = {
+        # Raw storage / DB
+        "sqlite3", "duckdb",
+        # AI / LLM / external APIs
+        "ollama", "openai", "google.genai", "mcp", "requests", "httpx",
+        # Theme / frontend
+        "theme_validator", "react", "css",
+        # Spatial placement logic
+        "spatial_composition_optimizer",
+    }
+
+    code_text = engine_file.read_text(encoding="utf-8")
+    tree = ast.parse(code_text, filename=str(engine_file))
+
+    # 1. Imports check
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                top_pkg = alias.name.split(".")[0]
+                assert top_pkg not in forbidden_modules, f"Forbidden import in engine.py: {alias.name}"
+        elif isinstance(node, ast.ImportFrom):
+            mod = node.module or ""
+            for fm in forbidden_modules:
+                assert fm not in mod, f"Forbidden from-import in engine.py: {mod}"
+
+    # 2. Raw SQL / execute checks (all database operations must be delegated to source_data_loader)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            if isinstance(node.func, ast.Attribute) and node.func.attr == "execute":
+                raise AssertionError(f"engine.py must not execute raw SQL queries; found raw execute at line {node.lineno}")
+
+    # 3. Direct hashing checks (topic hashing must be delegated to topics/ package)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            if isinstance(node.func, ast.Attribute) and node.func.attr in ("hexdigest", "sha256", "md5"):
+                raise AssertionError(f"engine.py must not perform low-level hashing; found {node.func.attr} at line {node.lineno}")
 
 
+def test_g5_7_packages_do_not_import_engine():
+    """Phase G5.7: Verifies that all 6 extracted packages have ZERO imports of engine.py (strict downward dependency direction)."""
+    import ast
+    from pathlib import Path
+
+    packages = ["formatting", "evidence", "narrative", "topics", "visuals", "composition"]
+    base_dir = Path(__file__).resolve().parent.parent / "app" / "services" / "adaptive_dashboard"
+
+    violations = []
+    for pkg in packages:
+        pkg_dir = base_dir / pkg
+        for py_file in pkg_dir.glob("**/*.py"):
+            code_text = py_file.read_text(encoding="utf-8")
+            tree = ast.parse(code_text, filename=str(py_file))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    for alias in node.names:
+                        if "engine" in alias.name:
+                            violations.append((str(py_file.relative_to(base_dir)), alias.name))
+                elif isinstance(node, ast.ImportFrom):
+                    mod = node.module or ""
+                    if "engine" in mod:
+                        violations.append((str(py_file.relative_to(base_dir)), mod))
+                    for alias in node.names:
+                        if alias.name == "engine":
+                            violations.append((str(py_file.relative_to(base_dir)), f"from {mod} import {alias.name}"))
+
+    assert violations == [], f"Extracted packages must NEVER import engine: {violations}"
+
+
+def test_g5_7_engine_delegation_facade():
+    """Phase G5.7: Verifies that engine.py re-exports formatting utilities and legacy element builders transparently."""
+    from app.services.adaptive_dashboard import engine
+
+    # Verify formatting utilities re-exported
+    assert hasattr(engine, "compute_source_snapshot")
+    assert hasattr(engine, "format_compact_number")
+    assert hasattr(engine, "format_duration_short")
+    assert hasattr(engine, "calendar_month_range")
+    assert hasattr(engine, "parse_iso_date")
+    assert hasattr(engine, "clean_metric_name")
+    assert hasattr(engine, "safe_title")
+
+    # Verify legacy builders re-exported
+    assert hasattr(engine, "classify_domain_and_persona")
+    assert hasattr(engine, "profile_source")
+    assert hasattr(engine, "evaluate_and_select_primary_metric")
+    assert hasattr(engine, "build_average_logged_time_chart")
+    assert hasattr(engine, "build_temporal_measure_chart")
+    assert hasattr(engine, "build_segment_disparity_element")
+    assert hasattr(engine, "build_decision_focus_element")
+
+    # Test execution through engine facade
+    snap = engine.compute_source_snapshot(101, ["ColA", "ColB"], [{"ColA": 1, "ColB": 2}])
+    assert isinstance(snap, str) and len(snap) == 16
+
+    manifest, contract = engine.profile_source(
+        sheet_id=101,
+        sheet_name="TestSheet",
+        file_name="test.csv",
+        display_name="Test Display",
+        columns=["ColA", "ColB"],
+        rows=[{"ColA": 1, "ColB": 2}],
+    )
+    assert manifest.sheet_id == 101
+    assert contract.domain in ("workforce_hr", "general_tabular", "commercial_retail", "demographics_public")
+
+
+def test_g5_7_orchestration_pipeline_contract():
+    """Phase G5.7: Verifies end-to-end dataset intelligence pipeline through the clean engine facade."""
+    from pathlib import Path
+    from app.services.adaptive_dashboard.engine import run_adaptive_dashboard
+
+    # Ensure benchmark dataset 99770 (Workforce) is seeded in test DB
+    real_db = Path(__file__).resolve().parents[1] / "data" / "db" / "pulsehr.sqlite3"
+    with session_scope() as conn:
+        has_99770 = conn.execute("SELECT 1 FROM dataset_uploads WHERE id = 99770").fetchone()
+        if not has_99770 and real_db.exists():
+            conn.execute(f'ATTACH DATABASE "{real_db}" AS real_source')
+            conn.execute("INSERT OR REPLACE INTO dataset_uploads (id, filename, original_name, file_type, display_name) SELECT id, filename, original_name, file_type, display_name FROM real_source.dataset_uploads WHERE id IN (99770, 99771, 99772)")
+            conn.execute("INSERT OR REPLACE INTO sheets (id, dataset_id, name, display_name, columns_json, profile_json, row_count) SELECT id, dataset_id, name, display_name, columns_json, profile_json, row_count FROM real_source.sheets WHERE dataset_id IN (99770, 99771, 99772)")
+            conn.execute("INSERT OR REPLACE INTO sheet_rows (id, sheet_id, row_index, data_json) SELECT id, sheet_id, row_index, data_json FROM real_source.sheet_rows WHERE sheet_id IN (SELECT id FROM real_source.sheets WHERE dataset_id IN (99770, 99771, 99772))")
+            conn.commit()
+            conn.execute("DETACH DATABASE real_source")
+
+    resp = run_adaptive_dashboard(dataset_id=99770, include_dataset_intelligence=True)
+    assert resp.run_status == "ready"
+    assert resp.dataset_id == 99770
+    assert resp.manifest is not None
+    assert resp.contract is not None
+    assert len(resp.executive_topics) > 0
+    assert resp.layout_plan is not None
+    assert resp.layout_plan["total_cards"] > 0
+    assert resp.executive_integrity is not None
+    assert resp.executive_integrity["grounding"] == "Passed"

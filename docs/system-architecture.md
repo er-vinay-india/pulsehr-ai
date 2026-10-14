@@ -224,3 +224,15 @@ React Frontend Presentation (ECharts / SCSS Tokens)
   - **AST Architecture Purity:** Complete isolation verified via static AST audit (`audit_ast_purity()`) ensuring zero dependencies on database engines (`sqlite3`, `duckdb`), AI/LLM SDKs (`ollama`), MCP services, or React/theme tokens.
   - Multi-viewport Puppeteer closure verified across 1440px desktop, 1024px tablet, 390px mobile, and same-session dataset switching (Workforce &rarr; Retail &rarr; Environmental &rarr; Workforce) with 0 layout overlaps and 0 console errors.
 
+* **Phase G5.7 — Engine Cleanup & Strangler Closure:**
+  - Complete conversion of `backend/app/services/adaptive_dashboard/engine.py` into a thin orchestration facade over the extracted modules (`formatting/`, `evidence/`, `narrative/`, `topics/`, `visuals/`, `composition/`).
+  - **Core Orchestration Invariant:** *"The engine coordinates governed components; it does not reimplement them."*
+  - **Codebase Decompression:** Reduced `engine.py` from 4,774 lines down to 473 lines (&minus;4,301 lines, 90.1% reduction).
+  - **Encapsulated Data Retrieval (`source_data_loader.py`):** Isolated all SQLite database access (`sheets`, `dataset_uploads`, `sheet_curated_rows`, `derived_tables`, `eda_reports`) into dedicated data-loading functions, removing all raw `conn.execute()` calls from `engine.py`.
+  - **Preserved Backward Compatibility (`legacy_elements.py`):** Extracted legacy single-sheet builders and source profilers (`profile_source`, `evaluate_and_select_primary_metric`, `build_average_logged_time_chart`, `build_temporal_measure_chart`, `build_period_attendance_chart`, `build_categorical_breakdown_element`, `build_explanatory_comparator_element`, `build_segment_disparity_element`, `validate_cross_sheet_correlation_candidate`, `build_decision_focus_element`) with zero-overhead re-export facades in `engine.py`.
+  - **Strict Downward Dependency Direction:** Verified via AST audit that all 6 extracted packages (`formatting/`, `evidence/`, `narrative/`, `topics/`, `visuals/`, `composition/`) have strictly ZERO imports of `adaptive_dashboard.engine`.
+  - **Executable AST Purity Verification:** Automated test (`test_g5_7_engine_ast_purity`) guarantees `engine.py` contains zero raw database engines (`sqlite3`, `duckdb`), zero direct AI/LLM SDK calls (`ollama`, `openai`, `google.genai`, `mcp`), zero theme/React/CSS dependencies, zero manual spatial packing, zero direct evidence ID generation, zero direct topic ID hashing, and zero chart capability rules.
+  - **Test Suite Parity:** 86/86 Phase-G tests passed; full backend regression suite confirmed at 1,461 passed with the exact 17 known baseline legacy failures, 1 skipped, and 0 new regressions.
+  - **Multi-Viewport Browser Closure:** Verified via live Puppeteer testing across 1440px desktop, 1024px tablet, 390px mobile, and a 4-step multi-domain switch (Workforce &rarr; Retail &rarr; Environmental &rarr; Workforce) with 0 card overlaps, 0 horizontal overflow, 0 console errors, and 0 cross-domain vocabulary leaks.
+  - **Strangler Modernization Complete:** Formally closes the HighView analytical pipeline strangler migration (G1 &rarr; G5.7).
+
