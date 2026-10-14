@@ -12,6 +12,7 @@ Acceptance Gates:
 5. Partial row quality: span-6 isolated cards right-sized with is_intentional_partial.
 6. Layout generation performance (< 10ms execution budget).
 """
+from pathlib import Path
 import pytest
 import time
 from app.services.adaptive_dashboard.composition.contracts import (
@@ -29,6 +30,26 @@ from app.services.adaptive_dashboard.composition.planner import (
     DashboardLayoutPlan,
 )
 from app.services.adaptive_dashboard.composition_planner import ExecutiveTopic
+
+
+@pytest.fixture(scope="function", autouse=True)
+def seed_benchmark_datasets():
+    """Ensure benchmark datasets (99770, 99771, 99772) are available in test db."""
+    from app.db.database import get_connection
+    real_db = Path(__file__).resolve().parents[1] / "data" / "db" / "pulsehr.sqlite3"
+    with get_connection() as conn:
+        has_99770 = conn.execute("SELECT 1 FROM dataset_uploads WHERE id = 99770").fetchone()
+        if not has_99770 and real_db.exists():
+            conn.execute(f'ATTACH DATABASE "{real_db}" AS real_source')
+            conn.execute("INSERT OR REPLACE INTO dataset_uploads (id, filename, original_name, file_type, display_name) SELECT id, filename, original_name, file_type, display_name FROM real_source.dataset_uploads WHERE id IN (99770, 99771, 99772)")
+            conn.execute("INSERT OR REPLACE INTO sheets (id, dataset_id, name, display_name, columns_json, profile_json, row_count) SELECT id, dataset_id, name, display_name, columns_json, profile_json, row_count FROM real_source.sheets WHERE dataset_id IN (99770, 99771, 99772)")
+            conn.execute("INSERT OR REPLACE INTO sheet_rows (id, sheet_id, row_index, data_json) SELECT id, sheet_id, row_index, data_json FROM real_source.sheet_rows WHERE sheet_id IN (SELECT id FROM real_source.sheets WHERE dataset_id IN (99770, 99771, 99772))")
+            try:
+                conn.execute("INSERT OR REPLACE INTO sheet_relationships SELECT * FROM real_source.sheet_relationships WHERE left_sheet_id IN (SELECT id FROM real_source.sheets WHERE dataset_id IN (99770, 99771, 99772))")
+            except Exception:
+                pass
+            conn.commit()
+            conn.execute("DETACH DATABASE real_source")
 
 
 def test_track2_3_chart_readability_profiles_and_archetypes():
@@ -219,3 +240,88 @@ def test_track2_3_layout_plan_generation_performance():
 
     # Must be sub-10ms (typical is 0.5 - 2.0ms)
     assert elapsed_ms < 10.0
+
+
+def test_track2_3_canonical_24_topics_semantic_invariance():
+    """Validates complete 14-field semantic invariance and VisualSpec hashes for all 24 canonical topics."""
+    from app.services.adaptive_dashboard import run_adaptive_dashboard
+    from app.services.adaptive_dashboard.composition.integrity import CompositionIntegrity
+
+    benchmark_datasets = [99770, 99771, 99772]
+    total_verified = 0
+
+    for ds in benchmark_datasets:
+        res = run_adaptive_dashboard(sheet_id=None, dataset_id=ds, include_dataset_intelligence=True)
+        topics = res.executive_topics or []
+        assert len(topics) == 8, f"Dataset {ds} must have exactly 8 canonical executive topics"
+
+        for t in topics:
+            tid = t.get("topic_id") if isinstance(t, dict) else getattr(t, "topic_id", "")
+            pre_fp = CompositionIntegrity.extract_canonical_semantic_fingerprint(t)
+            pre_hash = CompositionIntegrity.compute_canonical_semantic_hash(t)
+            pre_vs_hash = CompositionIntegrity.compute_visual_spec_semantic_hash(
+                t.get("visual_spec", {}) if isinstance(t, dict) else getattr(t, "visual_spec", {})
+            )
+
+            # Execute spatial layout planning across the portfolio
+            plan = SpatialCompositionPlanner.plan_layout(topics)
+            assert plan is not None
+
+            post_fp = CompositionIntegrity.extract_canonical_semantic_fingerprint(t)
+            post_hash = CompositionIntegrity.compute_canonical_semantic_hash(t)
+            post_vs_hash = CompositionIntegrity.compute_visual_spec_semantic_hash(
+                t.get("visual_spec", {}) if isinstance(t, dict) else getattr(t, "visual_spec", {})
+            )
+
+            # Assert complete 14-field equality
+            for field in [
+                "topic_id", "fact_id", "evidence_ids", "title", "technical_title",
+                "short_finding", "primary_number", "leader_entity", "leader_value",
+                "chart_type", "x_semantic_field", "y_semantic_field", "series_semantics",
+                "reference_lines"
+            ]:
+                assert pre_fp[field] == post_fp[field], f"Semantic drift in '{field}' for topic {tid}"
+
+            assert pre_fp == post_fp, f"Full canonical fingerprint mismatch for topic {tid}"
+            assert pre_hash == post_hash, f"Canonical semantic hash mismatch for topic {tid}"
+            assert pre_vs_hash == post_vs_hash, f"VisualSpec semantic hash mismatch for topic {tid}"
+            total_verified += 1
+
+    assert total_verified == 24, f"Expected 24 verified topics, got {total_verified}"
+
+
+def test_track2_3_visual_spec_hash_invariance_excluding_geometry():
+    """Asserts that VisualSpec semantic hash is strictly invariant to geometry changes but sensitive to semantics."""
+    from app.services.adaptive_dashboard.composition.integrity import CompositionIntegrity
+
+    base_spec = {
+        "chart_type": "bullet",
+        "categories": ["Operations", "Sales", "IT"],
+        "values": [16.2, 14.5, 12.0],
+        "benchmark": 15.0,
+        "x_label": "Attendance Days",
+        "y_label": "Department",
+        "series": [{"name": "Attendance", "data": [16.2, 14.5, 12.0]}],
+    }
+    base_hash = CompositionIntegrity.compute_visual_spec_semantic_hash(base_spec)
+
+    # 1. Mutate ONLY presentation & geometry fields: hash MUST remain identical
+    geom_mutated = dict(base_spec)
+    geom_mutated["column_span"] = 12
+    geom_mutated["span"] = 12
+    geom_mutated["row"] = 1
+    geom_mutated["column"] = 0
+    geom_mutated["height"] = 320
+    geom_mutated["height_class"] = "tall"
+    geom_mutated["is_hero"] = True
+    geom_mutated["is_intentional_partial"] = False
+    geom_mutated["containLabel"] = True
+    geom_mutated["padding"] = [10, 10, 10, 10]
+    geom_hash = CompositionIntegrity.compute_visual_spec_semantic_hash(geom_mutated)
+    assert geom_hash == base_hash, "VisualSpec semantic hash must not change when geometry/layout changes"
+
+    # 2. Mutate SEMANTIC field: hash MUST change
+    semantic_mutated = dict(base_spec)
+    semantic_mutated["benchmark"] = 18.0
+    sem_hash = CompositionIntegrity.compute_visual_spec_semantic_hash(semantic_mutated)
+    assert sem_hash != base_hash, "VisualSpec semantic hash must change when semantic benchmark changes"

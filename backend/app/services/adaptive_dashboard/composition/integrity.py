@@ -60,6 +60,102 @@ class CompositionIntegrity:
         return hashlib.sha256("|".join(semantic_parts).encode("utf-8")).hexdigest()
 
     @classmethod
+    def extract_canonical_semantic_fingerprint(cls, topic: Any) -> dict[str, Any]:
+        """Extracts the 14 canonical semantic fields required by Track 2.3 semantic invariance.
+
+        The immutable set:
+        - topic_id
+        - fact_id
+        - evidence_ids
+        - title
+        - technical_title
+        - short_finding
+        - primary_number
+        - leader_entity
+        - leader_value
+        - chart_type
+        - x semantic field
+        - y semantic field
+        - series semantics
+        - reference lines
+        """
+        def _get(obj: Any, key: str, default: Any = None) -> Any:
+            if isinstance(obj, dict):
+                return obj.get(key, default)
+            return getattr(obj, key, default)
+
+        p = _get(topic, "inspect_payload", {}) or {}
+        mc = _get(topic, "visual_microcopy", {}) or {}
+        vs = _get(topic, "visual_spec", {}) or {}
+
+        fact_id = _get(p, "fact_id") or _get(topic, "fact_id") or ""
+        leader_entity = str(_get(p, "leader") or _get(p, "leader_entity") or "")
+        leader_value = str(_get(p, "val") or _get(p, "leader_value") or "")
+
+        short_finding = _get(mc, "short_finding") or _get(topic, "primary_takeaway") or ""
+        primary_number = str(_get(mc, "primary_number") or _get(topic, "key_metric") or "")
+
+        chart_type = _get(vs, "chart_type") or _get(topic, "recommended_visual") or ""
+        x_field = str(_get(vs, "x_label") or _get(vs, "entity_column") or _get(vs, "category_field") or "")
+        y_field = str(_get(vs, "y_label") or _get(vs, "measure_column") or _get(vs, "value_field") or "")
+
+        series_raw = _get(vs, "series", [])
+        if isinstance(series_raw, list):
+            series_semantics = [
+                s.get("name") if isinstance(s, dict) else str(s)
+                for s in series_raw
+            ]
+        else:
+            series_semantics = []
+
+        ref_lines = str(_get(vs, "benchmark") or _get(vs, "reference_lines") or _get(vs, "target") or "")
+        evidence_ids = sorted(list(_get(topic, "evidence_ids", []) or []))
+
+        return {
+            "topic_id": str(_get(topic, "topic_id", "")),
+            "fact_id": str(fact_id),
+            "evidence_ids": evidence_ids,
+            "title": str(_get(topic, "title", "")),
+            "technical_title": str(_get(topic, "technical_title", "")),
+            "short_finding": str(short_finding),
+            "primary_number": str(primary_number),
+            "leader_entity": str(leader_entity),
+            "leader_value": str(leader_value),
+            "chart_type": str(chart_type),
+            "x_semantic_field": str(x_field),
+            "y_semantic_field": str(y_field),
+            "series_semantics": series_semantics,
+            "reference_lines": str(ref_lines),
+        }
+
+    @classmethod
+    def compute_canonical_semantic_hash(cls, topic: Any) -> str:
+        """Computes a deterministic SHA256 digest of the 14 canonical semantic fields."""
+        fp = cls.extract_canonical_semantic_fingerprint(topic)
+        canonical_str = json.dumps(fp, sort_keys=True, ensure_ascii=True)
+        return hashlib.sha256(canonical_str.encode("utf-8")).hexdigest()
+
+    @classmethod
+    def compute_visual_spec_semantic_hash(cls, visual_spec: dict[str, Any]) -> str:
+        """Computes a deterministic SHA256 hash of VisualSpec semantics, excluding geometry & styling."""
+        if not isinstance(visual_spec, dict):
+            return ""
+
+        geometry_presentation_keys = {
+            "width", "height", "column_span", "span", "row", "column", "row_id",
+            "height_class", "padding", "margin", "is_hero", "is_intentional_partial",
+            "containLabel", "left", "right", "top", "bottom", "grid", "color",
+            "theme", "animation", "responsive", "card_width", "card_height"
+        }
+
+        semantic_spec = {
+            k: v for k, v in visual_spec.items()
+            if k not in geometry_presentation_keys
+        }
+        canonical_str = json.dumps(semantic_spec, sort_keys=True, default=str)
+        return hashlib.sha256(canonical_str.encode("utf-8")).hexdigest()
+
+    @classmethod
     def assert_valid_plan(cls, plan: DashboardLayoutPlan, topics: list[Any]) -> None:
         """Validates all spatial and grid integrity constraints for a planned layout."""
         if not topics:
