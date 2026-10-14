@@ -76,6 +76,10 @@ class ExecutiveTopicFactory:
 
         return ExecutiveTopic(
             topic_id=topic_id,
+            semantic_topic_key=draft.semantic_topic_key,
+            display_order=draft.display_order,
+            rank=draft.rank,
+            portfolio_position=draft.portfolio_position,
             title=title,
             subtitle=subtitle,
             slot_type=draft.slot_type,

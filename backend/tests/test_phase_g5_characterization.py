@@ -1434,4 +1434,273 @@ def test_g5_5_topics_package_ast_purity():
     assert violations == [], f"Topics package AST violations: {violations}"
 
 
+def test_g5_5_topic_identity_seed_determinism_and_concurrency():
+    """Phase G5.5: Verifies TopicIdentitySeed and TopicIdentityFactory determinism under 20 concurrent threads."""
+    import concurrent.futures
+    from app.services.adaptive_dashboard.topics import (
+        TopicIdentitySeed,
+        TopicIdentityFactory,
+    )
+
+    seed_identical = TopicIdentitySeed(
+        dataset_id=101,
+        dataset_version=1,
+        domain="retail",
+        analytical_intent="RANKING",
+        entity_grain="STORE",
+        metric_family="sales",
+        measure_ids=["weekly_sales"],
+        dimension_ids=["store"],
+        opportunity_id="OPP-001",
+    )
+
+    # 1. 20 concurrent threads with identical seed must return the EXACT same topic_id
+    with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
+        futures = [executor.submit(TopicIdentityFactory.create_topic_id, seed_identical) for _ in range(20)]
+        results = [f.result() for f in futures]
+
+    assert len(results) == 20
+    assert len(set(results)) == 1, f"Expected 1 unique topic_id across threads, got: {set(results)}"
+    canonical_id = results[0]
+    assert canonical_id.startswith("TOPIC-")
+    assert len(canonical_id) == 14  # "TOPIC-" (6) + 8 hex chars
+
+    # 2. 20 concurrent threads with 20 distinct seeds must return exactly 20 distinct topic_ids
+    distinct_seeds = [
+        TopicIdentitySeed(
+            dataset_id=101,
+            dataset_version=1,
+            domain="retail",
+            analytical_intent="RANKING",
+            entity_grain="STORE",
+            metric_family=f"family_{i}",
+            measure_ids=[f"metric_{i}"],
+            dimension_ids=["store"],
+            opportunity_id=f"OPP-{i:03d}",
+        )
+        for i in range(20)
+    ]
+    with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
+        futures = [executor.submit(TopicIdentityFactory.create_topic_id, s) for s in distinct_seeds]
+        distinct_results = [f.result() for f in futures]
+
+    assert len(distinct_results) == 20
+    assert len(set(distinct_results)) == 20, "Every distinct semantic seed must yield a unique topic_id"
+
+
+def test_g5_5_topic_identity_ordering_invariance():
+    """Phase G5.5: Verifies that topic identity is strictly invariant to portfolio order / permutations."""
+    from app.services.adaptive_dashboard.topics import (
+        TopicIdentitySeed,
+        TopicIdentityFactory,
+    )
+
+    seed_a = TopicIdentitySeed(
+        dataset_id=200,
+        domain="workforce",
+        analytical_intent="COMPOSITION",
+        entity_grain="DEPARTMENT",
+        metric_family="presence",
+        measure_ids=["office_presence", "approved_leaves"],
+        opportunity_id="OPP-A",
+    )
+    seed_b = TopicIdentitySeed(
+        dataset_id=200,
+        domain="workforce",
+        analytical_intent="RANKING",
+        entity_grain="PERSON",
+        metric_family="attendance",
+        measure_ids=["total_attendance"],
+        opportunity_id="OPP-B",
+    )
+    seed_c = TopicIdentitySeed(
+        dataset_id=200,
+        domain="workforce",
+        analytical_intent="TREND",
+        entity_grain="DEPARTMENT",
+        metric_family="headcount",
+        measure_ids=["headcount_delta"],
+        opportunity_id="OPP-C",
+    )
+
+    id_a = TopicIdentityFactory.create_topic_id(seed_a)
+    id_b = TopicIdentityFactory.create_topic_id(seed_b)
+    id_c = TopicIdentityFactory.create_topic_id(seed_c)
+
+    # Permutation 1: [A, B, C]
+    perm1 = [TopicIdentityFactory.create_topic_id(s) for s in [seed_a, seed_b, seed_c]]
+    # Permutation 2: [C, A, B]
+    perm2 = [TopicIdentityFactory.create_topic_id(s) for s in [seed_c, seed_a, seed_b]]
+    # Permutation 3: [B, C, A]
+    perm3 = [TopicIdentityFactory.create_topic_id(s) for s in [seed_b, seed_c, seed_a]]
+
+    assert perm1 == [id_a, id_b, id_c]
+    assert perm2 == [id_c, id_a, id_b]
+    assert perm3 == [id_b, id_c, id_a]
+
+
+def test_g5_5_topic_identity_insertion_invariance():
+    """Phase G5.5: Verifies that inserting an adjacent topic does not shift or destabilize existing topic IDs."""
+    from app.services.adaptive_dashboard.topics import (
+        TopicIdentitySeed,
+        TopicIdentityFactory,
+    )
+
+    seed_a = TopicIdentitySeed(
+        dataset_id=300,
+        domain="environmental",
+        analytical_intent="TREND",
+        metric_family="pm10",
+        measure_ids=["pm10"],
+        opportunity_id="OPP-AIR-01",
+    )
+    seed_b = TopicIdentitySeed(
+        dataset_id=300,
+        domain="environmental",
+        analytical_intent="RANKING",
+        entity_grain="CITY",
+        metric_family="so2",
+        measure_ids=["so2"],
+        opportunity_id="OPP-AIR-02",
+    )
+    seed_c = TopicIdentitySeed(
+        dataset_id=300,
+        domain="environmental",
+        analytical_intent="RELATIONSHIP",
+        metric_family="pollution_corr",
+        measure_ids=["so2", "no2"],
+        opportunity_id="OPP-AIR-03",
+    )
+
+    orig_ids = [TopicIdentityFactory.create_topic_id(s) for s in [seed_a, seed_b, seed_c]]
+
+    # Insert new opportunity X between A and B: [A, X, B, C]
+    seed_x = TopicIdentitySeed(
+        dataset_id=300,
+        domain="environmental",
+        analytical_intent="ANOMALY",
+        metric_family="pm10_spike",
+        measure_ids=["pm10"],
+        opportunity_id="OPP-AIR-NEW",
+    )
+    expanded_list = [seed_a, seed_x, seed_b, seed_c]
+    new_ids = [TopicIdentityFactory.create_topic_id(s) for s in expanded_list]
+
+    # A, B, and C must keep their exact original topic_ids
+    assert new_ids[0] == orig_ids[0]  # A
+    assert new_ids[2] == orig_ids[1]  # B
+    assert new_ids[3] == orig_ids[2]  # C
+
+
+def test_g5_5_semantic_topic_key_cross_version_continuity():
+    """Phase G5.5: Verifies that semantic_topic_key provides logical topic tracking across dataset versions."""
+    from app.services.adaptive_dashboard.topics import (
+        TopicIdentitySeed,
+        TopicIdentityFactory,
+    )
+
+    seed_v1 = TopicIdentitySeed(
+        dataset_id=400,
+        dataset_version=1,
+        domain="workforce",
+        analytical_intent="RANKING",
+        entity_grain="PERSON",
+        metric_family="attendance",
+        measure_ids=["total_attendance"],
+        opportunity_id="OPP-1",
+    )
+    seed_v2 = TopicIdentitySeed(
+        dataset_id=400,
+        dataset_version=2,
+        domain="workforce",
+        analytical_intent="RANKING",
+        entity_grain="PERSON",
+        metric_family="attendance",
+        measure_ids=["total_attendance"],
+        opportunity_id="OPP-1",
+    )
+
+    # topic_id is version-scoped (must differ)
+    id_v1 = TopicIdentityFactory.create_topic_id(seed_v1)
+    id_v2 = TopicIdentityFactory.create_topic_id(seed_v2)
+    assert id_v1 != id_v2, "Topic IDs must differ across dataset versions"
+
+    # semantic_topic_key is logical and version-independent (must match)
+    assert seed_v1.semantic_topic_key == seed_v2.semantic_topic_key
+    assert seed_v1.semantic_topic_key == "workforce:ranking:person:attendance"
+
+
+def test_g5_5_executive_topic_semantic_immutability():
+    """Phase G5.5: Verifies that ExecutiveTopic semantic identity fields are protected from downstream mutation."""
+    from app.services.adaptive_dashboard.topics import (
+        ExecutiveTopicDraft,
+        ExecutiveTopicFactory,
+    )
+
+    draft = ExecutiveTopicDraft(
+        topic_id="TOPIC-abcdef01",
+        semantic_topic_key="workforce:composition:department:presence",
+        display_order=1,
+        rank=1,
+        portfolio_position=1,
+        dataset_id=500,
+        domain="workforce",
+        analytical_intent="COMPOSITION",
+        evidence_ids=["EVID-01", "EVID-02"],
+        narrative={"topic_id": "TOPIC-abcdef01", "title": "Department Capacity"},
+    )
+    topic = ExecutiveTopicFactory.create_topic(draft)
+
+    # Attempting to mutate semantic identity fields must raise AttributeError
+    with pytest.raises(AttributeError, match="IMMUTABILITY_VIOLATION"):
+        topic.topic_id = "TOPIC-MUTATED"
+
+    with pytest.raises(AttributeError, match="IMMUTABILITY_VIOLATION"):
+        topic.semantic_topic_key = "mutated:key"
+
+    with pytest.raises(AttributeError, match="IMMUTABILITY_VIOLATION"):
+        topic.analytical_intent = "RANKING"
+
+    with pytest.raises(AttributeError, match="IMMUTABILITY_VIOLATION"):
+        topic.domain = "retail"
+
+    with pytest.raises(AttributeError, match="IMMUTABILITY_VIOLATION"):
+        topic.dataset_id = 9999
+
+    with pytest.raises(AttributeError, match="IMMUTABILITY_VIOLATION"):
+        topic.evidence_ids = ["EVID-MUTATED"]
+
+    # Non-semantic presentation / spatial fields are allowed to update
+    topic.display_order = 2
+    assert topic.display_order == 2
+    topic.rank = 2
+    assert topic.rank == 2
+    topic.spatial_placement = {"row": 1, "col": 0, "width": 6}
+    assert topic.spatial_placement["width"] == 6
+
+
+def test_g5_5_cache_topic_id_stability():
+    """Phase G5.5: Verifies end-to-end topic ID stability across cold run, warm cache, and re-execution."""
+    with session_scope() as conn:
+        ds_id = _create_dataset_with_rows(conn, "stability_eval.csv", "Workforce Stability", "Attendance", WORKFORCE_RECORDS)
+
+    # Cold Run 1
+    res1_obj = run_dataset_intelligence(dataset_id=ds_id)
+    res1 = res1_obj.model_dump()
+    topics1 = res1.get("executive_topics", []) or res1.get("elements", [])
+    assert len(topics1) > 0
+    ids_run1 = [t.get("topic_id") for t in topics1]
+
+    # Cold Run 2 (or cached run)
+    res2_obj = run_dataset_intelligence(dataset_id=ds_id)
+    res2 = res2_obj.model_dump()
+    topics2 = res2.get("executive_topics", []) or res2.get("elements", [])
+    ids_run2 = [t.get("topic_id") for t in topics2]
+
+    # Topic IDs must be completely identical across runs
+    assert ids_run1 == ids_run2, f"Topic IDs drifted between runs: {ids_run1} vs {ids_run2}"
+    for tid in ids_run1:
+        assert tid.startswith("TOPIC-"), f"Expected canonical TOPIC- prefix, got: {tid}"
+
+
 

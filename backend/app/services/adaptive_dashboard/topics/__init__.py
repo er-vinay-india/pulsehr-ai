@@ -8,6 +8,8 @@ from .contracts import (
     ExecutiveTopic,
     ExecutiveTopicDraft,
     TopicIdGenerator,
+    TopicIdentityFactory,
+    TopicIdentitySeed,
 )
 from .factory import ExecutiveTopicFactory
 from .integrity import (
@@ -22,4 +24,6 @@ __all__ = [
     "StoryAssemblyIntegrity",
     "StoryAssemblyIntegrityError",
     "TopicIdGenerator",
+    "TopicIdentityFactory",
+    "TopicIdentitySeed",
 ]

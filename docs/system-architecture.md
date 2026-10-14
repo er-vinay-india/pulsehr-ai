@@ -200,11 +200,15 @@ React Frontend Presentation (ECharts / SCSS Tokens)
   - Immutability guarantee (`VisualSemanticsMutationIntegrity`): composition may adjust layout/span, but cannot mutate chart type, series, axes, or measures.
   - Full titles preserved alongside responsive display titles.
 
-* **Phase G5.5 — Analytical Story & ExecutiveTopic Factory Extraction:**
-  - Dedicated story and topic assembly package (`topics/`): `ExecutiveTopicDraft`, `ExecutiveTopic`, `ExecutiveTopicFactory`, `TopicIdGenerator`, `StoryAssemblyIntegrity`.
+* **Phase G5.5 — Analytical Story / ExecutiveTopic Factory & Semantic Identity Boundary:**
+  - Dedicated story and topic assembly package (`topics/`): `TopicIdentitySeed`, `TopicIdentityFactory`, `ExecutiveTopicDraft`, `ExecutiveTopic`, `ExecutiveTopicFactory`, `TopicIdGenerator`, `StoryAssemblyIntegrity`.
   - **Story Assembly Invariant:** *"A story does not calculate facts, create evidence, choose chart mechanics, or decide layout. It assembles already-governed meaning into one immutable topic identity."*
-  - Centralized monotonic topic identifier generation (`TopicIdGenerator` &rarr; `TOPIC-001`, `TOPIC-002`, ...).
-  - Strict identity-based assembly: binds narrative, evidence, topic, and visual spec strictly by `topic_id`, permanently eliminating positional array zipping.
+  - **Semantic Identity Invariant:** *"Topic identity represents semantic ownership, not construction or execution order."*
+  - Pure, deterministic semantic hashing (`TopicIdentityFactory.create_topic_id(seed)` &rarr; `TOPIC-[hash[:8]]`, e.g. `TOPIC-a503738a`) deriving version-scoped canonical IDs from dataset, version, domain, analytical intent, entity grain, metric family, measures, dimensions, and opportunity ID.
+  - Distinct separation of semantic identity from presentation sequencing: `display_order`, `rank`, and `portfolio_position` track portfolio layout order, completely decoupled from `topic_id`.
+  - Version-independent logical topic tracking via `semantic_topic_key` (`domain:intent:grain:family`).
+  - Runtime immutability guard: mutating semantic fields (`topic_id`, `semantic_topic_key`, `analytical_intent`, `domain`, `dataset_id`, `evidence_ids`) on `ExecutiveTopic` raises `AttributeError: IMMUTABILITY_VIOLATION`.
+  - Strict identity-based assembly: `ExecutiveTopicFactory.bind_visual_spec(topic, visual_spec)` validates topic identity match (`topic.topic_id == visual_spec.topic_id`) with zero visual decision logic.
   - Fail-closed validation: any mismatch across `narrative.topic_id`, `evidence_binding.topic_id`, `executive_topic.topic_id`, or `visual_spec.topic_id` raises `StoryAssemblyIntegrityError`.
-  - Protected by executable AST boundary purity tests preventing DB, AI/LLM, MCP, or layout dependencies.
+  - Verified across 20-thread concurrency, portfolio permutation invariance (`[A, B, C]` vs `[C, A, B]`), insertion invariance (`[A, B, C]` vs `[A, X, B, C]`), cold/warm cache consistency, AST purity, and full multi-viewport browser testing.
 

@@ -58,6 +58,8 @@ from .topics import (
     ExecutiveTopicDraft,
     ExecutiveTopicFactory,
     TopicIdGenerator,
+    TopicIdentityFactory,
+    TopicIdentitySeed,
     StoryAssemblyIntegrity,
 )
 
@@ -1466,7 +1468,20 @@ class ExecutiveCompositionPlanner:
                     if not s.get("evidence_id"):
                         s["evidence_id"] = e_ids[s_idx % len(e_ids)] if e_ids else f"EVID-SERIES-{s_idx:02d}"
 
-            t_id = TopicIdGenerator.format_id(out_idx)
+            meas_list = [str(m) for m in [v_spec.get("measure_column"), getattr(story, "key_metric", None)] if m]
+            dim_list = [str(d) for d in [v_spec.get("entity_column"), getattr(story, "dimension", None)] if d]
+            seed = TopicIdentitySeed(
+                dataset_id=dataset_id or 1,
+                dataset_version=1,
+                domain=domain_name or "general",
+                analytical_intent=item.intent,
+                entity_grain=v_spec.get("entity_grain"),
+                metric_family=item.semantic_family,
+                measure_ids=meas_list,
+                dimension_ids=dim_list,
+                opportunity_id=str(getattr(story, "opportunity_id", getattr(story, "story_id", item.item_id))),
+            )
+            t_id = TopicIdentityFactory.create_topic_id(seed)
             v_spec["topic_id"] = t_id
             v_spec["dataset_id"] = dataset_id
             v_spec["domain"] = domain_name
@@ -1482,6 +1497,10 @@ class ExecutiveCompositionPlanner:
 
             draft = ExecutiveTopicDraft(
                 topic_id=t_id,
+                semantic_topic_key=seed.semantic_topic_key,
+                display_order=out_idx,
+                rank=out_idx,
+                portfolio_position=out_idx,
                 dataset_id=dataset_id,
                 domain=domain_name,
                 analytical_intent=item.intent,
