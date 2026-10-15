@@ -16,7 +16,7 @@ from ..services.copilot_query_planner import plan_analytical_query, execute_anal
 from ..services.ai_copilot import query_copilot, get_available_models, stream_copilot_generator
 from ..services.data_engine.semantic_classifier import SemanticClassifier
 from ..services.copilot.generic_copilot_engine import GenericCopilotEngine
-from ..services.copilot.chat_visuals import answer_chat_visual
+from ..services.copilot.chat_visuals import answer_chat_visual, is_visual_request
 from ..services.copilot.sheet_quality import is_missing_values_query, answer_missing_values
 from ..services.copilot.union_war_room import UnionWarRoomEngine, COUNCIL_DELEGATES
 from ..services.copilot.coordinator_models import RoutingAssignment, WorkerTarget, CoordinatorDecision
@@ -99,6 +99,10 @@ def _load_active_sheet_dataframe(sheet_id: int | None = None, dataset_id: int | 
 
 def _answer_from_shared_findings(query: str, sheet_id: int, dataset_name: str) -> dict | None:
     """Answers high-level management questions directly from the authoritative Shared Findings Store (T30, T31)."""
+    # These shortcuts return prose only. A chart request must stay on the visual
+    # path, including when it mentions a metric with a cached department ranking.
+    if is_visual_request(query):
+        return None
     t_start = time.perf_counter()
     q_low = query.lower().strip()
 
