@@ -15,12 +15,141 @@ Invariants:
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import math
 from typing import Any, Literal
 from pydantic import BaseModel, Field, ConfigDict
 
 logger = logging.getLogger(__name__)
+
+
+def compute_canonical_semantic_hash(payload: dict[str, Any] | Any) -> str:
+    """Computes a deterministic SHA-256 canonical semantic fingerprint over the 11 protected attributes.
+
+    Protected attributes:
+    1. topic_id
+    2. fact_id
+    3. evidence_ids (canonical sorted order)
+    4. metric
+    5. unit
+    6. leader
+    7. leader_value
+    8. ranking_direction
+    9. reference_line
+    10. analytical_intent
+    11. visual_spec_semantics (chart_type, categories, values)
+
+    Excluded attributes:
+    - slide number / order
+    - layout geometry
+    - theme / colors
+    - fonts
+    - coordinates
+    - continuation page number / badge
+    """
+    if hasattr(payload, "to_semantic_dict"):
+        d = payload.to_semantic_dict()
+    elif isinstance(payload, dict):
+        inspect = payload.get("inspect_payload") or {}
+        vspec = payload.get("visual_spec") or {}
+        rm = inspect.get("ranking_metadata") or vspec.get("ranking_metadata") or payload.get("ranking_metadata") or {}
+
+        t_id = str(payload.get("topic_id") or "")
+        fact_id = str(
+            payload.get("fact_id")
+            or inspect.get("fact_id")
+            or vspec.get("fact_id")
+            or ""
+        )
+
+        ev_list = (
+            payload.get("evidence_ids")
+            or inspect.get("evidence_ids")
+            or vspec.get("evidence_ids")
+            or []
+        )
+        if isinstance(ev_list, str):
+            ev_list = [ev_list]
+        evidence_ids = sorted([str(e) for e in ev_list if e])
+
+        metric = str(payload.get("key_metric") or payload.get("metric") or vspec.get("key_metric") or "")
+        unit = str(payload.get("unit") or vspec.get("unit") or rm.get("unit") or "")
+
+        leader = str(
+            payload.get("leader")
+            or inspect.get("leader_entity")
+            or vspec.get("leader_entity")
+            or vspec.get("leader")
+            or ""
+        )
+
+        lval = payload.get("leader_value")
+        if lval is None or lval == "":
+            lval = inspect.get("leader_value")
+        if lval is None or lval == "":
+            lval = vspec.get("leader_value")
+
+        leader_val_str = ""
+        if lval is not None and lval != "":
+            try:
+                leader_val_str = f"{float(lval):.6g}"
+            except (ValueError, TypeError):
+                leader_val_str = str(lval)
+
+        ranking_dir = str(payload.get("ranking_direction") or rm.get("ranking_direction") or "")
+
+        ref = payload.get("reference_line")
+        if ref is None or ref == "":
+            ref = vspec.get("benchmark")
+        if ref is None or ref == "":
+            ref = rm.get("benchmark")
+        if (ref is None or ref == "") and "reference_lines" in vspec:
+            rl = vspec.get("reference_lines") or []
+            if rl and isinstance(rl[0], dict):
+                ref = rl[0].get("value")
+
+        ref_str = ""
+        if ref is not None and ref != "":
+            try:
+                ref_str = f"{float(ref):.6g}"
+            except (ValueError, TypeError):
+                ref_str = str(ref)
+
+        intent = str(
+            payload.get("analytical_intent")
+            or inspect.get("analytical_intent")
+            or vspec.get("analytical_intent")
+            or "RANKING"
+        )
+
+        v_type = str(vspec.get("chart_type") or payload.get("recommended_visual") or "")
+        v_cats = [str(c) for c in (vspec.get("categories") or [])]
+        v_vals = [f"{float(v):.6g}" if isinstance(v, (int, float)) else str(v) for v in (vspec.get("values") or [])]
+
+        d = {
+            "topic_id": t_id,
+            "fact_id": fact_id,
+            "evidence_ids": evidence_ids,
+            "metric": metric,
+            "unit": unit,
+            "leader": leader,
+            "leader_value": leader_val_str,
+            "ranking_direction": ranking_dir,
+            "reference_line": ref_str,
+            "analytical_intent": intent,
+            "visual_spec": {
+                "chart_type": v_type,
+                "categories": v_cats,
+                "values": v_vals
+            }
+        }
+    else:
+        raise ValueError(f"Cannot compute semantic hash for payload: {type(payload)}")
+
+    canonical_json = json.dumps(d, sort_keys=True, separators=(',', ':'))
+    return hashlib.sha256(canonical_json.encode('utf-8')).hexdigest()
 
 
 class PresentationTopic(BaseModel):
@@ -166,6 +295,47 @@ class PresentationTopic(BaseModel):
             source_sheets=source_sheets
         )
 
+    def to_semantic_dict(self) -> dict[str, Any]:
+        """Extracts the 11 protected semantic fields in canonical form."""
+        leader_val_str = ""
+        if self.leader_value is not None and self.leader_value != "":
+            try:
+                leader_val_str = f"{float(self.leader_value):.6g}"
+            except (ValueError, TypeError):
+                leader_val_str = str(self.leader_value)
+
+        ref_str = ""
+        if self.reference_line is not None and self.reference_line != "":
+            try:
+                ref_str = f"{float(self.reference_line):.6g}"
+            except (ValueError, TypeError):
+                ref_str = str(self.reference_line)
+        vspec = self.visual_spec or {}
+        v_type = str(vspec.get("chart_type") or self.recommended_visual or "")
+        v_cats = [str(c) for c in (vspec.get("categories") or [])]
+        v_vals = [f"{float(v):.6g}" if isinstance(v, (int, float)) else str(v) for v in (vspec.get("values") or [])]
+        return {
+            "topic_id": self.topic_id,
+            "fact_id": str(self.fact_id or ""),
+            "evidence_ids": sorted([str(e) for e in self.evidence_ids if e]),
+            "metric": self.metric,
+            "unit": self.unit,
+            "leader": str(self.leader or ""),
+            "leader_value": leader_val_str,
+            "ranking_direction": str(self.ranking_direction or ""),
+            "reference_line": ref_str,
+            "analytical_intent": self.analytical_intent,
+            "visual_spec": {
+                "chart_type": v_type,
+                "categories": v_cats,
+                "values": v_vals
+            }
+        }
+
+    def canonical_semantic_hash(self) -> str:
+        """Returns the canonical deterministic SHA-256 fingerprint of protected attributes."""
+        return compute_canonical_semantic_hash(self.to_semantic_dict())
+
     def to_slide_contract(
         self,
         slide_order: int,
@@ -305,7 +475,8 @@ class PresentationTopic(BaseModel):
             "reference_line": self.reference_line,
             "analytical_intent": self.analytical_intent,
             "visual_spec": dict(self.visual_spec),
-            "inspect_payload": dict(self.inspect_payload)
+            "inspect_payload": dict(self.inspect_payload),
+            "semantic_hash": self.canonical_semantic_hash()
         }
 
     def to_slide_contracts(

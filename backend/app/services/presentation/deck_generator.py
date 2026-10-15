@@ -98,8 +98,11 @@ def generate_presentation_deck_spec(
         or (workspace_evidence and workspace_evidence.get("executive_topics"))
     )
 
-    # Invariant: NO build_hr_report analytical bypass for governed datasets
-    if scope.get("force_legacy_hr_builder", False) or scope.get("objective") == "Attendance review" or (not has_governed_topics and not scope.get("prevent_hr_report", False)):
+    # Invariant: NO build_hr_report analytical bypass for governed datasets.
+    # Legacy builders may ONLY be activated via explicit technical compatibility flags.
+    # Business/presentation objectives must NEVER decide analytical architecture.
+    force_legacy_hr = bool(scope.get("force_legacy_hr_builder") or scope.get("force_legacy_builder"))
+    if force_legacy_hr or (not has_governed_topics and not scope.get("prevent_hr_report", False)):
         from .hr_report import build_hr_report
         hr_deck = build_hr_report(scope, dataset_context, workspace_evidence)
         if hr_deck is not None:

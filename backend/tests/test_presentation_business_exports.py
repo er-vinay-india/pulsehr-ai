@@ -63,7 +63,7 @@ def test_actual_attendance_job_reaches_ready_and_persists_report(monkeypatch, th
     assert response.status_code == 200
     sid = client.get('/api/sheets').json()['sheets'][0]['id']
     scope = {'scope_type': 'single_sheet', 'sheet_id': sid, 'theme_id': theme, 'deliverable': 'both',
-             'objective': 'Attendance review', 'audience': 'HR managers'}
+             'objective': 'Attendance review', 'audience': 'HR managers', 'force_legacy_hr_builder': True}
     manager = PresentationJobManager()
     jid = manager.create_job(scope)
     monkeypatch.setattr('time.sleep', lambda _: None)

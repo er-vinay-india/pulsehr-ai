@@ -198,7 +198,8 @@ def build_governed_presentation_deck(
             "governed_synthesis": True,
             "topics_count": len(topics),
             "physical_slides_count": actual_total,
-            "contract_mode": "EXECUTIVE_TOPIC_BOUND"
+            "contract_mode": "EXECUTIVE_TOPIC_BOUND",
+            "content_contract": "executive_topic_bound_v1"
         }
     }
     return seal_business_content(deck_dict)

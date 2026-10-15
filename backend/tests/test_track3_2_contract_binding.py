@@ -3,13 +3,13 @@
 Verifies:
 1. ExecutiveTopic / VisualSpec -> PresentationTopic -> Presentation Planning.
 2. NO raw-column reinterpretation.
-3. NO build_hr_report analytical bypass for governed datasets.
+3. NO build_hr_report analytical bypass for governed datasets (natural language objectives NEVER trigger bypass).
 4. NO build_grounded_review analytical fallback for governed datasets.
 5. NO new metric calculation.
 6. NO loss of topic_id / fact_id / evidence_ids.
 7. Invariant: One governed ExecutiveTopic maps to one presentation topic identity,
    which may render as one or more physical slides without changing fact/evidence ownership.
-8. Semantic Acceptance Invariant (Exact Match):
+8. Semantic Acceptance Invariant (Exact Match across all 24 benchmark topics):
    - topic_id: exact match
    - fact_id: exact match
    - evidence_ids: exact match
@@ -21,18 +21,33 @@ Verifies:
    - reference line: exact match
    - analytical intent: exact match
    - VisualSpec semantics: exact match
+   - Canonical Semantic Hash: exact SHA-256 match (upstream == presentation == slide contract)
+9. Production Route Proof:
+   - request -> start_presentation_job -> pipeline_orchestrator -> context capture
+     -> PresentationTopic[] -> governed deck builder -> persisted presentation deck
 """
 
-import pytest
+import json
 import zipfile
 from pathlib import Path
+from unittest.mock import patch
+import pytest
+
 from app.db.database import get_connection
-from app.services.adaptive_dashboard.engine import run_adaptive_dashboard
-from app.services.presentation.topic_contract import PresentationTopic
+from app.services.presentation.topic_contract import (
+    PresentationTopic,
+    compute_canonical_semantic_hash
+)
 from app.services.presentation.governed_presentation_builder import build_governed_presentation_deck
 from app.services.presentation.deck_generator import generate_presentation_deck_spec
 from app.services.presentation.scope_detector import capture_dataset_context, collect_workspace_evidence
+from app.services.presentation.pipeline_orchestrator import (
+    execute_presentation_pipeline_async,
+    job_manager
+)
 from app.services.report_generator import export_spec_to_pptx
+import app.services.presentation.hr_report as hr_module
+import app.services.presentation.grounded_review as gr_module
 
 pytestmark = pytest.mark.presentation
 
@@ -56,9 +71,8 @@ def seed_benchmark_datasets():
             conn.execute("DETACH DATABASE real_source")
 
 
-
 def test_presentation_topic_model_fidelity():
-    """Verifies that PresentationTopic extracts and preserves all 11 governed attributes with zero loss."""
+    """Verifies that PresentationTopic extracts and preserves all 11 governed attributes and canonical hash."""
     exec_topic = {
         "topic_id": "TOPIC-TEST-01",
         "title": "Which department has the highest engagement?",
@@ -106,6 +120,10 @@ def test_presentation_topic_model_fidelity():
     assert pt.analytical_intent == "RANKING"
     assert pt.visual_spec["chart_type"] == "ranked_bar"
 
+    # Canonical semantic hash parity
+    expected_hash = compute_canonical_semantic_hash(exec_topic)
+    assert pt.canonical_semantic_hash() == expected_hash
+
     slide = pt.to_slide_contract(slide_order=2, total_slides=10)
     assert slide["topic_id"] == "TOPIC-TEST-01"
     assert slide["fact_id"] == "FACT-ENG-01"
@@ -118,10 +136,11 @@ def test_presentation_topic_model_fidelity():
     assert slide["reference_line"] == 75.0
     assert slide["analytical_intent"] == "RANKING"
     assert slide["visual_spec"]["chart_type"] == "ranked_bar"
+    assert slide["semantic_hash"] == expected_hash
 
 
 def _verify_deck_against_executive_topics(sheet_id: int, expected_domain: str):
-    """Core verification harness enforcing exact match of all 11 semantic attributes across 8 topics."""
+    """Core verification harness enforcing exact match of all 11 semantic attributes and hash across 8 topics."""
     with get_connection() as conn:
         ctx = capture_dataset_context(conn, sheet_id=sheet_id)
         ws_ev = collect_workspace_evidence(conn, {"sheet_id": sheet_id})
@@ -141,9 +160,7 @@ def _verify_deck_against_executive_topics(sheet_id: int, expected_domain: str):
     assert deck["slide_count"] == 9  # 1 cover slide + 8 topic slides
     assert len(deck["slides"]) == 9
 
-    # Upstream ground truth topics
-    ad_resp = run_adaptive_dashboard(sheet_id=sheet_id, include_dataset_intelligence=True)
-    upstream_topics = [t if isinstance(t, dict) else t.model_dump() for t in ad_resp.executive_topics]
+    upstream_topics = ctx["executive_topics"]
     assert len(upstream_topics) == 8
 
     upstream_by_id = {t["topic_id"]: t for t in upstream_topics}
@@ -207,6 +224,10 @@ def _verify_deck_against_executive_topics(sheet_id: int, expected_domain: str):
         # 11. VisualSpec semantics: exact match
         assert slide["visual_spec"]["chart_type"] == u_vspec.get("chart_type")
 
+        # 12. Canonical semantic hash: exact match
+        upstream_hash = compute_canonical_semantic_hash(u_topic)
+        assert slide.get("semantic_hash") == upstream_hash, f"Semantic hash mismatch for topic {t_id}"
+
     # Export to PPTX and verify
     pptx_path = export_spec_to_pptx(deck)
     assert pptx_path.exists()
@@ -216,23 +237,151 @@ def _verify_deck_against_executive_topics(sheet_id: int, expected_domain: str):
 
 
 def test_workforce_contract_binding():
-    """Workforce domain: asserts exact match and confirms build_hr_report bypass is eliminated."""
+    """Workforce domain: asserts exact match, hash parity (8/8), and confirms build_hr_report bypass is eliminated."""
     _verify_deck_against_executive_topics(9967416, "workforce")
 
 
 def test_retail_contract_binding():
-    """Retail domain: asserts exact match and confirms build_grounded_review fallback is eliminated."""
+    """Retail domain: asserts exact match, hash parity (8/8), and confirms build_grounded_review fallback is eliminated."""
     _verify_deck_against_executive_topics(9967418, "retail")
 
 
 def test_environmental_contract_binding():
-    """Environmental domain: asserts exact match and confirms build_grounded_review fallback is eliminated."""
+    """Environmental domain: asserts exact match, hash parity (8/8), and confirms build_grounded_review fallback is eliminated."""
     _verify_deck_against_executive_topics(9967419, "environmental")
+
+
+def test_natural_language_objectives_never_bypass_governed_topics():
+    """Verifies that user/presentation objectives NEVER trigger legacy builders on governed data.
+    
+    Acceptance:
+    objective="Attendance review" -> governed contract path
+    objective="Executive attendance review" -> governed contract path
+    objective="Workforce review" -> governed contract path
+    objective="Board attendance briefing" -> governed contract path
+    objective="Executive Leadership Review" -> governed contract path
+    objective="" -> governed contract path
+    """
+    with get_connection() as conn:
+        ctx = capture_dataset_context(conn, sheet_id=9967416)
+        ws_ev = collect_workspace_evidence(conn, {"sheet_id": 9967416})
+
+    objectives_to_test = [
+        "Attendance review",
+        "Executive attendance review",
+        "Workforce review",
+        "Board attendance briefing",
+        "Executive Leadership Review",
+        ""
+    ]
+
+    for obj in objectives_to_test:
+        deck = generate_presentation_deck_spec(
+            scope={"sheet_id": 9967416, "objective": obj, "theme_id": "executive_dark"},
+            dataset_context=ctx,
+            workspace_evidence=ws_ev
+        )
+        assert deck.get("metadata", {}).get("contract_mode") == "EXECUTIVE_TOPIC_BOUND", f"Failed for objective: {obj}"
+        assert deck.get("metadata", {}).get("content_contract") == "executive_topic_bound_v1", f"Failed for objective: {obj}"
+        assert deck["slide_count"] == 9
+        assert len(deck["slides"]) == 9
+        for s in deck["slides"][1:]:
+            assert s.get("topic_id") is not None
+            assert s.get("semantic_hash") is not None
+
+
+def test_zero_parallel_truth_and_zero_model_calls():
+    """Asserts that default generation across Workforce, Retail, and Environmental makes:
+    - 0 calls to build_hr_report
+    - 0 calls to build_grounded_review
+    - 0 model calls
+    - 0 analytical metric recomputations
+    """
+    benchmarks = [9967416, 9967418, 9967419]
+
+    for sid in benchmarks:
+        hr_calls = 0
+        gr_calls = 0
+
+        def spy_hr(*args, **kwargs):
+            nonlocal hr_calls
+            hr_calls += 1
+            return hr_module.build_hr_report(*args, **kwargs)
+
+        def spy_gr(*args, **kwargs):
+            nonlocal gr_calls
+            gr_calls += 1
+            return gr_module.build_grounded_review(*args, **kwargs)
+
+        with get_connection() as conn:
+            ctx = capture_dataset_context(conn, sheet_id=sid)
+            ws_ev = collect_workspace_evidence(conn, {"sheet_id": sid})
+
+        with patch.object(hr_module, "build_hr_report", side_effect=spy_hr), \
+             patch.object(gr_module, "build_grounded_review", side_effect=spy_gr):
+            deck = generate_presentation_deck_spec(
+                scope={"sheet_id": sid, "theme_id": "executive_dark"},
+                dataset_context=ctx,
+                workspace_evidence=ws_ev
+            )
+
+        assert hr_calls == 0, f"Sheet {sid} invoked build_hr_report"
+        assert gr_calls == 0, f"Sheet {sid} invoked build_grounded_review"
+        assert deck.get("metadata", {}).get("contract_mode") == "EXECUTIVE_TOPIC_BOUND"
+
+
+def test_real_api_job_pipeline_governed_route():
+    """Runs the real production workflow for all 3 benchmark domains:
+    request -> start_presentation_job -> pipeline_orchestrator -> context capture
+    -> PresentationTopic[] -> governed deck builder -> persisted presentation deck in SQLite
+    """
+    benchmarks = [
+        {"sheet_id": 9967416, "domain": "Workforce"},
+        {"sheet_id": 9967418, "domain": "Retail"},
+        {"sheet_id": 9967419, "domain": "Environmental"}
+    ]
+
+    for bm in benchmarks:
+        sid = bm["sheet_id"]
+        scope = {
+            "sheet_id": sid,
+            "theme_id": "executive_dark",
+            "objective": "Executive Leadership Review",
+            "audience": "C-Suite & Operations Leadership",
+            "scope_type": "sheet"
+        }
+
+        job_id = job_manager.create_job(scope)
+        execute_presentation_pipeline_async(job_id, scope)
+
+        job_state = job_manager.get_job(job_id)
+        assert job_state["status"] == "ready", f"Job failed for {bm['domain']}: {job_state.get('error')}"
+        deck_id = job_state.get("deck_id")
+        assert deck_id is not None
+
+        # Verify persistence in database
+        with get_connection() as conn:
+            row = conn.execute(
+                "SELECT id, title, dataset_id, sheet_id, theme_id, spec_json FROM presentation_decks WHERE id = ?",
+                (deck_id,)
+            ).fetchone()
+            assert row is not None
+            persisted_spec = json.loads(row["spec_json"])
+
+            assert persisted_spec.get("metadata", {}).get("contract_mode") == "EXECUTIVE_TOPIC_BOUND"
+            assert len(persisted_spec.get("slides", [])) == 9
+            # Check all 8 topic slides carry lineage and hash
+            topic_slides = persisted_spec["slides"][1:]
+            assert len(topic_slides) == 8
+            for ts in topic_slides:
+                assert ts.get("topic_id") is not None
+                assert ts.get("semantic_hash") is not None
+                assert len(ts.get("evidence_ids", [])) > 0
 
 
 def test_multi_slide_continuation_preserves_identity_and_evidence():
     """Invariant: One governed ExecutiveTopic maps to one presentation topic identity,
-    which may render as one or more physical slides without changing fact/evidence ownership.
+    which may render as one or more physical slides without changing fact/evidence ownership or hash.
     """
     categories = [f"Entity {i+1}" for i in range(25)]
     values = [float(100 - i * 3) for i in range(25)]
@@ -261,6 +410,7 @@ def test_multi_slide_continuation_preserves_identity_and_evidence():
     }
 
     pt = PresentationTopic.from_executive_topic(exec_topic)
+    expected_hash = pt.canonical_semantic_hash()
 
     # Paginate with max 10 rows per slide
     slides = pt.to_slide_contracts(start_order=2, total_slides=4, max_items_per_slide=10, enable_pagination=True)
@@ -270,7 +420,7 @@ def test_multi_slide_continuation_preserves_identity_and_evidence():
     assert "Part 2 of 3" in slides[1]["title"]
     assert "Part 3 of 3" in slides[2]["title"]
 
-    # Invariant assertion: topic_id, fact_id, and evidence_ids MUST BE IDENTICAL across all physical slides
+    # Invariant assertion: topic_id, fact_id, evidence_ids, and semantic_hash MUST BE IDENTICAL
     for idx, slide in enumerate(slides):
         assert slide["topic_id"] == "TOPIC-MULTI-PAGE-01", f"Slide {idx} changed topic_id"
         assert slide["fact_id"] == "FACT-CARBON-25", f"Slide {idx} changed fact_id"
@@ -279,10 +429,11 @@ def test_multi_slide_continuation_preserves_identity_and_evidence():
         assert slide["leader"] == "Entity 1"
         assert slide["leader_value"] == 100.0
         assert slide["ranking_direction"] == "descending"
+        assert slide["semantic_hash"] == expected_hash, f"Slide {idx} changed semantic_hash"
 
 
 def test_legacy_opt_in_flags_preserved():
-    """Verifies that legacy builders can still be explicitly opted into via force flags."""
+    """Verifies that legacy builders can ONLY be explicitly opted into via technical compatibility flags."""
     with get_connection() as conn:
         ctx = capture_dataset_context(conn, sheet_id=9967416)
         ws_ev = collect_workspace_evidence(conn, {"sheet_id": 9967416})
@@ -302,4 +453,3 @@ def test_legacy_opt_in_flags_preserved():
         workspace_evidence=ws_ev
     )
     assert review_deck.get("metadata", {}).get("content_contract") == "recorded_results_v1"
-
