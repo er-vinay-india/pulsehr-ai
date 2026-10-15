@@ -155,7 +155,7 @@ npm run test:chat
 | Test Suite | Total Tests | Passed | Failed | Skipped | Status |
 | :--- | :---: | :---: | :---: | :---: | :---: |
 | **Backend Suite** | **1,650** | **1,650** | **0** | **0** | **100% Green ✅** |
-| **Frontend Suite** | **74** | **74** | **0** | **0** | **100% Green ✅** |
+| **Frontend Suite** | **75** | **75** | **0** | **0** | **100% Green ✅** |
 | **Historical Legacy Failures** | — | — | **0** | — | **Eliminated (was 17) ✅** |
 
 ---

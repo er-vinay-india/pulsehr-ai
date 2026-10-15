@@ -67,7 +67,7 @@ Implemented in `backend/tests/test_dataset_isolation_and_deletion_cascade.py`:
 | Verification Suite | Target Environment | Total Tests | Passed | Failed | Skipped | Status |
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: |
 | **Backend Regression Suite** | Repo-root & `backend/` pytest | **1,650** | **1,650** | **0** | **0** | **100% Green ✅** |
-| **Frontend Test Suite** | `frontend/` vitest (`npm test -- --run`) | **74** | **74** | **0** | **0** | **100% Green ✅** |
+| **Frontend Test Suite** | `frontend/` vitest & chat suite (`npm test -- --run && npm run test:chat`) | **75** | **75** | **0** | **0** | **100% Green ✅** |
 | **Historical Legacy Failures** | Known baseline issues | — | — | **0** | — | **Eliminated (was 17) ✅** |
 
 ### E. The 8 Registered Domain Modules (`tests/module_registry.py`)

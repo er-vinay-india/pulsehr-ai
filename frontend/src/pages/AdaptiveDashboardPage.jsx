@@ -643,6 +643,9 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
                       display: "inline-flex",
                       alignItems: "center",
                       gap: "6px",
+                      minHeight: "32px",
+                      padding: "6px 10px",
+                      borderRadius: "6px",
                     }}
                     aria-label="Explore evidence ledger and lineage in Data Explorer"
                   >
