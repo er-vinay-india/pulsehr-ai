@@ -13,6 +13,7 @@ import pandas as pd
 from ..data_engine.fact_visualizer import FactVisualizer
 from ..data_engine.semantic_classifier import SemanticClassifier
 from ..data_engine.visualization_models import ChartSeries, VisualChartSpec
+from .attendance_visuals import attendance_leave_visual
 
 
 def _normalized(text: Any) -> str:
@@ -80,6 +81,10 @@ replaced with a full-cohort mean. The existing planner handles richer queries.
     descriptor = prior.get("visualization_context") or {}
     if not isinstance(descriptor, dict):
         descriptor = {}
+    if visual:
+        attendance_visual = attendance_leave_visual(query, df, sheet_name, sheet_id, descriptor)
+        if attendance_visual is not None:
+            return response(**attendance_visual)
     # Backward compatibility for an earlier council response: recover column and
     # operation from its question, but never read numerical values from its prose.
     history = prior.get("history") if isinstance(prior.get("history"), list) else []
