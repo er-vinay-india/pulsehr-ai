@@ -37,13 +37,21 @@ export default function QuickInspectDialog({
         : data?.briefing_element)
     : null;
 
-  const topic = isBriefing ? null : inspectTarget;
-  const isCandidate = !isBriefing && Boolean(selectedCandidate);
+  const topic = isBriefing
+    ? null
+    : selectedCandidate?.topic_id
+    ? selectedCandidate
+    : typeof inspectTarget === "object" && inspectTarget?.topic_id
+    ? inspectTarget
+    : null;
+  const isCandidate = !isBriefing && Boolean(selectedCandidate) && !topic;
   const title = isBriefing
     ? "Executive Summary"
+    : topic
+    ? topic.title || topic.technical_title || "Executive Visual"
     : isCandidate
     ? selectedCandidate?.title || "Candidate Finding"
-    : topic?.title || "Executive Visual";
+    : "Executive Visual";
 
   const cleanTitle = resolvePresentationLabel(title);
   const contextualTarget = topic
@@ -392,6 +400,73 @@ export default function QuickInspectDialog({
                     >
                       {takeaway}
                     </p>
+                  </div>
+                )}
+
+                {/* 4. Recommended Action Plan */}
+                {(topic?.recommended_action || topic?.action) && (
+                  <div>
+                    <h4
+                      style={{
+                        margin: "0 0 4px 0",
+                        fontSize: "0.74rem",
+                        fontWeight: 700,
+                        textTransform: "uppercase",
+                        letterSpacing: "0.05em",
+                        color: "var(--color-text-muted, #3C5059)",
+                      }}
+                    >
+                      Recommended Action Plan
+                    </h4>
+                    <p
+                      style={{
+                        margin: 0,
+                        fontSize: "0.88rem",
+                        color: "var(--color-text-primary, #172B3A)",
+                        lineHeight: 1.5,
+                      }}
+                    >
+                      {topic.recommended_action || topic.action}
+                    </p>
+                  </div>
+                )}
+
+                {/* 5. Cryptographic Evidence Ledger Citations */}
+                {Array.isArray(topic?.evidence_ids) && topic.evidence_ids.length > 0 && (
+                  <div>
+                    <h4
+                      style={{
+                        margin: "0 0 6px 0",
+                        fontSize: "0.74rem",
+                        fontWeight: 700,
+                        textTransform: "uppercase",
+                        letterSpacing: "0.05em",
+                        color: "var(--color-text-muted, #3C5059)",
+                      }}
+                    >
+                      Evidence Ledger Citations ({topic.evidence_ids.length})
+                    </h4>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                      {topic.evidence_ids.map((evid, idx) => (
+                        <span
+                          key={evid || idx}
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            padding: "3px 8px",
+                            borderRadius: "4px",
+                            backgroundColor: "var(--color-bg-subtle, #EEEFE9)",
+                            border: "1px solid var(--color-border, #D4DDD6)",
+                            fontFamily: "monospace",
+                            fontSize: "0.72rem",
+                            fontWeight: 600,
+                            color: "var(--color-brand-primary, #183B56)",
+                          }}
+                        >
+                          {evid}
+                        </span>
+                      ))}
+                    </div>
                   </div>
                 )}
 
