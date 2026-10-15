@@ -202,4 +202,6 @@ def build_governed_presentation_deck(
             "content_contract": "executive_topic_bound_v1"
         }
     }
+    from .spatial_planner import apply_spatial_slide_budgeting
+    deck_dict = apply_spatial_slide_budgeting(deck_dict)
     return seal_business_content(deck_dict)

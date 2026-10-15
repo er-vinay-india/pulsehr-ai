@@ -157,17 +157,18 @@ def _verify_deck_against_executive_topics(sheet_id: int, expected_domain: str):
     )
 
     assert deck.get("metadata", {}).get("contract_mode") == "EXECUTIVE_TOPIC_BOUND"
-    assert deck["slide_count"] == 9  # 1 cover slide + 8 topic slides
-    assert len(deck["slides"]) == 9
+    assert deck["slide_count"] >= 9  # 1 cover slide + 8 topic slides (plus spatial continuation parts)
+    assert len(deck["slides"]) >= 9
 
     upstream_topics = ctx["executive_topics"]
     assert len(upstream_topics) == 8
 
     upstream_by_id = {t["topic_id"]: t for t in upstream_topics}
 
-    # Verify each topic slide (slides 2 to 9)
+    # Verify each topic slide (slides 2 to N)
     topic_slides = deck["slides"][1:]
-    assert len(topic_slides) == 8
+    assert len(topic_slides) >= 8
+    assert len(set(s["topic_id"] for s in topic_slides if s.get("topic_id"))) == 8
 
     for slide in topic_slides:
         t_id = slide["topic_id"]
@@ -283,8 +284,10 @@ def test_natural_language_objectives_never_bypass_governed_topics():
         )
         assert deck.get("metadata", {}).get("contract_mode") == "EXECUTIVE_TOPIC_BOUND", f"Failed for objective: {obj}"
         assert deck.get("metadata", {}).get("content_contract") == "executive_topic_bound_v1", f"Failed for objective: {obj}"
-        assert deck["slide_count"] == 9
-        assert len(deck["slides"]) == 9
+        assert deck["slide_count"] >= 9
+        assert len(deck["slides"]) >= 9
+        topic_ids = [s.get("topic_id") for s in deck["slides"][1:] if s.get("topic_id")]
+        assert len(set(topic_ids)) == 8
         for s in deck["slides"][1:]:
             assert s.get("topic_id") is not None
             assert s.get("semantic_hash") is not None
@@ -369,10 +372,11 @@ def test_real_api_job_pipeline_governed_route():
             persisted_spec = json.loads(row["spec_json"])
 
             assert persisted_spec.get("metadata", {}).get("contract_mode") == "EXECUTIVE_TOPIC_BOUND"
-            assert len(persisted_spec.get("slides", [])) == 9
-            # Check all 8 topic slides carry lineage and hash
+            assert len(persisted_spec.get("slides", [])) >= 9
+            # Check all topic slides carry lineage and hash
             topic_slides = persisted_spec["slides"][1:]
-            assert len(topic_slides) == 8
+            assert len(topic_slides) >= 8
+            assert len(set(ts.get("topic_id") for ts in topic_slides if ts.get("topic_id"))) == 8
             for ts in topic_slides:
                 assert ts.get("topic_id") is not None
                 assert ts.get("semantic_hash") is not None

@@ -368,17 +368,23 @@ class PresentationTopic(BaseModel):
                 categories = [f"Item {i+1}" for i in range(len(values))]
 
         if chart_type in ("table", "table_detail", "grid"):
-            headers = ["Category", self.metric or "Value"]
-            rows = []
-            if categories and values:
-                rows = [[str(c), str(v)] for c, v in zip(categories, values)]
-            elif self.inspect_payload.get("ranking_metadata"):
-                rm = self.inspect_payload["ranking_metadata"]
-                headers = [rm.get("entity_column", "Entity"), rm.get("measure_column", "Measure")]
-                if self.leader:
-                    rows = [[str(self.leader), str(self.leader_value or "")]]
-            if rows:
-                slide_table = {"headers": headers, "rows": rows}
+            if active_spec.get("headers") and active_spec.get("rows"):
+                slide_table = {
+                    "headers": list(active_spec["headers"]),
+                    "rows": [list(r) for r in active_spec["rows"]]
+                }
+            else:
+                headers = ["Category", self.metric or "Value"]
+                rows = []
+                if categories and values:
+                    rows = [[str(c), str(v)] for c, v in zip(categories, values)]
+                elif self.inspect_payload.get("ranking_metadata"):
+                    rm = self.inspect_payload["ranking_metadata"]
+                    headers = [rm.get("entity_column", "Entity"), rm.get("measure_column", "Measure")]
+                    if self.leader:
+                        rows = [[str(self.leader), str(self.leader_value or "")]]
+                if rows:
+                    slide_table = {"headers": headers, "rows": rows}
         elif categories and values:
             valid_cats = []
             valid_vals = []
@@ -476,7 +482,10 @@ class PresentationTopic(BaseModel):
             "analytical_intent": self.analytical_intent,
             "visual_spec": dict(self.visual_spec),
             "inspect_payload": dict(self.inspect_payload),
-            "semantic_hash": self.canonical_semantic_hash()
+            "semantic_hash": self.canonical_semantic_hash(),
+            "physical_plan_hash": hashlib.sha256(
+                f"{self.topic_id}:{slide_order}:{total_slides}:{display_title}:{continuation_badge or ''}".encode("utf-8")
+            ).hexdigest()
         }
 
     def to_slide_contracts(
