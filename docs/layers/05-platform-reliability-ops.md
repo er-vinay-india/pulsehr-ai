@@ -54,13 +54,21 @@ Implemented in `backend/tests/test_dataset_isolation_and_deletion_cascade.py`:
   3. **Simultaneous Co-Existence Isolation**: When multiple datasets co-exist in SQLite, zero cross-dataset joins are allowed in `sheet_relationships` (`left_sheet.dataset_id == right_sheet.dataset_id` for 100% of rows).
   4. **Post-Deletion Orphan Verification**: Deletion is transactional and asserts zero orphan records across all descendant tables (`orphan_check = "PASS"`).
 
-### D. Modular Test Pyramid (`backend/pytest.ini`)
+### D. Modular Test Pyramid & Canonical Test Baselines (`backend/pytest.ini`)
 
 | Execution Tier | Pytest Marker | Latency Target | Scope & Invariants |
 | :--- | :--- | :---: | :--- |
 | **Tier 1: Unit** | `@pytest.mark.unit` | `< 50ms` / test | Pure in-memory algorithmic transformers. Zero DB writes, zero network, zero LLM calls. |
 | **Tier 2: Integration** | `@pytest.mark.integration`, `@pytest.mark.db` | `0.5s - 5s` / mod | FastAPI endpoints, SQLite schema migrations, multi-stage pipelines, reconstruction flows, isolation tests. |
 | **Tier 3: Benchmark** | `@pytest.mark.benchmark` | `30s - 15m` | Multi-case LLM evaluations, large matrix latency profiling (quarantined by default). |
+
+### Current Canonical Test Baselines
+
+| Verification Suite | Target Environment | Total Tests | Passed | Failed | Skipped | Status |
+| :--- | :--- | :---: | :---: | :---: | :---: | :---: |
+| **Backend Regression Suite** | Repo-root & `backend/` pytest | **1,650** | **1,650** | **0** | **0** | **100% Green ✅** |
+| **Frontend Test Suite** | `frontend/` vitest (`npm test -- --run`) | **74** | **74** | **0** | **0** | **100% Green ✅** |
+| **Historical Legacy Failures** | Known baseline issues | — | — | **0** | — | **Eliminated (was 17) ✅** |
 
 ### E. The 8 Registered Domain Modules (`tests/module_registry.py`)
 1. **`enrichment`**: Semantic enrichment, formula discovery, table synthesizer.

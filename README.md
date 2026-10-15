@@ -85,22 +85,78 @@ README.md (Root Parent Node)
 
 ---
 
-## 🧪 Verification & Testing
+---
+
+## 🚦 Product Track Status
+
+| Track / Capability | Subsystem | Status | Acceptance Gate & Invariants |
+| :--- | :--- | :---: | :--- |
+| **Product Track 1** | **HRIDAY Conversational Intelligence** | **FROZEN ✅** | 25/25 canonical analytical questions, 105/105 paraphrase variants, 8/8 grounded refusals, 0 cross-dataset leakage, desktop/mobile chat UX, deterministic P50/P95 latency targets (<35ms / <70ms). |
+| **Product Track 2.1** | **Executive Dashboard: Data Integrity & Content Correctness** | **FROZEN ✅** | Zero cross-domain leakage; zero duplicate visible findings; grammatical narrative completeness; narrative / primary callout / visual leader parity; shared governed fact identity (`fact_id`); fail-closed contradiction suppression; cache-version based invalidation. |
+| **Product Track 2.2** | **Executive Dashboard: Glanceability & Visual Hierarchy** | **FROZEN ✅** | Visible titles phrased as executive business questions; technical title preserved; standardized unit and metric formatting; explicit multi-series legends; hero card dominance; Level-1 prose compression ($\le 60$ words); synthetic unseen-domain title generalization; 1440/1024/390 responsive validation; $\le 20$s comprehension. |
+| **Product Track 2.3** | **Executive Dashboard: Spatial Polish & Responsive Geometry** | **FROZEN ✅** | Semantic invariance under layout composition ($24/24$ cards, 14 protected fields preserved, VisualSpec semantic hash unchanged); 1440, 1024, 768, 390 viewports verified; zero card overlap, zero clipping, zero horizontal overflow, zero zero-size containers; tooltip boundary confinement; axis label readability; zero cumulative resize drift (reversible resize cycle); zero ResizeObserver loop errors; performance baseline (plan gen 0.138ms, first render 830ms, resize stabilization 605–613ms). |
+| **Product Track 2.4** | **Executive Dashboard: Final Product Acceptance & Trust** | **IN PROGRESS** | 11 acceptance pillars audit; executive trust scorecard ($\ge 95/100$ per domain); 20-second comprehension audit; zero P0/P1 defects. |
+| **Presentation Studio** | **13-Phase Slide Automation & PPTX Export** | **NOT YET ACTIVE** | Queued for downstream product track after Executive Dashboard acceptance. |
+| **Data Explorer** | **7-Tab Deep-Dive Analytical Workbench** | **NOT YET ACTIVE** | Queued for downstream product track after Executive Dashboard acceptance. |
+
+---
+
+## 🏛️ System Architecture & Canonical Flow
+
+The core architecture operates as an immutable, governed data plane:
+
+```text
+[Raw Physical File (CSV / XLSX)]
+             │
+             ▼ (Layer 1: Adaptive Table Reconstruction)
+[Clean Logical Records (SQLite pulsehr.sqlite3)]
+             │
+             ▼ (Layer 1: Immutable Columnar Storage)
+[Versioned Parquet Lake (data/datasets/<id>/v<ver>/<table].parquet)]
+             │
+             ▼ (Layer 1: Governed Analytical Query Plane)
+[DuckDB Process-Safe In-Memory Analytical Sessions]
+             │
+             ▼ (Layer 1: Analytical Core Pipeline)
+[Evidence (BoundFact) → Narrative (NarrativeResult) → ExecutiveTopic → VisualSpec → Composition]
+             │
+             ▼ (Multi-Surface Consumer Delivery)
+┌─────────────────────────────┬─────────────────────────────┐
+│  Level 1: Executive Cockpit  │  Level 2: Data Explorer     │
+│  "What requires attention?" │  "Show me the analysis"     │
+├─────────────────────────────┼─────────────────────────────┤
+│  Level 3: Presentation Deck │  HRIDAY Conversational AI   │
+│  16:9 Automated PPTX / PDF  │  Deterministic Fact Q&A     │
+└─────────────────────────────┴─────────────────────────────┘
+```
+
+- **G-Series Modernization**: COMPLETE AND FROZEN.
+- **Orchestration**: `backend/app/services/adaptive_dashboard/engine.py` is a thin facade orchestrating decoupled domain modules (`formatting/`, `evidence/`, `narrative/`, `topics/`, `visuals/`, `composition/`).
+- **Compatibility Debt**: `legacy_elements.py` is isolated compatibility debt to be retired opportunistically, not via another architecture campaign.
+- **Technology Boundaries**: LangGraph handles conversational multi-turn orchestration; MCP serves as the governed capability layer; Model Gateway provides task-specific model routing and fallback; the deterministic core strictly handles all analytical calculations and mathematical truth.
+
+---
+
+## 🧪 Verification & Canonical Test Baseline
 
 ```bash
-# Backend test suite (Deterministic reconstruction, isolation, governance, visual portfolio diversity)
-cd backend
-source .venv/bin/activate
-pytest tests/test_adaptive_table_reconstruction.py tests/test_dataset_isolation_and_deletion_cascade.py tests/test_visual_portfolio_diversity.py tests/test_story_planner_and_governed_pipeline.py
-
-# Run all backend unit and integration tests
+# Backend full test suite (Repository root or backend/)
 pytest
 
-# Frontend test suite & production build
-cd frontend
+# Frontend test suite
 npm test -- --run
-npm run build
+
+# Conversational chat regression suite
+npm run test:chat
 ```
+
+### Current Verified Baseline
+
+| Test Suite | Total Tests | Passed | Failed | Skipped | Status |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| **Backend Suite** | **1,650** | **1,650** | **0** | **0** | **100% Green ✅** |
+| **Frontend Suite** | **74** | **74** | **0** | **0** | **100% Green ✅** |
+| **Historical Legacy Failures** | — | — | **0** | — | **Eliminated (was 17) ✅** |
 
 ---
 
@@ -112,10 +168,11 @@ cd backend
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-uvicorn app.main:app --port 8000 --reload
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
 # 2. Frontend (React + Vite + SCSS)
 cd frontend
 npm install
 npm run dev -- --port 5175
 ```
+

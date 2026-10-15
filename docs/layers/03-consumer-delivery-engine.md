@@ -51,11 +51,14 @@ Implemented in `backend/app/services/adaptive_dashboard/` and `frontend/src/page
        - Synchronizes card and viewport heights across paired row companions (`HeightBalanceIntegrity`), eliminating ragged row baselines.
        - Emits server-driven `topic.spatial_placement` consumed by `ExecutiveVisualCard.jsx` (`span-12`, `span-8`, `span-6`, `span-4`) with synchronized height classes (`height-short`, `height-standard`, `height-tall`), sorted by `order_index` to guarantee strict DOM reading order.
      - *Semantic Visual Compression Layer (`SemanticVisualCompressionLayer`)*: Level-1 executive cards eliminate report prose in favor of high visual density:
+       - `title`: Phrased strictly as an executive business question (e.g. *"Which locations exceed statutory PM10 thresholds?"*). Technical titles (e.g. `PM10 Concentration Ranking`) are preserved separately in metadata.
        - `short_title`: $\le 7$ words (executive noun phrase).
        - `short_context`: $\le 8$ words (cohort context & scope).
-       - `short_finding`: $\le 12$ words (single clear takeaway sentence).
+       - `short_finding`: $\le 12$ words (single clear takeaway sentence). Total visible card prose is strictly bounded to $\le 60$ words.
        - `cta`: $\le 3$ words (e.g. "Inspect →").
        - `SemanticIconRegistry`: Deterministic mapping to SVG icons (`target`, `trophy`, `users`, `calendar`, `alert`, `trend`, `distribution`, `compare`, `relationship`, `shield`, `matrix`, `wind`).
+       - **Narrative / Callout / Visual Leader Parity**: The narrative leader entity, primary callout metric, and visual rank #1 originate strictly from the same governed analytical fact (`fact_id`). Any mismatch triggers fail-closed contradiction suppression.
+       - **Semantic Invariance Under Spatial Composition**: Composition and layout planning cannot mutate topic semantics. All 24 cards across 3 benchmark domains preserve 14 protected fields and VisualSpec SHA-256 semantic hashes identically before and after layout planning.
        - **Zero Permanent Action Clutter**: `recommended_action` is never rendered permanently inside Level-1 dashboard cards. Unabridged business questions, full explanations, recommended action steps, and cryptographic evidence citations are preserved on demand inside the Quick Inspect Drawer and Data Explorer.
      - *Truth > Quota Invariant*: HighView never synthesizes artificial stories, fabricated entities, or fake temporal dimensions to satisfy a count quota.
   4. **Top 3 / Bottom 3 Ranking Card**: Compact ranking overview with polarity awareness (`HIGHER_IS_BETTER` vs `LOWER_IS_BETTER`). Enforces a maximum of 6 unique entities and avoids duplicate entries on small cohorts ($N \le 6$). Deep-links via `"Explore full ranking →"`.
@@ -75,7 +78,7 @@ Implemented in `backend/app/services/adaptive_dashboard/` and `frontend/src/page
   - *Standardized `CardActions` Component*: Unifies primary ("Inspect") and secondary ("Deep dive") controls into accessible buttons and anchors.
   - *Portal `<dialog>` Quick Inspect*: Quick inspect context is rendered through React Portal (`createPortal(..., document.body)`) using a native `<dialog open>` element with keyboard focus trap, `Escape` key dismissal, and automatic focus restoration to the originating trigger button.
 - **Redundancy Suppression (`VisualStoryRedundancyIntegrity`)**: Standalone scalar cards that duplicate values in the KPI strip are suppressed from the visual stories grid.
-- **Multi-Viewport Responsive Sizing & Zero Overflow**: 12-column grid system collapses compact cards to 6-span on tablets (max-width 1024px) and 12-span single-column on mobile (<768px), guaranteeing zero horizontal clipping, zero orphan cards, and zero CSS `order:` reordering.
+- **Multi-Viewport Responsive Sizing & Zero Overflow**: 12-column grid system collapses compact cards to 6-span on tablets (1024px) and small tablets (768px), and 12-span single-column on mobile (390px), guaranteeing zero horizontal clipping, zero card collisions, zero orphan cards, and zero CSS `order:` reordering.
 
 ### Consumer 3B: Data Explorer ("Show me the analysis behind it.")
 Implemented in `frontend/src/pages/DataExplorerPage.jsx` and `frontend/src/components/explorer/`:

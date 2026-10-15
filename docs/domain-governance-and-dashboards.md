@@ -286,3 +286,10 @@ Domain guards in the registry prevent cross-domain token leakage (e.g. `users` i
 - Clicking `"Inspect →"` opens the Quick Inspect Drawer, which displays the full business question, unabridged paragraph explanation, recommended action plan, and cryptographic evidence ledger citations (`EVID-XXX`).
 - The full deep dive remains available by clicking into the relevant Data Explorer tab.
 
+### D. Governed Card Invariants (Product Tracks 2.1 – 2.3)
+1. **Business-Question Visible Titles**: All visible card titles must be phrased as clear executive business questions (e.g. *"Which departments lead hybrid policy compliance?"*, *"Which locations exceed statutory PM10 thresholds?"*). Technical titles (e.g. `PM10 Concentration Ranking`) are preserved separately in metadata for developer and inspection workflows.
+2. **Narrative / Callout / Visual Leader Parity**: The narrative leader entity, primary callout metric, and visual rank #1 originate strictly from the same governed analytical fact (`fact_id`). Any divergence triggers fail-closed contradiction suppression before UI rendering.
+3. **Semantic Invariance Under Spatial Composition**: Composition and layout planning are strictly prohibited from mutating topic semantics. All 14 protected fields and the VisualSpec SHA-256 semantic hash must remain identical before and after layout planning.
+4. **Standardized Formatting & Multi-Series Legends**: Units and metric values follow standardized formatting rules across all KPI chips. Multi-measure visuals (e.g. dumbbell disparity spreads) enforce explicit legends to ensure immediate comprehension.
+
+

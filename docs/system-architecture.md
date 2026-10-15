@@ -132,25 +132,51 @@ The platform is architected into **5 cohesive, integrated layers** supported by 
 
 ---
 
-## 5. Modernization & Strangler Architecture (Phases G1 – G5)
+## 5. Modernization & Strangler Architecture (Phases G1 – G5 — COMPLETE & FROZEN)
 
-To decouple HighView's deterministic core from monolithic engine dependencies, the platform implements a disciplined strangler refactoring model:
+The G-series strangler refactoring is **COMPLETE AND FROZEN**. HighView's deterministic core is fully decoupled from monolithic engine dependencies, establishing the canonical system architecture:
 
 ```text
-AnalyticalFact
-      ↓  (app/services/adaptive_dashboard/evidence/)
-BoundFact / EvidenceBinding
-      ↓  (app/services/adaptive_dashboard/narrative/)
-NarrativeResult / Executive Briefing
-      ↓  (app/services/adaptive_dashboard/composition_planner.py)
-ExecutiveTopic (Immutable Aggregate)
-      ↓  (app/services/adaptive_dashboard/visuals/)
-VisualSpec (Theme-Agnostic)
-      ↓  (app/services/adaptive_dashboard/spatial_composition_optimizer.py)
-Spatial Composition (12-Col Responsive Grid)
-      ↓
-React Frontend Presentation (ECharts / SCSS Tokens)
+[Raw Physical File (CSV / XLSX)]
+             │
+             ▼ (Pre-Semantic Reconstruction: AdaptiveTableReconstructionEngine)
+[SQLite Database (pulsehr.sqlite3) — Metadata, Governance, Ingestion Lineage]
+             │
+             ▼ (Columnar Parquet Lake: data/datasets/<id>/v<ver>/<table].parquet)
+[DuckDB Query Plane — Process-Safe In-Memory Analytical Execution]
+             │
+             ▼ (Analytical Core Pipeline: apps/services/adaptive_dashboard/)
+┌────────────────────────────────────────────────────────────────────────┐
+│ AnalyticalFact                                                         │
+│       ↓  (evidence/ — BoundFact, EvidenceBinding, Cryptographic Hash)  │
+│ BoundFact / EvidenceBinding                                            │
+│       ↓  (narrative/ — NarrativeResult, TitleBuilder, FindingBuilder)  │
+│ NarrativeResult / Executive Briefing                                   │
+│       ↓  (topics/ — ExecutiveTopic, TopicIdentityFactory)              │
+│ ExecutiveTopic (Immutable Aggregate)                                   │
+│       ↓  (visuals/ — VisualSpec, VisualSpecFactory, Theme-Agnostic)    │
+│ VisualSpec (Theme-Agnostic)                                            │
+│       ↓  (composition/ — SpatialCompositionPlanner, 12-Col Grid)       │
+│ Spatial Composition (12-Col Responsive Grid)                           │
+└────────────────────────────────────────────────────────────────────────┘
+             │
+             ▼ (Consumer Delivery Surfaces)
+┌────────────────────────────────────────────────────────────────────────┐
+│ • Executive Dashboard: Level-1 Cockpit ("What requires attention?")    │
+│ • Data Explorer: Level-2 Workbench ("Show me the analysis behind it")  │
+│ • Presentation Studio: 13-Phase Slide Automation & PPTX/PDF Export    │
+│ • HRIDAY Copilot: Conversational Analytical Q&A (0-LLM Math)           │
+└────────────────────────────────────────────────────────────────────────┘
 ```
+
+### Canonical Component Responsibilities
+
+1. **`engine.py`**: A thin orchestration facade over decoupled domain modules (`formatting/`, `evidence/`, `narrative/`, `topics/`, `visuals/`, `composition/`). The engine coordinates governed components; it does not reimplement them.
+2. **`legacy_elements.py`**: Isolated backward-compatibility debt. Legacy single-sheet builders remain quarantined here and are to be retired opportunistically, not via another architecture campaign.
+3. **LangGraph**: Governs conversational multi-turn orchestration, dialog state management, and intent routing across agent workflows.
+4. **Model Context Protocol (MCP)**: Governed capability layer providing standardized tool and context bindings for external interactions.
+5. **Model Gateway**: Handles local and hosted model selection, role-based escalation (`FAST`, `ANALYST`, `REASONER`, `WRITER`, `CRITIC`), fallback policies, and endpoint health.
+6. **Deterministic Core**: Strictly owns mathematical calculations, aggregations, statistical tests, ranking polarity, and cryptographic fact identity (`FACT-XXX`, `EVID-XXX`). AI models never execute arithmetic.
 
 ### Strangler Milestone Highlights
 
@@ -232,7 +258,34 @@ React Frontend Presentation (ECharts / SCSS Tokens)
   - **Preserved Backward Compatibility (`legacy_elements.py`):** Extracted legacy single-sheet builders and source profilers (`profile_source`, `evaluate_and_select_primary_metric`, `build_average_logged_time_chart`, `build_temporal_measure_chart`, `build_period_attendance_chart`, `build_categorical_breakdown_element`, `build_explanatory_comparator_element`, `build_segment_disparity_element`, `validate_cross_sheet_correlation_candidate`, `build_decision_focus_element`) with zero-overhead re-export facades in `engine.py`.
   - **Strict Downward Dependency Direction:** Verified via AST audit that all 6 extracted packages (`formatting/`, `evidence/`, `narrative/`, `topics/`, `visuals/`, `composition/`) have strictly ZERO imports of `adaptive_dashboard.engine`.
   - **Executable AST Purity Verification:** Automated test (`test_g5_7_engine_ast_purity`) guarantees `engine.py` contains zero raw database engines (`sqlite3`, `duckdb`), zero direct AI/LLM SDK calls (`ollama`, `openai`, `google.genai`, `mcp`), zero theme/React/CSS dependencies, zero manual spatial packing, zero direct evidence ID generation, zero direct topic ID hashing, and zero chart capability rules.
-  - **Test Suite Parity:** 86/86 Phase-G tests passed; full backend regression suite confirmed at 1,461 passed with the exact 17 known baseline legacy failures, 1 skipped, and 0 new regressions.
+  - **Test Suite Parity (Historical Milestone):** 86/86 Phase-G tests passed; full backend regression suite confirmed at 1,461 passed with the exact 17 known baseline legacy failures, 1 skipped, and 0 new regressions. *(Note: All 17 legacy test failures have since been permanently resolved in subsequent work, bringing the canonical backend baseline to 1,650/1,650 passed, 0 failures, 0 skipped.)*
   - **Multi-Viewport Browser Closure:** Verified via live Puppeteer testing across 1440px desktop, 1024px tablet, 390px mobile, and a 4-step multi-domain switch (Workforce &rarr; Retail &rarr; Environmental &rarr; Workforce) with 0 card overlaps, 0 horizontal overflow, 0 console errors, and 0 cross-domain vocabulary leaks.
   - **Strangler Modernization Complete:** Formally closes the HighView analytical pipeline strangler migration (G1 &rarr; G5.7).
+
+---
+
+## 6. Product Track Status & Governed Invariants
+
+HighView executes under disciplined product tracks with strict acceptance criteria, automated invariant verification, and multi-viewport browser testing.
+
+### Product Track Matrix
+
+| Product Track | Focus Subsystem | Status | Acceptance Gates & Governed Invariants |
+| :--- | :--- | :---: | :--- |
+| **Product Track 1** | **HRIDAY Conversational Intelligence** | **FROZEN ✅** | • 25/25 canonical analytical benchmark questions passed.<br>• 105/105 paraphrase variants with deterministic parity.<br>• 8/8 grounded refusals with zero cross-dataset leakage.<br>• Desktop and mobile conversational chat UX verified.<br>• Deterministic latency targets: Planning P50 4.57ms / P95 6.95ms; Execution P50 30.64ms / P95 59.32ms; Total deterministic path P50 34.82ms / P95 66.06ms.<br>• Zero backend regressions. |
+| **Product Track 2.1** | **Executive Dashboard: Data Integrity & Content Correctness** | **FROZEN ✅** | • Zero cross-domain vocabulary or metric leakage (`DatasetIsolationIntegrity`).<br>• Zero duplicate visible narrative findings (`NarrativeDeduplicationIntegrity`).<br>• Complete grammatical integrity (full subject-predicate sentences, no compression-induced clipping).<br>• **Narrative / Callout / Visual Leader Parity**: Narrative leader entity, primary callout metric, and visual rank #1 originate from the exact same governed analytical fact (`fact_id`).<br>• Fail-closed contradiction suppression: Any mismatch across narrative leader, primary callout, and visual leader fails closed before UI emission.<br>• Cache versioning: Automatic cache invalidation driven by engine version tokens (`COMPOSITION_ENGINE_VERSION`). |
+| **Product Track 2.2** | **Executive Dashboard: Glanceability & Visual Hierarchy** | **FROZEN ✅** | • Card visible titles phrased strictly as executive business questions (e.g. *"Which locations exceed statutory PM10 thresholds?"*).<br>• Technical titles preserved independently in underlying metadata for developer and inspection workflows.<br>• Standardized unit and metric formatting across all KPI callouts.<br>• Explicit multi-series legends rendered on comparative visuals (e.g. dumbbell and multi-measure charts).<br>• Hero card dominance: Top decision section anchored by full-span visual with clear visual priority.<br>• Level-1 prose compression: Narrative copy strictly bounded ($\le 60$ words per card) to maximize glanceability.<br>• Synthetic unseen-domain title generalization verified across healthcare, cloud latency, supply chain, and education.<br>• Responsive browser validation verified across 1440px desktop, 1024px tablet, and 390px mobile.<br>• Timed comprehension audit: All cards comprehensible within $\le 20$ seconds. |
+| **Product Track 2.3** | **Executive Dashboard: Spatial Polish & Responsive Geometry** | **FROZEN ✅** | • **Semantic Invariance Under Composition**: Spatial placement, row packing, and viewport layout cannot alter topic semantics. All 24 cards across 3 benchmark domains preserve 14 protected fields (`topic_id`, `semantic_topic_key`, `analytical_intent`, `domain`, `dataset_id`, `evidence_ids`, `entity_grain`, `metric_names`, `dimension_names`, `title`, `finding`, `business_value`, `primary_callout`, `data_points_hash`).<br>• Pre-composition and post-composition VisualSpec SHA-256 semantic hashes match identically ($24/24$).<br>• Complete responsive 12-state matrix verified: 1440px desktop, 1024px tablet, 768px small tablet, 390px mobile across Workforce, Retail, and Environmental datasets.<br>• Zero card overlap, zero container clipping, zero horizontal overflow, zero zero-size charts.<br>• Tooltip confinement: All tooltips strictly confined to chart and card boundaries (`confine: true`).<br>• Axis label readability: Dedicated readability profiles with automatic label rotation, staggering, and ellipsis.<br>• Zero cumulative resize drift: Reversible resize cycle (`1440 → 1024 → 768 → 390 → 768 → 1024 → 1440`) confirmed with 0px drift across all 24 cards.<br>• Zero ResizeObserver loop errors or layout oscillations.<br>• Performance baseline verified: Layout plan generation mean 0.138ms / P95 0.194ms; first render mean 830ms / P95 950ms; resize stabilization 605–613ms. |
+| **Product Track 2.4** | **Executive Dashboard: Final Product Acceptance & Trust** | **IN PROGRESS** | • Full audit across 11 Acceptance Pillars.<br>• Executive Trust Scorecard targeting $\ge 95/100$ per domain.<br>• 20-second decision comprehension test.<br>• Zero P0 / unresolved P1 defects. |
+| **Presentation Studio** | **13-Phase Slide Automation & PPTX Export** | **NOT YET ACTIVE** | Queued for downstream product track after Executive Dashboard acceptance. |
+| **Data Explorer** | **7-Tab Deep-Dive Analytical Workbench** | **NOT YET ACTIVE** | Queued for downstream product track after Executive Dashboard acceptance. |
+
+### Current Canonical Test Baselines
+
+| Verification Suite | Target Environment | Total Tests | Passed | Failed | Skipped | Status |
+| :--- | :--- | :---: | :---: | :---: | :---: | :---: |
+| **Backend Regression Suite** | Repo-root & `backend/` pytest | **1,650** | **1,650** | **0** | **0** | **100% Green ✅** |
+| **Frontend Test Suite** | `frontend/` vitest (`npm test -- --run`) | **74** | **74** | **0** | **0** | **100% Green ✅** |
+| **Historical Legacy Failures** | Known baseline issues | — | — | **0** | — | **Eliminated (was 17) ✅** |
+
 

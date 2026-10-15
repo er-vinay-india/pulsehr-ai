@@ -64,7 +64,7 @@ Implemented in `backend/app/services/adaptive_dashboard/composition_planner.py`,
    - Horizontal performance bars with benchmark threshold indicators and gap badges.
 5. **`COMPARISON` Intent &rarr; Lollipop & Dumbbell Charts**:
    - Lollipops for clean entity-level measure comparisons without heavy ink.
-   - Dumbbells for pairwise disparity spreads (e.g. SO2 vs NO2 gap across urban centers).
+   - Dumbbells for pairwise disparity spreads (e.g. SO2 vs NO2 gap across urban centers) with explicit multi-series legends.
 6. **`COMPOSITION` Intent &rarr; 100% Stacked Bars & Treemaps**:
    - Capacity breakdown across categorical cohorts or multi-sheet reconciliation.
 7. **`ANOMALY` / `OUTLIER` Intent &rarr; Variance Bars**:
@@ -179,6 +179,10 @@ Implemented in `backend/app/services/adaptive_dashboard/visual_portfolio_optimiz
      - `PriorityAreaIntegrity`: The primary Hero visual receives span 12 and anchors the top decision section.
      - `Synchronized DOM Order & Zero CSS Reordering`: Partitioned topics within sections are sorted strictly by server-assigned `order_index`, ensuring DOM reading order identically matches visual row packing order without CSS `order:`.
      - `Tiered Governance Banner`: Informational verification notices render as a compact `<div className="governance-status-compact">` pill (`Governance ✓ Verified Single-Domain Analysis`), reserving high-prominence alert banners strictly for critical integrity failures or coverage gaps.
+     - `Tooltip Boundary Confinement`: All chart and card tooltips are strictly confined within their viewports (`confine: true`), preventing viewport clipping and horizontal page scrollbars.
+     - `Axis Readability Profiles`: Specialized label readability profiles apply automated rotation, staggering, and truncation rules to prevent axis collision.
+     - `Zero Cumulative Resize Drift`: Responsive geometry is strictly reversible; complete resize cycle (`1440 → 1024 → 768 → 390 → 768 → 1024 → 1440`) confirmed with 0px cumulative drift across all 24 cards.
+     - `Performance Baselines`: Layout plan generation mean 0.138ms / P95 0.194ms; first render mean 830ms / P95 950ms; resize stabilization 605–613ms; zero ResizeObserver loop errors.
    - **Multi-Viewport Responsive Contract**:
      - **Desktop ($\ge 1025\mathrm{px}$)**: Full server-optimized multi-column layout (`span-12`, `span-8`, `span-6`, `span-4`).
      - **Tablet ($\le 1024\mathrm{px}$)**: Cards with span $>6$ collapse to span 12; cards with span $\le 6$ scale to span 6 (balanced 2-column grid).
