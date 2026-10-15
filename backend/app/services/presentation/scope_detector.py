@@ -448,6 +448,35 @@ def capture_dataset_context(conn, sheet_id: int | None = None, dataset_id: int |
     visual_dashboard = build_workspace_visual_dashboard(conn, sheet_id=sid)
     visuals = visual_dashboard.get("visualizations", [])
 
+    # Product Track 3.2: Upstream Governed ExecutiveTopic & PresentationTopic binding
+    executive_topics: list[dict[str, Any]] = []
+    presentation_topics: list[Any] = []
+    try:
+        from ..adaptive_dashboard.engine import run_adaptive_dashboard
+        from .topic_contract import PresentationTopic
+
+        target_ds_id = target_sheet.get("dataset_id")
+        ad_resp = run_adaptive_dashboard(
+            sheet_id=sid,
+            dataset_id=target_ds_id,
+            include_dataset_intelligence=True
+        )
+        if hasattr(ad_resp, "executive_topics") and ad_resp.executive_topics:
+            executive_topics = [
+                t if isinstance(t, dict) else t.model_dump()
+                for t in ad_resp.executive_topics
+            ]
+            presentation_topics = [
+                PresentationTopic.from_executive_topic(
+                    t,
+                    domain=domain,
+                    source_sheet_name=target_sheet.get("name") or ""
+                )
+                for t in executive_topics
+            ]
+    except Exception as ad_exc:
+        logger.warning(f"Could not load governed executive topics from adaptive dashboard: {ad_exc}")
+
     return {
         "target_sheet": target_sheet,
         "all_sheets": all_sheets,
@@ -458,8 +487,11 @@ def capture_dataset_context(conn, sheet_id: int | None = None, dataset_id: int |
         "ground_truth": ground_truth,
         "snapshot_hash": snapshot_hash,
         "visual_dashboard": visual_dashboard,
-        "visuals": visuals
+        "visuals": visuals,
+        "executive_topics": executive_topics,
+        "presentation_topics": presentation_topics
     }
+
 
 
 def collect_workspace_evidence(conn, scope: dict[str, Any]) -> dict[str, Any]:
@@ -525,5 +557,8 @@ def collect_workspace_evidence(conn, scope: dict[str, Any]) -> dict[str, Any]:
         "total_records": tot_rows,
         "reporting_period_summary": period_summary,
         "is_partial_year": is_partial,
-        "disconnected_boundary_note": shared_pkg["disconnected_boundary_note"]
+        "disconnected_boundary_note": shared_pkg["disconnected_boundary_note"],
+        "executive_topics": primary_ctx.get("executive_topics", []),
+        "presentation_topics": primary_ctx.get("presentation_topics", [])
     }
+

@@ -40,8 +40,9 @@ def semantic_issues(deck, source_columns=None):
     Contract decks have deliberately bounded language. Older AI plans additionally
     require actual source capabilities for causal/commercial assertions.
     """
-    if deck.get('metadata', {}).get('deck_style') == 'decision_brief':
-        return []  # Its independent immutable snapshot verifier owns this path.
+    if deck.get('metadata', {}).get('deck_style') == 'decision_brief' or deck.get('metadata', {}).get('contract_mode') == 'EXECUTIVE_TOPIC_BOUND':
+        return []  # Upstream governed contract verifier owns this path.
+
     issues = []
     ledger = {e.get('evidence_id'): e for e in deck.get('evidence_ledger', [])}
     slides = deck.get('slides') or []

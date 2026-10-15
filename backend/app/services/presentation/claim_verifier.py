@@ -270,7 +270,7 @@ def verify_presentation_claims(
         from .decision_deck import verify_decision_deck
         return verify_decision_deck(deck_spec, evidence_ledger)
 
-    if deck_spec.get("metadata", {}).get("content_contract"):
+    if deck_spec.get("metadata", {}).get("content_contract") or deck_spec.get("metadata", {}).get("contract_mode") == "EXECUTIVE_TOPIC_BOUND":
         from .content_validation import verify_business_content
         return verify_business_content(deck_spec)
 

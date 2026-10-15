@@ -89,18 +89,47 @@ def generate_presentation_deck_spec(
 
     target_sheet = dataset_context["target_sheet"]
     records = dataset_context["records"]
-    from .hr_report import build_hr_report
-    hr_deck = build_hr_report(scope, dataset_context, workspace_evidence)
-    if hr_deck is not None:
-        total = len(hr_deck["slides"])
-        for idx, slide in enumerate(hr_deck["slides"], 1):
-            if callable(on_slide_start):
-                on_slide_start(idx, total, slide["title"], slide["category"])
-            if callable(on_slide_progress):
-                on_slide_progress(idx, total, slide["title"], slide["category"], slide_dict=slide)
+    theme_id = scope.get("theme_id") or "executive_dark"
+
+    has_governed_topics = bool(
+        dataset_context.get("presentation_topics")
+        or dataset_context.get("executive_topics")
+        or (workspace_evidence and workspace_evidence.get("presentation_topics"))
+        or (workspace_evidence and workspace_evidence.get("executive_topics"))
+    )
+
+    # Invariant: NO build_hr_report analytical bypass for governed datasets
+    if scope.get("force_legacy_hr_builder", False) or scope.get("objective") == "Attendance review" or (not has_governed_topics and not scope.get("prevent_hr_report", False)):
+        from .hr_report import build_hr_report
+        hr_deck = build_hr_report(scope, dataset_context, workspace_evidence)
+        if hr_deck is not None:
+            total = len(hr_deck["slides"])
+            for idx, slide in enumerate(hr_deck["slides"], 1):
+                if callable(on_slide_start):
+                    on_slide_start(idx, total, slide["title"], slide["category"])
+                if callable(on_slide_progress):
+                    on_slide_progress(idx, total, slide["title"], slide["category"], slide_dict=slide)
+            if materialize_visuals_now:
+                hr_deck["slides"] = materialize_slide_visuals(hr_deck["slides"], hr_deck["metadata"]["theme_id"])
+            return hr_deck
+
+    # Governed Presentation Builder: Direct Upstream Contract Binding (Track 3.2)
+    is_wide_attendance = any(str(c).startswith("Person_") for c in dataset_context.get("columns", []))
+    is_workspace_findings = scope.get("scope_type") == "workspace" and bool(workspace_evidence and workspace_evidence.get("candidate_findings"))
+
+    if has_governed_topics and not is_wide_attendance and not is_workspace_findings and not scope.get("force_legacy_builders", False) and not scope.get("force_ai_planner", False):
+        from .governed_presentation_builder import build_governed_presentation_deck
+        gov_deck = build_governed_presentation_deck(
+            scope=scope,
+            dataset_context=dataset_context,
+            workspace_evidence=workspace_evidence,
+            on_slide_start=on_slide_start,
+            on_slide_progress=on_slide_progress
+        )
         if materialize_visuals_now:
-            hr_deck["slides"] = materialize_slide_visuals(hr_deck["slides"], hr_deck["metadata"]["theme_id"])
-        return hr_deck
+            gov_deck["slides"] = materialize_slide_visuals(gov_deck["slides"], theme_id)
+        return gov_deck
+
     domain = dataset_context["domain"]
     ground_truth = dataset_context["ground_truth"]
     snapshot_hash = dataset_context["snapshot_hash"]
@@ -476,12 +505,13 @@ def generate_presentation_deck_spec(
             logger.exception(f"Presentation Director / Orchestrator execution failed, falling back to deterministic builders: {exc}")
             slides = []
 
-    if not slides:
+    if not slides and scope.get("force_grounded_review", False):
         from .grounded_review import build_grounded_review
         deck = build_grounded_review(scope, dataset_context, workspace_evidence)
         if materialize_visuals_now:
             deck["slides"] = materialize_slide_visuals(deck["slides"], theme_id)
         return deck
+
 
     if not slides:
         # Legacy builders remain encapsulated for historical deck compatibility.
