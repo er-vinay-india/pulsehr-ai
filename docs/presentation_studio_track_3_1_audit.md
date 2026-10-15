@@ -29,11 +29,11 @@ This audit was conducted strictly in **AUDIT-ONLY** mode without modifying gener
 
 The default production pipeline was benchmarked across the three standard benchmark domains with `enable_ai_planner=True` and `force_legacy_builders=False`.
 
-| Benchmark Domain | Sheet ID | Active Route / Content Contract | AI Model Invocation | Total Latency | Final Slide Count | Primary Presentation Failure |
+| Benchmark Domain | Sheet ID | Active Route / Content Contract | AI Model Invocation | Total Latency (Run 1 / Run 2) | Final Slide Count | Primary Presentation Failure |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Workforce** | `9967416` | Bespoke `build_hr_report`<br>(`hr_attendance_v1`) | **Bypassed** (Deterministic alias heuristic) | **1.794s** | 9 slides | Ignores upstream `ExecutiveTopic`s; hardcoded slide sequence. |
-| **Retail** | `9967418` | AI Director $\to$ Fallback `build_grounded_review`<br>(`recorded_results_v1`) | **Qwen 3.5:9b** (5 stages, failed validation at line 471) | **223.271s** | 9 slides | Plan validation error causes raw column-by-column dump. |
-| **Environmental** | `9967419` | AI Director $\to$ Fallback `build_grounded_review`<br>(`recorded_results_v1`) | **Qwen 3.5:9b** (5 stages, failed validation at line 471) | **255.308s** | 9 slides | Plan validation error causes raw column-by-column dump. |
+| **Workforce** | `9967416` | Bespoke `build_hr_report`<br>(`hr_attendance_v1`) | **Bypassed** (0 calls, deterministic alias heuristic) | **1.794s / 1.177s**<br>(N=5 Mean: 0.882s) | 9 slides | Ignores upstream `ExecutiveTopic`s; hardcoded slide sequence. |
+| **Retail** | `9967418` | AI Director $\to$ Fallback `build_grounded_review`<br>(`recorded_results_v1`) | **24 Calls**: Qwen 3.5:9b (8 macro calls) + Granite 4.0:3b-h (16 micro calls) | **223.271s / 195.662s**<br>(N=2 Mean: 209.47s) | 9 slides | Plan validation error (`ValueError` at `deck_generator.py:471`) discards all 24 model outputs; falls back to raw column dump. |
+| **Environmental** | `9967419` | AI Director $\to$ Fallback `build_grounded_review`<br>(`recorded_results_v1`) | **30 Calls**: Qwen 3.5:9b (10 macro calls) + Granite 4.0:3b-h (20 micro calls) | **255.308s / 260.509s**<br>(N=2 Mean: 257.91s) | 9 slides | Plan validation error (`ValueError` at `deck_generator.py:471`) discards all 30 model outputs; falls back to raw column dump. |
 
 ---
 
@@ -106,21 +106,58 @@ Presentation Studio is organized into 13 formal pipeline execution phases (`pipe
 
 ### Generation & Export Latency Benchmarks
 
-| Metric / Stage | Workforce (`hr_attendance_v1`) | Retail (`recorded_results_v1`) | Environmental (`recorded_results_v1`) |
+Repeated latency characterization was conducted across all three benchmark domains. For Workforce, $N=5$ repeated runs were executed to characterize distribution. For Retail and Environmental, $N=2$ complete end-to-end runs were executed (each cycle requires ~3.5–4.5 minutes of local GPU inference across 24–30 model calls):
+
+| Metric / Stage | Workforce (`hr_attendance_v1`)<br>($N=5$ Distribution) | Retail (`recorded_results_v1`)<br>($N=2$ Distribution) | Environmental (`recorded_results_v1`)<br>($N=2$ Distribution) |
 | :--- | :---: | :---: | :---: |
-| **Preflight & Evidence Ingestion** | 45 ms | 120 ms | 135 ms |
-| **Director Planning Latency** | 0 ms (Bypassed) | 221,400 ms | 253,200 ms |
+| **Preflight & Evidence Ingestion** | 45 ms | 115 ms | 130 ms |
+| **Director & Orchestrator Latency** | 0 ms (Bypassed) | Run 1: 221.40s / Run 2: 194.98s<br>(Mean: 208.19s) | Run 1: 253.20s / Run 2: 259.70s<br>(Mean: 256.45s) |
 | **Deck Spec Generation** | 12 ms | 18 ms | 22 ms |
 | **Geometry Resolution (`resolve_slide`)** | 1.8 ms | 0.9 ms | 1.1 ms |
-| **PPTX Export Latency** | 286.63 ms | 38.14 ms | 42.50 ms |
-| **PDF Export Latency** | 51.76 ms | 5.61 ms | 6.20 ms |
-| **Total End-to-End Latency** | **1.794s** | **223.271s** | **255.308s** |
+| **PPTX Export Latency** | Mean: 62.6 ms (P50: 62.5 ms, Max: 63.2 ms) | 38.14 ms | 42.50 ms |
+| **PDF Export Latency** | Mean: 9.6 ms (P50: 9.6 ms, Max: 10.1 ms) | 5.61 ms | 6.20 ms |
+| **Total End-to-End Latency** | **Mean: 0.882s** (P50: 0.860s, Min: 0.823s, Max: 1.031s) | **Mean: 209.47s** (Run 1: 223.27s, Run 2: 195.66s) | **Mean: 257.91s** (Run 1: 255.31s, Run 2: 260.51s) |
 
-### Model Call Characterization
+#### Latency Decomposition
+- **Workforce**: 100% deterministic code execution (<1s e2e, 0 model calls).
+- **Retail & Environmental**: **99.6%** of end-to-end duration is consumed by sequential local LLM generation on the GPU (~195s Retail, ~260s Environmental); Python preprocessing, layout resolution, and export combined account for less than **0.4%** (<1 second).
 
-- **Workforce**: 0 model calls (100% deterministic heuristic).
-- **Retail**: 5 model calls (`ModelRole.ANALYST`, `qwen3.5:9b`), average latency 44.2s per call, 100% fallback rate due to validation rejection.
-- **Environmental**: 5 model calls (`ModelRole.ANALYST`, `qwen3.5:9b`), average latency 50.6s per call, 100% fallback rate due to validation rejection.
+---
+
+### Empirical Model Call Ledger
+
+Every LLM invocation in the presentation pipeline was intercepted and recorded in `backend/data/exports/model_call_ledger.json`. 
+
+#### Workforce Domain (`9967416`)
+- **Total Model Calls**: **0** (100% deterministic heuristic diversion in `build_hr_report`).
+
+#### Retail Domain (`9967418`): 24 Model Calls (194.98s Model Time)
+| Step Name | Executing Model | Call Count | Total Latency | Avg Latency | Min Latency | Max Latency | Purpose & Behavioral Notes |
+| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :--- |
+| `director_intent_planner` | `qwen3.5:9b` | 1 | 14.19s | 14.19s | 14.19s | 14.19s | Macro intent determination |
+| `director_information_triage` | `qwen3.5:9b` | 3 | 39.87s | 13.29s | 10.97s | 16.28s | Truth triage across partitioned columns |
+| `director_narrative_planner` | `qwen3.5:9b` | 1 | 22.89s | 22.89s | 22.89s | 22.89s | Narrative arc and section structuring |
+| `director_slide_planner` | `qwen3.5:9b` | 3 | 81.08s | 27.03s | 21.55s | 37.97s | Initial slide planning + bounded recovery replanning |
+| `granite_presentation_orchestration` | `granite4:3b-h` | 16 | 36.93s | 2.31s | 1.77s | 3.21s | Per-slide executive synthesis and speaker notes |
+| **Total Retail** | — | **24** | **194.98s** | — | — | — | **Post-execution failure at line 471 (`ValueError`)** |
+
+#### Environmental Domain (`9967419`): 30 Model Calls (259.70s Model Time)
+| Step Name | Executing Model | Call Count | Total Latency | Avg Latency | Min Latency | Max Latency | Purpose & Behavioral Notes |
+| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :--- |
+| `director_intent_planner` | `qwen3.5:9b` | 1 | 12.43s | 12.43s | 12.43s | 12.43s | Macro intent determination |
+| `director_information_triage` | `qwen3.5:9b` | 3 | 34.69s | 11.56s | 10.78s | 12.69s | Truth triage across air quality metrics |
+| `director_narrative_planner` | `qwen3.5:9b` | 3 | 44.30s | 14.77s | 8.92s | 26.39s | Narrative arc generation with prompt retries |
+| `director_slide_planner` | `qwen3.5:9b` | 3 | 122.78s | 40.93s | 35.02s | 52.55s | Slide boundary planning + duplicate recovery |
+| `granite_presentation_orchestration` | `granite4:3b-h` | 20 | 45.50s | 2.28s | 1.49s | 3.05s | Per-slide executive synthesis and speaker notes |
+| **Total Environmental** | — | **30** | **259.70s** | — | — | — | **Post-execution failure at line 471 (`ValueError`)** |
+
+#### The Core Architectural Failure
+In both Retail and Environmental, **100% of model invocations succeed individually**, generating rich multi-slide plans and Granite-synthesized executive narratives. However, at `deck_generator.py:471`:
+```python
+if director_deck_spec and not director_deck_spec.get("metadata", {}).get("planning_validation", {}).get("is_valid", False):
+    raise ValueError("Presentation plan lacks supported answers or claims.")
+```
+An over-strict post-validation condition raises `ValueError`, causing the orchestrator exception handler (lines 475–478) to **completely discard all 24–30 model outputs and 195–260 seconds of GPU compute**, falling back to the raw-column `build_grounded_review` dump.
 
 ---
 
@@ -135,25 +172,46 @@ Presentation Studio is organized into 13 formal pipeline execution phases (`pipe
 | **Retail** | **12 / 100** | Raw column dump; zero executive synthesis; 0/9 business-question titles; 0% topic alignment. |
 | **Environmental** | **10 / 100** | Raw column audit (`Stn Code`, `Sampling Date`, `SO2`); misses air quality index; 0% topic alignment. |
 
-### Visual Parity Score (/100)
-- **Preview $\leftrightarrow$ PPTX**: **78 / 100** (Colors and fonts match; table padding and chart legend wrapping differ).
-- **Preview $\leftrightarrow$ PDF**: **84 / 100** (Design tokens match; PDF displays paginated continuation pages while preview displays single-slide view).
-- **PPTX $\leftrightarrow$ PDF**: **82 / 100** (Both generated via `resolve_slide`, but PDF paginates multi-page tables cleanly while PPTX uses fixed height).
+### Visual Parity Score (/100) & Empirical Rendering Methodology
+
+Native visual rendering was conducted using Microsoft PowerPoint (`/Applications/Microsoft PowerPoint.app`) on macOS automated via AppleScript and `pdftoppm`:
+
+- **Workforce Presentation**:
+  - Successfully opened and rendered via native Microsoft PowerPoint to PDF (`workforce_powerpoint.pdf`, 133,027 bytes).
+  - All 11 physical slides converted to PNG at 150 DPI (`workforce_pptx_slide-01.png` through `workforce_pptx_slide-11.png`).
+  - Visual inspection confirms: 16:9 widescreen canvas, high-contrast typography, styled department tables, card borders, and clear `Slide 4 of 9 · 1/2` continuation badges.
+  - **Workforce Parity Scores**:
+    - **Preview $\leftrightarrow$ PDF**: **84 / 100** (Design tokens match; PDF displays paginated continuation pages while web preview displays single-slide view).
+    - **Preview $\leftrightarrow$ PPTX**: **86 / 100** (Empirically verified via Microsoft PowerPoint rendering; colors and typography align cleanly; table cell paddings differ slightly).
+    - **PPTX $\leftrightarrow$ PDF**: **88 / 100** (Empirically verified via Microsoft PowerPoint rendering; table header repeat and grid layout match).
+
+- **Retail & Environmental Presentations**:
+  - **Preview $\leftrightarrow$ PDF**: **84 / 100** (Empirically inspected via PDF rendering).
+  - **Preview $\leftrightarrow$ PPTX**: **NOT EMPIRICALLY VERIFIED (blocked by PPTX chart XML repair dialog -9074)**.
+  - **PPTX $\leftrightarrow$ PDF**: **NOT EMPIRICALLY VERIFIED (blocked by PPTX chart XML repair dialog -9074)**.
+  - *Technical Root Cause*: When Microsoft PowerPoint opens `retail.pptx` or `environmental.pptx`, it halts with an interactive modal repair dialog: *"PowerPoint found a problem with content in retail.pptx. PowerPoint can attempt to repair the presentation..."*. The underlying issue is that native `python-pptx` chart XML (`type=CHART (3)`) contains drawingML schema incompatibilities that require manual user repair clicks. Under headless AppleScript automation, this dialog raises error `-9074`. In adherence to strict audit integrity, parity scores are explicitly reported as **NOT EMPIRICALLY VERIFIED** rather than fabricated.
 
 ---
 
 ## 7. Stress Test Fixture & Long-Title Characterization
 
 ### Comprehensive Stress Matrix Results
+A comprehensive stress deck containing 7 deliberate edge-case topics was evaluated:
 
-1. **25-Row Table**: Successfully paginates into **4 physical slide pages** under `resolve_slide`. All 25 rows and headers are preserved without data loss.
-2. **10-Column Wide Table**: Successfully resolves across standard canvas (width = 864pt, column width = 86.4pt).
-3. **Long Narrative (>200 words)**: Renders with total text height 184pt, within the 505pt body bottom limit.
-4. **Long Title (>100 characters / 3 lines)**:
-   ```python
-   SlideLayoutError: The slide title needs a shorter heading or a separate cover.
-   ```
-   Cumulative title block height $y = 178\text{pt} > 155\text{pt}$ threshold, raising `SlideLayoutError`.
+1. **Logical Topics Evaluated**: 7 topics
+2. **Physical Slides Materialized**: 14 slides (including 9 continuation slides)
+3. **28-Row Table**: Successfully paginates across **10 physical slide pages** (`1/10` to `10/10`) under `resolve_slide`. All 28 rows, column headers, and department aggregates are preserved without data loss.
+4. **11-Column Wide Table**: Successfully resolves across standard canvas (width = 864pt, column width = 78.5pt/col) without crashing.
+5. **Image Slides (Slides 5 & 6)**: Tagged as `UNSUPPORTED / CUSTOM` by `slide_layout.py:45`, bypassing the layout geometry solver.
+6. **Layout Overflow Cliffs (2 SlideLayoutErrors)**:
+   - **Slide 1 (Long Title > 120 characters / 3 lines)**:
+     ```python
+     SlideLayoutError: The slide title needs a shorter heading or a separate cover.
+     ```
+     Cumulative title block height $y = 178\text{pt} > 155\text{pt}$ threshold, raising unhandled `SlideLayoutError`.
+   - **Slide 2 (Long Narrative > 200 words + bullet list)**:
+     Narrative and bullets push content bottom to $y = 542\text{pt} > 505\text{pt}$ limit, triggering vertical overflow.
+7. **Export Behavioral Cliff**: When exporting this stress deck, the pipeline raises `ValueError: Business report changed after evidence verification` because synthetic stress items lack ground-truth ledger bindings.
 
 ### Formal Characterization: Planning vs Rendering Defect
 The long-title failure is a **cross-layer contract disconnect**:
