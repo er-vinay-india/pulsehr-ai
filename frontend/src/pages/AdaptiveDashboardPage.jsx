@@ -670,9 +670,10 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
                     )}
 
                     <div className="adaptive-empty-actions">
-                      <button
-                        type="button"
-                        className="btn-primary"
+                      <Button
+                        variant="PRIMARY"
+                        size="md"
+                        icon={UploadCloud}
                         onClick={() => {
                           if (typeof onNavigateTab === "function") {
                             onNavigateTab("upload");
@@ -680,13 +681,14 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
                             window.location.hash = "upload";
                           }
                         }}
+                        ariaLabel="Upload new spreadsheet"
                       >
-                        <UploadCloud size={18} />
-                        <span>Upload Spreadsheet</span>
-                      </button>
-                      <button
-                        type="button"
-                        className="btn-secondary"
+                        Upload Spreadsheet
+                      </Button>
+                      <Button
+                        variant="SECONDARY"
+                        size="md"
+                        icon={Table}
                         onClick={() => {
                           if (typeof onNavigateTab === "function") {
                             onNavigateTab("explorer");
@@ -694,10 +696,10 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
                             window.location.hash = "explorer";
                           }
                         }}
+                        ariaLabel="Open Data Explorer"
                       >
-                        <Table size={16} />
-                        <span>Open Data Explorer</span>
-                      </button>
+                        Open Data Explorer
+                      </Button>
                     </div>
                   </section>
                 );
