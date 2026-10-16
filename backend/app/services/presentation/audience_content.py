@@ -9,7 +9,8 @@ TECHNICAL_SECTION = re.compile(r"evidence (?:ledger|appendix)|dataset governance
 
 
 def polish_audience_content(deck: dict, include_technical_appendix: bool = False) -> dict:
-    if deck.get('metadata', {}).get('deck_style') == 'decision_brief':
+    meta = deck.get('metadata', {})
+    if meta.get('deck_style') == 'decision_brief' or meta.get('contract_mode') == 'EXECUTIVE_TOPIC_BOUND':
         return deck
     visible, hidden = [], list(deck.get('technical_appendix') or [])
     for slide in deck.get('slides', []):

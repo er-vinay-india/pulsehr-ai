@@ -549,6 +549,9 @@ def execute_presentation_pipeline_async(
             "success_criterion": f"After viewing this deck, the audience should understand {scope.get('main_takeaway') or scope.get('objective', 'operations')} and decide or do {scope.get('decision_requested', 'align on strategic priorities')}.",
             "is_inferred": not bool(scope.get("decision_requested") and scope.get("main_takeaway")),
         }
+        deck_spec.setdefault("metadata", {})["brief"] = brief_data
+        deck_spec["metadata"].setdefault("objective", brief_data.get("objective") or "Executive Leadership Review")
+        deck_spec["metadata"].setdefault("audience", brief_data.get("audience") or "C-Suite & Operations Leadership")
         review_gates = evaluate_automated_gates(
             deck_spec=deck_spec,
             verification_summary=deck_spec["metadata"].get("validation_summary"),

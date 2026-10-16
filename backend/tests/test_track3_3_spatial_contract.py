@@ -1005,3 +1005,36 @@ def test_spatial_planning_performance_and_zero_model_calls():
                 assert p95_ms < 350.0
 
     assert llm_calls == 0
+
+
+def test_governed_deck_export_review_gates_and_polish_preservation():
+    """Governed decks pass review gates on direct PPTX/PDF export without external brief arg and survive audience_content polish."""
+    from app.services.presentation.audience_content import polish_audience_content
+    from app.services.presentation.governed_presentation_builder import build_governed_presentation_deck
+    from app.services.presentation.review_gates import evaluate_automated_gates
+    from app.services.report_generator import export_spec_to_pdf, export_spec_to_pptx
+
+    for ds_id in (9967416, 9967418, 9967419):
+        with get_connection() as conn:
+            p_ctx = capture_dataset_context(conn, sheet_id=ds_id)
+        scope = {"scope_type": "single_sheet", "sheet_id": ds_id, "theme_id": "executive_dark"}
+
+        deck_spec = build_governed_presentation_deck(
+            scope=scope,
+            dataset_context=p_ctx,
+        )
+        # Ensure polish_audience_content preserves governed decks and their visual_spec/digests
+        deck_spec = polish_audience_content(deck_spec)
+        rg = evaluate_automated_gates(deck_spec)
+        failed = [
+            (gid, g["automated"]["details"])
+            for gid, g in rg["gates"].items()
+            if g["automated"]["status"] == "FAILED"
+        ]
+        assert not failed, f"Dataset {ds_id} failed export review gates: {failed}"
+        pptx_path = export_spec_to_pptx(deck_spec)
+        pdf_path = export_spec_to_pdf(deck_spec)
+        assert pptx_path.exists() and pptx_path.stat().st_size > 0
+        assert pdf_path.exists() and pdf_path.stat().st_size > 0
+
+

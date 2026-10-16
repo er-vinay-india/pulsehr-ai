@@ -177,6 +177,21 @@ def build_governed_presentation_deck(
                     "recommended_action": t.recommended_action
                 })
 
+    objective = scope.get("objective") or deck_title
+    audience = scope.get("audience") or "C-Suite & Operations Leadership"
+    decision_requested = scope.get("decision_requested") or "Align on strategic priorities from governed findings"
+    brief_meta = {
+        "objective": objective,
+        "audience": audience,
+        "decision_requested": decision_requested,
+        "main_takeaway": scope.get("main_takeaway") or (topics[0].primary_takeaway if topics else deck_subtitle),
+        "presentation_time_minutes": scope.get("presentation_time_minutes") or 15,
+        "deliverable": scope.get("deliverable") or "pptx",
+        "citation_requirement": scope.get("citation_requirement") or "standard",
+        "motion_preference": scope.get("motion_preference") or scope.get("animation") or "none",
+        "is_inferred": not bool(scope.get("decision_requested") and scope.get("main_takeaway")),
+    }
+
     deck_dict = {
         "id": deck_id,
         "spec_version": "2.0",
@@ -194,6 +209,10 @@ def build_governed_presentation_deck(
             "source": file_label,
             "theme_id": theme_id,
             "domain": domain,
+            "objective": objective,
+            "audience": audience,
+            "decision_requested": decision_requested,
+            "brief": brief_meta,
             "data_snapshot_hash": snapshot_hash,
             "governed_synthesis": True,
             "topics_count": len(topics),

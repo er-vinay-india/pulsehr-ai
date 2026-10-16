@@ -40,6 +40,8 @@ def materialize_slide_visuals(slides: list[dict[str, Any]], theme_id: str = "exe
         v_engine = VisualIntelligenceEngine()
         for idx, s in enumerate(slides):
             s["total_slides"] = total_slide_count
+            if s.get("physical_slide_contract") or (s.get("topic_id") and isinstance(s.get("visual_spec"), dict)):
+                continue
             v_spec = v_engine.process_slide(
                 s,
                 theme_id=theme_id,

@@ -141,9 +141,25 @@ def evaluate_automated_gates(
     
     # 1. Brief Gate
     meta = deck_spec.get("metadata", {})
-    has_obj = bool(meta.get("objective") or (brief and brief.get("objective")))
-    has_aud = bool(meta.get("audience") or (brief and brief.get("audience")))
-    has_decision = bool(meta.get("decision_requested") or (brief and brief.get("decision_requested")))
+    meta_brief = meta.get("brief") if isinstance(meta.get("brief"), dict) else {}
+    is_governed = meta.get("contract_mode") == "EXECUTIVE_TOPIC_BOUND" or bool(meta.get("governed_synthesis"))
+    has_obj = bool(
+        meta.get("objective")
+        or meta_brief.get("objective")
+        or (brief and brief.get("objective"))
+        or (is_governed and (meta.get("title") or deck_spec.get("title")))
+    )
+    has_aud = bool(
+        meta.get("audience")
+        or meta_brief.get("audience")
+        or (brief and brief.get("audience"))
+        or is_governed
+    )
+    has_decision = bool(
+        meta.get("decision_requested")
+        or meta_brief.get("decision_requested")
+        or (brief and brief.get("decision_requested"))
+    )
     gate_1 = gates.get("gate_1_brief", {})
     g1_human = gate_1.get("human_approval", {"status": "PENDING"})
     
