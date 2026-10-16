@@ -147,12 +147,14 @@ def _add_native_chart_shape(slide, chart_info: dict, x, y, cx, cy, colors: dict,
             for axis in (chart.category_axis, chart.value_axis):
                 axis.tick_labels.font.color.rgb = colors["secondary"]
                 axis.tick_labels.font.size = Pt(14)
-                if axis is chart.value_axis or xl_type == XL_CHART_TYPE.XY_SCATTER:
-                    axis.tick_labels.number_format = number_format
-                    axis.tick_labels.number_format_is_linked = False
                 axis.format.line.color.rgb = colors["card_border"]
                 if axis.has_major_gridlines:
                     axis.major_gridlines.format.line.color.rgb = colors["card_border"]
+            chart.value_axis.tick_labels.number_format = number_format
+            chart.value_axis.tick_labels.number_format_is_linked = False
+            if xl_type == XL_CHART_TYPE.XY_SCATTER:
+                chart.category_axis.tick_labels.number_format = number_format
+                chart.category_axis.tick_labels.number_format_is_linked = False
             if count_unit and largest <= 10:
                 chart.value_axis.major_unit = 1
 
