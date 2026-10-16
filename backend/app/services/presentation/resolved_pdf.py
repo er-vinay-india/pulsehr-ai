@@ -79,11 +79,13 @@ def export_resolved_pdf(deck, output, *, canvas=None, page_offset=0, total=None)
                 detail.drawOn(canvas, x+w*.49+18, yy-detail_height)
                 yy -= detail_height+15
             return
-        horizontal = kind in ('bar', 'horizontal_bar')
+        horizontal = kind in ('bar', 'horizontal_bar', 'ranked_bar')
         low, high = min(0, min(values)), max(0, max(values))
         span = max(high-low, 1)
-        left, bottom = x+(130 if horizontal else 85), top-h+30
-        pw, ph = w-(205 if horizontal else 120), h-82
+        max_cat_len = max((len(str(c)) for c in categories), default=0)
+        h_gutter = min(230, max(130, int(min(max_cat_len, 32) * 6.8) + 16)) if horizontal else 85
+        left, bottom = x + h_gutter, top - h + 30
+        pw, ph = w - (h_gutter + 75 if horizontal else 120), h - 82
         canvas.setStrokeColor(HexColor(theme['card_border']))
         for tick in range(5):
             v = low+span*tick/4
@@ -111,7 +113,22 @@ def export_resolved_pdf(deck, output, *, canvas=None, page_offset=0, total=None)
                     canvas.rect(min(zero, end), yy-bh/2, abs(end-zero), bh, fill=1, stroke=0)
                     label(formatted(value), max(zero, end)+5, yy-4, 14)
                     if j == 0:
-                        label(category, left-8, bottom+ph-(i+.5)*step-4, 14, 'right', 'secondary_text')
+                        cat_str = str(category)
+                        if len(cat_str) * 7.2 <= h_gutter - 12:
+                            label(cat_str, left-8, bottom+ph-(i+.5)*step-4, 14, 'right', 'secondary_text')
+                        else:
+                            lbl_w = h_gutter - 12
+                            cat_style = ParagraphStyle(
+                                'chart_cat',
+                                fontName='Helvetica',
+                                fontSize=11,
+                                leading=13,
+                                alignment=2,
+                                textColor=HexColor(theme['secondary_text']),
+                            )
+                            cat_p = Paragraph(escape(cat_str), cat_style)
+                            _, cat_h = cat_p.wrap(lbl_w, max(step, 28))
+                            cat_p.drawOn(canvas, x + 4, bottom + ph - (i + .5) * step - cat_h / 2)
                 else:
                     xx, yy = left+(i+.5)*step, bottom+(value-low)/span*ph
                     zero = bottom+(0-low)/span*ph
@@ -173,6 +190,30 @@ def export_resolved_pdf(deck, output, *, canvas=None, page_offset=0, total=None)
                     if height > block['height']+1:
                         raise ValueError('Text exceeds the resolved PDF region; split the content before export.')
                     p.drawOn(canvas, block['x'], 540-block['y']-height)
+                elif block['kind'] == 'image':
+                    from pathlib import Path
+                    aspect_map = {'landscape': 16 / 9, 'portrait': 3 / 4, 'square': 1.0, 'very_wide': 21 / 9, 'very_tall': 9 / 21}
+                    shape_hint = str(block.get('image_shape') or 'landscape').lower()
+                    for key in aspect_map:
+                        if key in str(block.get('image_url') or '').lower():
+                            shape_hint = key
+                    aspect = aspect_map.get(shape_hint, 16 / 9)
+                    bw, bh = block['width'], block['height']
+                    if bw / max(bh, 1) > aspect:
+                        ih = bh
+                        iw = max(72, round(ih * aspect))
+                    else:
+                        iw = bw
+                        ih = max(72, round(iw / aspect))
+                    ix = block['x'] + (bw - iw) / 2
+                    iy = 540 - block['y'] - bh + (bh - ih) / 2
+                    canvas.setFillColor(HexColor(theme['card_bg']))
+                    canvas.setStrokeColor(HexColor(theme['card_border']))
+                    canvas.setLineWidth(1.5)
+                    canvas.roundRect(ix, iy, iw, ih, 8, fill=1, stroke=1)
+                    url_str = str(block.get('image_url') or '')
+                    label(f"Visual Asset ({shape_hint})", ix + iw / 2, iy + ih / 2 + 8, 14, 'center', 'primary_text')
+                    label(Path(url_str).name or url_str[:36], ix + iw / 2, iy + ih / 2 - 12, 12, 'center', 'secondary_text')
                 else:
                     rows = [[paragraph(cell, block['column_widths'][ci]-16, block['size'], 'brand_color' if ri == 0 else 'primary_text', ri == 0)
                              for ci, cell in enumerate(row)] for ri, row in enumerate([block['headers'], *block['rows']])]

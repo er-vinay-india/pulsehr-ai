@@ -99,6 +99,43 @@ def render_resolved_slide(slide, plan, theme, colors, page, total):
                     p.space_before = p.space_after = Pt(0)
                     p.line_spacing = GEOMETRY['type']['line_height']
             continue
+        if block['kind'] == 'image':
+            from pathlib import Path
+            aspect_map = {'landscape': 16 / 9, 'portrait': 3 / 4, 'square': 1.0, 'very_wide': 21 / 9, 'very_tall': 9 / 21}
+            shape_hint = str(block.get('image_shape') or 'landscape').lower()
+            for key in aspect_map:
+                if key in str(block.get('image_url') or '').lower():
+                    shape_hint = key
+            aspect = aspect_map.get(shape_hint, 16 / 9)
+            bw, bh = block['width'], block['height']
+            if bw / max(bh, 1) > aspect:
+                ih = bh
+                iw = max(72, round(ih * aspect))
+            else:
+                iw = bw
+                ih = max(72, round(iw / aspect))
+            ix = block['x'] + (bw - iw) / 2
+            iy = block['y'] + (bh - ih) / 2
+            url_str = str(block.get('image_url') or '')
+            local_path = Path(url_str) if url_str and not url_str.startswith(('http://', 'https://')) else None
+            if local_path and local_path.is_file():
+                slide.shapes.add_picture(str(local_path), Pt(ix), Pt(iy), width=Pt(iw), height=Pt(ih))
+            else:
+                frame = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Pt(ix), Pt(iy), Pt(iw), Pt(ih))
+                frame.name = f"Image frame: {url_str[:30]}"
+                frame.fill.solid()
+                frame.fill.fore_color.rgb = colors['card_bg']
+                frame.line.color.rgb = colors['card_border']
+                frame.line.width = Pt(1.5)
+                tf = frame.text_frame
+                tf.word_wrap = True
+                tf.vertical_anchor = MSO_ANCHOR.MIDDLE
+                p = tf.paragraphs[0]
+                p.text = f"Visual Asset ({shape_hint})\n{Path(url_str).name or url_str}"
+                p.alignment = PP_ALIGN.CENTER
+                p.font.name, p.font.size, p.font.bold = font, Pt(14), True
+                p.font.color.rgb = colors['primary']
+            continue
         shape = slide.shapes.add_textbox(*[Pt(block[k]) for k in ('x', 'y', 'width', 'height')])
         shape.name = f"Text: {block.get('field') or block['text'][:35]}"
         tf = shape.text_frame

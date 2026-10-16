@@ -56,7 +56,7 @@ def _add_native_chart_shape(slide, chart_info: dict, x, y, cx, cy, colors: dict,
                 )
 
     raw_type = (chart_info.get("chart_type") or chart_info.get("type") or "column").lower()
-    if raw_type in ("bar", "horizontal_bar"):
+    if raw_type in ("bar", "horizontal_bar", "ranked_bar"):
         xl_type = XL_CHART_TYPE.BAR_CLUSTERED
     elif raw_type in ("line", "area"):
         xl_type = XL_CHART_TYPE.LINE
@@ -81,8 +81,8 @@ def _add_native_chart_shape(slide, chart_info: dict, x, y, cx, cy, colors: dict,
         for element in chart._chartSpace.iter():
             if element.tag.rsplit('}', 1)[-1] in {'axId', 'crossAx'} and element.get('val'):
                 value = int(element.get('val'))
-                if value < 0:
-                    element.set('val', str(value % (2**32)))
+                if value < 0 or value >= 2**31:
+                    element.set('val', str((value % (2**31 - 1)) or 1))
         chart.has_legend = len(series_list) > 1
         if chart.has_legend:
             chart.legend.position = XL_LEGEND_POSITION.TOP

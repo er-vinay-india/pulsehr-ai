@@ -42,7 +42,7 @@ def resolve_slide(slide, theme=None):
     palette = slide_theme_preset(theme)
     brush = bool(palette.get('checklist'))
     layout = slide.get('layout') or ('chart_narrative' if slide.get('chart') or slide.get('chart_data') else 'table_detail' if slide.get('table') or slide.get('table_data') else 'comparison_split')
-    if layout not in GEOMETRY['supported_layouts'] or slide.get('image_url') or slide.get('talent_9box_data') or slide.get('burnout_strain_data'):
+    if layout not in GEOMETRY['supported_layouts'] or slide.get('talent_9box_data') or slide.get('burnout_strain_data'):
         return None
     c, t, spacing = GEOMETRY['canvas'], GEOMETRY['type'], GEOMETRY['spacing']
     x, width, bottom = c['margin'], c['width']-2*c['margin'], c['body_bottom']
@@ -154,6 +154,9 @@ def resolve_slide(slide, theme=None):
                 continuation_tables.append(block)
 
 
+    image_url = slide.get('image_url') or slide.get('image')
+    if image_url and (charts or table):
+        raise SlideLayoutError('Image and chart/table need separate slides so both remain readable.')
     if charts:
         if len(charts) > 2:
             raise SlideLayoutError('Use at most two charts per slide.')
@@ -175,6 +178,37 @@ def resolve_slide(slide, theme=None):
     elif table:
         y = text(narrative or subtitle, x, y, width, t['body'], field='narrative' if narrative else 'subtitle') + spacing['paragraph']
         render_table(table, y)
+        supporting()
+    elif image_url:
+        y_top = y
+        left_w = math.floor(width * 0.48)
+        right_x = x + left_w + spacing['section']
+        right_w = width - left_w - spacing['section']
+        if subtitle:
+            y = text(subtitle, x, y, left_w, t['body'], 'accent_color', True, 'subtitle') + spacing['paragraph']
+        if narrative:
+            y = text(narrative, x, y, left_w, t['body'], field='narrative') + spacing['section']
+        for bullet in bullets:
+            y = text('• ' + bullet, x, y, left_w, t['body']) + spacing['paragraph']
+        if y - spacing['paragraph'] > bottom:
+            raise SlideLayoutError('Text exceeds the readable slide area alongside image.')
+        caption_str = plain(slide.get('caption') or '')
+        cap_h = (math.ceil(lines(caption_str, right_w, t['caption']) * t['caption'] * t['line_height']) + 4) if caption_str else 0
+        img_h = (bottom - y_top) - cap_h - (8 if cap_h else 0)
+        if img_h < 120:
+            raise SlideLayoutError('Insufficient vertical space for readable image display.')
+        blocks.append(dict(
+            kind='image',
+            image_url=str(image_url),
+            image_shape=str(slide.get('image_shape') or 'landscape'),
+            caption=caption_str,
+            x=right_x,
+            y=y_top,
+            width=right_w,
+            height=img_h
+        ))
+        if caption_str:
+            text(caption_str, right_x, y_top + img_h + 6, right_w, t['caption'], 'secondary_text', False, 'caption')
         supporting()
     elif layout in ('chart_narrative', 'full_chart_takeaway', 'two_charts'):
         raise SlideLayoutError(f"Layout '{layout}' contains no chart specification.")
