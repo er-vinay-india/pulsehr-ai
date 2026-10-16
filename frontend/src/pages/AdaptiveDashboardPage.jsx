@@ -192,24 +192,45 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
         const urlSheetId = p.get("sheet_id");
 
         let targetId = "";
-        if (urlDatasetId) {
+        if (list.length === 0) {
+          // No datasets exist in workspace: cleanly reset target and strip stale URL parameters
+          targetId = "";
+          setSelectedDatasetId("");
+          setData(null);
+          setCalcError(null);
+          try {
+            const url = new URL(window.location);
+            url.searchParams.delete("dataset_id");
+            url.searchParams.delete("sheet_id");
+            window.history.replaceState({}, "", url);
+          } catch {}
+          return;
+        }
+
+        // Validate if urlDatasetId exists in loaded datasets
+        if (urlDatasetId && list.some((d) => String(d.id) === String(urlDatasetId))) {
           targetId = urlDatasetId;
         } else if (urlSheetId) {
           const parent = list.find((d) => (d.sheets || []).some((s) => String(s.id) === urlSheetId));
           if (parent) targetId = String(parent.id);
-        } else if (list.length > 0) {
+        }
+
+        // If URL dataset ID was stale or missing, fallback to first available dataset
+        if (!targetId && list.length > 0) {
           targetId = String(list[0].id);
         }
 
-        if (targetId) {
-          setSelectedDatasetId(targetId);
-          try {
-            const url = new URL(window.location);
+        setSelectedDatasetId(targetId);
+        try {
+          const url = new URL(window.location);
+          if (targetId) {
             url.searchParams.set("dataset_id", targetId);
-            url.searchParams.delete("sheet_id");
-            window.history.replaceState({}, "", url);
-          } catch {}
-        }
+          } else {
+            url.searchParams.delete("dataset_id");
+          }
+          url.searchParams.delete("sheet_id");
+          window.history.replaceState({}, "", url);
+        } catch {}
       })
       .catch((err) => {
         setSourcesError(err.message || "Failed to load uploaded datasets.");
@@ -280,7 +301,21 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
       .catch((err) => {
         if (currentReqId !== requestCounter.current) return;
         if (err.name !== "AbortError") {
-          setCalcError(err.message || "Unable to compute verified metric for this workbook.");
+          const msg = err.message || "";
+          if (msg.includes("No uploaded sheet found") || msg.includes("not found")) {
+            // Stale or non-existent dataset requested: clear selection and show clean empty view
+            setData(null);
+            setSelectedDatasetId("");
+            setCalcError(null);
+            try {
+              const url = new URL(window.location);
+              url.searchParams.delete("dataset_id");
+              url.searchParams.delete("sheet_id");
+              window.history.replaceState({}, "", url);
+            } catch {}
+          } else {
+            setCalcError(msg || "Unable to compute verified metric for this workbook.");
+          }
         }
       })
       .finally(() => {
