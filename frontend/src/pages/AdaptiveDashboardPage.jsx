@@ -56,12 +56,28 @@ function formatHumanDate(dateStr) {
   return `${dNum} ${mNames[mIdx]} ${y}`;
 }
 
-function getEmptyStateExplanation(data, activeDataset) {
+function getEmptyStateExplanation(data, activeDataset, sourcesCount = 0) {
+  if (sourcesCount === 0 || (!data && !activeDataset)) {
+    return {
+      title: "No Workbooks Ingested",
+      reason: "No datasets or spreadsheets have been uploaded to HighView yet.",
+      action: "Upload an Excel (.xlsx, .xls) or CSV file to start automated executive intelligence."
+    };
+  }
+
   if (!data) {
     return {
       title: "No Data Available",
       reason: "Unable to retrieve analytical records for this workbook.",
       action: "Select an uploaded workbook or upload a new spreadsheet."
+    };
+  }
+
+  if (data.total_rows === 0) {
+    return {
+      title: "Empty Spreadsheet",
+      reason: `The selected workbook "${activeDataset?.display_name || data?.dataset_name || "Workbook"}" contains 0 data records after table reconstruction.`,
+      action: "Upload a spreadsheet containing valid data rows."
     };
   }
 
@@ -375,9 +391,9 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
                 id="dataset-selector"
                 value={selectedDatasetId}
                 onChange={(e) => handleSourceSelect(e.target.value)}
-                disabled={sourcesLoading}
+                disabled={sourcesLoading || sources.length === 0}
                 aria-label="Selected dataset workbook"
-                placeholder={sourcesLoading ? "Loading datasets…" : "Select dataset…"}
+                placeholder={sourcesLoading ? "Loading datasets…" : sources.length === 0 ? "No datasets uploaded" : "Select dataset…"}
                 options={
                   sources.length > 0
                     ? sources.map((d) => ({
@@ -414,18 +430,38 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
             )}
           </div>
 
-          <Button
-            variant="GHOST"
-            size="sm"
-            icon={RefreshCw}
-            className="scope-refresh-btn"
-            onClick={() => setRevision((r) => r + 1)}
-            disabled={calculating || !selectedDatasetId}
-            ariaLabel="Refresh analysis for selected workbook"
-            title="Refresh analysis for selected workbook"
-          >
-            Refresh
-          </Button>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            {sources.length === 0 && !sourcesLoading && (
+              <Button
+                variant="PRIMARY"
+                size="sm"
+                icon={UploadCloud}
+                onClick={() => {
+                  if (typeof onNavigateTab === "function") {
+                    onNavigateTab("upload");
+                  } else {
+                    window.location.hash = "upload";
+                  }
+                }}
+                ariaLabel="Upload new spreadsheet"
+                title="Upload new spreadsheet"
+              >
+                Upload Data
+              </Button>
+            )}
+            <Button
+              variant="GHOST"
+              size="sm"
+              icon={RefreshCw}
+              className="scope-refresh-btn"
+              onClick={() => setRevision((r) => r + 1)}
+              disabled={calculating || !selectedDatasetId || sources.length === 0}
+              ariaLabel="Refresh analysis for selected workbook"
+              title="Refresh analysis for selected workbook"
+            >
+              Refresh
+            </Button>
+          </div>
         </div>
       </header>
 
@@ -561,11 +597,12 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
             {/* Truthful Empty State: When zero insights detected or insufficient data */}
             {!calculating && !calcError && (!data?.selected_dashboard_insights || data.selected_dashboard_insights.length === 0) && (
               (() => {
-                const explanation = getEmptyStateExplanation(data, activeDataset);
+                const isNoSources = sources.length === 0 || (!data && !activeDataset);
+                const explanation = getEmptyStateExplanation(data, activeDataset, sources.length);
                 return (
                   <section className="adaptive-empty-state" aria-labelledby="adaptive-empty-title">
-                    <div className="adaptive-empty-icon">
-                      <FileSpreadsheet size={32} />
+                    <div className="adaptive-empty-icon" aria-hidden="true">
+                      <FileSpreadsheet size={36} />
                     </div>
                     <h2 id="adaptive-empty-title" className="adaptive-empty-heading">
                       {explanation.title}
@@ -573,30 +610,67 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
                     <p className="adaptive-empty-text">
                       {explanation.reason}
                     </p>
-                    <div className="adaptive-empty-hint" style={{ marginTop: "8px", fontWeight: 500 }}>
+                    <div className="adaptive-empty-hint">
                       {explanation.action}
                     </div>
-                    {sources.length === 0 && (
+
+                    {isNoSources && (
+                      <div className="adaptive-empty-features" aria-label="HighView Capabilities">
+                        <div className="adaptive-empty-feature-card">
+                          <div className="feature-icon-wrap" aria-hidden="true"><Layers size={20} /></div>
+                          <strong>Adaptive Ingestion</strong>
+                          <span>Auto-reconstructs messy multi-row headers, merged cells, and wrapped records into clean tabular datasets.</span>
+                        </div>
+                        <div className="adaptive-empty-feature-card">
+                          <div className="feature-icon-wrap" aria-hidden="true"><TrendingUp size={20} /></div>
+                          <strong>Deterministic Truth</strong>
+                          <span>Uncovers statistical variance, outlier clusters, and business KPIs with zero LLM math or hallucinated numbers.</span>
+                        </div>
+                        <div className="adaptive-empty-feature-card">
+                          <div className="feature-icon-wrap" aria-hidden="true"><Presentation size={20} /></div>
+                          <strong>Executive Studio</strong>
+                          <span>Transforms verified findings into 16:9 board-ready presentations with 100% native editable PowerPoint charts.</span>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="adaptive-empty-actions">
                       <button
                         type="button"
                         className="btn-primary"
-                        style={{ marginTop: "16px" }}
                         onClick={() => {
-                          window.location.hash = "upload";
+                          if (typeof onNavigateTab === "function") {
+                            onNavigateTab("upload");
+                          } else {
+                            window.location.hash = "upload";
+                          }
                         }}
                       >
-                        <UploadCloud size={16} />
-                        <span>Upload spreadsheet</span>
+                        <UploadCloud size={18} />
+                        <span>Upload Spreadsheet</span>
                       </button>
-                    )}
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        onClick={() => {
+                          if (typeof onNavigateTab === "function") {
+                            onNavigateTab("explorer");
+                          } else {
+                            window.location.hash = "explorer";
+                          }
+                        }}
+                      >
+                        <Table size={16} />
+                        <span>Open Data Explorer</span>
+                      </button>
+                    </div>
                   </section>
                 );
               })()
             )}
 
-
             {/* Level 2: Compact Contextual Evidence & Governance Handoff Strip */}
-            {!calcError && (
+            {!calcError && data && (data.evidence_count > 0 || (data.selected_dashboard_insights && data.selected_dashboard_insights.length > 0)) && (
               <aside
                 className="dashboard-section dashboard-section--evidence"
                 aria-label="Evidence and governance"
@@ -621,11 +695,11 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
                     <ShieldCheck size={16} color={themeTokens.colors.brandBlue || "#2563eb"} aria-hidden="true" />
                     <span>
                       <strong style={{ color: themeTokens.colors.textPrimary }}>
-                        {data?.evidence_count ?? data?.story_plan?.claims?.length ?? 73} validated findings
+                        {data.evidence_count ?? data.story_plan?.claims?.length ?? 0} validated findings
                       </strong>
                       {" · "}
                       <span>
-                        {data?.relationship_count ?? 3} cross-source relationships
+                        {data.relationship_count ?? 0} cross-source relationships
                       </span>
                     </span>
                   </div>
