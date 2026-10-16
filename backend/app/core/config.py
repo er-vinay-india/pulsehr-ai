@@ -17,15 +17,15 @@ class HighviewSettings(BaseSettings):
     )
 
     PROJECT_NAME: str = Field(default="HighView")
-    PORT: int = Field(default=8020)
-    ENVIRONMENT: str = Field(default="development")
+    PORT: int = Field(default_factory=lambda: int(os.getenv("HIGHVIEW_PORT") or os.getenv("PORT") or "8020"))
+    ENVIRONMENT: str = Field(default_factory=lambda: os.getenv("HIGHVIEW_ENVIRONMENT") or os.getenv("APP_ENV") or "development")
 
     # Storage paths
-    DATA_DIR: Path = Field(default=BASE_DIR / "data")
-    DB_PATH: Path = Field(default=BASE_DIR / "data" / "db" / "pulsehr.sqlite3")
-    UPLOADS_DIR: Path = Field(default=BASE_DIR / "data" / "uploads")
-    EXPORTS_DIR: Path = Field(default=BASE_DIR / "data" / "exports")
-    PARQUET_STORAGE_DIR: Path = Field(default=BASE_DIR / "data" / "datasets")
+    DATA_DIR: Path = Field(default_factory=lambda: Path(os.getenv("HIGHVIEW_DATA_DIR") or os.getenv("DATA_DIR") or str(BASE_DIR / "data")))
+    DB_PATH: Path = Field(default_factory=lambda: Path(os.getenv("HIGHVIEW_DB_PATH") or os.getenv("DATABASE_PATH") or str(BASE_DIR / "data" / "db" / "pulsehr.sqlite3")))
+    UPLOADS_DIR: Path = Field(default_factory=lambda: Path(os.getenv("HIGHVIEW_UPLOADS_DIR") or os.getenv("UPLOADS_DIR") or os.getenv("UPLOAD_DIR") or str(BASE_DIR / "data" / "uploads")))
+    EXPORTS_DIR: Path = Field(default_factory=lambda: Path(os.getenv("HIGHVIEW_EXPORTS_DIR") or os.getenv("EXPORTS_DIR") or str(BASE_DIR / "data" / "exports")))
+    PARQUET_STORAGE_DIR: Path = Field(default_factory=lambda: Path(os.getenv("HIGHVIEW_PARQUET_STORAGE_DIR") or os.getenv("PARQUET_STORAGE_DIR") or str(BASE_DIR / "data" / "datasets")))
     SCHEMA_PATH: Path = Field(default=BASE_DIR / "app" / "db" / "schema.sql")
 
     # Phase G3 Analytical Plane
@@ -87,13 +87,13 @@ class HighviewSettings(BaseSettings):
         default=int(os.getenv("PRESENTATION_MEMORY_MAX_TOTAL_CHARS", "4000"))
     )
     PRESENTATION_MEMORY_DB_PATH: Path = Field(
-        default=BASE_DIR / "data" / "db" / "presentation_memory.sqlite3"
+        default_factory=lambda: Path(os.getenv("HIGHVIEW_PRESENTATION_MEMORY_DB_PATH") or os.getenv("PRESENTATION_MEMORY_DB_PATH") or str(Path(os.getenv("HIGHVIEW_DATA_DIR") or os.getenv("DATA_DIR") or str(BASE_DIR / "data")) / "db" / "presentation_memory.sqlite3"))
     )
     PRESENTATION_MEMORY_VECTOR_STORE: str = Field(
         default=os.getenv("PRESENTATION_MEMORY_VECTOR_STORE", "sqlite_vec")
     )
     SYSTEM_FUNCTION_LIBRARY_DB_PATH: Path = Field(
-        default=BASE_DIR / "data" / "db" / "system_function_library.sqlite3"
+        default_factory=lambda: Path(os.getenv("HIGHVIEW_SYSTEM_FUNCTION_LIBRARY_DB_PATH") or os.getenv("SYSTEM_FUNCTION_LIBRARY_DB_PATH") or str(Path(os.getenv("HIGHVIEW_DATA_DIR") or os.getenv("DATA_DIR") or str(BASE_DIR / "data")) / "db" / "system_function_library.sqlite3"))
     )
 
     # Presentation Director (Phase 2) Configuration

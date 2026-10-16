@@ -93,3 +93,48 @@ def test_live_db_remains_unpolluted():
         assert rows_count == 0
     finally:
         conn.close()
+
+
+def test_firewall_blocks_test_mutation_against_live_instance(monkeypatch):
+    """TestEnvironmentFirewallMiddleware returns 403 when test mutation targets live instance."""
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    # Simulate running on live instance (not test mode)
+    monkeypatch.setattr(config, "ENVIRONMENT", "development")
+    monkeypatch.setattr(config, "DB_PATH", LIVE_DB_PATH)
+
+    client = TestClient(app)
+    res = client.delete(
+        "/api/upload/datasets",
+        headers={"X-HighView-Test-Run": "probe-live-rejection"}
+    )
+    assert res.status_code == 403
+    body = res.json()
+    assert body["error"] == "FORBIDDEN_TEST_MUTATION_ON_LIVE_INSTANCE"
+
+
+def test_firewall_allows_test_mutation_on_isolated_instance(monkeypatch, tmp_path):
+    """TestEnvironmentFirewallMiddleware permits test mutations on isolated ephemeral test backend."""
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    isolated_db = tmp_path / "firewall_test.sqlite3"
+    monkeypatch.setattr(config, "ENVIRONMENT", "test")
+    monkeypatch.setattr(config, "DB_PATH", isolated_db)
+
+    # Schema and migrations must be present in isolated_db
+    from app.db.database import get_connection, init_db
+    conn = get_connection(isolated_db)
+    init_db(conn)
+    conn.close()
+
+    client = TestClient(app)
+    res = client.delete(
+        "/api/upload/datasets",
+        headers={"X-HighView-Test-Run": "probe-isolated-allowed"}
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert body["orphan_check"] == "PASS"
+

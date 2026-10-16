@@ -15,6 +15,7 @@ import puppeteer from 'puppeteer';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import { spawnIsolatedTestBackend, getTestHeaders, assertIsolatedTestTarget } from './test_environment_guard.mjs';
 import { validateChartFormatters, resolveAxisFormatter, sanitizeOptionFormatters } from '../src/components/visualization/layout/chartFormatterValidator.js';
 import { AdaptiveChartLayoutEngine } from '../src/components/visualization/layout/AdaptiveChartLayoutEngine.js';
 
@@ -96,68 +97,84 @@ async function runUnitVisualChecks() {
 }
 
 async function runBrowserGeometryAndScreenshotChecks() {
-  console.log('\n🌐 Step 2: Multi-Viewport Browser Geometry & Rendered QA Suite...');
+  console.log('\n🌐 Step 2: Multi-Viewport Browser Geometry & Rendered QA Suite (Isolated Backend)...');
 
-  const browser = await puppeteer.launch({
-    headless: 'new',
-    executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-    args: ['--no-sandbox', '--disable-setuid-sandbox']
-  });
-
-  const viewports = [
-    { name: '1440px_desktop', width: 1440, height: 1100, isDark: false },
-    { name: '1440px_dark', width: 1440, height: 1100, isDark: true },
-    { name: '1024px_laptop', width: 1024, height: 900, isDark: false },
-    { name: '768px_tablet', width: 768, height: 1024, isDark: false },
-    { name: '390px_mobile', width: 390, height: 844, isDark: false },
-  ];
-
-  let activeDatasetId = '99770';
-  let uploadedTemp = false;
-  try {
-    const dsRes = await fetch('http://localhost:5175/api/upload/datasets');
-    let list = [];
-    if (dsRes.ok) {
-      const dsData = await dsRes.json();
-      list = Array.isArray(dsData) ? dsData : dsData.datasets || [];
-    }
-
-    if (list.length === 0) {
-      console.log('    (Live DB is empty — uploading hermetic test fixture WFO_July_2026_Test.xlsx...)');
-      const fixturePath = path.resolve(__dirname, '../../backend/tests/fixtures/benchmark_datasets/WFO_July_2026_Test.xlsx');
-      const fileBytes = fs.readFileSync(fixturePath);
-      const formData = new FormData();
-      const blob = new Blob([fileBytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-      formData.append('file', blob, 'WFO_July_2026_Test.xlsx');
-
-      const upRes = await fetch('http://localhost:8000/api/upload/file', {
-        method: 'POST',
-        body: formData,
-      });
-      if (upRes.ok) {
-        const upJson = await upRes.json();
-        activeDatasetId = String(upJson.dataset_id);
-        uploadedTemp = true;
-      }
-    } else {
-      const wf = list.find((d) => String(d.id) === '99770');
-      if (wf) {
-        activeDatasetId = '99770';
-      } else if (list.length > 0) {
-        activeDatasetId = String(list[0].id);
-      }
-    }
-  } catch (err) {
-    console.warn('Dataset resolution warning:', err.message);
-  }
+  const isolated = await spawnIsolatedTestBackend();
+  let browser = null;
+  let activeDatasetId = null;
 
   try {
+    assertIsolatedTestTarget(isolated.baseUrl, 'visual_qa_fixture_upload');
+    console.log('    (Uploading hermetic test fixture WFO_July_2026_Test.xlsx to isolated backend...)');
+    const fixturePath = path.resolve(__dirname, '../../backend/tests/fixtures/benchmark_datasets/WFO_July_2026_Test.xlsx');
+    const fileBytes = fs.readFileSync(fixturePath);
+    const formData = new FormData();
+    const blob = new Blob([fileBytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    formData.append('file', blob, 'WFO_July_2026_Test.xlsx');
+
+    const upRes = await fetch(`${isolated.baseUrl}/api/upload/file`, {
+      method: 'POST',
+      headers: getTestHeaders(isolated.runId),
+      body: formData,
+    });
+    if (!upRes.ok) throw new Error(`Upload failed on isolated backend: HTTP ${upRes.status}`);
+    const upJson = await upRes.json();
+    activeDatasetId = String(upJson.dataset_id);
+    console.log(`    ✅ Uploaded fixture to isolated backend: dataset_id=${activeDatasetId}`);
+
+    browser = await puppeteer.launch({
+      headless: 'new',
+      executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+      args: ['--no-sandbox', '--disable-setuid-sandbox']
+    });
+
+    const viewports = [
+      { name: '1440px_desktop', width: 1440, height: 1100, isDark: false },
+      { name: '1440px_dark', width: 1440, height: 1100, isDark: true },
+      { name: '1024px_laptop', width: 1024, height: 900, isDark: false },
+      { name: '768px_tablet', width: 768, height: 1024, isDark: false },
+      { name: '390px_mobile', width: 390, height: 844, isDark: false },
+    ];
 
   for (const vp of viewports) {
     console.log(`\n  📱 Inspecting Viewport: ${vp.name} (${vp.width}x${vp.height})...`);
     const page = await browser.newPage();
-    page.on('console', msg => console.log('PAGE LOG:', msg.text()));
-    page.on('pageerror', err => console.log('PAGE ERROR:', err.message, err.stack));
+
+    await page.setRequestInterception(true);
+    page.on('request', async (req) => {
+      const url = req.url();
+      if (url.includes('/api/')) {
+        const targetUrl = url.replace(/https?:\/\/[^/]+(?=\/api)/, isolated.baseUrl);
+        try {
+          const fetchOpts = {
+            method: req.method(),
+            headers: {
+              ...req.headers(),
+              ...getTestHeaders(isolated.runId),
+            },
+          };
+          if (req.method() !== 'GET' && req.method() !== 'HEAD') {
+            fetchOpts.body = req.postData();
+          }
+          const resp = await fetch(targetUrl, fetchOpts);
+          const resHeaders = {};
+          resp.headers.forEach((v, k) => { resHeaders[k] = v; });
+          const buf = Buffer.from(await resp.arrayBuffer());
+          req.respond({
+            status: resp.status,
+            headers: resHeaders,
+            body: buf,
+          });
+        } catch (err) {
+          req.abort('failed');
+        }
+      } else {
+        req.continue();
+      }
+    });
+
+    page.on('console', (msg) => console.log('PAGE LOG:', msg.text()));
+    page.on('pageerror', (err) => console.log('PAGE ERROR:', err.message, err.stack));
     page.on('response', async res => {
       if (res.status() >= 400) {
         console.log(`HTTP ${res.status()} ${res.url()}`);
@@ -266,14 +283,12 @@ async function runBrowserGeometryAndScreenshotChecks() {
     await page.close();
   }
 
-  await browser.close();
   console.log('\n🎉 ALL PHASE 9.9 VISUAL QA & MULTI-VIEWPORT CHECKS PASSED!');
   } finally {
-    if (uploadedTemp) {
-      console.log('    (Cleaning up temporary test dataset from live DB...)');
-      await fetch('http://localhost:8000/api/upload/datasets', { method: 'DELETE' });
-      console.log('    ✅ Live DB returned to 0 datasets');
+    if (browser) {
+      await browser.close().catch(() => {});
     }
+    await isolated.teardown();
   }
 }
 

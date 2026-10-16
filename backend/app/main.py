@@ -25,6 +25,8 @@ async def lifespan(app: FastAPI):
     yield
     print("[HighView] Shutting down...")
 
+from .core.test_firewall import TestEnvironmentFirewallMiddleware
+
 app = FastAPI(
     title="HighView API",
     description="Spreadsheet Analysis, Executive Insights & Presentation Automation · Powered by HRIDAY",
@@ -32,6 +34,7 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+app.add_middleware(TestEnvironmentFirewallMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=config.ALLOWED_ORIGINS,

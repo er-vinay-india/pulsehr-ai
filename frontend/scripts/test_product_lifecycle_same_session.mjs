@@ -2,12 +2,17 @@
 /**
  * test_product_lifecycle_same_session.mjs
  *
- * Implements Sections 19, 20, 21:
+ * Implements Sections 19, 20, 21 with 100% Hermetic Test Isolation:
  * - Section 19: Same-Session Product Lifecycle (Workforce -> empty -> Retail -> empty -> Environmental -> empty -> refresh)
  * - Section 20: Browser Back/Forward History Resurrect Invariant
  * - Section 21: Reproduction of the Exact Original Incident (Live Dashboard Open -> Delete All -> Zero-Data Transition)
  *
- * Verifies across viewports (1440x900 light, 390x844 dark) without restarting frontend or backend.
+ * NON-NEGOTIABLE P0 ISOLATION INVARIANT:
+ * - Runs against an ephemeral isolated backend instance on an isolated port.
+ * - Backed by temporary SQLite database and directories in /tmp/highview-test-<id>/.
+ * - Browser requests intercepted and routed to the isolated backend.
+ * - Normal user development server and database (pulsehr.sqlite3) are NEVER touched.
+ * - Live environment snapshot verified before and after test execution (bit-for-bit identical).
  */
 
 import puppeteer from "puppeteer";
@@ -15,52 +20,23 @@ import fs from "node:fs";
 import path from "node:path";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
+import {
+  spawnIsolatedTestBackend,
+  getTestHeaders,
+  assertIsolatedTestTarget,
+  captureUserEnvironmentSnapshot,
+  assertEnvironmentSnapshotsIdentical,
+} from "./test_environment_guard.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "../..");
 
 const FRONTEND_URL = process.env.BASE_URL || "http://localhost:5175";
-const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:8000";
 const CHROME_PATH = process.env.CHROME_PATH || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 
 const WORKFORCE_CSV = path.join(repoRoot, "backend/tests/fixtures/reconstruction_benchmark/workforce_01_headcount_multilevel.csv");
 const RETAIL_CSV = path.join(repoRoot, "backend/tests/fixtures/reconstruction_benchmark/retail_01_inventory_catalog_multicell.csv");
 const ENV_CSV = path.join(repoRoot, "backend/tests/fixtures/reconstruction_benchmark/env_01_cpcb_pollution.csv");
-
-async function apiDeleteAllDatasets() {
-  const res = await fetch(`${BACKEND_URL}/api/upload/datasets`, { method: "DELETE" });
-  if (!res.ok) {
-    throw new Error(`Failed to delete all datasets: HTTP ${res.status}`);
-  }
-  return res.json();
-}
-
-async function apiGetDatasets() {
-  const res = await fetch(`${BACKEND_URL}/api/upload/datasets`);
-  if (!res.ok) {
-    throw new Error(`Failed to get datasets: HTTP ${res.status}`);
-  }
-  const data = await res.json();
-  return Array.isArray(data) ? data : data.datasets || [];
-}
-
-async function apiUploadFile(filePath) {
-  const fileBytes = fs.readFileSync(filePath);
-  const fileName = path.basename(filePath);
-  const formData = new FormData();
-  const blob = new Blob([fileBytes], { type: "text/csv" });
-  formData.append("file", blob, fileName);
-
-  const res = await fetch(`${BACKEND_URL}/api/upload/file`, {
-    method: "POST",
-    body: formData,
-  });
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`Upload failed for ${fileName}: HTTP ${res.status} - ${err}`);
-  }
-  return res.json();
-}
 
 // Contrast ratio helper
 function srgbToLinear(c) {
@@ -142,8 +118,64 @@ async function verifyEmptyStateDOM(page, contextLabel) {
 async function runLifecycleSuite() {
   console.log("================================================================================");
   console.log("🚀 HIGHVIEW PRODUCT LIFECYCLE & LIVE INCIDENT REPRODUCTION SUITE");
-  console.log("   Sections 19, 20, 21 — Same-Session / Zero-Restart Integrity");
+  console.log("   Sections 19, 20, 21 — Hermetic Ephemeral Test Instance Isolation");
   console.log("================================================================================\n");
+
+  // Step 0: Capture Pre-Test Environment Snapshot of User's Live Database & Directories
+  console.log("0. Capturing Pre-Test Manifest of User's Normal Application State...");
+  const preSnapshot = captureUserEnvironmentSnapshot(repoRoot);
+  console.log(`   Live DB Path:    ${preSnapshot.liveDb.path}`);
+  console.log(`   Live DB Size:    ${preSnapshot.liveDb.size} bytes`);
+  console.log(`   Live DB SHA256:  ${preSnapshot.liveDb.sha256}`);
+  console.log(`   Live Datasets:   ${preSnapshot.datasets.length} files`);
+  console.log(`   Live Uploads:    ${preSnapshot.uploads.length} files`);
+  console.log("   ✅ User environment baseline captured.\n");
+
+  // Step 1: Spawn Isolated Backend on Ephemeral Port
+  const isolated = await spawnIsolatedTestBackend({ runId: "lifecycle-session" });
+  assertIsolatedTestTarget(isolated.baseUrl, "same_session_lifecycle");
+
+  // API helper functions scoped strictly to isolated backend
+  async function apiDeleteAllDatasets() {
+    const res = await fetch(`${isolated.baseUrl}/api/upload/datasets`, {
+      method: "DELETE",
+      headers: getTestHeaders(isolated.runId),
+    });
+    if (!res.ok) {
+      throw new Error(`Failed to delete all datasets on isolated backend: HTTP ${res.status}`);
+    }
+    return res.json();
+  }
+
+  async function apiGetDatasets() {
+    const res = await fetch(`${isolated.baseUrl}/api/upload/datasets`, {
+      headers: getTestHeaders(isolated.runId),
+    });
+    if (!res.ok) {
+      throw new Error(`Failed to get datasets from isolated backend: HTTP ${res.status}`);
+    }
+    const data = await res.json();
+    return Array.isArray(data) ? data : data.datasets || [];
+  }
+
+  async function apiUploadFile(filePath) {
+    const fileBytes = fs.readFileSync(filePath);
+    const fileName = path.basename(filePath);
+    const formData = new FormData();
+    const blob = new Blob([fileBytes], { type: "text/csv" });
+    formData.append("file", blob, fileName);
+
+    const res = await fetch(`${isolated.baseUrl}/api/upload/file`, {
+      method: "POST",
+      headers: getTestHeaders(isolated.runId),
+      body: formData,
+    });
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`Upload failed on isolated backend for ${fileName}: HTTP ${res.status} - ${err}`);
+    }
+    return res.json();
+  }
 
   const browser = await puppeteer.launch({
     headless: "new",
@@ -154,20 +186,38 @@ async function runLifecycleSuite() {
   try {
     const page = await browser.newPage();
 
-    // Capture console errors & network failures for audit
-    const consoleLogs = [];
-    const consoleErrors = [];
-    page.on("console", (msg) => {
-      const txt = msg.text();
-      consoleLogs.push(txt);
-      if (msg.type() === "error") {
-        consoleErrors.push(txt);
+    // Route all browser /api traffic directly to the isolated backend
+    await page.setRequestInterception(true);
+    page.on("request", async (req) => {
+      const url = req.url();
+      if (url.includes("/api/")) {
+        const targetUrl = url.replace(/https?:\/\/[^/]+(?=\/api)/, isolated.baseUrl);
+        try {
+          const fetchOpts = {
+            method: req.method(),
+            headers: {
+              ...req.headers(),
+              ...getTestHeaders(isolated.runId),
+            },
+          };
+          if (req.method() !== "GET" && req.method() !== "HEAD") {
+            fetchOpts.body = req.postData();
+          }
+          const resp = await fetch(targetUrl, fetchOpts);
+          const resHeaders = {};
+          resp.headers.forEach((v, k) => { resHeaders[k] = v; });
+          const buf = Buffer.from(await resp.arrayBuffer());
+          req.respond({
+            status: resp.status,
+            headers: resHeaders,
+            body: buf,
+          });
+        } catch (err) {
+          req.abort("failed");
+        }
+      } else {
+        req.continue();
       }
-    });
-
-    const failedRequests = [];
-    page.on("requestfailed", (req) => {
-      failedRequests.push({ url: req.url(), error: req.failure()?.errorText });
     });
 
     // -------------------------------------------------------------------------
@@ -176,12 +226,12 @@ async function runLifecycleSuite() {
     console.log("▶ INITIAL VIEWPORT: Desktop 1440x900 (Light Theme)");
     await page.setViewport({ width: 1440, height: 900 });
 
-    // Step 0: Ensure starting state is empty
-    console.log("\n0. Initial State Reset: Clearing all datasets via API...");
+    // Step 0: Ensure starting state is empty on isolated backend
+    console.log("\n0. Initial State Reset: Clearing isolated test database via API...");
     await apiDeleteAllDatasets();
     let currentDatasets = await apiGetDatasets();
-    assert.equal(currentDatasets.length, 0, "Initial dataset count must be 0");
-    console.log("   ✅ Database verified at 0 datasets");
+    assert.equal(currentDatasets.length, 0, "Initial dataset count on isolated backend must be 0");
+    console.log("   ✅ Isolated database verified at 0 datasets");
 
     // Load Dashboard in empty state
     await page.goto(`${FRONTEND_URL}/?tab=dashboard`, { waitUntil: "networkidle2" });
@@ -190,12 +240,12 @@ async function runLifecycleSuite() {
     console.log("   ✅ Initial zero-data dashboard renders clean EmptyDashboardBoundary without errors");
 
     // -------------------------------------------------------------------------
-    // STEP A: Upload Workforce Dataset
+    // STEP A: Upload Workforce Dataset to Isolated Backend
     // -------------------------------------------------------------------------
     console.log("\n1. Step A: Uploading Workforce Dataset (workforce_01_headcount_multilevel.csv)...");
     const wfUpload = await apiUploadFile(WORKFORCE_CSV);
     const wfDatasetId = wfUpload.dataset_id || (await apiGetDatasets())[0]?.id;
-    console.log(`   Workforce uploaded successfully: dataset_id=${wfDatasetId}`);
+    console.log(`   Workforce uploaded successfully to isolated backend: dataset_id=${wfDatasetId}`);
 
     // Navigate to Dashboard for Workforce
     await page.goto(`${FRONTEND_URL}/?tab=dashboard&dataset_id=${wfDatasetId}`, { waitUntil: "networkidle2" });
@@ -209,14 +259,14 @@ async function runLifecycleSuite() {
 
     // -------------------------------------------------------------------------
     // STEP B & SECTION 21: The Exact Original Incident Reproduction
-    // While Dashboard is actively open, delete all datasets WITHOUT restarting server!
+    // While Dashboard is actively open, delete all datasets on isolated backend WITHOUT restarting!
     // -------------------------------------------------------------------------
     console.log("\n2. Step B / Section 21: Reproducing the EXACT Original Incident:");
     console.log("   - Live Dashboard is OPEN at dataset_id=" + wfDatasetId);
-    console.log("   - User deletes all datasets from system without server restart...");
+    console.log("   - User deletes all datasets on isolated backend without server restart...");
     await apiDeleteAllDatasets();
     const afterDeleteDatasets = await apiGetDatasets();
-    assert.equal(afterDeleteDatasets.length, 0, "All datasets successfully deleted");
+    assert.equal(afterDeleteDatasets.length, 0, "All datasets successfully deleted on isolated backend");
 
     // Trigger dashboard refresh / poll in same session
     await page.reload({ waitUntil: "networkidle2" });
@@ -230,7 +280,7 @@ async function runLifecycleSuite() {
     console.log("   ✅ 0 synthetic numbers (?? 73, ?? 3) rendered");
     console.log("   ✅ Canonical <Button> rendered with compliant AAA contrast");
 
-    // Also verify Data Explorer is clean
+    // Also verify Data Explorer is clean on isolated backend
     await page.goto(`${FRONTEND_URL}/?tab=explorer`, { waitUntil: "networkidle2" });
     await new Promise((r) => setTimeout(r, 1000));
     const explorerText = await page.evaluate(() => document.body.innerText);
@@ -261,12 +311,12 @@ async function runLifecycleSuite() {
     await new Promise((r) => setTimeout(r, 1000));
 
     // -------------------------------------------------------------------------
-    // STEP C: Upload Retail Dataset
+    // STEP C: Upload Retail Dataset to Isolated Backend
     // -------------------------------------------------------------------------
     console.log("\n4. Step C: Uploading Retail Dataset (retail_01_inventory_catalog_multicell.csv)...");
     const retailUpload = await apiUploadFile(RETAIL_CSV);
     const retailDatasetId = retailUpload.dataset_id || (await apiGetDatasets())[0]?.id;
-    console.log(`   Retail uploaded successfully: dataset_id=${retailDatasetId}`);
+    console.log(`   Retail uploaded successfully to isolated backend: dataset_id=${retailDatasetId}`);
 
     await page.goto(`${FRONTEND_URL}/?tab=dashboard&dataset_id=${retailDatasetId}`, { waitUntil: "networkidle2" });
     await new Promise((r) => setTimeout(r, 2000));
@@ -278,7 +328,7 @@ async function runLifecycleSuite() {
     console.log("   ✅ Retail Dashboard rendered: Retail vocabulary present, ZERO Workforce vocabulary leakage");
 
     // -------------------------------------------------------------------------
-    // STEP D: Delete All Datasets
+    // STEP D: Delete All Datasets on Isolated Backend
     // -------------------------------------------------------------------------
     console.log("\n5. Step D: Deleting all datasets after Retail...");
     await apiDeleteAllDatasets();
@@ -295,7 +345,7 @@ async function runLifecycleSuite() {
 
     const envUpload = await apiUploadFile(ENV_CSV);
     const envDatasetId = envUpload.dataset_id || (await apiGetDatasets())[0]?.id;
-    console.log(`   Environmental uploaded successfully: dataset_id=${envDatasetId}`);
+    console.log(`   Environmental uploaded successfully to isolated backend: dataset_id=${envDatasetId}`);
 
     // Set theme to dark in localStorage before loading
     await page.evaluate(() => {
@@ -324,17 +374,30 @@ async function runLifecycleSuite() {
     await verifyEmptyStateDOM(page, "Mobile Dark Final Empty State");
     console.log("   ✅ Final clean zero-data state confirmed in Mobile Dark viewport");
 
-    // Final database state check
+    // Final database state check on isolated backend
     const finalDatasets = await apiGetDatasets();
-    assert.equal(finalDatasets.length, 0, "Live database must end with 0 datasets");
-    console.log("   ✅ Live database confirmed at 0 datasets");
+    assert.equal(finalDatasets.length, 0, "Isolated database must end with 0 datasets");
+    console.log("   ✅ Isolated database confirmed at 0 datasets");
 
     console.log("\n================================================================================");
     console.log("🎉 ALL PRODUCT LIFECYCLE & INCIDENT REPRODUCTION TESTS PASSED!");
     console.log("================================================================================\n");
 
   } finally {
-    await browser.close();
+    await browser.close().catch(() => {});
+    await isolated.teardown();
+
+    // Final Environment Invariant Proof: Compare Pre and Post Snapshots
+    console.log("8. Verifying Bit-for-Bit Immutability of User's Live Application State...");
+    const postSnapshot = captureUserEnvironmentSnapshot(repoRoot);
+    console.log(`   Live DB Path:    ${postSnapshot.liveDb.path}`);
+    console.log(`   Live DB Size:    ${postSnapshot.liveDb.size} bytes`);
+    console.log(`   Live DB SHA256:  ${postSnapshot.liveDb.sha256}`);
+    console.log(`   Live Datasets:   ${postSnapshot.datasets.length} files`);
+    console.log(`   Live Uploads:    ${postSnapshot.uploads.length} files`);
+
+    assertEnvironmentSnapshotsIdentical(preSnapshot, postSnapshot, "Lifecycle Same-Session Isolation");
+    console.log("   ✅ IMMUTABILITY PROVEN: Live database and user storage were 100% UNTOUCHED throughout test.\n");
   }
 }
 
