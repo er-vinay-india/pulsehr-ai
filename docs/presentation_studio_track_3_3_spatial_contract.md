@@ -11,7 +11,7 @@
 
 Fixed category chunking (`page_size = 10`) has been completely removed from `SpatialCanvasBudgeter`. Category capacity is computed deterministically in `SpatialCanvasBudgeter.measure_chart_category_chunks` from:
 - **Chart Morphology**: Horizontal bar (`ranked_bar`, `horizontal_bar`, `bar`), composition (`pie`, `donut`), or vertical (`column`, `line`, `area`).
-- **Plot Geometry**: Available plot width (`864pt`) and remaining plot height after subtracting continuation title footprint (`1–2` lines at `30pt`), introduction narrative/subtitle footprint, chart title (`26pt`), axis ticks (`30pt`), legend (`24pt` when multi-series), and reference line (`18pt`).
+- **Plot Geometry**: Available plot width (`864pt`) and remaining plot height after subtracting continuation title footprint (adaptive `1–3` lines at `>= 20pt` where geometry remains certified), introduction narrative/subtitle footprint, chart title (`26pt`), axis ticks (`30pt`), legend (`24pt` when multi-series), and reference line (`18pt`).
 - **Label Wrapping & Font Floor**: Category labels are measured at the `12pt` axis label font floor across the horizontal bar label gutter (`195pt`, ~30 characters/line) using `estimate_wrapped_lines`.
 - **Per-Category Slot Height**: $\max(\text{min\_bar\_slot\_h}, \text{wrapped\_lines} \times 12.0 \times 1.22 + \text{gap})$.
 
