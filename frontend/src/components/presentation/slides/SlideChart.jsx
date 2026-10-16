@@ -378,10 +378,14 @@ export default function SlideChart({ chart, chartData, theme, hideImpactCard = f
     name: humanizeLabel(s.name)
   }));
 
-  const refLines = actualChart.reference_lines || actualChart.referenceLines || [];
+  const isHorizontal = ['bar', 'horizontal_bar', 'ranked_bar', 'stacked_bar', 'bar_stacked', 'horizontal_stacked_bar'].includes(type);
+  const isStacked = ['stacked_bar', 'bar_stacked', 'horizontal_stacked_bar', 'stacked_column', 'column_stacked'].includes(type);
+  const isScatter = ['scatter', 'correlation', 'xy_scatter'].includes(type);
+
+  const refLines = actualChart.reference_lines || actualChart.referenceLines || (actualChart.reference_line != null ? [{ value: actualChart.reference_line, label: actualChart.reference_line_label || 'Benchmark' }] : []);
   const markLineData = refLines.map(rl => ({
     name: rl.label || 'Baseline',
-    yAxis: Number(rl.value),
+    ...(isHorizontal ? { xAxis: Number(rl.value) } : { yAxis: Number(rl.value) }),
     lineStyle: {
       type: rl.line_style || 'dashed',
       color: isDark ? '#f59e0b' : '#d97706',
@@ -396,52 +400,98 @@ export default function SlideChart({ chart, chartData, theme, hideImpactCard = f
   }));
 
   const pie = ['pie', 'donut'].includes(type);
-  const option = pie ? {
-    legend: { show: false },
-    tooltip: {
-      trigger: 'item',
-      confine: true,
-      backgroundColor: isDark ? 'rgba(15, 23, 42, 0.95)' : 'rgba(255, 255, 255, 0.98)',
-      borderColor: isDark ? '#334155' : '#cbd5e1',
-      textStyle: { color: isDark ? '#f1f5f9' : '#1e293b', fontSize: 12 },
-      formatter: params => {
-        const fullCat = cleanCategories?.[params.dataIndex] || params.name;
-        return `<div style="font-weight:700;max-width:280px;word-break:break-word;">${fullCat}</div><div>Value: <b>${formatFull(params.value)} (${params.percent}%)</b></div>`;
-      }
-    },
-    series: [{
-      type: 'pie',
-      name: cleanSeries[0]?.name || '',
-      radius: type === 'donut' ? ['40%', '64%'] : '64%',
-      center: ['50%', '50%'],
-      avoidLabelOverlap: true,
-      label: {
-        show: true,
-        fontSize: 10,
-        color: isDark ? '#e2e8f0' : '#1e293b',
-        formatter: p => `${p.name && p.name.length > 14 ? p.name.slice(0, 12) + '…' : p.name}\n${p.percent}%`
+  let option;
+
+  if (pie) {
+    option = {
+      legend: { show: false },
+      tooltip: {
+        trigger: 'item',
+        confine: true,
+        backgroundColor: isDark ? 'rgba(15, 23, 42, 0.95)' : 'rgba(255, 255, 255, 0.98)',
+        borderColor: isDark ? '#334155' : '#cbd5e1',
+        textStyle: { color: isDark ? '#f1f5f9' : '#1e293b', fontSize: 12 },
+        formatter: params => {
+          const fullCat = cleanCategories?.[params.dataIndex] || params.name;
+          return `<div style="font-weight:700;max-width:280px;word-break:break-word;">${fullCat}</div><div>Value: <b>${formatFull(params.value)} (${params.percent}%)</b></div>`;
+        }
       },
-      labelLine: { show: true, length: 8, length2: 8 },
-      itemStyle: { borderWidth: 2, borderColor: isDark ? '#08111f' : '#ffffff' },
-      data: cleanCategories.map((label, i) => ({
-        name: String(label),
-        value: cleanSeries[0]?.values?.[i] ?? cleanSeries[0]?.data?.[i]
-      }))
-    }],
-  } : cartesian(cleanCategories,
-    cleanSeries.map((s, sIdx) => ({
-      name: s.name && s.name.length > 20 ? s.name.slice(0, 18) + '…' : s.name,
-      type: type === 'line' ? 'line' : 'bar',
-      data: cleanCategories.map((_, i) => numeric(s.values?.[i] ?? s.data?.[i])),
-      label: {
-        show: cleanCategories.length <= 16,
-        fontSize: 10,
-        position: ['bar', 'horizontal_bar'].includes(type) ? 'right' : 'top',
-        formatter: p => format(p.value)
+      series: [{
+        type: 'pie',
+        name: cleanSeries[0]?.name || '',
+        radius: type === 'donut' ? ['40%', '64%'] : '64%',
+        center: ['50%', '50%'],
+        avoidLabelOverlap: true,
+        label: {
+          show: true,
+          fontSize: 10,
+          color: isDark ? '#e2e8f0' : '#1e293b',
+          formatter: p => `${p.name && p.name.length > 14 ? p.name.slice(0, 12) + '…' : p.name}\n${p.percent}%`
+        },
+        labelLine: { show: true, length: 8, length2: 8 },
+        itemStyle: { borderWidth: 2, borderColor: isDark ? '#08111f' : '#ffffff' },
+        data: cleanCategories.map((label, i) => ({
+          name: String(label),
+          value: cleanSeries[0]?.values?.[i] ?? cleanSeries[0]?.data?.[i]
+        }))
+      }],
+    };
+  } else if (isScatter) {
+    const s1Vals = cleanSeries[0]?.values || cleanSeries[0]?.data || [];
+    const s2Vals = cleanSeries[1]?.values || cleanSeries[1]?.data || [];
+    const scatterPoints = cleanCategories.map((cat, i) => {
+      const xVal = s2Vals.length > 0 ? numeric(s1Vals[i]) : (!isNaN(Number(cat)) ? Number(cat) : i + 1);
+      const yVal = s2Vals.length > 0 ? numeric(s2Vals[i]) : numeric(s1Vals[i]);
+      return [xVal, yVal, String(cat)];
+    });
+
+    option = {
+      grid: { left: '12%', right: '10%', top: '16%', bottom: '14%' },
+      tooltip: {
+        trigger: 'item',
+        formatter: p => `<b>${p.data[2]}</b><br/>X: ${format(p.data[0])}<br/>Y: ${format(p.data[1])}`
       },
-      ...(sIdx === 0 && markLineData.length > 0 ? { markLine: { data: markLineData, symbol: 'none' } } : {})
-    })),
-    ['bar', 'horizontal_bar'].includes(type), actualChart.unit, isDark);
+      xAxis: {
+        type: 'value',
+        scale: true,
+        splitLine: { lineStyle: { color: isDark ? '#1e293b' : '#e2e8f0' } },
+        axisLabel: { color: isDark ? '#94a3b8' : '#64748b', fontSize: 11 }
+      },
+      yAxis: {
+        type: 'value',
+        scale: true,
+        splitLine: { lineStyle: { color: isDark ? '#1e293b' : '#e2e8f0' } },
+        axisLabel: { color: isDark ? '#94a3b8' : '#64748b', fontSize: 11 }
+      },
+      series: [{
+        type: 'scatter',
+        symbolSize: 10,
+        data: scatterPoints,
+        itemStyle: { color: '#0ea5e9' },
+        ...(markLineData.length > 0 ? { markLine: { data: markLineData, symbol: 'none' } } : {})
+      }]
+    };
+  } else {
+    option = cartesian(
+      cleanCategories,
+      cleanSeries.map((s, sIdx) => ({
+        name: s.name && s.name.length > 20 ? s.name.slice(0, 18) + '…' : s.name,
+        type: type === 'line' ? 'line' : 'bar',
+        ...(isStacked ? { stack: 'total' } : {}),
+        data: cleanCategories.map((_, i) => numeric(s.values?.[i] ?? s.data?.[i])),
+        label: {
+          show: cleanCategories.length <= 16,
+          fontSize: 10,
+          position: isHorizontal ? 'right' : 'top',
+          formatter: p => format(p.value)
+        },
+        ...(sIdx === 0 && markLineData.length > 0 ? { markLine: { data: markLineData, symbol: 'none' } } : {})
+      })),
+      isHorizontal,
+      actualChart.unit,
+      isDark
+    );
+  }
 
   if (!pie) {
     const hasLegend = cleanSeries.length > 1;

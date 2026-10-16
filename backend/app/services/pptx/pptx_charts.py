@@ -6,7 +6,7 @@ from pptx.util import Inches, Pt
 from pptx.oxml.xmlchemy import OxmlElement
 from pptx.dml.fill import FillFormat
 from pptx.enum.shapes import MSO_SHAPE
-from pptx.chart.data import CategoryChartData
+from pptx.chart.data import CategoryChartData, XyChartData
 from pptx.enum.chart import XL_CHART_TYPE, XL_LEGEND_POSITION, XL_DATA_LABEL_POSITION
 
 from .pptx_styles import ChartExportError, hex_to_rgb
@@ -58,8 +58,14 @@ def _add_native_chart_shape(slide, chart_info: dict, x, y, cx, cy, colors: dict,
     raw_type = (chart_info.get("chart_type") or chart_info.get("type") or "column").lower()
     if raw_type in ("bar", "horizontal_bar", "ranked_bar"):
         xl_type = XL_CHART_TYPE.BAR_CLUSTERED
-    elif raw_type in ("line", "area"):
+    elif raw_type in ("stacked_bar", "bar_stacked", "horizontal_stacked_bar"):
+        xl_type = XL_CHART_TYPE.BAR_STACKED
+    elif raw_type in ("stacked_column", "column_stacked"):
+        xl_type = XL_CHART_TYPE.COLUMN_STACKED
+    elif raw_type in ("line", "area", "trend"):
         xl_type = XL_CHART_TYPE.LINE
+    elif raw_type in ("scatter", "correlation", "xy_scatter"):
+        xl_type = XL_CHART_TYPE.XY_SCATTER
     elif raw_type in ("pie",):
         xl_type = XL_CHART_TYPE.PIE
     elif raw_type in ("donut", "doughnut"):
@@ -67,13 +73,27 @@ def _add_native_chart_shape(slide, chart_info: dict, x, y, cx, cy, colors: dict,
     else:
         xl_type = XL_CHART_TYPE.COLUMN_CLUSTERED
 
-    cdata = CategoryChartData()
-    cdata.categories = categories
-
-    for s in series_list:
-        s_name = str(s.get("name", "Metric"))
-        s_vals = tuple(float(v) for v in s["values"])
-        cdata.add_series(s_name, s_vals)
+    if xl_type == XL_CHART_TYPE.XY_SCATTER:
+        cdata = XyChartData()
+        if len(series_list) >= 2:
+            s_xy = cdata.add_series(series_list[1].get("name", "Correlation"))
+            for xv, yv in zip(series_list[0]["values"], series_list[1]["values"]):
+                s_xy.add_data_point(float(xv), float(yv))
+        else:
+            s_xy = cdata.add_series(series_list[0].get("name", "Scatter"))
+            for idx, yv in enumerate(series_list[0]["values"]):
+                try:
+                    xv = float(categories[idx])
+                except (ValueError, TypeError):
+                    xv = float(idx + 1)
+                s_xy.add_data_point(xv, float(yv))
+    else:
+        cdata = CategoryChartData()
+        cdata.categories = categories
+        for s in series_list:
+            s_name = str(s.get("name", "Metric"))
+            s_vals = tuple(float(v) for v in s["values"])
+            cdata.add_series(s_name, s_vals)
 
     try:
         chart_shape = slide.shapes.add_chart(xl_type, x, y, cx, cy, cdata)
@@ -122,18 +142,91 @@ def _add_native_chart_shape(slide, chart_info: dict, x, y, cx, cy, colors: dict,
             else:
                 element.insert_element_before(sp_pr, "c:extLst")
         if xl_type not in (XL_CHART_TYPE.PIE, XL_CHART_TYPE.DOUGHNUT):
-            if xl_type == XL_CHART_TYPE.BAR_CLUSTERED:
+            if xl_type in (XL_CHART_TYPE.BAR_CLUSTERED, XL_CHART_TYPE.BAR_STACKED):
                 chart.category_axis.reverse_order = True
             for axis in (chart.category_axis, chart.value_axis):
                 axis.tick_labels.font.color.rgb = colors["secondary"]
                 axis.tick_labels.font.size = Pt(14)
-                axis.tick_labels.number_format = number_format
-                axis.tick_labels.number_format_is_linked = False
+                if axis is chart.value_axis or xl_type == XL_CHART_TYPE.XY_SCATTER:
+                    axis.tick_labels.number_format = number_format
+                    axis.tick_labels.number_format_is_linked = False
                 axis.format.line.color.rgb = colors["card_border"]
                 if axis.has_major_gridlines:
                     axis.major_gridlines.format.line.color.rgb = colors["card_border"]
             if count_unit and largest <= 10:
                 chart.value_axis.major_unit = 1
+
+        # Reference Line / Benchmark Overlay
+        raw_ref = chart_info.get("reference_line")
+        ref_label = "Benchmark"
+        if raw_ref is None and "reference_lines" in chart_info:
+            rls = chart_info.get("reference_lines") or []
+            if rls and isinstance(rls[0], dict):
+                raw_ref = rls[0].get("value")
+                ref_label = rls[0].get("label") or "Benchmark"
+        elif chart_info.get("reference_line_label"):
+            ref_label = chart_info["reference_line_label"]
+
+        if raw_ref is not None and str(raw_ref).strip() != "":
+            try:
+                ref_val = float(raw_ref)
+                if math.isfinite(ref_val):
+                    all_vals = [v for s in series_list for v in s["values"]]
+                    curr_min = min(all_vals) if all_vals else 0.0
+                    curr_max = max(all_vals) if all_vals else 100.0
+                    if ref_val > curr_max:
+                        chart.value_axis.maximum_scale = max(ref_val * 1.12, curr_max * 1.05)
+                    if ref_val < curr_min and curr_min < 0:
+                        chart.value_axis.minimum_scale = min(ref_val * 1.12, curr_min * 1.05)
+                    elif curr_min >= 0:
+                        chart.value_axis.minimum_scale = 0.0
+
+                    axis_min = chart.value_axis.minimum_scale if chart.value_axis.minimum_scale is not None else min(0.0, curr_min)
+                    axis_max = chart.value_axis.maximum_scale if chart.value_axis.maximum_scale is not None else max(curr_max, ref_val)
+                    span = max(axis_max - axis_min, 1e-6)
+                    ratio = max(0.0, min(1.0, (ref_val - axis_min) / span))
+
+                    accent_rgb = colors.get("accent", hex_to_rgb("#F59E0B"))
+                    is_horizontal = xl_type in (XL_CHART_TYPE.BAR_CLUSTERED, XL_CHART_TYPE.BAR_STACKED)
+
+                    if is_horizontal:
+                        plot_x_start = x + cx * 0.22
+                        plot_w = cx * 0.72
+                        ref_x = plot_x_start + plot_w * ratio
+                        ref_line = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, ref_x, y + cy * 0.16, Pt(1.5), cy * 0.72)
+                        ref_line.name = f"Benchmark Line: {ref_label}"
+                        ref_line.fill.solid()
+                        ref_line.fill.fore_color.rgb = accent_rgb
+                        ref_line.line.color.rgb = accent_rgb
+
+                        badge = slide.shapes.add_textbox(ref_x - Inches(0.6), y + cy * 0.08, Inches(1.8), Inches(0.32))
+                        badge.name = f"Benchmark Callout: {ref_label}"
+                        badge.text_frame.word_wrap = False
+                        p = badge.text_frame.paragraphs[0]
+                        p.text = f"{ref_label}: {ref_val:,.4g}"
+                        p.font.size = Pt(11)
+                        p.font.bold = True
+                        p.font.color.rgb = accent_rgb
+                    else:
+                        plot_y_bottom = y + cy * 0.86
+                        plot_h = cy * 0.70
+                        ref_y = plot_y_bottom - plot_h * ratio
+                        ref_line = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, x + cx * 0.12, ref_y, cx * 0.82, Pt(1.5))
+                        ref_line.name = f"Benchmark Line: {ref_label}"
+                        ref_line.fill.solid()
+                        ref_line.fill.fore_color.rgb = accent_rgb
+                        ref_line.line.color.rgb = accent_rgb
+
+                        badge = slide.shapes.add_textbox(x + cx * 0.76, ref_y - Inches(0.28), Inches(1.8), Inches(0.32))
+                        badge.name = f"Benchmark Callout: {ref_label}"
+                        badge.text_frame.word_wrap = False
+                        p = badge.text_frame.paragraphs[0]
+                        p.text = f"{ref_label}: {ref_val:,.4g}"
+                        p.font.size = Pt(11)
+                        p.font.bold = True
+                        p.font.color.rgb = accent_rgb
+            except (ValueError, TypeError) as ex:
+                logger.debug(f"Could not render reference line overlay: {ex}")
 
 
         if theme_palette:

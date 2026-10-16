@@ -385,6 +385,34 @@ class PresentationTopic(BaseModel):
                         rows = [[str(self.leader), str(self.leader_value or "")]]
                 if rows:
                     slide_table = {"headers": headers, "rows": rows}
+        elif categories and active_spec.get("series"):
+            ser_list = []
+            for s in active_spec["series"]:
+                if isinstance(s, dict):
+                    raw_v = s.get("values") if s.get("values") is not None else s.get("data") or []
+                    f_vals = []
+                    for v in raw_v:
+                        try:
+                            vf = float(v)
+                            f_vals.append(vf if math.isfinite(vf) else 0.0)
+                        except (ValueError, TypeError):
+                            f_vals.append(0.0)
+                    ser_list.append({
+                        "name": str(s.get("name") or self.metric or "Series"),
+                        "values": f_vals,
+                        "data": f_vals,
+                        "unit": s.get("unit") or self.unit,
+                        "evidence_id": s.get("evidence_id") or (self.evidence_ids[0] if self.evidence_ids else None)
+                    })
+            if ser_list:
+                slide_chart = {
+                    "type": chart_type,
+                    "chart_type": chart_type,
+                    "categories": [str(c) for c in categories],
+                    "series": ser_list,
+                    "reference_line": self.reference_line,
+                    "unit": self.unit
+                }
         elif categories and values:
             valid_cats = []
             valid_vals = []
@@ -447,7 +475,7 @@ class PresentationTopic(BaseModel):
         if not bullets:
             bullets.append(f"Empirical evaluation confirms {self.metric} under governed {self.analytical_intent} criteria.")
 
-        return {
+        slide_dict = {
             "id": f"slide_{slide_order}",
             "stable_slide_id": f"slide_topic_{self.topic_id.lower().replace('-', '_')}" + (f"_{continuation_badge.lower().replace(' ', '_')}" if continuation_badge else ""),
             "order": slide_order,
@@ -487,6 +515,23 @@ class PresentationTopic(BaseModel):
                 f"{self.topic_id}:{slide_order}:{total_slides}:{display_title}:{continuation_badge or ''}".encode("utf-8")
             ).hexdigest()
         }
+
+        try:
+            from .presentation_visual_spec import PresentationVisualSpec
+            p_spec = PresentationVisualSpec.from_governed_visual(slide_dict)
+            slide_dict["presentation_visual_spec"] = p_spec.model_dump()
+            slide_dict["visual_semantic_fingerprint"] = p_spec.semantic_fingerprint()
+            slide_dict["render_manifest"] = p_spec.build_render_manifest("canonical")
+            if slide_chart:
+                chart_d = p_spec.to_chart_dict()
+                for k, v in chart_d.items():
+                    if k not in slide_chart or slide_chart[k] is None:
+                        slide_chart[k] = v
+                slide_dict["chart"] = slide_chart
+        except Exception as ex:
+            logger.debug(f"Could not derive presentation_visual_spec: {ex}")
+
+        return slide_dict
 
     def to_slide_contracts(
         self,

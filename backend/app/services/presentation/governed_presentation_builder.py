@@ -223,4 +223,21 @@ def build_governed_presentation_deck(
     }
     from .spatial_planner import apply_spatial_slide_budgeting
     deck_dict = apply_spatial_slide_budgeting(deck_dict)
+
+    from .presentation_visual_spec import PresentationVisualSpec
+    for s in deck_dict.get("slides", []):
+        if s.get("chart") or s.get("table") or s.get("visual_spec"):
+            try:
+                p_spec = PresentationVisualSpec.from_governed_visual(s)
+                s["presentation_visual_spec"] = p_spec.model_dump()
+                s["visual_semantic_fingerprint"] = p_spec.semantic_fingerprint()
+                s["render_manifest"] = p_spec.build_render_manifest("canonical")
+                if s.get("chart"):
+                    cd = p_spec.to_chart_dict()
+                    for k, v in cd.items():
+                        if k not in s["chart"] or s["chart"][k] is None:
+                            s["chart"][k] = v
+            except Exception as ex:
+                logger.debug(f"Could not refresh presentation_visual_spec after spatial budgeting: {ex}")
+
     return seal_business_content(deck_dict)

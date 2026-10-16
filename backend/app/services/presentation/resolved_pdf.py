@@ -79,8 +79,40 @@ def export_resolved_pdf(deck, output, *, canvas=None, page_offset=0, total=None)
                 detail.drawOn(canvas, x+w*.49+18, yy-detail_height)
                 yy -= detail_height+15
             return
-        horizontal = kind in ('bar', 'horizontal_bar', 'ranked_bar')
-        low, high = min(0, min(values)), max(0, max(values))
+        horizontal = kind in ('bar', 'horizontal_bar', 'ranked_bar', 'stacked_bar', 'bar_stacked', 'horizontal_stacked_bar')
+        is_stacked = kind in ('stacked_bar', 'bar_stacked', 'horizontal_stacked_bar', 'stacked_column', 'column_stacked')
+        is_scatter = kind in ('scatter', 'correlation', 'xy_scatter')
+
+        raw_ref = data.get("reference_line")
+        ref_label = "Benchmark"
+        if raw_ref is None and "reference_lines" in data:
+            rls = data.get("reference_lines") or []
+            if rls and isinstance(rls[0], dict):
+                raw_ref = rls[0].get("value")
+                ref_label = rls[0].get("label") or "Benchmark"
+        elif data.get("reference_line_label"):
+            ref_label = data["reference_line_label"]
+
+        ref_val = None
+        if raw_ref is not None:
+            try:
+                rf = float(raw_ref)
+                if isfinite(rf):
+                    ref_val = rf
+            except (ValueError, TypeError):
+                ref_val = None
+
+        if is_stacked:
+            stack_totals = [sum(max(0, s['values'][i]) for s in series) for i in range(len(categories))]
+            low = min(0, min(values))
+            high = max(0, max(stack_totals) if stack_totals else max(values))
+        else:
+            low, high = min(0, min(values)), max(0, max(values))
+
+        if ref_val is not None:
+            low = min(low, ref_val)
+            high = max(high, ref_val)
+
         span = max(high-low, 1)
         max_cat_len = max((len(str(c)) for c in categories), default=0)
         h_gutter = min(230, max(130, int(min(max_cat_len, 32) * 6.8) + 16)) if horizontal else 85
@@ -97,56 +129,149 @@ def export_resolved_pdf(deck, output, *, canvas=None, page_offset=0, total=None)
                 yy = bottom+ph*tick/4
                 canvas.line(left, yy, left+pw, yy)
                 label(formatted(v), left-8, yy-4, 12, 'right', 'secondary_text')
-        points = []
-        step = (ph if horizontal else pw)/len(categories)
-        for j, s in enumerate(series):
-            color = HexColor(theme['chart_palette'][j % len(theme['chart_palette'])])
-            points = []
-            for i, (category, value) in enumerate(zip(categories, s['values'])):
+
+        if is_scatter:
+            # Render XY scatter points
+            if len(series) >= 2:
+                xs = series[0]['values']
+                ys = series[1]['values']
+            else:
+                ys = series[0]['values']
+                xs = []
+                for idx, c in enumerate(categories):
+                    try:
+                        xs.append(float(c))
+                    except (ValueError, TypeError):
+                        xs.append(float(idx + 1))
+            min_x, max_x = min(xs), max(xs)
+            span_x = max(max_x - min_x, 1)
+            sc_color = HexColor(theme['chart_palette'][0])
+            canvas.setFillColor(sc_color)
+            canvas.setStrokeColor(HexColor(theme['card_border']))
+            for idx, (px_val, py_val) in enumerate(zip(xs, ys)):
+                cx_pt = left + (px_val - min_x) / span_x * pw
+                cy_pt = bottom + (py_val - low) / span * ph
+                canvas.circle(cx_pt, cy_pt, 4.5, fill=1, stroke=1)
+                if len(categories) <= 15:
+                    label(str(categories[idx]), cx_pt, cy_pt + 6, 10, 'center')
+        elif is_stacked:
+            # Render stacked bars / columns
+            step = (ph if horizontal else pw)/len(categories)
+            accum = [0.0] * len(categories)
+            for j, s in enumerate(series):
+                color = HexColor(theme['chart_palette'][j % len(theme['chart_palette'])])
                 canvas.setFillColor(color)
                 canvas.setStrokeColor(color)
-                if horizontal:
-                    yy = bottom+ph-(i+.5)*step
-                    zero, end = left+(0-low)/span*pw, left+(value-low)/span*pw
-                    bh = min(30, step*.65/len(series))
-                    yy += (j-(len(series)-1)/2)*bh
-                    canvas.rect(min(zero, end), yy-bh/2, abs(end-zero), bh, fill=1, stroke=0)
-                    label(formatted(value), max(zero, end)+5, yy-4, 14)
-                    if j == 0:
-                        cat_str = str(category)
-                        if len(cat_str) * 7.2 <= h_gutter - 12:
-                            label(cat_str, left-8, bottom+ph-(i+.5)*step-4, 14, 'right', 'secondary_text')
-                        else:
-                            lbl_w = h_gutter - 12
-                            cat_style = ParagraphStyle(
-                                'chart_cat',
-                                fontName='Helvetica',
-                                fontSize=11,
-                                leading=13,
-                                alignment=2,
-                                textColor=HexColor(theme['secondary_text']),
-                            )
-                            cat_p = Paragraph(escape(cat_str), cat_style)
-                            _, cat_h = cat_p.wrap(lbl_w, max(step, 28))
-                            cat_p.drawOn(canvas, x + 4, bottom + ph - (i + .5) * step - cat_h / 2)
-                else:
-                    xx, yy = left+(i+.5)*step, bottom+(value-low)/span*ph
-                    zero = bottom+(0-low)/span*ph
-                    if kind in ('line', 'area'):
-                        points.append((xx, yy))
-                        canvas.circle(xx, yy, 3, fill=1, stroke=0)
+                for i, (category, value) in enumerate(zip(categories, s['values'])):
+                    start_v = accum[i]
+                    end_v = start_v + max(0, value)
+                    accum[i] = end_v
+                    if horizontal:
+                        yy = bottom+ph-(i+.5)*step
+                        bh = min(30, step*.65)
+                        x0 = left + (start_v - low) / span * pw
+                        x1 = left + (end_v - low) / span * pw
+                        canvas.rect(min(x0, x1), yy-bh/2, abs(x1-x0), bh, fill=1, stroke=0)
+                        if j == len(series) - 1:
+                            label(formatted(end_v), max(x0, x1)+5, yy-4, 14)
+                        if j == 0:
+                            cat_str = str(category)
+                            if len(cat_str) * 7.2 <= h_gutter - 12:
+                                label(cat_str, left-8, bottom+ph-(i+.5)*step-4, 14, 'right', 'secondary_text')
+                            else:
+                                lbl_w = h_gutter - 12
+                                cat_style = ParagraphStyle(
+                                    'chart_cat', fontName='Helvetica', fontSize=11, leading=13,
+                                    alignment=2, textColor=HexColor(theme['secondary_text']),
+                                )
+                                cat_p = Paragraph(escape(cat_str), cat_style)
+                                _, cat_h = cat_p.wrap(lbl_w, max(step, 28))
+                                cat_p.drawOn(canvas, x + 4, bottom + ph - (i + .5) * step - cat_h / 2)
                     else:
-                        bw = step*.65/len(series)
-                        xx += (j-(len(series)-1)/2)*bw
-                        canvas.rect(xx-bw/2, min(zero, yy), bw, abs(yy-zero), fill=1, stroke=0)
-                    label(formatted(value), xx, yy+7, 14, 'center')
-                    if j == 0:
-                        label(category, left+(i+.5)*step, bottom-19, 14, 'center', 'secondary_text')
-            if points:
-                canvas.setStrokeColor(color)
-                canvas.setLineWidth(2)
-                for a, b in zip(points, points[1:]):
-                    canvas.line(*a, *b)
+                        xx = left+(i+.5)*step
+                        bw = step*.65
+                        y0 = bottom + (start_v - low) / span * ph
+                        y1 = bottom + (end_v - low) / span * ph
+                        canvas.rect(xx-bw/2, min(y0, y1), bw, abs(y1-y0), fill=1, stroke=0)
+                        if j == len(series) - 1:
+                            label(formatted(end_v), xx, max(y0, y1)+7, 14, 'center')
+                        if j == 0:
+                            label(category, left+(i+.5)*step, bottom-19, 14, 'center', 'secondary_text')
+        else:
+            points = []
+            step = (ph if horizontal else pw)/len(categories)
+            for j, s in enumerate(series):
+                color = HexColor(theme['chart_palette'][j % len(theme['chart_palette'])])
+                points = []
+                for i, (category, value) in enumerate(zip(categories, s['values'])):
+                    canvas.setFillColor(color)
+                    canvas.setStrokeColor(color)
+                    if horizontal:
+                        yy = bottom+ph-(i+.5)*step
+                        zero, end = left+(0-low)/span*pw, left+(value-low)/span*pw
+                        bh = min(30, step*.65/len(series))
+                        yy += (j-(len(series)-1)/2)*bh
+                        canvas.rect(min(zero, end), yy-bh/2, abs(end-zero), bh, fill=1, stroke=0)
+                        label(formatted(value), max(zero, end)+5, yy-4, 14)
+                        if j == 0:
+                            cat_str = str(category)
+                            if len(cat_str) * 7.2 <= h_gutter - 12:
+                                label(cat_str, left-8, bottom+ph-(i+.5)*step-4, 14, 'right', 'secondary_text')
+                            else:
+                                lbl_w = h_gutter - 12
+                                cat_style = ParagraphStyle(
+                                    'chart_cat',
+                                    fontName='Helvetica',
+                                    fontSize=11,
+                                    leading=13,
+                                    alignment=2,
+                                    textColor=HexColor(theme['secondary_text']),
+                                )
+                                cat_p = Paragraph(escape(cat_str), cat_style)
+                                _, cat_h = cat_p.wrap(lbl_w, max(step, 28))
+                                cat_p.drawOn(canvas, x + 4, bottom + ph - (i + .5) * step - cat_h / 2)
+                    else:
+                        xx, yy = left+(i+.5)*step, bottom+(value-low)/span*ph
+                        zero = bottom+(0-low)/span*ph
+                        if kind in ('line', 'area'):
+                            points.append((xx, yy))
+                            canvas.circle(xx, yy, 3, fill=1, stroke=0)
+                        else:
+                            bw = step*.65/len(series)
+                            xx += (j-(len(series)-1)/2)*bw
+                            canvas.rect(xx-bw/2, min(zero, yy), bw, abs(yy-zero), fill=1, stroke=0)
+                        label(formatted(value), xx, yy+7, 14, 'center')
+                        if j == 0:
+                            label(category, left+(i+.5)*step, bottom-19, 14, 'center', 'secondary_text')
+                if points:
+                    canvas.setStrokeColor(color)
+                    canvas.setLineWidth(2)
+                    for a, b in zip(points, points[1:]):
+                        canvas.line(*a, *b)
+
+        # Draw Benchmark Reference Line Overlay
+        if ref_val is not None:
+            accent_c = HexColor(theme.get('accent_color', '#F59E0B'))
+            canvas.saveState()
+            canvas.setStrokeColor(accent_c)
+            canvas.setLineWidth(1.5)
+            canvas.setDash([4, 3])
+            if horizontal:
+                rx = left + (ref_val - low) / span * pw
+                canvas.line(rx, bottom, rx, bottom + ph)
+                canvas.restoreState()
+                label(f"{ref_label}: {formatted(ref_val)}", rx, bottom + ph + 4, 11, 'center', 'brand_color')
+            else:
+                ry = bottom + (ref_val - low) / span * ph
+                canvas.line(left, ry, left + pw, ry)
+                canvas.restoreState()
+                label(f"{ref_label}: {formatted(ref_val)}", left + pw - 4, ry + 4, 11, 'right', 'brand_color')
+
+        # Leader callout badge
+        if data.get("leader"):
+            l_val_str = f" ({data['leader_value']})" if data.get('leader_value') is not None else ""
+            label(f"Leader: {data['leader']}{l_val_str}", left + pw, top - 19, 12, 'right', 'brand_color')
+
         if len(series) > 1:
             label(' / '.join(s.get('name', '') for s in series), x+w/2, top-38, 12, 'center', 'secondary_text')
 
