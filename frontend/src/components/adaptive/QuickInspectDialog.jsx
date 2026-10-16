@@ -4,6 +4,8 @@ import HighviewSidePanel from "../../design-system/components/HighviewSidePanel"
 import Button from "../../design-system/components/Button";
 import { resolvePresentationLabel } from "../../design-system/registries/PresentationLabelResolver";
 import { buildExplorerUrl, getContextualExplorerTarget } from "../../utils/explorerNavigation";
+import { NAVIGATION_INTENTS, dispatchNavigationIntent } from "../../contracts/NavigationIntentRegistry";
+import { resolveGovernedCount } from "../../contracts/DashboardTruthIntegrity";
 
 /**
  * Accessible Quick Inspect Side Panel powered by HighviewSidePanel.
@@ -20,6 +22,7 @@ export default function QuickInspectDialog({
   selectedDatasetId,
   themeTokens,
   isDark = false,
+  onNavigateTab,
 }) {
   if (!isOpen) return null;
 
@@ -68,31 +71,22 @@ export default function QuickInspectDialog({
       >
         Close
       </Button>
-      <a
-        href={contextualTarget.url}
-        onClick={(e) => {
-          e.preventDefault();
-          window.location.href = contextualTarget.url;
+      <Button
+        variant="PRIMARY"
+        size="sm"
+        iconRight={ArrowRight}
+        onClick={() => {
+          onClose();
+          dispatchNavigationIntent(
+            NAVIGATION_INTENTS.OPEN_EXPLORER,
+            { target: contextualTarget },
+            { onNavigateTab }
+          );
         }}
-        style={{
-          display: "inline-flex",
-          alignItems: "center",
-          gap: "6px",
-          textDecoration: "none",
-          backgroundColor: "var(--action-primary-bg, #075443)",
-          color: "var(--action-primary-text, #ffffff)",
-          fontSize: "0.82rem",
-          fontWeight: 600,
-          padding: "8px 14px",
-          borderRadius: "8px",
-          cursor: "pointer",
-          transition: "all 0.15s ease",
-        }}
-        aria-label={`${contextualTarget.label} in Data Explorer`}
+        ariaLabel={`${contextualTarget.label} in Data Explorer`}
       >
-        <span>Explore in Data Explorer</span>
-        <ArrowRight size={14} aria-hidden="true" />
-      </a>
+        Explore in Data Explorer
+      </Button>
     </div>
   ) : (
     <div style={{ display: "flex", justifyContent: "flex-end", width: "100%" }}>
@@ -199,7 +193,7 @@ export default function QuickInspectDialog({
                       style={{
                         padding: "10px 12px",
                         borderRadius: "8px",
-                        backgroundColor: isDark ? "rgba(15, 23, 42, 0.6)" : "#f8fafc",
+                        backgroundColor: isDark ? "rgba(15, 23, 42, 0.6)" : "var(--color-bg-secondary, rgba(248, 250, 252, 1))",
                         border: "1px solid var(--color-border, #D4DDD6)",
                         display: "flex",
                         flexDirection: "column",
@@ -247,22 +241,28 @@ export default function QuickInspectDialog({
             )}
 
             {/* 4. Ground Truth Verification */}
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "8px",
-                fontSize: "0.78rem",
-                color: "var(--color-text-muted, #3C5059)",
-                paddingTop: "12px",
-                borderTop: "1px solid var(--color-border, #D4DDD6)",
-              }}
-            >
-              <ShieldCheck size={16} color="var(--color-success, #075443)" aria-hidden="true" />
-              <span>
-                Grounded across {data?.sheet_count || activeDataset?.sheet_count || 2} unified sheets · Mathematically reconciled · 100% confidence
-              </span>
-            </div>
+            {(() => {
+              const sheetRes = resolveGovernedCount([data?.sheet_count, activeDataset?.sheet_count]);
+              const countText = sheetRes.hasValue ? `${sheetRes.value} unified ${sheetRes.value === 1 ? "sheet" : "sheets"}` : "governed analytical sheets";
+              return (
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    fontSize: "0.78rem",
+                    color: "var(--color-text-muted, #3C5059)",
+                    paddingTop: "12px",
+                    borderTop: "1px solid var(--color-border, #D4DDD6)",
+                  }}
+                >
+                  <ShieldCheck size={16} color="var(--color-success, #075443)" aria-hidden="true" />
+                  <span>
+                    Grounded across {countText} · Mathematically reconciled · 100% confidence
+                  </span>
+                </div>
+              );
+            })()}
           </div>
         ) : isCandidate ? (
           <div>
@@ -303,8 +303,11 @@ export default function QuickInspectDialog({
           </div>
         ) : (
           (() => {
-            const sheetCount = data?.sheet_count || activeDataset?.sheet_count || 1;
-            const sheetText = `${sheetCount} unified ${sheetCount === 1 ? "sheet" : "sheets"}`;
+            const sheetRes = resolveGovernedCount([data?.sheet_count, activeDataset?.sheet_count]);
+            const sheetCount = sheetRes.hasValue ? sheetRes.value : 0;
+            const sheetText = sheetRes.hasValue
+              ? `${sheetCount} unified ${sheetCount === 1 ? "sheet" : "sheets"}`
+              : "Unified analytical sheets";
             const primaryMetric = topic?.key_metric || topic?.visual_microcopy?.primary_number;
             const subtitle = topic?.subtitle || topic?.visual_microcopy?.short_context;
             const takeaway =

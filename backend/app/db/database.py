@@ -4,10 +4,12 @@ from pathlib import Path
 import sqlite_vec
 
 from ..core import config
+from ..core.db_isolation import assert_test_database_isolation
 
 
 def get_connection(db_path: Path | None = None) -> sqlite3.Connection:
     target_path = db_path or config.DB_PATH
+    assert_test_database_isolation(target_path)
     target_path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(target_path, timeout=60.0)
     conn.row_factory = sqlite3.Row

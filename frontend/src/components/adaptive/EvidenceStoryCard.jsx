@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Sparkles, ShieldCheck, Database, ChevronDown, ChevronUp, Activity, ArrowRight } from "lucide-react";
 import { SurfaceGuard } from "../guard";
+import Button from "../../design-system/components/Button";
 
 /**
  * Causal badge styles mapped strictly into Highview's centralized theme tokens.
@@ -151,25 +152,16 @@ export default function EvidenceStoryCard({ storyPlan, evidenceGraph, snapshot, 
                 </div>
                 <div>
                   {claim.evidence_ids?.length > 0 && (
-                    <button
+                    <Button
+                      variant={isSelected ? "PRIMARY" : "GHOST"}
+                      size="sm"
+                      icon={Database}
                       onClick={() => setSelectedEvidId(isSelected ? null : claim.evidence_ids[0])}
-                      style={{
-                        background: isSelected ? "var(--color-brand-primary)" : "var(--color-bg-subtle)",
-                        color: isSelected ? "var(--color-text-on-dark)" : "var(--color-brand-primary)",
-                        border: "1px solid var(--color-border)",
-                        borderRadius: "4px",
-                        fontSize: "0.72rem",
-                        fontWeight: 600,
-                        padding: "3px 8px",
-                        cursor: "pointer",
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: "4px",
-                      }}
-                      title="Inspect underlying calculation and evidence"
+                      style={{ padding: "3px 8px", fontSize: "0.72rem" }}
+                      ariaLabel="Inspect underlying calculation and evidence"
                     >
-                      <Database size={11} /> {isSelected ? "Hide evidence" : "View evidence"}
-                    </button>
+                      {isSelected ? "Hide evidence" : "View evidence"}
+                    </Button>
                   )}
                 </div>
               </div>
@@ -209,12 +201,15 @@ export default function EvidenceStoryCard({ storyPlan, evidenceGraph, snapshot, 
             <span style={{ fontWeight: 700, color: "var(--color-brand-primary)", fontSize: "0.85rem", display: "flex", alignItems: "center", gap: "6px" }}>
               <Database size={14} /> Provenance for {selectedNode.evidence_id}: {selectedNode.subject}
             </span>
-            <button
+            <Button
+              variant="GHOST"
+              size="sm"
               onClick={() => setSelectedEvidId(null)}
-              style={{ background: "transparent", border: "none", color: "var(--color-text-muted)", cursor: "pointer", fontSize: "0.8rem" }}
+              style={{ fontSize: "0.8rem", padding: "2px 6px" }}
+              ariaLabel="Close evidence node provenance"
             >
               Close
-            </button>
+            </Button>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "0.75rem", fontSize: "0.8rem" }}>
             <div>
@@ -242,44 +237,29 @@ export default function EvidenceStoryCard({ storyPlan, evidenceGraph, snapshot, 
       {/* Bottom Controls: Evidence Nodes & Developer Diagnostics */}
       <div style={{ marginTop: "1rem", paddingTop: "0.75rem", borderTop: "1px solid var(--color-divider)", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.75rem" }}>
         {nodes.length > 0 && (
-          <button
+          <Button
+            variant="GHOST"
+            size="sm"
             onClick={() => setShowAllNodes(!showAllNodes)}
-            style={{
-              background: "transparent",
-              border: "none",
-              color: "var(--color-text-muted)",
-              cursor: "pointer",
-              fontSize: "0.78rem",
-              display: "flex",
-              alignItems: "center",
-              gap: "4px",
-              padding: 0,
-            }}
+            style={{ fontSize: "0.78rem", padding: "3px 8px" }}
+            ariaLabel={showAllNodes ? "Hide Governed Fact Nodes" : `View all ${nodes.length} verified evidence nodes`}
           >
             {showAllNodes ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-            {showAllNodes ? "Hide Governed Fact Nodes" : `View all ${nodes.length} verified evidence nodes`}
-          </button>
+            <span>{showAllNodes ? "Hide Governed Fact Nodes" : `View all ${nodes.length} verified evidence nodes`}</span>
+          </Button>
         )}
 
         {rootSpan && (
-          <button
+          <Button
+            variant="GHOST"
+            size="sm"
+            icon={Activity}
             onClick={() => setShowDevTrace(!showDevTrace)}
-            style={{
-              background: "var(--color-bg-subtle)",
-              border: "1px solid var(--color-border)",
-              color: "var(--color-brand-primary)",
-              cursor: "pointer",
-              fontSize: "0.75rem",
-              padding: "4px 10px",
-              borderRadius: "6px",
-              display: "flex",
-              alignItems: "center",
-              gap: "6px",
-            }}
+            style={{ fontSize: "0.75rem", padding: "4px 10px" }}
+            ariaLabel={showDevTrace ? "Hide Developer Trace" : `Inspect Trace (${rootSpan.duration_ms}ms)`}
           >
-            <Activity size={12} />
             {showDevTrace ? "Hide Developer Trace" : `Inspect Trace (${rootSpan.duration_ms}ms)`}
-          </button>
+          </Button>
         )}
       </div>
 

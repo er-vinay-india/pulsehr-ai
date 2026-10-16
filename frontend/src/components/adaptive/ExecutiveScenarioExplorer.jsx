@@ -14,6 +14,7 @@ import {
   Users,
 } from "lucide-react";
 import SafeReactECharts from "../charts/SafeReactECharts";
+import Button from "../../design-system/components/Button";
 import { useTheme } from "../../context/ThemeContext";
 import { getThemeTokens } from "../../theme/tokens";
 
@@ -236,7 +237,7 @@ export default function ExecutiveScenarioExplorer({
     const baselineVals = activeScenario.department_impacts.map((d) => d.baseline_compliant_pct);
     const scenarioVals = activeScenario.department_impacts.map((d) => d.projected_compliant_pct);
 
-    const textColor = isDark ? "#cbd5e1" : "#475569";
+    const textColor = isDark ? "rgba(203, 213, 225, 1)" : "rgba(71, 85, 105, 1)";
     const splitLineColor = isDark ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 0, 0, 0.06)";
 
     return {
@@ -255,8 +256,8 @@ export default function ExecutiveScenarioExplorer({
           return `
             <strong>${entity}</strong><br/>
             ${isRetail ? "Observed Weekly Baseline" : "Observed Baseline"}: <strong>${unitPrefix}${bVal}${unitSuffix}</strong><br/>
-            ${isRetail ? "Simulated Weekly Sales" : "Simulated Outcome"}: <strong style="color: #8b5cf6;">${unitPrefix}${sVal}${unitSuffix}</strong><br/>
-            Delta: <strong style="color: ${delta >= 0 ? '#10b981' : '#ef4444'}">${delta >= 0 ? '+' : ''}${delta}${deltaSuffix}</strong>
+            ${isRetail ? "Simulated Weekly Sales" : "Simulated Outcome"}: <strong style="color: var(--action-primary-bg, rgb(7, 84, 67));">${unitPrefix}${sVal}${unitSuffix}</strong><br/>
+            Delta: <strong style="color: ${delta >= 0 ? 'rgb(7, 84, 67)' : 'rgb(142, 25, 56)'}">${delta >= 0 ? '+' : ''}${delta}${deltaSuffix}</strong>
           `;
         },
       },
@@ -297,7 +298,7 @@ export default function ExecutiveScenarioExplorer({
           data: baselineVals,
           barMaxWidth: 10,
           itemStyle: {
-            color: isDark ? "#475569" : "#94a3b8",
+            color: isDark ? "rgba(71, 85, 105, 1)" : "rgba(148, 163, 184, 1)",
             borderRadius: [0, 4, 4, 0],
           },
         },
@@ -307,7 +308,7 @@ export default function ExecutiveScenarioExplorer({
           data: scenarioVals,
           barMaxWidth: 10,
           itemStyle: {
-            color: isDark ? "#a78bfa" : "#8b5cf6",
+            color: isDark ? "rgba(167, 139, 250, 1)" : "rgba(139, 92, 246, 1)",
             borderRadius: [0, 4, 4, 0],
           },
         },
@@ -341,9 +342,14 @@ export default function ExecutiveScenarioExplorer({
             </div>
           </div>
           {onClose && (
-            <button type="button" onClick={onClose} className="btn-secondary btn-sm" style={{ fontSize: "0.76rem" }}>
+            <Button
+              variant="SECONDARY"
+              size="sm"
+              onClick={onClose}
+              ariaLabel="Dismiss Scenario Explorer"
+            >
               Dismiss
-            </button>
+            </Button>
           )}
         </div>
       </section>
@@ -382,7 +388,7 @@ export default function ExecutiveScenarioExplorer({
                 fontWeight: 700,
                 textTransform: "uppercase",
                 backgroundColor: "rgba(139, 92, 246, 0.12)",
-                color: isDark ? "#c4b5fd" : "#7c3aed",
+                color: isDark ? "rgba(196, 181, 253, 1)" : "rgba(124, 58, 237, 1)",
               }}
             >
               <Sparkles size={11} />
@@ -398,7 +404,7 @@ export default function ExecutiveScenarioExplorer({
                 fontSize: "0.70rem",
                 fontWeight: 600,
                 backgroundColor: "rgba(16, 185, 129, 0.10)",
-                color: themeTokens.colors.statusSuccess || "#10b981",
+                color: themeTokens.colors.statusSuccess || "var(--color-success)",
               }}
             >
               <Shield size={10} />
@@ -416,14 +422,14 @@ export default function ExecutiveScenarioExplorer({
         </div>
 
         {onClose && (
-          <button
-            type="button"
+          <Button
+            variant="SECONDARY"
+            size="sm"
             onClick={onClose}
-            className="btn-secondary btn-sm"
-            style={{ fontSize: "0.76rem" }}
+            ariaLabel="Collapse Simulator"
           >
             Collapse Simulator
-          </button>
+          </Button>
         )}
       </div>
 
@@ -436,33 +442,41 @@ export default function ExecutiveScenarioExplorer({
           {benchmarks.map((scen) => {
             const isSelected = selectedPresetId === scen.scenario_id;
             return (
-              <button
+              <div
                 key={scen.scenario_id}
-                type="button"
+                role="button"
+                tabIndex={0}
                 onClick={() => handleSelectPreset(scen)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    handleSelectPreset(scen);
+                  }
+                }}
+                aria-label={`Select scenario ${scen.scenario_id}: ${scen.title}`}
                 style={{
                   textAlign: "left",
                   padding: "10px 14px",
                   borderRadius: "8px",
                   border: isSelected
-                    ? `2px solid ${themeTokens.colors.brandPurple || "#8b5cf6"}`
+                    ? `2px solid var(--action-primary-bg, #075443)`
                     : `1px solid ${themeTokens.colors.borderSubtle}`,
                   backgroundColor: isSelected
-                    ? isDark ? "rgba(139, 92, 246, 0.15)" : "rgba(139, 92, 246, 0.05)"
+                    ? "var(--color-bg-soft-teal, rgba(7, 84, 67, 0.08))"
                     : "var(--color-bg-subtle, rgba(0, 0, 0, 0.02))",
                   cursor: "pointer",
                   transition: "all 0.15s ease",
                 }}
               >
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "3px" }}>
-                  <span style={{ fontSize: "0.70rem", fontFamily: "monospace", fontWeight: 700, color: isSelected ? "#8b5cf6" : themeTokens.colors.textMuted }}>
+                  <span style={{ fontSize: "0.70rem", fontFamily: "monospace", fontWeight: 700, color: isSelected ? "var(--action-primary-bg, #075443)" : themeTokens.colors.textMuted }}>
                     {scen.scenario_id}
                   </span>
                   <span
                     style={{
                       fontSize: "0.72rem",
                       fontWeight: 700,
-                      color: scen.delta_compliance_pts >= 0 ? (themeTokens.colors.statusSuccess || "#10b981") : (themeTokens.colors.statusDanger || "#ef4444"),
+                      color: scen.delta_compliance_pts >= 0 ? "var(--color-success, #075443)" : "var(--color-error, #8E1938)",
                     }}
                   >
                     {scen.formatted_delta}
@@ -474,7 +488,7 @@ export default function ExecutiveScenarioExplorer({
                 <div style={{ fontSize: "0.74rem", color: themeTokens.colors.textSecondary, marginTop: "2px" }}>
                   {scen.scenario_policy}
                 </div>
-              </button>
+              </div>
             );
           })}
         </div>
@@ -505,28 +519,19 @@ export default function ExecutiveScenarioExplorer({
                   { val: 1.15, label: "1.15x (Standard)" },
                   { val: 1.25, label: "1.25x (Aggressive)" },
                 ].map((opt) => (
-                  <button
+                  <Button
                     key={opt.val}
-                    type="button"
+                    variant={promoMultiplier === opt.val ? "PRIMARY" : "GHOST"}
+                    size="sm"
                     onClick={() => {
                       setPromoMultiplier(opt.val);
                       setSelectedPresetId("CUSTOM");
                       handleSimulateRetail(opt.val, markdownDepth, fuelSensitivity);
                     }}
-                    style={{
-                      flex: 1,
-                      padding: "7px 4px",
-                      borderRadius: "6px",
-                      fontSize: "0.74rem",
-                      fontWeight: promoMultiplier === opt.val ? 700 : 500,
-                      border: promoMultiplier === opt.val ? `1.5px solid #8b5cf6` : `1px solid ${themeTokens.colors.borderSubtle}`,
-                      backgroundColor: promoMultiplier === opt.val ? "#8b5cf6" : "transparent",
-                      color: promoMultiplier === opt.val ? "#ffffff" : themeTokens.colors.textPrimary,
-                      cursor: "pointer",
-                    }}
+                    style={{ flex: 1, padding: "7px 4px", fontSize: "0.74rem" }}
                   >
                     {opt.label}
-                  </button>
+                  </Button>
                 ))}
               </div>
             </div>
@@ -542,28 +547,19 @@ export default function ExecutiveScenarioExplorer({
                   { val: 10.0, label: "10% (Promo)" },
                   { val: 20.0, label: "20% (Clearance)" },
                 ].map((opt) => (
-                  <button
+                  <Button
                     key={opt.val}
-                    type="button"
+                    variant={markdownDepth === opt.val ? "PRIMARY" : "GHOST"}
+                    size="sm"
                     onClick={() => {
                       setMarkdownDepth(opt.val);
                       setSelectedPresetId("CUSTOM");
                       handleSimulateRetail(promoMultiplier, opt.val, fuelSensitivity);
                     }}
-                    style={{
-                      flex: 1,
-                      padding: "7px 4px",
-                      borderRadius: "6px",
-                      fontSize: "0.74rem",
-                      fontWeight: markdownDepth === opt.val ? 700 : 500,
-                      border: markdownDepth === opt.val ? `1.5px solid #8b5cf6` : `1px solid ${themeTokens.colors.borderSubtle}`,
-                      backgroundColor: markdownDepth === opt.val ? "#8b5cf6" : "transparent",
-                      color: markdownDepth === opt.val ? "#ffffff" : themeTokens.colors.textPrimary,
-                      cursor: "pointer",
-                    }}
+                    style={{ flex: 1, padding: "7px 4px", fontSize: "0.74rem" }}
                   >
                     {opt.label}
-                  </button>
+                  </Button>
                 ))}
               </div>
             </div>
@@ -579,28 +575,19 @@ export default function ExecutiveScenarioExplorer({
                   { val: 0.0, label: "0% (Base)" },
                   { val: 3.0, label: "+3% (Buffer)" },
                 ].map((opt) => (
-                  <button
+                  <Button
                     key={opt.val}
-                    type="button"
+                    variant={fuelSensitivity === opt.val ? "PRIMARY" : "GHOST"}
+                    size="sm"
                     onClick={() => {
                       setFuelSensitivity(opt.val);
                       setSelectedPresetId("CUSTOM");
                       handleSimulateRetail(promoMultiplier, markdownDepth, opt.val);
                     }}
-                    style={{
-                      flex: 1,
-                      padding: "7px 4px",
-                      borderRadius: "6px",
-                      fontSize: "0.74rem",
-                      fontWeight: fuelSensitivity === opt.val ? 700 : 500,
-                      border: fuelSensitivity === opt.val ? `1.5px solid #8b5cf6` : `1px solid ${themeTokens.colors.borderSubtle}`,
-                      backgroundColor: fuelSensitivity === opt.val ? "#8b5cf6" : "transparent",
-                      color: fuelSensitivity === opt.val ? "#ffffff" : themeTokens.colors.textPrimary,
-                      cursor: "pointer",
-                    }}
+                    style={{ flex: 1, padding: "7px 4px", fontSize: "0.74rem" }}
                   >
                     {opt.label}
-                  </button>
+                  </Button>
                 ))}
               </div>
             </div>
@@ -618,28 +605,19 @@ export default function ExecutiveScenarioExplorer({
                   { val: 3.0, label: "3 Days/wk (Baseline)" },
                   { val: 4.0, label: "4 Days/wk (Strict)" },
                 ].map((opt) => (
-                  <button
+                  <Button
                     key={opt.val}
-                    type="button"
+                    variant={daysPerWeek === opt.val ? "PRIMARY" : "GHOST"}
+                    size="sm"
                     onClick={() => {
                       setDaysPerWeek(opt.val);
                       setSelectedPresetId("CUSTOM");
                       handleSimulateWorkforce(opt.val, leaveRatio, departmentOverrides);
                     }}
-                    style={{
-                      flex: 1,
-                      padding: "7px 4px",
-                      borderRadius: "6px",
-                      fontSize: "0.74rem",
-                      fontWeight: daysPerWeek === opt.val ? 700 : 500,
-                      border: daysPerWeek === opt.val ? `1.5px solid #8b5cf6` : `1px solid ${themeTokens.colors.borderSubtle}`,
-                      backgroundColor: daysPerWeek === opt.val ? "#8b5cf6" : "transparent",
-                      color: daysPerWeek === opt.val ? "#ffffff" : themeTokens.colors.textPrimary,
-                      cursor: "pointer",
-                    }}
+                    style={{ flex: 1, padding: "7px 4px", fontSize: "0.74rem" }}
                   >
                     {opt.label}
-                  </button>
+                  </Button>
                 ))}
               </div>
             </div>
@@ -655,28 +633,19 @@ export default function ExecutiveScenarioExplorer({
                   { val: 0.5, label: "0.5x Half Credit" },
                   { val: 0.0, label: "0.0x Strict" },
                 ].map((opt) => (
-                  <button
+                  <Button
                     key={opt.val}
-                    type="button"
+                    variant={leaveRatio === opt.val ? "PRIMARY" : "GHOST"}
+                    size="sm"
                     onClick={() => {
                       setLeaveRatio(opt.val);
                       setSelectedPresetId("CUSTOM");
                       handleSimulateWorkforce(daysPerWeek, opt.val, departmentOverrides);
                     }}
-                    style={{
-                      flex: 1,
-                      padding: "7px 4px",
-                      borderRadius: "6px",
-                      fontSize: "0.74rem",
-                      fontWeight: leaveRatio === opt.val ? 700 : 500,
-                      border: leaveRatio === opt.val ? `1.5px solid #8b5cf6` : `1px solid ${themeTokens.colors.borderSubtle}`,
-                      backgroundColor: leaveRatio === opt.val ? "#8b5cf6" : "transparent",
-                      color: leaveRatio === opt.val ? "#ffffff" : themeTokens.colors.textPrimary,
-                      cursor: "pointer",
-                    }}
+                    style={{ flex: 1, padding: "7px 4px", fontSize: "0.74rem" }}
                   >
                     {opt.label}
-                  </button>
+                  </Button>
                 ))}
               </div>
             </div>
@@ -694,28 +663,19 @@ export default function ExecutiveScenarioExplorer({
                 ].map((opt, idx) => {
                   const isActive = JSON.stringify(departmentOverrides) === JSON.stringify(opt.targets);
                   return (
-                    <button
+                    <Button
                       key={idx}
-                      type="button"
+                      variant={isActive ? "PRIMARY" : "GHOST"}
+                      size="sm"
                       onClick={() => {
                         setDepartmentOverrides(opt.targets);
                         setSelectedPresetId("CUSTOM");
                         handleSimulateWorkforce(daysPerWeek, leaveRatio, opt.targets);
                       }}
-                      style={{
-                        flex: 1,
-                        padding: "7px 4px",
-                        borderRadius: "6px",
-                        fontSize: "0.74rem",
-                        fontWeight: isActive ? 700 : 500,
-                        border: isActive ? `1.5px solid #8b5cf6` : `1px solid ${themeTokens.colors.borderSubtle}`,
-                        backgroundColor: isActive ? "#8b5cf6" : "transparent",
-                        color: isActive ? "#ffffff" : themeTokens.colors.textPrimary,
-                        cursor: "pointer",
-                      }}
+                      style={{ flex: 1, padding: "7px 4px", fontSize: "0.74rem" }}
                     >
                       {opt.label}
-                    </button>
+                    </Button>
                   );
                 })}
               </div>
@@ -742,10 +702,10 @@ export default function ExecutiveScenarioExplorer({
             </div>
 
             <div style={{ padding: "14px", borderRadius: "10px", backgroundColor: isDark ? "rgba(139, 92, 246, 0.10)" : "rgba(139, 92, 246, 0.05)", border: "1.5px solid rgba(139, 92, 246, 0.4)" }}>
-              <div style={{ fontSize: "0.70rem", textTransform: "uppercase", color: "#8b5cf6", fontWeight: 700 }}>
+              <div style={{ fontSize: "0.70rem", textTransform: "uppercase", color: "var(--color-indigo, rgba(139, 92, 246, 1))", fontWeight: 700 }}>
                 {isRetail ? "Simulated Weekly Sales" : "Simulated Outcome"}
               </div>
-              <div style={{ fontSize: "1.45rem", fontWeight: 700, color: "#8b5cf6", margin: "4px 0" }}>
+              <div style={{ fontSize: "1.45rem", fontWeight: 700, color: "var(--color-indigo, rgba(139, 92, 246, 1))", margin: "4px 0" }}>
                 {isRetail ? `$${Number(activeScenario.projected_compliance || 0).toFixed(0)}K` : activeScenario.formatted_projected_compliance}
               </div>
               <div style={{ fontSize: "0.72rem", color: themeTokens.colors.textSecondary }}>
@@ -757,7 +717,7 @@ export default function ExecutiveScenarioExplorer({
               <div style={{ fontSize: "0.70rem", textTransform: "uppercase", color: themeTokens.colors.textMuted, fontWeight: 700 }}>
                 Impact Delta
               </div>
-              <div style={{ fontSize: "1.45rem", fontWeight: 700, color: activeScenario.delta_compliance_pts >= 0 ? (themeTokens.colors.statusSuccess || "#10b981") : (themeTokens.colors.statusDanger || "#ef4444"), margin: "4px 0" }}>
+              <div style={{ fontSize: "1.45rem", fontWeight: 700, color: activeScenario.delta_compliance_pts >= 0 ? (themeTokens.colors.statusSuccess || "var(--color-success)") : (themeTokens.colors.statusDanger || "var(--color-danger)"), margin: "4px 0" }}>
                 {activeScenario.formatted_delta}
               </div>
               <div style={{ fontSize: "0.72rem", color: themeTokens.colors.textSecondary }}>
@@ -788,7 +748,7 @@ export default function ExecutiveScenarioExplorer({
 
           {/* Executive Takeaway & Decision Action */}
           <div style={{ padding: "14px 16px", borderRadius: "8px", backgroundColor: isDark ? "rgba(16, 185, 129, 0.08)" : "rgba(16, 185, 129, 0.05)", border: "1px solid rgba(16, 185, 129, 0.2)", display: "flex", flexDirection: "column", gap: "6px" }}>
-            <div style={{ fontSize: "0.74rem", fontWeight: 700, textTransform: "uppercase", color: themeTokens.colors.statusSuccess || "#10b981" }}>
+            <div style={{ fontSize: "0.74rem", fontWeight: 700, textTransform: "uppercase", color: themeTokens.colors.statusSuccess || "var(--color-success)" }}>
               Executive Takeaway & Decision Recommendation
             </div>
             <div style={{ fontSize: "0.85rem", fontWeight: 600, color: themeTokens.colors.textPrimary }}>

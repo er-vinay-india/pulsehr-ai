@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { AlertTriangle, TrendingDown, DollarSign, Users, ChevronDown, ChevronUp, ShieldAlert } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
+import Button from '../../design-system/components/Button';
 
 export default function SmartImpactCard({ impact, className = "", compact = false }) {
   const { isDark } = useTheme();
@@ -141,25 +142,22 @@ export default function SmartImpactCard({ impact, className = "", compact = fals
 
       {impact.formula_explanation && (
         <div style={{ marginTop: "6px" }}>
-          <button
-            type="button"
+          <Button
+            variant="GHOST"
+            size="sm"
             onClick={() => setShowFormula(prev => !prev)}
             style={{
-              background: "transparent",
-              border: "none",
-              padding: 0,
+              padding: "2px 6px",
               fontSize: "11px",
-              color: isDark ? "#94a3b8" : "#64748b",
               display: "inline-flex",
               alignItems: "center",
               gap: "3px",
-              cursor: "pointer",
-              fontWeight: 500,
             }}
+            ariaLabel={showFormula ? "Hide calculation basis" : "View calculation formula"}
           >
             {showFormula ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-            {showFormula ? "Hide calculation basis" : "View calculation formula"}
-          </button>
+            <span>{showFormula ? "Hide calculation basis" : "View calculation formula"}</span>
+          </Button>
           {showFormula && (
             <div
               style={{

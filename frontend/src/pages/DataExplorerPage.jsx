@@ -672,6 +672,32 @@ export default function DataExplorerPage() {
             isDark={isDark}
           />
 
+          {selectedDerivedId && activeDerivedTable && (
+            <div
+              style={{
+                background: activeDerivedTable.join_keys?.type === 'scientific_enrichment_rollup'
+                  ? 'var(--color-bg-soft-teal)'
+                  : 'var(--color-bg-soft-gold)',
+                border: activeDerivedTable.join_keys?.type === 'scientific_enrichment_rollup'
+                  ? '1px solid var(--hv-status-success-border, var(--color-border-strong))'
+                  : '1px solid var(--color-border-strong)',
+                borderRadius: '8px',
+                padding: '0.6rem 0.9rem',
+                marginBottom: '0.75rem',
+                fontSize: '0.85rem',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '8px'
+              }}
+            >
+              <span>
+                <strong>Derived View Active:</strong> {activeDerivedTable.display_name} ({activeDerivedTable.row_count} rows)
+              </span>
+            </div>
+          )}
+
           {/* SUBPAGE VIEW ROUTING */}
           <div className="explorer-subpage-content" id={`explorer-panel-${activeTab}`} role="tabpanel">
             {activeTab === 'overview' && (

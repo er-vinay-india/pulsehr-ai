@@ -14,6 +14,7 @@ import {
   Search,
 } from "lucide-react";
 import VisualSpecRenderer from "./VisualSpecRenderer";
+import Button from "../../design-system/components/Button";
 
 /**
  * Generic Top/Bottom Ranking Explorer Component.
@@ -196,61 +197,35 @@ export default function GenericRankingExplorer({
           justifyContent: "space-between",
           gap: "8px",
           paddingBottom: "8px",
-          borderBottom: `1px solid ${themeTokens?.colors?.borderSubtle || "#e2e8f0"}`,
+          borderBottom: `1px solid ${themeTokens?.colors?.borderSubtle || "var(--color-border-subtle, var(--border))"}`,
         }}
       >
         {/* Left: Direction Segment Controls [ Top | Bottom | Both ] */}
-        <div style={{ display: "inline-flex", borderRadius: "6px", overflow: "hidden", border: `1px solid ${themeTokens?.colors?.borderSubtle}` }}>
-          <button
-            type="button"
+        <div style={{ display: "inline-flex", gap: "4px" }}>
+          <Button
+            variant={mode === "TOP" ? "PRIMARY" : "GHOST"}
+            size="sm"
             onClick={() => setMode("TOP")}
-            style={{
-              padding: "4px 10px",
-              fontSize: "0.74rem",
-              fontWeight: 700,
-              border: "none",
-              cursor: "pointer",
-              backgroundColor: mode === "TOP" ? (themeTokens?.colors?.brandBlue || "#2563eb") : "transparent",
-              color: mode === "TOP" ? "#ffffff" : themeTokens?.colors?.textSecondary,
-              transition: "all 0.15s ease",
-            }}
+            style={{ padding: "4px 10px", fontSize: "0.74rem" }}
           >
             {topLabel}
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant={mode === "BOTTOM" ? "PRIMARY" : "GHOST"}
+            size="sm"
             onClick={() => setMode("BOTTOM")}
-            style={{
-              padding: "4px 10px",
-              fontSize: "0.74rem",
-              fontWeight: 700,
-              border: "none",
-              cursor: "pointer",
-              backgroundColor: mode === "BOTTOM" ? (themeTokens?.colors?.brandBlue || "#2563eb") : "transparent",
-              color: mode === "BOTTOM" ? "#ffffff" : themeTokens?.colors?.textSecondary,
-              borderLeft: `1px solid ${themeTokens?.colors?.borderSubtle}`,
-              transition: "all 0.15s ease",
-            }}
+            style={{ padding: "4px 10px", fontSize: "0.74rem" }}
           >
             {bottomLabel}
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant={mode === "BOTH" ? "PRIMARY" : "GHOST"}
+            size="sm"
             onClick={() => setMode("BOTH")}
-            style={{
-              padding: "4px 10px",
-              fontSize: "0.74rem",
-              fontWeight: 700,
-              border: "none",
-              cursor: "pointer",
-              backgroundColor: mode === "BOTH" ? (themeTokens?.colors?.brandBlue || "#2563eb") : "transparent",
-              color: mode === "BOTH" ? "#ffffff" : themeTokens?.colors?.textSecondary,
-              borderLeft: `1px solid ${themeTokens?.colors?.borderSubtle}`,
-              transition: "all 0.15s ease",
-            }}
+            style={{ padding: "4px 10px", fontSize: "0.74rem" }}
           >
             Both
-          </button>
+          </Button>
         </div>
 
         {/* Middle: Scale Selector [ 5 | 15 | 25 | 50 | 100 | 500 | Full ] */}
@@ -258,23 +233,15 @@ export default function GenericRankingExplorer({
           <span style={{ fontSize: "0.72rem", color: themeTokens?.colors?.textMuted, fontWeight: 600 }}>Show:</span>
           <div style={{ display: "inline-flex", gap: "2px" }}>
             {SUPPORTED_LIMITS.map((lim) => (
-              <button
+              <Button
                 key={lim}
-                type="button"
+                variant={limit === lim ? "PRIMARY" : "GHOST"}
+                size="sm"
                 onClick={() => setLimit(lim)}
-                style={{
-                  padding: "2px 6px",
-                  fontSize: "0.70rem",
-                  fontWeight: limit === lim ? 700 : 500,
-                  borderRadius: "4px",
-                  border: `1px solid ${limit === lim ? (themeTokens?.colors?.brandBlue || "#2563eb") : "transparent"}`,
-                  backgroundColor: limit === lim ? "rgba(37, 99, 235, 0.1)" : "transparent",
-                  color: limit === lim ? (themeTokens?.colors?.brandBlue || "#2563eb") : themeTokens?.colors?.textSecondary,
-                  cursor: "pointer",
-                }}
+                style={{ padding: "2px 6px", fontSize: "0.70rem", minWidth: "26px" }}
               >
                 {lim}
-              </button>
+              </Button>
             ))}
           </div>
         </div>
@@ -416,7 +383,7 @@ export default function GenericRankingExplorer({
                         <span
                           style={{
                             fontSize: "0.68rem",
-                            color: themeTokens?.colors?.textMuted || "#94a3b8",
+                            color: themeTokens?.colors?.textMuted || "var(--color-text-muted, var(--text-muted))",
                             marginLeft: "5px",
                             fontWeight: "normal",
                           }}
@@ -427,7 +394,7 @@ export default function GenericRankingExplorer({
                     </td>
                     <td style={{ padding: "4px 8px", textAlign: "right", fontWeight: 700 }}>{r.formatted_value}</td>
                     <td style={{ padding: "4px 8px", textAlign: "right", color: themeTokens?.colors?.textMuted }}>{r.percentile_label}</td>
-                    <td style={{ padding: "4px 8px", textAlign: "right", color: r.delta_benchmark >= 0 ? "#10b981" : "#ef4444" }}>
+                    <td style={{ padding: "4px 8px", textAlign: "right", color: r.delta_benchmark >= 0 ? (themeTokens?.colors?.statusSuccess || "var(--color-success)") : (themeTokens?.colors?.statusError || "var(--color-danger)") }}>
                       {r.delta_benchmark >= 0 ? `+${r.delta_benchmark}` : r.delta_benchmark}
                     </td>
                   </tr>

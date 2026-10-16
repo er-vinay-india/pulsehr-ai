@@ -7,9 +7,14 @@ from app.core import config
 from app.db.database import init_db
 from app.services import sheet_catalog
 
+from app.core.db_isolation import assert_test_database_isolation, LIVE_DB_PATH
+
 @pytest.fixture(autouse=True)
 def isolated_workspace(request, tmp_path, monkeypatch):
-    monkeypatch.setattr(config, 'DB_PATH', tmp_path / 'db' / 'test.sqlite3')
+    test_db = tmp_path / 'db' / 'test.sqlite3'
+    monkeypatch.setattr(config, 'DB_PATH', test_db)
+    assert_test_database_isolation(test_db)
+    assert test_db.resolve() != LIVE_DB_PATH, "CRITICAL: Test DB matches Live DB!"
     monkeypatch.setattr(config, 'UPLOADS_DIR', tmp_path / 'uploads')
     monkeypatch.setattr(config, 'EXPORTS_DIR', tmp_path / 'exports')
     monkeypatch.setattr(config, 'PRESENTATION_MEMORY_DB_PATH', tmp_path / 'db' / 'presentation_memory.sqlite3')

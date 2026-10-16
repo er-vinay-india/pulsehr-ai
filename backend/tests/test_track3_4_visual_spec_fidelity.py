@@ -96,35 +96,14 @@ def _count_pdf_pages(pdf_path: Path) -> int:
     return len(re.findall(rb"/Type\s*/Page\b", data))
 
 
+from tests.fixtures.benchmark_seeder import ensure_benchmark_datasets_seeded
+
+
 @pytest.fixture(scope="function", autouse=True)
 def seed_benchmark_datasets():
-    """Populates the isolated test SQLite database with the 3 benchmark datasets from production DB."""
-    real_db = Path(__file__).resolve().parents[1] / "data" / "db" / "pulsehr.sqlite3"
+    """Populates the isolated test SQLite database with the 3 benchmark datasets hermetically."""
     with get_connection() as conn:
-        has_99770 = conn.execute("SELECT 1 FROM dataset_uploads WHERE id = 99770").fetchone()
-        if not has_99770 and real_db.exists():
-            conn.execute(f'ATTACH DATABASE "{real_db}" AS real_source')
-            conn.execute(
-                "INSERT OR REPLACE INTO dataset_uploads (id, filename, original_name, file_type, display_name) "
-                "SELECT id, filename, original_name, file_type, display_name FROM real_source.dataset_uploads WHERE id IN (99770, 99771, 99772)"
-            )
-            conn.execute(
-                "INSERT OR REPLACE INTO sheets (id, dataset_id, name, display_name, columns_json, profile_json, row_count) "
-                "SELECT id, dataset_id, name, display_name, columns_json, profile_json, row_count FROM real_source.sheets WHERE dataset_id IN (99770, 99771, 99772)"
-            )
-            conn.execute(
-                "INSERT OR REPLACE INTO sheet_rows (id, sheet_id, row_index, data_json) "
-                "SELECT id, sheet_id, row_index, data_json FROM real_source.sheet_rows WHERE sheet_id IN (SELECT id FROM real_source.sheets WHERE dataset_id IN (99770, 99771, 99772))"
-            )
-            try:
-                conn.execute(
-                    "INSERT OR REPLACE INTO sheet_relationships SELECT * FROM real_source.sheet_relationships "
-                    "WHERE left_sheet IN (SELECT id FROM real_source.sheets WHERE dataset_id IN (99770, 99771, 99772))"
-                )
-            except Exception:
-                pass
-            conn.commit()
-            conn.execute("DETACH DATABASE real_source")
+        ensure_benchmark_datasets_seeded(conn)
 
 
 # ==============================================================================

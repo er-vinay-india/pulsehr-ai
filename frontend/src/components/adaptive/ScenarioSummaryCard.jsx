@@ -27,14 +27,14 @@ export default function ScenarioSummaryCard({
         col1Label: "Holiday Promo (1.25x)",
         col1Val: "+18.4%",
         col1Note: "+18.4 pts vs baseline",
-        col1Color: themeTokens?.colors?.statusSuccess || "#10b981",
+        col1Color: themeTokens?.colors?.statusSuccess || "var(--color-success)",
         col2Label: "Current Baseline",
         col2Val: "$1.05M",
         col2Note: "Observed weekly mean",
         col3Label: "Targeted Markdown (10%)",
         col3Val: "-4.2%",
         col3Note: "-4.2 pts margin buffer",
-        col3Color: themeTokens?.colors?.statusError || "#ef4444",
+        col3Color: themeTokens?.colors?.statusError || "var(--color-danger)",
       }
     : {
         title: "Hybrid Work Policy",
@@ -42,14 +42,14 @@ export default function ScenarioSummaryCard({
         col1Label: "2-Day Policy",
         col1Val: "81.1%",
         col1Note: "+25.9 pts vs baseline",
-        col1Color: themeTokens?.colors?.statusSuccess || "#10b981",
+        col1Color: themeTokens?.colors?.statusSuccess || "var(--color-success)",
         col2Label: "Current Policy",
         col2Val: "55.2%",
         col2Note: "Observed benchmark",
         col3Label: "4-Day Policy",
         col3Val: "29.0%",
         col3Note: "-26.2 pts vs baseline",
-        col3Color: themeTokens?.colors?.statusError || "#ef4444",
+        col3Color: themeTokens?.colors?.statusError || "var(--color-danger)",
       };
 
   return (
@@ -60,7 +60,7 @@ export default function ScenarioSummaryCard({
       data-ai-card="primary_policy_scenario"
       style={{
         backgroundColor: themeTokens?.colors?.surface,
-        border: `1px solid ${themeTokens?.colors?.borderSubtle || "#e2e8f0"}`,
+        border: `1px solid ${themeTokens?.colors?.borderSubtle || "var(--color-border)"}`,
         borderRadius: "12px",
         padding: "16px 20px",
         display: "flex",
@@ -111,7 +111,7 @@ export default function ScenarioSummaryCard({
           padding: "12px 14px",
           borderRadius: "8px",
           backgroundColor: isDark ? "rgba(255, 255, 255, 0.03)" : "rgba(0, 0, 0, 0.02)",
-          border: `1px solid ${themeTokens?.colors?.borderSubtle || "#e2e8f0"}`,
+          border: `1px solid ${themeTokens?.colors?.borderSubtle || "var(--color-border)"}`,
         }}
       >
         <div>

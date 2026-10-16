@@ -405,7 +405,8 @@ export default function VisualSpecRenderer({
 
     // 4. BULLET BAR / TARGET GAP (Target Archetype)
     if (chartType === "bullet" || chartType === "bullet_bar") {
-      const bench = benchmark ?? 15.0;
+      const hasBench = benchmark != null;
+      const bench = hasBench ? benchmark : null;
       return {
         backgroundColor: "transparent",
         tooltip: {
@@ -414,7 +415,7 @@ export default function VisualSpecRenderer({
           backgroundColor: isDark ? "#1e293b" : "#ffffff",
           borderColor: isDark ? "#334155" : "#e2e8f0",
           textStyle: { color: isDark ? "#f1f5f9" : "#0f172a", fontSize: 12 },
-          formatter: (p) => `${p[0].name}: <strong>${p[0].value} ${unit}</strong> (Benchmark: ${bench} ${unit})`,
+          formatter: (p) => hasBench ? `${p[0].name}: <strong>${p[0].value} ${unit}</strong> (Benchmark: ${bench} ${unit})` : `${p[0].name}: <strong>${p[0].value} ${unit}</strong>`,
         },
         grid: { top: 20, right: 25, bottom: 20, left: 10, containLabel: true },
         xAxis: {
@@ -434,11 +435,11 @@ export default function VisualSpecRenderer({
             data: values.map((v) => ({
               value: v,
               itemStyle: {
-                color: v >= bench ? (isDark ? "#3b82f6" : "#2563eb") : (isDark ? "#f87171" : "#ef4444"),
+                color: hasBench ? (v >= bench ? (isDark ? "#3b82f6" : "#2563eb") : (isDark ? "#f87171" : "#ef4444")) : (themeTokens?.colors?.brandBlue || "#2563eb"),
                 borderRadius: [0, 4, 4, 0],
               },
             })),
-            markLine: {
+            markLine: hasBench ? {
               symbol: "none",
               data: [
                 {
@@ -447,7 +448,7 @@ export default function VisualSpecRenderer({
                   label: { formatter: `Benchmark (${bench})`, color: isDark ? "#fbbf24" : "#d97706", fontSize: 10 },
                 },
               ],
-            },
+            } : undefined,
           },
         ],
       };
@@ -619,7 +620,7 @@ export default function VisualSpecRenderer({
     if (chartType === "treemap") {
       const treeData = categories.map((cat, idx) => ({
         name: cat,
-        value: values[idx] || 10,
+        value: values[idx] != null ? values[idx] : 0,
       }));
       return {
         backgroundColor: "transparent",

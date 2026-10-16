@@ -1,18 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRight,
-  Info,
-  X,
   Presentation,
   Layers,
-  Sparkles,
   TrendingUp,
-  BarChart2,
   Table,
   FileSpreadsheet,
   UploadCloud,
-  GitMerge,
-  AlertCircle,
   AlertTriangle,
   Loader2,
   ShieldCheck,
@@ -29,8 +23,23 @@ import UnifiedExecutiveInsightsGrid from "../components/adaptive/UnifiedExecutiv
 import SectionHeader from "../components/adaptive/SectionHeader";
 import QuickInspectDialog from "../components/adaptive/QuickInspectDialog";
 import ExecutiveScenarioExplorer from "../components/adaptive/ExecutiveScenarioExplorer";
-import SafeReactECharts from "../components/charts/SafeReactECharts";
-import { buildExplorerUrl, getContextualExplorerTarget } from "../utils/explorerNavigation";
+import EmptyDashboardBoundary from "../components/adaptive/EmptyDashboardBoundary";
+import EmptyDashboardState from "../components/adaptive/EmptyDashboardState";
+import {
+  DASHBOARD_STATES,
+  resolveDashboardState,
+} from "../contracts/DashboardStateContract";
+import { sanitizeError } from "../contracts/ProductErrorSanitizer";
+import {
+  extractDatasetIdFromUrl,
+  validateAndResolveDataset,
+  selfHealUrl,
+} from "../contracts/DatasetReferenceIntegrity";
+import {
+  NAVIGATION_INTENTS,
+  dispatchNavigationIntent,
+} from "../contracts/NavigationIntentRegistry";
+import { resolveGovernedCount } from "../contracts/DashboardTruthIntegrity";
 import "../styles/adaptive-dashboard.scss";
 import { useTheme } from "../context/ThemeContext";
 import { getThemeTokens } from "../theme/tokens";
@@ -56,78 +65,7 @@ function formatHumanDate(dateStr) {
   return `${dNum} ${mNames[mIdx]} ${y}`;
 }
 
-function getEmptyStateExplanation(data, activeDataset, sourcesCount = 0) {
-  if (sourcesCount === 0 || (!data && !activeDataset)) {
-    return {
-      title: "No Workbooks Ingested",
-      reason: "No datasets or spreadsheets have been uploaded to HighView yet.",
-      action: "Upload an Excel (.xlsx, .xls) or CSV file to start automated executive intelligence."
-    };
-  }
-
-  if (!data) {
-    return {
-      title: "No Data Available",
-      reason: "Unable to retrieve analytical records for this workbook.",
-      action: "Select an uploaded workbook or upload a new spreadsheet."
-    };
-  }
-
-  if (data.total_rows === 0) {
-    return {
-      title: "Empty Spreadsheet",
-      reason: `The selected workbook "${activeDataset?.display_name || data?.dataset_name || "Workbook"}" contains 0 data records after table reconstruction.`,
-      action: "Upload a spreadsheet containing valid data rows."
-    };
-  }
-
-  if (data.total_rows != null && data.total_rows < 5) {
-    return {
-      title: "Insufficient Sample Size",
-      reason: `Dataset contains only ${data.total_rows} records. At least 5 observations are required to compute statistical distributions and executive variance.`,
-      action: "Upload a fuller export with additional reporting records."
-    };
-  }
-
-  if (data.domain_profile?.status === "UNSUPPORTED" || data.unsupported_domain) {
-    return {
-      title: "Unsupported Domain Concepts",
-      reason: "The uploaded schema does not contain recognizable business dimension keys or continuous numeric measures supported by executive analytics.",
-      action: "Verify column headers match business identifiers (e.g., Department, Store, Revenue, Hours)."
-    };
-  }
-
-  if (data.coverage_warnings && data.coverage_warnings.length > 0) {
-    return {
-      title: "Data Quality Threshold Not Met",
-      reason: data.coverage_warnings[0] || "Data binding checks reported high nullity or conflicting joins.",
-      action: "Inspect source data for broken keys or missing columns."
-    };
-  }
-
-  return {
-    title: "Clean Operational Baseline",
-    reason: `Analysis across ${data.sheet_count || activeDataset?.sheet_count || 1} sheet(s) and ${data.total_rows || "all"} records detected no significant variance, outliers, or policy deviations exceeding baseline thresholds.`,
-    action: "Operational metrics are performing within normal parameters."
-  };
-}
-
-function getDatasetIdFromUrl() {
-  try {
-    const searchP = new URLSearchParams(window.location.search);
-    const searchVal = searchP.get("dataset_id") || searchP.get("sheet_id");
-    if (searchVal) return searchVal;
-    const hash = window.location.hash || "";
-    if (hash.includes("?")) {
-      const hashP = new URLSearchParams(hash.substring(hash.indexOf("?")));
-      const hashVal = hashP.get("dataset_id") || hashP.get("sheet_id");
-      if (hashVal) return hashVal;
-    }
-  } catch {}
-  return "";
-}
-
-export default function AdaptiveDashboardPage({ onNavigateTab }) {
+export default function AdaptiveDashboardPage({ onNavigateTab, onOpenUpload }) {
   const { isDark } = useTheme();
   const themeTokens = getThemeTokens(isDark);
 
@@ -135,7 +73,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
   const [sources, setSources] = useState([]);
   const [sourcesLoading, setSourcesLoading] = useState(true);
   const [sourcesError, setSourcesError] = useState(null);
-  const [selectedDatasetId, setSelectedDatasetId] = useState(getDatasetIdFromUrl);
+  const [selectedDatasetId, setSelectedDatasetId] = useState(extractDatasetIdFromUrl);
 
   // Analysis State
   const [data, setData] = useState(null);
@@ -149,9 +87,8 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
   const [selectedCandidate, setSelectedCandidate] = useState(null);
   const [investigationTarget, setInvestigationTarget] = useState(null);
   const [inspectedEmployeeId, setInspectedEmployeeId] = useState(null);
-  const [showDetailedAnalysis, setShowDetailedAnalysis] = useState(false);
   const [showScenarioExplorer, setShowScenarioExplorer] = useState(false);
-  const [developerMode, setDeveloperMode] = useState(() => {
+  const [developerMode] = useState(() => {
     try {
       const p = new URLSearchParams(window.location.search);
       return p.get("dev") === "true" || p.get("developer") === "true";
@@ -161,9 +98,21 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
   });
 
   const modalCloseBtnRef = useRef(null);
-  const dialogRef = useRef(null);
   const activeControllerRef = useRef(null);
   const requestCounter = useRef(0);
+
+  // Formal HighView State Machine Resolution
+  const dashboardState = useMemo(() => {
+    return resolveDashboardState({
+      sourcesLoading,
+      sources,
+      selectedDatasetId,
+      data,
+      calculating,
+      calcError,
+      sourcesError,
+    });
+  }, [sourcesLoading, sources, selectedDatasetId, data, calculating, calcError, sourcesError]);
 
   const activeDataset = useMemo(() => {
     return sources.find((d) => String(d.id) === String(selectedDatasetId)) || sources[0] || null;
@@ -171,12 +120,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
 
   const handleSourceSelect = (newId) => {
     setSelectedDatasetId(newId);
-    try {
-      const url = new URL(window.location);
-      url.searchParams.set("dataset_id", newId);
-      url.searchParams.delete("sheet_id");
-      window.history.replaceState({}, "", url);
-    } catch {}
+    selfHealUrl(newId);
   };
 
   // 1. Load Datasets/Workbooks on Mount & Normalize Scope (WP-9.6)
@@ -187,53 +131,18 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
       .then((res) => {
         const list = Array.isArray(res) ? res : res.datasets || [];
         setSources(list);
-        const urlDatasetId = getDatasetIdFromUrl();
-        const p = new URLSearchParams(window.location.search);
-        const urlSheetId = p.get("sheet_id");
 
-        let targetId = "";
-        if (list.length === 0) {
-          // No datasets exist in workspace: cleanly reset target and strip stale URL parameters
-          targetId = "";
-          setSelectedDatasetId("");
+        const urlDatasetId = extractDatasetIdFromUrl();
+        const resolution = validateAndResolveDataset(list, urlDatasetId);
+
+        setSelectedDatasetId(resolution.resolvedId);
+        if (resolution.status === "CATALOG_EMPTY") {
           setData(null);
           setCalcError(null);
-          try {
-            const url = new URL(window.location);
-            url.searchParams.delete("dataset_id");
-            url.searchParams.delete("sheet_id");
-            window.history.replaceState({}, "", url);
-          } catch {}
-          return;
         }
-
-        // Validate if urlDatasetId exists in loaded datasets
-        if (urlDatasetId && list.some((d) => String(d.id) === String(urlDatasetId))) {
-          targetId = urlDatasetId;
-        } else if (urlSheetId) {
-          const parent = list.find((d) => (d.sheets || []).some((s) => String(s.id) === urlSheetId));
-          if (parent) targetId = String(parent.id);
-        }
-
-        // If URL dataset ID was stale or missing, fallback to first available dataset
-        if (!targetId && list.length > 0) {
-          targetId = String(list[0].id);
-        }
-
-        setSelectedDatasetId(targetId);
-        try {
-          const url = new URL(window.location);
-          if (targetId) {
-            url.searchParams.set("dataset_id", targetId);
-          } else {
-            url.searchParams.delete("dataset_id");
-          }
-          url.searchParams.delete("sheet_id");
-          window.history.replaceState({}, "", url);
-        } catch {}
       })
       .catch((err) => {
-        setSourcesError(err.message || "Failed to load uploaded datasets.");
+        setSourcesError(sanitizeError(err));
       })
       .finally(() => {
         setSourcesLoading(false);
@@ -248,7 +157,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
 
   useEffect(() => {
     const handleUrlChange = () => {
-      const idFromUrl = getDatasetIdFromUrl();
+      const idFromUrl = extractDatasetIdFromUrl();
       if (idFromUrl && idFromUrl !== selectedDatasetId) {
         setSelectedDatasetId(idFromUrl);
       }
@@ -274,8 +183,6 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
 
     const isDifferentDataset = selectedDatasetId !== lastDatasetIdRef.current;
     if (isDifferentDataset) {
-      // Switching datasets -> clear old charts immediately!
-      // Old charts must NOT remain visible when switching to a different dataset.
       setData(null);
       lastDatasetIdRef.current = selectedDatasetId;
     }
@@ -301,20 +208,15 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
       .catch((err) => {
         if (currentReqId !== requestCounter.current) return;
         if (err.name !== "AbortError") {
-          const msg = err.message || "";
-          if (msg.includes("No uploaded sheet found") || msg.includes("not found")) {
-            // Stale or non-existent dataset requested: clear selection and show clean empty view
+          const rawMsg = err.message || "";
+          if (rawMsg.includes("No uploaded sheet found") || rawMsg.includes("not found")) {
+            // Stale or deleted dataset requested -> cleanly self-heal URL and clear state
             setData(null);
             setSelectedDatasetId("");
             setCalcError(null);
-            try {
-              const url = new URL(window.location);
-              url.searchParams.delete("dataset_id");
-              url.searchParams.delete("sheet_id");
-              window.history.replaceState({}, "", url);
-            } catch {}
+            selfHealUrl(null);
           } else {
-            setCalcError(msg || "Unable to compute verified metric for this workbook.");
+            setCalcError(sanitizeError(err));
           }
         }
       })
@@ -369,11 +271,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
       };
       sessionStorage.setItem("highview_presentation_source", JSON.stringify(storedConfig));
     } catch {}
-    if (typeof onNavigateTab === "function") {
-      onNavigateTab("presentation");
-    } else {
-      window.location.hash = "presentation";
-    }
+    dispatchNavigationIntent(NAVIGATION_INTENTS.CREATE_PRESENTATION, {}, { onNavigateTab });
   };
 
   // Scope line summary
@@ -421,33 +319,24 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
         {/* Compact Dataset Context & Command Bar */}
         <div className="adaptive-scope-bar page-command-bar" aria-label="Dataset Command Bar">
           <div className="dataset-selector-and-context">
-            <div className="scope-control-group">
-              <Select
-                id="dataset-selector"
-                value={selectedDatasetId}
-                onChange={(e) => handleSourceSelect(e.target.value)}
-                disabled={sourcesLoading || sources.length === 0}
-                aria-label="Selected dataset workbook"
-                placeholder={sourcesLoading ? "Loading datasets…" : sources.length === 0 ? "No datasets uploaded" : "Select dataset…"}
-                options={
-                  sources.length > 0
-                    ? sources.map((d) => ({
-                        value: String(d.id),
-                        label: d.display_name || d.original_name || `Dataset ${d.id}`,
-                      }))
-                    : selectedDatasetId
-                    ? [
-                        {
-                          value: String(selectedDatasetId),
-                          label: data?.dataset_name || activeDataset?.display_name || activeDataset?.original_name || "Dataset",
-                        },
-                      ]
-                    : []
-                }
-              />
-            </div>
+            {sources.length > 0 && (
+              <div className="scope-control-group">
+                <Select
+                  id="dataset-selector"
+                  value={selectedDatasetId}
+                  onChange={(e) => handleSourceSelect(e.target.value)}
+                  disabled={sourcesLoading}
+                  aria-label="Selected dataset workbook"
+                  placeholder={sourcesLoading ? "Loading datasets…" : "Select dataset…"}
+                  options={sources.map((d) => ({
+                    value: String(d.id),
+                    label: d.display_name || d.original_name || `Dataset ${d.id}`,
+                  }))}
+                />
+              </div>
+            )}
 
-            {scopeLine && (
+            {scopeLine && sources.length > 0 && (
               <div className="dataset-context-meta" aria-label="Dataset context">
                 <span className="dataset-context-meta__item dataset-context-meta__period">
                   {scopeLine.period}
@@ -471,31 +360,27 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
                 variant="PRIMARY"
                 size="sm"
                 icon={UploadCloud}
-                onClick={() => {
-                  if (typeof onNavigateTab === "function") {
-                    onNavigateTab("upload");
-                  } else {
-                    window.location.hash = "upload";
-                  }
-                }}
+                onClick={() => dispatchNavigationIntent(NAVIGATION_INTENTS.OPEN_UPLOAD, {}, { onNavigateTab, onOpenUpload })}
                 ariaLabel="Upload new spreadsheet"
                 title="Upload new spreadsheet"
               >
                 Upload Data
               </Button>
             )}
-            <Button
-              variant="GHOST"
-              size="sm"
-              icon={RefreshCw}
-              className="scope-refresh-btn"
-              onClick={() => setRevision((r) => r + 1)}
-              disabled={calculating || !selectedDatasetId || sources.length === 0}
-              ariaLabel="Refresh analysis for selected workbook"
-              title="Refresh analysis for selected workbook"
-            >
-              Refresh
-            </Button>
+            {sources.length > 0 && (
+              <Button
+                variant="GHOST"
+                size="sm"
+                icon={RefreshCw}
+                className="scope-refresh-btn"
+                onClick={() => setRevision((r) => r + 1)}
+                disabled={calculating || !selectedDatasetId}
+                ariaLabel="Refresh analysis for selected workbook"
+                title="Refresh analysis for selected workbook"
+              >
+                Refresh
+              </Button>
+            )}
           </div>
         </div>
       </header>
@@ -503,271 +388,199 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
       {/* Source Loading or Source Error State */}
       {sourcesError && (
         <div className="adaptive-status-notice error" role="alert">
-          <span>Failed to load sources: {sourcesError}</span>
-          <button type="button" onClick={loadSources}>
+          <span>{sourcesError.message}</span>
+          <Button
+            variant="GHOST"
+            size="sm"
+            icon={RefreshCw}
+            onClick={loadSources}
+            ariaLabel="Retry loading sources"
+          >
             Retry
-          </button>
+          </Button>
         </div>
       )}
 
       {/* Calculation Error State */}
       {calcError && !calculating && (
         <div className="adaptive-status-notice error" role="alert">
-          <span>{calcError}</span>
-          <button type="button" onClick={() => setRevision((r) => r + 1)}>
+          <span>{calcError.message}</span>
+          <Button
+            variant="GHOST"
+            size="sm"
+            icon={RefreshCw}
+            onClick={() => setRevision((r) => r + 1)}
+            ariaLabel="Retry calculating executive intelligence"
+          >
             Retry
-          </button>
+          </Button>
         </div>
       )}
 
-      {/* Runtime Developer Diagnostics Trigger (Developer Mode - Clean Drawer Trigger) */}
+      {/* Runtime Developer Diagnostics Trigger */}
       {developerMode && data && (
         <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "12px" }}>
-          <button
-            type="button"
-            className="scope-badge-button"
+          <Button
+            variant="GHOST"
+            size="sm"
+            iconRight={ExternalLink}
             data-testid="executive-dashboard-runtime-diagnostic"
             onClick={() => handleOpenInspect("runtime_diagnostics")}
-            style={{
-              fontSize: "11px",
-              fontFamily: "monospace",
-              padding: "5px 12px",
-              borderRadius: "6px",
-              border: `1px dashed ${themeTokens.colors.borderStrong}`,
-              background: themeTokens.colors.surface,
-              color: themeTokens.colors.textSecondary,
-              cursor: "pointer",
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "6px",
-            }}
-            aria-label="Inspect runtime scope and diagnostics in drawer"
+            ariaLabel="Inspect runtime scope and diagnostics in drawer"
           >
-            <span>[Dev Scope] Dataset {data?.dataset_id || selectedDatasetId} ({data?.candidate_count ?? 0} candidates)</span>
-            <ExternalLink size={12} />
-          </button>
+            [Dev Scope] Dataset {data?.dataset_id || selectedDatasetId} ({data?.candidate_count ?? 0} candidates)
+          </Button>
         </div>
       )}
 
-      {/* Executive Dashboard Governed Content Container */}
+      {/* Executive Dashboard Governed Content Container Protected by Zero-Data Render Firewall */}
       <SurfaceGuard surface="dashboard">
-        <section className="adaptive-content-container" aria-label="Dashboard Content">
-          {/* State A: First-time or Dataset-Switch Indeterminate Executive Loader */}
-          {calculating && !data && (
-            <div className="adaptive-executive-loader" role="status" aria-live="polite">
-              <div className="adaptive-executive-loader__waveform" aria-hidden="true">
-                <span />
-                <span />
-                <span />
-                <span />
-                <span />
-              </div>
-              <h2 className="adaptive-executive-loader__title">Calculating Executive Intelligence…</h2>
-              <p className="adaptive-executive-loader__context">
-                Synthesizing cross-sheet distributions, business KPI variances, and policy telemetry.
-              </p>
-            </div>
-          )}
-
-          {/* Stale-while-Revalidate Banner for Same-Dataset Refresh */}
-          {calculating && data && (
-            <div className="adaptive-recalc-banner" role="status" aria-live="polite">
-              <Loader2 size={16} className="adaptive-spin-icon" />
-              <span>Recalculating intelligence with latest revisions… Displaying previous snapshot.</span>
-            </div>
-          )}
-
-          {/* Content Wrapper (Dimmed during re-calculation) */}
-          <div className={calculating && data ? "adaptive-content-recalculating" : ""}>
-            {/* Governed Executive Briefing Audio/Text (if available at dataset level) */}
-            {!calcError && briefingElement && (
-              <section
-                className="dashboard-section dashboard-section--summary"
-                aria-labelledby="section-summary-heading"
-                style={{ marginBottom: "24px" }}
-              >
-                <SectionHeader
-                  id="section-summary-heading"
-                  title="Executive Summary"
-                />
-                <ExecutiveBriefingCard
-                  briefing={briefingElement}
-                  sheetId={selectedDatasetId}
-                  onOpenInspect={() => handleOpenInspect("briefing", briefingElement)}
-                  snapshot={data?.snapshot}
-                  domain={data?.contract?.domain}
-                />
-              </section>
-            )}
-
-            {/* Governed Unified Executive Insights Grid (4-5 Executive Topics & Business KPIs) */}
-            {!calcError && data?.selected_dashboard_insights && data.selected_dashboard_insights.length > 0 && (
-              <ErrorBoundary
-                fallback={
-                  <div className="adaptive-status-notice error" role="alert" style={{ margin: "20px 0" }}>
-                    <AlertTriangle size={18} />
-                    <span>An unexpected rendering error occurred in the executive grid.</span>
-                  </div>
-                }
-              >
-                <UnifiedExecutiveInsightsGrid
-                  insights={data.selected_dashboard_insights}
-                  executiveTopics={data.executive_topics || []}
-                  executiveKpis={data.executive_kpis || []}
-                  coverageWarnings={data.coverage_warnings || []}
-                  datasetName={data.dataset_name || (activeDataset?.display_name || activeDataset?.original_name || "Workbook")}
-                  datasetId={selectedDatasetId}
-                  sheetCount={data.sheet_count || 1}
-                  domainProfile={data?.domain_profile || null}
-                  layoutPlan={data?.layout_plan || null}
-                  onInspectInsight={(cand) => {
-                    handleOpenInspect("candidate", cand);
-                  }}
-                  onOpenScenarioExplorer={() => setShowScenarioExplorer(true)}
-                />
-
-              </ErrorBoundary>
-            )}
-
-            {/* Truthful Empty State: When zero insights detected or insufficient data */}
-            {!calculating && !calcError && (!data?.selected_dashboard_insights || data.selected_dashboard_insights.length === 0) && (
-              (() => {
-                const isNoSources = sources.length === 0 || (!data && !activeDataset);
-                const explanation = getEmptyStateExplanation(data, activeDataset, sources.length);
-                return (
-                  <section className="adaptive-empty-state" aria-labelledby="adaptive-empty-title">
-                    <div className="adaptive-empty-icon" aria-hidden="true">
-                      <FileSpreadsheet size={36} />
-                    </div>
-                    <h2 id="adaptive-empty-title" className="adaptive-empty-heading">
-                      {explanation.title}
-                    </h2>
-                    <p className="adaptive-empty-text">
-                      {explanation.reason}
-                    </p>
-                    <div className="adaptive-empty-hint">
-                      {explanation.action}
-                    </div>
-
-                    {isNoSources && (
-                      <div className="adaptive-empty-features" aria-label="HighView Capabilities">
-                        <div className="adaptive-empty-feature-card">
-                          <div className="feature-icon-wrap" aria-hidden="true"><Layers size={20} /></div>
-                          <strong>Adaptive Ingestion</strong>
-                          <span>Auto-reconstructs messy multi-row headers, merged cells, and wrapped records into clean tabular datasets.</span>
-                        </div>
-                        <div className="adaptive-empty-feature-card">
-                          <div className="feature-icon-wrap" aria-hidden="true"><TrendingUp size={20} /></div>
-                          <strong>Deterministic Truth</strong>
-                          <span>Uncovers statistical variance, outlier clusters, and business KPIs with zero LLM math or hallucinated numbers.</span>
-                        </div>
-                        <div className="adaptive-empty-feature-card">
-                          <div className="feature-icon-wrap" aria-hidden="true"><Presentation size={20} /></div>
-                          <strong>Executive Studio</strong>
-                          <span>Transforms verified findings into 16:9 board-ready presentations with 100% native editable PowerPoint charts.</span>
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="adaptive-empty-actions">
-                      <Button
-                        variant="PRIMARY"
-                        size="md"
-                        icon={UploadCloud}
-                        onClick={() => {
-                          if (typeof onNavigateTab === "function") {
-                            onNavigateTab("upload");
-                          } else {
-                            window.location.hash = "upload";
-                          }
-                        }}
-                        ariaLabel="Upload new spreadsheet"
-                      >
-                        Upload Spreadsheet
-                      </Button>
-                      <Button
-                        variant="SECONDARY"
-                        size="md"
-                        icon={Table}
-                        onClick={() => {
-                          if (typeof onNavigateTab === "function") {
-                            onNavigateTab("explorer");
-                          } else {
-                            window.location.hash = "explorer";
-                          }
-                        }}
-                        ariaLabel="Open Data Explorer"
-                      >
-                        Open Data Explorer
-                      </Button>
-                    </div>
-                  </section>
-                );
-              })()
-            )}
-
-            {/* Level 2: Compact Contextual Evidence & Governance Handoff Strip */}
-            {!calcError && data && (data.evidence_count > 0 || (data.selected_dashboard_insights && data.selected_dashboard_insights.length > 0)) && (
-              <aside
-                className="dashboard-section dashboard-section--evidence"
-                aria-label="Evidence and governance"
-                style={{ marginTop: "24px" }}
-              >
-                <div
-                  className="adaptive-evidence-handoff-strip"
-                  data-testid="adaptive-evidence-handoff-strip"
-                  style={{
-                    padding: "12px 18px",
-                    borderRadius: "10px",
-                    backgroundColor: themeTokens.colors.surface,
-                    border: `1px solid ${themeTokens.colors.borderSubtle}`,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: "12px",
-                    flexWrap: "wrap",
-                  }}
-                >
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "0.84rem", color: themeTokens.colors.textSecondary }}>
-                    <ShieldCheck size={16} color={themeTokens.colors.brandBlue || "#2563eb"} aria-hidden="true" />
-                    <span>
-                      <strong style={{ color: themeTokens.colors.textPrimary }}>
-                        {data.evidence_count ?? data.story_plan?.claims?.length ?? 0} validated findings
-                      </strong>
-                      {" · "}
-                      <span>
-                        {data.relationship_count ?? 0} cross-source relationships
-                      </span>
-                    </span>
-                  </div>
-                  <a
-                    href={buildExplorerUrl({ datasetId: selectedDatasetId, tab: "evidence" })}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      window.location.href = buildExplorerUrl({ datasetId: selectedDatasetId, tab: "evidence" });
-                    }}
-                    style={{
-                      textDecoration: "none",
-                      color: themeTokens.colors.brandBlue || "#2563eb",
-                      fontSize: "0.82rem",
-                      fontWeight: 600,
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: "6px",
-                      minHeight: "32px",
-                      padding: "6px 10px",
-                      borderRadius: "6px",
-                    }}
-                    aria-label="Explore evidence ledger and lineage in Data Explorer"
-                  >
-                    <span>Explore evidence ledger & lineage</span>
-                    <ArrowRight size={14} aria-hidden="true" />
-                  </a>
+        <EmptyDashboardBoundary
+          dashboardState={dashboardState}
+          error={calcError || sourcesError}
+          onRetry={() => {
+            if (sourcesError) loadSources();
+            else setRevision((r) => r + 1);
+          }}
+          onNavigateTab={onNavigateTab}
+          onOpenUpload={onOpenUpload}
+        >
+          <section className="adaptive-content-container" aria-label="Dashboard Content">
+            {/* State A: Indeterminate Executive Loader */}
+            {calculating && !data && (
+              <div className="adaptive-executive-loader" role="status" aria-live="polite">
+                <div className="adaptive-executive-loader__waveform" aria-hidden="true">
+                  <span />
+                  <span />
+                  <span />
+                  <span />
+                  <span />
                 </div>
-              </aside>
+                <h2 className="adaptive-executive-loader__title">Calculating Executive Intelligence…</h2>
+                <p className="adaptive-executive-loader__context">
+                  Synthesizing cross-sheet distributions, business KPI variances, and policy telemetry.
+                </p>
+              </div>
             )}
-          </div>
-        </section>
+
+            {/* Stale-while-Revalidate Banner for Same-Dataset Refresh */}
+            {calculating && data && (
+              <div className="adaptive-recalc-banner" role="status" aria-live="polite">
+                <Loader2 size={16} className="adaptive-spin-icon" />
+                <span>Recalculating intelligence with latest revisions… Displaying previous snapshot.</span>
+              </div>
+            )}
+
+            {/* Content Wrapper (Dimmed during re-calculation) */}
+            <div className={calculating && data ? "adaptive-content-recalculating" : ""}>
+              {/* Governed Executive Briefing Audio/Text */}
+              {!calcError && briefingElement && (
+                <section
+                  className="dashboard-section dashboard-section--summary"
+                  aria-labelledby="section-summary-heading"
+                  style={{ marginBottom: "24px" }}
+                >
+                  <SectionHeader
+                    id="section-summary-heading"
+                    title="Executive Summary"
+                  />
+                  <ExecutiveBriefingCard
+                    briefing={briefingElement}
+                    sheetId={selectedDatasetId}
+                    onOpenInspect={() => handleOpenInspect("briefing", briefingElement)}
+                    snapshot={data?.snapshot}
+                    domain={data?.contract?.domain}
+                  />
+                </section>
+              )}
+
+              {/* Governed Unified Executive Insights Grid */}
+              {!calcError && data?.selected_dashboard_insights && data.selected_dashboard_insights.length > 0 && (
+                <ErrorBoundary
+                  fallback={
+                    <div className="adaptive-status-notice error" role="alert" style={{ margin: "20px 0" }}>
+                      <AlertTriangle size={18} />
+                      <span>An unexpected rendering error occurred in the executive grid.</span>
+                    </div>
+                  }
+                >
+                  <UnifiedExecutiveInsightsGrid
+                    insights={data.selected_dashboard_insights}
+                    executiveTopics={data.executive_topics || []}
+                    executiveKpis={data.executive_kpis || []}
+                    coverageWarnings={data.coverage_warnings || []}
+                    datasetName={data.dataset_name || (activeDataset?.display_name || activeDataset?.original_name || "Workbook")}
+                    datasetId={selectedDatasetId}
+                    sheetCount={data.sheet_count ?? null}
+                    domainProfile={data?.domain_profile || null}
+                    layoutPlan={data?.layout_plan || null}
+                    onInspectInsight={(cand) => {
+                      handleOpenInspect("candidate", cand);
+                    }}
+                    onOpenScenarioExplorer={() => setShowScenarioExplorer(true)}
+                  />
+                </ErrorBoundary>
+              )}
+
+              {/* Truthful Empty State for Dataset with Zero Insights */}
+              {!calculating && !calcError && (!data?.selected_dashboard_insights || data.selected_dashboard_insights.length === 0) && (
+                <EmptyDashboardState
+                  onNavigateTab={onNavigateTab}
+                  onOpenUpload={onOpenUpload}
+                />
+              )}
+
+              {/* Level 2: Compact Contextual Evidence & Governance Handoff Strip */}
+              {!calcError && data && (data.evidence_count > 0 || (data.selected_dashboard_insights && data.selected_dashboard_insights.length > 0)) && (
+                <aside
+                  className="dashboard-section dashboard-section--evidence"
+                  aria-label="Evidence and governance"
+                  style={{ marginTop: "24px" }}
+                >
+                  <div
+                    className="adaptive-evidence-handoff-strip"
+                    data-testid="adaptive-evidence-handoff-strip"
+                    style={{
+                      padding: "12px 18px",
+                      borderRadius: "10px",
+                      backgroundColor: themeTokens.colors.surface,
+                      border: `1px solid ${themeTokens.colors.borderSubtle}`,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: "12px",
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "0.84rem", color: themeTokens.colors.textSecondary }}>
+                      <ShieldCheck size={16} color="var(--brand-400, #075443)" aria-hidden="true" />
+                      <span>
+                        <strong style={{ color: themeTokens.colors.textPrimary }}>
+                          {data.evidence_count != null ? `${data.evidence_count} validated findings` : "Validated findings"}
+                        </strong>
+                        {" · "}
+                        <span>
+                          {data.relationship_count != null ? `${data.relationship_count} cross-source relationships` : "Verified relationships"}
+                        </span>
+                      </span>
+                    </div>
+                    <Button
+                      variant="GHOST"
+                      size="sm"
+                      iconRight={ArrowRight}
+                      onClick={() => {
+                        dispatchNavigationIntent(NAVIGATION_INTENTS.OPEN_EVIDENCE, { datasetId: selectedDatasetId }, { onNavigateTab });
+                      }}
+                      ariaLabel="Explore evidence ledger and lineage in Data Explorer"
+                    >
+                      Explore evidence ledger & lineage
+                    </Button>
+                  </div>
+                </aside>
+              )}
+            </div>
+          </section>
+        </EmptyDashboardBoundary>
       </SurfaceGuard>
 
       {/* Layer 3: Accessible Quick Inspect Dialog Rendered Through Portal */}
@@ -781,7 +594,16 @@ export default function AdaptiveDashboardPage({ onNavigateTab }) {
         selectedDatasetId={selectedDatasetId}
         themeTokens={themeTokens}
         isDark={isDark}
+        onNavigateTab={onNavigateTab}
       />
+
+      {/* Governed Executive Scenario Explorer */}
+      {showScenarioExplorer && (
+        <ExecutiveScenarioExplorer
+          datasetId={selectedDatasetId}
+          onClose={() => setShowScenarioExplorer(false)}
+        />
+      )}
 
       {/* Inline Contextual Evidence & Source Records Drawer */}
       {investigationTarget && (

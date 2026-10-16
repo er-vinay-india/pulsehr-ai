@@ -20,7 +20,8 @@
     "test:ux": "node scripts/test_ux_governance.mjs",
     "test:visual-qa": "node scripts/test_rendered_visual_qa.mjs",
     "test:scenario": "node scripts/test_scenario_explorer_governance.mjs",
-    "pretest:slides": "node scripts/generate_slide_tokens.mjs"
+    "pretest:slides": "node scripts/generate_slide_tokens.mjs",
+    "test:dashboard-integrity": "node scripts/lint_dashboard_anti_bypass.mjs && node scripts/test_anti_bypass_linter_negative.mjs && npm run test:theme && npm run test:theme-integrity && node scripts/test_rendered_dashboard_integrity.mjs"
   },
   "dependencies": {
     "@radix-ui/react-popover": "^1.1.23",

@@ -123,7 +123,7 @@ export default function UnifiedExecutiveInsightsGrid({
 
   return (
     <div
-      className="unified-executive-insights-grid"
+      className="unified-executive-insights-grid unified-dataset-insights-section"
       style={{ display: "flex", flexDirection: "column", gap: "28px" }}
     >
       {/* 1. KEY METRICS SECTION (Semantic H2 + dl/dt/dd KPI Grid) */}
@@ -171,8 +171,8 @@ export default function UnifiedExecutiveInsightsGrid({
                 padding: "8px 14px",
                 borderRadius: "8px",
                 backgroundColor: "rgba(245, 158, 11, 0.10)",
-                border: `1px solid ${themeTokens.colors.gold || "#f59e0b"}`,
-                color: isDark ? "#fbbf24" : "#b45309",
+                border: `1px solid ${themeTokens.colors.gold || "var(--color-gold, var(--color-warning))"}`,
+                color: isDark ? "rgba(251, 191, 36, 1)" : "rgba(180, 83, 9, 1)",
                 fontSize: "0.80rem",
                 marginBottom: "8px",
               }}

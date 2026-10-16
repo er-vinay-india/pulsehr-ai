@@ -12,9 +12,13 @@
  *    - Mobile: 390px
  */
 import puppeteer from 'puppeteer';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
 import { validateChartFormatters, resolveAxisFormatter, sanitizeOptionFormatters } from '../src/components/visualization/layout/chartFormatterValidator.js';
 import { AdaptiveChartLayoutEngine } from '../src/components/visualization/layout/AdaptiveChartLayoutEngine.js';
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ARTIFACT_DIR = '/Users/vinayksharma/.gemini/antigravity-ide/brain/9cd70832-7bbd-449d-b18c-68954cd00123';
 
 async function runUnitVisualChecks() {
@@ -108,15 +112,46 @@ async function runBrowserGeometryAndScreenshotChecks() {
     { name: '390px_mobile', width: 390, height: 844, isDark: false },
   ];
 
-  let activeDatasetId = '99750';
+  let activeDatasetId = '99770';
+  let uploadedTemp = false;
   try {
     const dsRes = await fetch('http://localhost:5175/api/upload/datasets');
+    let list = [];
     if (dsRes.ok) {
       const dsData = await dsRes.json();
-      const list = Array.isArray(dsData) ? dsData : dsData.datasets || [];
-      if (list.length > 0) activeDatasetId = String(list[0].id);
+      list = Array.isArray(dsData) ? dsData : dsData.datasets || [];
     }
-  } catch {}
+
+    if (list.length === 0) {
+      console.log('    (Live DB is empty — uploading hermetic test fixture WFO_July_2026_Test.xlsx...)');
+      const fixturePath = path.resolve(__dirname, '../../backend/tests/fixtures/benchmark_datasets/WFO_July_2026_Test.xlsx');
+      const fileBytes = fs.readFileSync(fixturePath);
+      const formData = new FormData();
+      const blob = new Blob([fileBytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      formData.append('file', blob, 'WFO_July_2026_Test.xlsx');
+
+      const upRes = await fetch('http://localhost:8000/api/upload/file', {
+        method: 'POST',
+        body: formData,
+      });
+      if (upRes.ok) {
+        const upJson = await upRes.json();
+        activeDatasetId = String(upJson.dataset_id);
+        uploadedTemp = true;
+      }
+    } else {
+      const wf = list.find((d) => String(d.id) === '99770');
+      if (wf) {
+        activeDatasetId = '99770';
+      } else if (list.length > 0) {
+        activeDatasetId = String(list[0].id);
+      }
+    }
+  } catch (err) {
+    console.warn('Dataset resolution warning:', err.message);
+  }
+
+  try {
 
   for (const vp of viewports) {
     console.log(`\n  📱 Inspecting Viewport: ${vp.name} (${vp.width}x${vp.height})...`);
@@ -169,11 +204,12 @@ async function runBrowserGeometryAndScreenshotChecks() {
       // Check business KPIs
       const kpiTiles = Array.from(document.querySelectorAll('.business-kpi-card')).map(card => card.innerText.trim());
 
-      // Check for compact period labels vs verbose ordinals
-      const supportingChartEl = document.querySelector('[data-testid="supporting-chart-container"] [data-categories]');
-      const supportingCategories = supportingChartEl ? JSON.parse(supportingChartEl.getAttribute('data-categories') || '[]') : [];
-      const hasVerboseOrdinals = supportingCategories.some(c => /\b(1st|2nd|3rd|\d+th)\b/i.test(c));
-      const hasCompactPeriods = supportingCategories.includes('1–5 Jul') && supportingCategories.includes('27–31 Jul');
+      // Check for compact period labels vs verbose ordinals across supporting charts
+      const supportingChartEls = Array.from(document.querySelectorAll('[data-testid="supporting-chart-container"] [data-categories]'));
+      const allSupportingCategories = supportingChartEls.map(el => JSON.parse(el.getAttribute('data-categories') || '[]'));
+      const periodCategories = allSupportingCategories.find(cats => cats.some(c => typeof c === 'string' && c.includes('Jul'))) || allSupportingCategories[0] || [];
+      const hasVerboseOrdinals = periodCategories.some(c => typeof c === 'string' && /\b(1st|2nd|3rd|\d+th)\b/i.test(c));
+      const hasCompactPeriods = periodCategories.includes('1–5 Jul') && periodCategories.includes('27–31 Jul');
 
       return {
         rawTokenMatches,
@@ -232,6 +268,13 @@ async function runBrowserGeometryAndScreenshotChecks() {
 
   await browser.close();
   console.log('\n🎉 ALL PHASE 9.9 VISUAL QA & MULTI-VIEWPORT CHECKS PASSED!');
+  } finally {
+    if (uploadedTemp) {
+      console.log('    (Cleaning up temporary test dataset from live DB...)');
+      await fetch('http://localhost:8000/api/upload/datasets', { method: 'DELETE' });
+      console.log('    ✅ Live DB returned to 0 datasets');
+    }
+  }
 }
 
 async function main() {

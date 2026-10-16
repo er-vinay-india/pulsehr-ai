@@ -119,8 +119,8 @@ export default function ExecutiveKPIGrid({
                   fontSize: "0.76rem",
                   fontWeight: 600,
                   color: kpi.variance.startsWith("+")
-                    ? themeTokens?.colors?.statusSuccess || "#10b981"
-                    : themeTokens?.colors?.statusError || "#ef4444",
+                    ? (themeTokens?.colors?.statusSuccess || "var(--color-success)")
+                    : (themeTokens?.colors?.statusError || "var(--color-danger)"),
                 }}
               >
                 {kpi.variance}

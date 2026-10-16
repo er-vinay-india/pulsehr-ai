@@ -20,18 +20,18 @@ export default function ExecutiveVisualCard({
   if (!topic) return null;
 
   const intentColor = {
-    RANKING: themeTokens?.colors?.brandBlue || "#2563eb",
-    TREND: themeTokens?.colors?.gold || "#d97706",
-    COMPOSITION: themeTokens?.colors?.statusSuccess || "#10b981",
-    RELATIONSHIP: "#8b5cf6",
-    ANOMALY: themeTokens?.colors?.statusError || "#ef4444",
-    DISTRIBUTION: "#06b6d4",
-    TARGET_VS_ACTUAL: themeTokens?.colors?.statusSuccess || "#10b981",
-    COMPARISON: themeTokens?.colors?.brandBlue || "#2563eb",
-    PART_TO_WHOLE: "#8b5cf6",
-    GAP_EXPLANATION: themeTokens?.colors?.gold || "#d97706",
-    MATRIX: "#6366f1",
-  }[topic.analytical_intent] || (themeTokens?.colors?.brandBlue || "#2563eb");
+    RANKING: themeTokens?.colors?.brandBlue || "var(--color-brand-blue, var(--action-primary-bg))",
+    TREND: themeTokens?.colors?.gold || "var(--color-gold, var(--color-warning))",
+    COMPOSITION: themeTokens?.colors?.statusSuccess || "var(--color-success)",
+    RELATIONSHIP: "var(--color-indigo, var(--action-primary-bg))",
+    ANOMALY: themeTokens?.colors?.statusError || "var(--color-danger)",
+    DISTRIBUTION: "var(--color-cyan, var(--color-brand-secondary))",
+    TARGET_VS_ACTUAL: themeTokens?.colors?.statusSuccess || "var(--color-success)",
+    COMPARISON: themeTokens?.colors?.brandBlue || "var(--color-brand-blue, var(--action-primary-bg))",
+    PART_TO_WHOLE: "var(--color-indigo, var(--action-primary-bg))",
+    GAP_EXPLANATION: themeTokens?.colors?.gold || "var(--color-gold, var(--color-warning))",
+    MATRIX: "var(--color-violet, var(--action-primary-bg))",
+  }[topic.analytical_intent] || (themeTokens?.colors?.brandBlue || "var(--color-brand-blue, var(--action-primary-bg))");
 
   const intentBg = isDark
     ? "rgba(255, 255, 255, 0.06)"
@@ -168,8 +168,8 @@ export default function ExecutiveVisualCard({
 
   return (
     <article
-      className={`executive-visual-card executive-insight-card ${isHero ? "hero-card visual-card--hero" : "supporting-card"} ${layoutClass}`}
-      data-testid={isHero ? "hero-card" : `supporting-card-${topic.topic_id}`}
+      className={`executive-visual-card executive-insight-card ${isHero ? "hero-card visual-card--hero hero-chart-container" : "supporting-card"} ${layoutClass}`}
+      data-testid={isHero ? "hero-card" : "supporting-chart-container"}
       data-topic-id={topic.topic_id}
       data-column-span={colSpan}
       data-height-class={heightClass}
@@ -177,7 +177,7 @@ export default function ExecutiveVisualCard({
       style={{
         gridColumn: `span ${colSpan}`,
         backgroundColor: themeTokens?.colors?.surface,
-        border: `1px solid ${isHero ? (themeTokens?.colors?.brandBlue || "#2563eb") : themeTokens?.colors?.borderSubtle}`,
+        border: `1px solid ${isHero ? (themeTokens?.colors?.brandBlue || "var(--action-primary-bg)") : (themeTokens?.colors?.borderSubtle || "var(--color-border)")}`,
         borderRadius: "12px",
         padding: isHero ? "18px 22px" : "14px 16px",
         display: "flex",
@@ -317,7 +317,7 @@ export default function ExecutiveVisualCard({
             style={{
               paddingTop: "8px",
               marginTop: "4px",
-              borderTop: `1px solid ${themeTokens?.colors?.borderSubtle || "#e2e8f0"}`,
+              borderTop: `1px solid ${themeTokens?.colors?.borderSubtle || "var(--color-border)"}`,
             }}
           >
             <p

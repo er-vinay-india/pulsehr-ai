@@ -6,6 +6,7 @@ import { useVisualQA } from '../visualization/observers/useVisualQA';
 import { repairChartLayout } from '../visualization/repair/repairChartLayout';
 import { VISUAL_POLICY } from '../visualization/policy/visualPolicy';
 import { formatCompactNumber, humanizeLabel } from '../visualization/layout/formatters';
+import Button from '../../design-system/components/Button';
 
 export default function DataChart({
   items = [],
@@ -208,9 +209,14 @@ export default function DataChart({
                 <tr key={i}>
                   <td>
                     {onSelect ? (
-                      <button type="button" onClick={() => onSelect(p)}>
+                      <Button
+                        variant="GHOST"
+                        size="sm"
+                        onClick={() => onSelect(p)}
+                        style={{ padding: "2px 6px", fontSize: "0.80rem" }}
+                      >
                         {p.label}
-                      </button>
+                      </Button>
                     ) : (
                       p.label
                     )}
