@@ -86,6 +86,13 @@ class HighviewSettings(BaseSettings):
     OLLAMA_EMBED_MODEL: str = Field(default=os.getenv("OLLAMA_EMBED_MODEL", "nomic-embed-text:latest"))
     EMBEDDING_DIM: int = Field(default=768)
 
+    # AI Model Roles
+    MODEL_ROLE_COORDINATOR_PRIMARY: str = Field(default=os.getenv("MODEL_ROLE_COORDINATOR_PRIMARY", "qwen3.5:2b"))
+    MODEL_ROLE_FAST_PRIMARY: str = Field(default=os.getenv("MODEL_ROLE_FAST_PRIMARY", "phi4-mini:latest"))
+    MODEL_ROLE_ANALYST_PRIMARY: str = Field(default=os.getenv("MODEL_ROLE_ANALYST_PRIMARY", "qwen3.5:9b"))
+    MODEL_ROLE_REASONER_PRIMARY: str = Field(default=os.getenv("MODEL_ROLE_REASONER_PRIMARY", "deepseek-r1:7b"))
+    MODEL_ROLE_WRITER_PRIMARY: str = Field(default=os.getenv("MODEL_ROLE_WRITER_PRIMARY", "gemma4:12b"))
+
     # Kaggle cache
     KAGGLE_DATASET: str = Field(default="yasirub/employee-attendance-ratings")
     KAGGLE_LOCAL_CACHE: Path = Field(
@@ -306,3 +313,9 @@ MAX_INGESTION_COLUMNS = settings.MAX_INGESTION_COLUMNS
 CRITIC_MODE = settings.CRITIC_MODE
 CRITIC_SEMANTIC_MODEL = settings.CRITIC_SEMANTIC_MODEL
 DECISION_ENGINE = settings.DECISION_ENGINE
+
+MODEL_ROLE_COORDINATOR_PRIMARY = settings.MODEL_ROLE_COORDINATOR_PRIMARY
+MODEL_ROLE_FAST_PRIMARY = settings.MODEL_ROLE_FAST_PRIMARY
+MODEL_ROLE_ANALYST_PRIMARY = settings.MODEL_ROLE_ANALYST_PRIMARY
+MODEL_ROLE_REASONER_PRIMARY = settings.MODEL_ROLE_REASONER_PRIMARY
+MODEL_ROLE_WRITER_PRIMARY = settings.MODEL_ROLE_WRITER_PRIMARY

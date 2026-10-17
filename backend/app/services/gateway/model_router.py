@@ -59,28 +59,28 @@ class ModelRouter:
 
         # 3. High reasoning level or deep investigative queries promote DeepSeek-R1
         if request.reasoning_level == ReasoningLevel.HIGH:
-            deepseek_model = getattr(config, "MODEL_ROLE_REASONER_PRIMARY", "deepseek-r1:7b")
+            deepseek_model = config.MODEL_ROLE_REASONER_PRIMARY
             if deepseek_model not in candidates:
                 candidates.append(deepseek_model)
-            qwen_model = getattr(config, "MODEL_ROLE_ANALYST_PRIMARY", "qwen3.5:9b")
+            qwen_model = config.MODEL_ROLE_ANALYST_PRIMARY
             if qwen_model not in candidates:
                 candidates.append(qwen_model)
 
         # 4. Pull base cascade for the assigned AITaskType
-        base_cascade = TASK_MODEL_CASCADES.get(request.task_type, ["qwen3.5:9b", "phi4-mini:latest"])
+        base_cascade = TASK_MODEL_CASCADES.get(request.task_type, [config.MODEL_ROLE_ANALYST_PRIMARY, config.MODEL_ROLE_FAST_PRIMARY])
         for m in base_cascade:
             if m not in candidates:
                 candidates.append(m)
 
         # 5. Low latency budget prioritization: if budget < 12 seconds, ensure fast model is upfront
         if request.max_latency_ms < 12000.0 and request.reasoning_level != ReasoningLevel.HIGH:
-            fast_model = "phi4-mini:latest"
+            fast_model = config.MODEL_ROLE_FAST_PRIMARY
             if fast_model in candidates:
                 candidates.remove(fast_model)
                 candidates.insert(0, fast_model)
 
         # 6. Append system default model as ultimate fallback if not present
-        sys_default = getattr(config, "OLLAMA_MODEL", "qwen3.5:2b")
+        sys_default = config.OLLAMA_MODEL
         if sys_default not in candidates:
             candidates.append(sys_default)
 

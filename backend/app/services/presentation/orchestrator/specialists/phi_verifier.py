@@ -65,7 +65,7 @@ class PhiAnalyticalVerifier:
             }
 
         # If retries < 0 (testing / fast-mode / deterministic override), return deterministic result
-        if retries < 0 or not getattr(config, "PRESENTATION_ORCHESTRATOR_ENABLED", True):
+        if retries < 0 or not config.PRESENTATION_ORCHESTRATOR_ENABLED:
             return det_result
 
         # Model-based verification prompt using Phi-4 Mini

@@ -432,7 +432,7 @@ def generate_presentation_deck_spec(
             constraint = SlideCountConstraint.from_inputs(
                 instructions=instructions,
                 target_length=scope.get("target_length"),
-                default_mode=getattr(config, "PRESENTATION_DEFAULT_SLIDE_COUNT_MODE", "ADAPTIVE")
+                default_mode=config.PRESENTATION_DEFAULT_SLIDE_COUNT_MODE
             )
             brief_obj = PresentationBrief(
                 objective=objective,
@@ -476,7 +476,7 @@ def generate_presentation_deck_spec(
                 snapshot_hash=snapshot_hash
             )
             # Phase 3: IBM Granite 4.0 Presentation Execution Orchestrator
-            if getattr(config, "PRESENTATION_ORCHESTRATOR_ENABLED", True):
+            if config.PRESENTATION_ORCHESTRATOR_ENABLED:
                 from .orchestrator import presentation_orchestrator
                 plan_spec = presentation_director.plan_presentation(planning_ctx)
                 director_deck_spec, _ = presentation_orchestrator.orchestrate(

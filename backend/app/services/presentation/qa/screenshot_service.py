@@ -36,7 +36,7 @@ class ScreenshotService:
     ]
 
     def __init__(self, output_dir: Path | None = None):
-        self.output_dir = output_dir or getattr(config, "PRESENTATION_VISUAL_QA_DIR", Path("data/exports/qa"))
+        self.output_dir = output_dir or config.PRESENTATION_VISUAL_QA_DIR
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self._chrome_path = self._locate_chrome_binary()
 
@@ -153,7 +153,7 @@ class ScreenshotService:
 
     def cleanup_deck_screenshots(self, deck_id: str) -> None:
         """Deletes screenshot files for a deck if cleanup is enabled."""
-        if getattr(config, "PRESENTATION_VISUAL_QA_KEEP_SCREENSHOTS", False):
+        if config.PRESENTATION_VISUAL_QA_KEEP_SCREENSHOTS:
             return
         deck_dir = self.output_dir / deck_id
         if deck_dir.exists():

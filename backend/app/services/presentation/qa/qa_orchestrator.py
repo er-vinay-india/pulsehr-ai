@@ -36,9 +36,9 @@ class VisualQAOrchestrator:
         screenshot_service: ScreenshotService | None = None,
         repair_engine: VisualRepairEngine | None = None
     ):
-        self.qa_mode = (qa_mode or getattr(config, "PRESENTATION_VISUAL_QA_MODE", "STANDARD")).upper()
-        self.max_repairs = max_repairs if max_repairs is not None else getattr(config, "PRESENTATION_VISUAL_QA_MAX_REPAIRS", 2)
-        self.min_score = min_score if min_score is not None else getattr(config, "PRESENTATION_VISUAL_QA_MIN_SCORE", 0.80)
+        self.qa_mode = (qa_mode or config.PRESENTATION_VISUAL_QA_MODE).upper()
+        self.max_repairs = max_repairs if max_repairs is not None else config.PRESENTATION_VISUAL_QA_MAX_REPAIRS
+        self.min_score = min_score if min_score is not None else config.PRESENTATION_VISUAL_QA_MIN_SCORE
         self.critic = critic or GemmaVisualCritic()
         self.screenshot_service = screenshot_service or ScreenshotService()
         self.repair_engine = repair_engine or VisualRepairEngine()
