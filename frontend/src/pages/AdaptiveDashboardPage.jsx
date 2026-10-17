@@ -12,8 +12,11 @@ import {
   ShieldCheck,
   ExternalLink,
   RefreshCw,
+  CheckCircle2,
+  X,
 } from "lucide-react";
 import Button from "../design-system/components/Button";
+import ActionIconButton from "../design-system/components/ActionIconButton";
 import ErrorBoundary from "../components/common/ErrorBoundary";
 import Select from "../components/common/Select";
 import ExecutiveBriefingCard from "../components/adaptive/ExecutiveBriefingCard";
@@ -81,6 +84,16 @@ export default function AdaptiveDashboardPage({ onNavigateTab, onOpenUpload }) {
   const [calcError, setCalcError] = useState(null);
   const [revision, setRevision] = useState(0);
   const [burstCache, setBurstCache] = useState(false);
+  const [refreshNotice, setRefreshNotice] = useState(null);
+  const [lastRefreshedAt, setLastRefreshedAt] = useState(null);
+
+  useEffect(() => {
+    if (!refreshNotice) return;
+    const timer = setTimeout(() => {
+      setRefreshNotice(null);
+    }, 4500);
+    return () => clearTimeout(timer);
+  }, [refreshNotice]);
 
   // Inspect & Disclosure State
   const [inspectModalOpen, setInspectModalOpen] = useState(false);
@@ -235,6 +248,17 @@ export default function AdaptiveDashboardPage({ onNavigateTab, onOpenUpload }) {
       .then((res) => {
         if (currentReqId !== requestCounter.current) return;
         setData(res);
+        if (shouldBurst) {
+          const now = new Date();
+          const timeStr = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+          setLastRefreshedAt(timeStr);
+          setRefreshNotice({
+            type: "success",
+            title: "Cache Burst & Refreshed",
+            message: `Dashboard intelligence recalculated fresh at ${timeStr}. Stale cache was purged.`,
+            timestamp: Date.now(),
+          });
+        }
       })
       .catch((err) => {
         if (currentReqId !== requestCounter.current) return;
@@ -248,6 +272,14 @@ export default function AdaptiveDashboardPage({ onNavigateTab, onOpenUpload }) {
             selfHealUrl(null);
           } else {
             setCalcError(sanitizeError(err));
+          }
+          if (shouldBurst) {
+            setRefreshNotice({
+              type: "error",
+              title: "Refresh Failed",
+              message: err.message || "Failed to recalculate dashboard intelligence.",
+              timestamp: Date.now(),
+            });
           }
         }
       })
@@ -337,6 +369,33 @@ export default function AdaptiveDashboardPage({ onNavigateTab, onOpenUpload }) {
 
   return (
     <div className="adaptive-dashboard-page" data-testid="executive-dashboard-root">
+      {/* Floating Refresh / Cache Burst Notification Toast */}
+      {refreshNotice && (
+        <div
+          className={`dashboard-refresh-toast ${refreshNotice.type === "error" ? "is-error" : "is-success"}`}
+          role="status"
+          aria-live="polite"
+        >
+          {refreshNotice.type === "error" ? (
+            <AlertTriangle size={18} className="toast-icon-error" aria-hidden="true" />
+          ) : (
+            <CheckCircle2 size={18} className="toast-icon-success" aria-hidden="true" />
+          )}
+          <div className="toast-body">
+            <span className="toast-title">{refreshNotice.title}</span>
+            <span className="toast-msg">{refreshNotice.message}</span>
+          </div>
+          <ActionIconButton
+            action="close"
+            buttonSize={26}
+            size={13}
+            variant="ghost"
+            onClick={() => setRefreshNotice(null)}
+            ariaLabel="Dismiss notification"
+          />
+        </div>
+      )}
+
       {/* Page Title & Command Bar */}
       <header className="page-top-header adaptive-page-header">
         <div className="page-title-row">
@@ -380,7 +439,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab, onOpenUpload }) {
                 <span className="dataset-context-meta__sep">·</span>
                 <span className="dataset-context-meta__item dataset-context-meta__verified">
                   <span className="scope-live-dot" aria-hidden="true" />
-                  <span>Live verified</span>
+                  <span>{lastRefreshedAt ? `Refreshed ${lastRefreshedAt}` : "Live verified"}</span>
                 </span>
               </div>
             )}
