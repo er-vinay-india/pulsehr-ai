@@ -17,6 +17,7 @@ import {
   getIngestionJob,
   subscribeToIngestionJobStream
 } from "../../api/client";
+import { INGESTION_POLL_INTERVAL_MS, INGESTION_COMPLETION_DELAY_MS } from "../../config/env";
 import UploadProgressCard from "./UploadProgressCard";
 
 export default function UploadModal({
@@ -242,7 +243,7 @@ export default function UploadModal({
           }
         });
 
-        // Concurrently run polling loop every 400ms to guarantee delivery
+        // Concurrently run polling loop to guarantee delivery
         pollInterval = setInterval(async () => {
           if (isDone) return;
           try {
@@ -256,7 +257,7 @@ export default function UploadModal({
           } catch {
             // Non-fatal network blip
           }
-        }, 400);
+        }, INGESTION_POLL_INTERVAL_MS);
       });
 
       setUploadStep(10);
@@ -264,7 +265,7 @@ export default function UploadModal({
       setUploadResult(finalResult);
 
       // Visual grace period so user clearly sees all stages complete with green checkmarks
-      await new Promise((resolve) => setTimeout(resolve, 600));
+      await new Promise((resolve) => setTimeout(resolve, INGESTION_COMPLETION_DELAY_MS));
 
       if (onUploadSuccess) {
         onUploadSuccess(finalResult, { wasBackground: isBackgroundRef.current });

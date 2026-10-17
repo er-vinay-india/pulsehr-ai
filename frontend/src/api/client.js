@@ -1,4 +1,5 @@
-const API_BASE = "/api";
+import { API_BASE } from "../config/env";
+export { API_BASE };
 
 export async function getAnalyticsOverview(sheetId = null) {
   const url = sheetId ? `${API_BASE}/analytics/overview?sheet_id=${sheetId}` : `${API_BASE}/analytics/overview`;
@@ -393,18 +394,18 @@ async function readSheetApi(url) {
   if (!res.ok) throw new Error(data.detail || 'Unable to load sheets');
   return data;
 }
-export const getSheets = () => readSheetApi('/api/sheets');
+export const getSheets = () => readSheetApi(`${API_BASE}/sheets`);
 export const getSheetRows = (id, page, search = '', version = 'curated') =>
-  readSheetApi(`/api/sheets/${id}/rows?${new URLSearchParams({ page, search, version })}`);
-export const getJoinedRows = (id, page) => readSheetApi(`/api/sheets/relationships/${id}/rows?page=${page}`);
-export const getSheetProjections = (id) => readSheetApi(`/api/sheets/${id}/projections`);
-export const getSheetEdaReport = (id) => readSheetApi(`/api/eda/reports/${id}`);
-export const getDerivedTables = () => readSheetApi('/api/eda/derived-tables');
+  readSheetApi(`${API_BASE}/sheets/${id}/rows?${new URLSearchParams({ page, search, version })}`);
+export const getJoinedRows = (id, page) => readSheetApi(`${API_BASE}/sheets/relationships/${id}/rows?page=${page}`);
+export const getSheetProjections = (id) => readSheetApi(`${API_BASE}/sheets/${id}/projections`);
+export const getSheetEdaReport = (id) => readSheetApi(`${API_BASE}/eda/reports/${id}`);
+export const getDerivedTables = () => readSheetApi(`${API_BASE}/eda/derived-tables`);
 export const getDerivedTableRows = (id, page, search = '') =>
-  readSheetApi(`/api/eda/derived-tables/${id}/rows?${new URLSearchParams({ page, search })}`);
-export const getCrossSheetCorrelations = () => readSheetApi('/api/eda/cross-sheet-correlations');
+  readSheetApi(`${API_BASE}/eda/derived-tables/${id}/rows?${new URLSearchParams({ page, search })}`);
+export const getCrossSheetCorrelations = () => readSheetApi(`${API_BASE}/eda/cross-sheet-correlations`);
 export const runEdaPipeline = (sheetIds = null) =>
-  fetch('/api/eda/run', {
+  fetch(`${API_BASE}/eda/run`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(sheetIds)
@@ -526,6 +527,82 @@ export async function burstDatasetDashboardCache(datasetId) {
     throw new Error(err.detail || "Failed to burst dataset dashboard cache");
   }
   return res.json();
+}
+
+export async function getAdaptiveDashboardPrimaryElementByDataset(datasetId, signal = null) {
+  const res = await fetch(`${API_BASE}/adaptive-dashboard/primary-element?dataset_id=${encodeURIComponent(datasetId)}`, { signal });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Failed to load adaptive dashboard primary element");
+  }
+  return res.json();
+}
+
+export async function getRankingSchema(datasetId) {
+  const res = await fetch(`${API_BASE}/adaptive-dashboard/ranking/schema/${encodeURIComponent(datasetId)}`);
+  if (!res.ok) return null;
+  return res.json();
+}
+
+export async function fetchRanking(payload) {
+  const res = await fetch(`${API_BASE}/adaptive-dashboard/ranking`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+  if (!res.ok) return null;
+  return res.json();
+}
+
+export async function getExecutiveScenarios(datasetId) {
+  const res = await fetch(`${API_BASE}/adaptive-dashboard/scenarios?dataset_id=${encodeURIComponent(datasetId)}`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Failed to load scenario benchmarks");
+  }
+  return res.json();
+}
+
+export async function simulateExecutiveScenario(payload) {
+  const res = await fetch(`${API_BASE}/adaptive-dashboard/scenarios/simulate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Simulation calculation failed");
+  }
+  return res.json();
+}
+
+export async function getDecisionBriefVoiceover(text, signal = null) {
+  const res = await fetch(`${API_BASE}/analytics/decision-brief/voiceover`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text }),
+    signal
+  });
+  if (!res.ok) {
+    const detail = await res.json().catch(() => ({}));
+    throw new Error(typeof detail.detail === "string" ? detail.detail : "Could not prepare voiceover. Please retry.");
+  }
+  return res.blob();
+}
+
+export async function getPresentationLayoutPreview(themeId, slideSpec) {
+  const res = await fetch(`${API_BASE}/presentations/layout-preview?theme_id=${encodeURIComponent(themeId)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(slideSpec)
+  });
+  const body = await res.json();
+  if (!res.ok) throw new Error(body.detail || "Unable to lay out this slide.");
+  return body.plan;
+}
+
+export function getPresentationThemeAssetUrl(themeId, assetType) {
+  return `${API_BASE}/presentations/theme-assets/${encodeURIComponent(themeId)}/${assetType}`;
 }
 
 export async function getPresentationDeck(deckId) {

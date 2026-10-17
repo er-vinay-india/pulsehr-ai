@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { ShieldCheck, FileText, CheckCircle2, Search, ExternalLink, Code2, Database, AlertCircle, Sparkles } from "lucide-react";
-import { getOverviewEvidencePackage } from "../../api/client";
+import { getOverviewEvidencePackage, getAdaptiveDashboardPrimaryElementByDataset } from "../../api/client";
 
 const CAUSAL_COLORS = {
   OBSERVED: {
@@ -49,7 +49,7 @@ export default function EvidenceExplorer({
         const targetId = datasetId || sheetId || 99750;
         const [pkg, dash] = await Promise.all([
           getOverviewEvidencePackage(sheetId).catch(() => null),
-          fetch(`/api/adaptive-dashboard/primary-element?dataset_id=${targetId}`).then(r => r.ok ? r.json() : null).catch(() => null)
+          getAdaptiveDashboardPrimaryElementByDataset(targetId).catch(() => null)
         ]);
         if (mounted) {
           if (pkg) setEvidencePackage(pkg);

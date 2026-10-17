@@ -11,7 +11,8 @@ import {
   listDatasets,
   deleteDataset,
   bulkDeleteDatasets,
-  getDatasetDownloadUrl
+  getDatasetDownloadUrl,
+  getRankingSchema
 } from '../api/client';
 import DataTable from '../components/DataTable';
 import DeleteConsentModal from '../components/ingestion/DeleteConsentModal';
@@ -288,8 +289,7 @@ export default function DataExplorerPage() {
       setRankingSchema(null);
       return;
     }
-    fetch(`/api/adaptive-dashboard/ranking/schema/${dsId}`)
-      .then((r) => (r.ok ? r.json() : null))
+    getRankingSchema(dsId)
       .then((data) => {
         if (data) setRankingSchema(data);
       })

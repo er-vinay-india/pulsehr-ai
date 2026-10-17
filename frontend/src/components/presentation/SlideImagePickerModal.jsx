@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Search, Image, X, Check, Sliders, Sparkles, ExternalLink } from "lucide-react";
 import { searchPresentationImages } from "../../api/client";
+import { IMAGE_PICKER_TIMEOUT_MS } from "../../config/env";
 
 const CATEGORIES = [
   { id: "all", label: "All Curated" },
@@ -40,7 +41,7 @@ export default function SlideImagePickerModal({
       const data = await searchPresentationImages(searchQuery || "workplace", category, controller.signal);
       const decoded = await Promise.all((data.images || []).map(img => new Promise(resolve => {
         const preview = new window.Image();
-        const timer = setTimeout(() => resolve(null), 10000);
+        const timer = setTimeout(() => resolve(null), IMAGE_PICKER_TIMEOUT_MS);
         preview.onload = () => { clearTimeout(timer); resolve(img); };
         preview.onerror = () => { clearTimeout(timer); resolve(null); };
         preview.src = img.thumbnail || img.url;

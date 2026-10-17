@@ -13,6 +13,7 @@ import {
   previewPresentationScope
 } from "../../api/client";
 import { exportStandaloneHtmlPresentation } from "../../utils/standaloneHtmlExporter";
+import { PRESENTATION_ACTIVE_POLL_MS, PRESENTATION_IDLE_POLL_MS } from "../../config/env";
 
 export const STAGES = [
   { id: "brief_setup", label: "Objective & Brief Setup", desc: "Defining audience seniority, time budget, and decision requested" },
@@ -305,12 +306,12 @@ export function usePresentationWorkflow({
           return;
         }
 
-        pollTimerRef.current = setTimeout(poll, 250);
+        pollTimerRef.current = setTimeout(poll, PRESENTATION_ACTIVE_POLL_MS);
       } catch (err) {
         console.error("Job polling error:", err);
         setJobStageLabel("Connection interrupted. Reconnecting to the generation job…");
         if (isMounted) {
-          pollTimerRef.current = setTimeout(poll, 2500);
+          pollTimerRef.current = setTimeout(poll, PRESENTATION_IDLE_POLL_MS);
         }
       }
     };

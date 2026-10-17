@@ -8,6 +8,7 @@ import DataExplorerPage from "./pages/DataExplorerPage.jsx";
 import PresentationPage from "./pages/PresentationPage.jsx";
 import UploadModal from "./components/ingestion/UploadModal.jsx";
 import { activateUploadedSheet } from "./components/hriday/datasetScope.js";
+import { NOTIFICATION_DISMISS_DELAY_MS } from "./config/env";
 import { CheckCircle2, X, Table } from "lucide-react";
 
 function parseHash() {
@@ -75,10 +76,10 @@ export default function App() {
 
   useEffect(() => { window.scrollTo(0, 0); }, [activeTab]);
 
-  // Auto-dismiss notification after 8 seconds
+  // Auto-dismiss notification after delay
   useEffect(() => {
     if (!bgNotification) return;
-    const t = setTimeout(() => setBgNotification(null), 8000);
+    const t = setTimeout(() => setBgNotification(null), NOTIFICATION_DISMISS_DELAY_MS);
     return () => clearTimeout(t);
   }, [bgNotification]);
 

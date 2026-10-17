@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { STORAGE_KEYS } from '../constants/storageKeys';
 
-const STORAGE_KEY = 'highview_theme';
+const STORAGE_KEY = STORAGE_KEYS.THEME;
 
 const ThemeContext = createContext({
   theme: 'light',

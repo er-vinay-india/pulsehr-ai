@@ -5,6 +5,7 @@
  * Zero manual scope entry or artificial data hallucination:
  * Direct 1:1 binding between dashboard truth tokens and slide specifications.
  */
+import { DEFAULT_FALLBACK_IMAGE_URL } from "../config/env";
 
 export function transformDashboardToDeck(dashboardData, options = {}) {
   if (!dashboardData) return null;
@@ -47,7 +48,7 @@ export function transformDashboardToDeck(dashboardData, options = {}) {
     ],
     speaker_notes: `Welcome executive team. Today we present the operational and workforce audit findings. All data is verified from the active ledger with empirical backing.`,
     narration_script: `Welcome leadership team. Today we present the executive operational and workforce briefing, examining critical unit disparities, forward projections, and governance audit readiness.`,
-    background_image: selectedImageUrl || (backgroundMode === "image" ? "https://images.unsplash.com/photo-1542744173-8e7e53415bb0?auto=format&fit=crop&w=1600&q=80" : null),
+    background_image: selectedImageUrl || (backgroundMode === "image" ? DEFAULT_FALLBACK_IMAGE_URL : null),
   });
 
   // Slide 2: Strategic Priority Disparity (Donut / Bounded Bar)
@@ -349,7 +350,7 @@ export function transformCustomPromptToDeck(customPrompt, options = {}, dashboar
     ],
     speaker_notes: `Welcome executive team. Today we present our custom strategic assessment on ${primaryTitle}. We will examine root causes, operational dependencies, and leadership actions.`,
     narration_script: `Welcome leadership team. This executive briefing addresses ${primaryTitle}. We will explore the critical operational drivers, organizational risks, and key decision gates required.`,
-    background_image: selectedImageUrl || (backgroundMode === "image" ? "https://images.unsplash.com/photo-1542744173-8e7e53415bb0?auto=format&fit=crop&w=1600&q=80" : null),
+    background_image: selectedImageUrl || (backgroundMode === "image" ? DEFAULT_FALLBACK_IMAGE_URL : null),
   });
 
   // Slide 2: Strategic Context & Problem Statement

@@ -7,6 +7,7 @@ import {
   deletePresentationDeck,
   getDatasetPersonas
 } from "../api/client";
+import { STORAGE_KEYS } from "../constants/storageKeys";
 import EvidenceInspectionDrawer from "../components/EvidenceInspectionDrawer.jsx";
 import DeckGeneratingView from "../components/presentation/DeckGeneratingView.jsx";
 import DeckStudioView from "../components/presentation/DeckStudioView.jsx";
@@ -152,7 +153,7 @@ export default function PresentationPage({
   // Ingest Dashboard Context from sessionStorage if initiated from Adaptive Dashboard
   useEffect(() => {
     try {
-      const rawCtx = sessionStorage.getItem("presentation_dashboard_context");
+      const rawCtx = sessionStorage.getItem(STORAGE_KEYS.PRESENTATION_DASHBOARD_CONTEXT) || sessionStorage.getItem(STORAGE_KEYS.PRESENTATION_SOURCE);
       if (rawCtx) {
         const parsed = JSON.parse(rawCtx);
         if (parsed?.sheetId || parsed?.sheet_id) {

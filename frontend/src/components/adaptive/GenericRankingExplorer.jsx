@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import VisualSpecRenderer from "./VisualSpecRenderer";
 import Button from "../../design-system/components/Button";
+import { getRankingSchema, fetchRanking as apiFetchRanking } from "../../api/client";
 
 /**
  * Generic Top/Bottom Ranking Explorer Component.
@@ -72,8 +73,7 @@ export default function GenericRankingExplorer({
   // 1. Fetch Ranking Schema on mount if datasetId is provided
   useEffect(() => {
     if (!datasetId) return;
-    fetch(`/api/adaptive-dashboard/ranking/schema/${datasetId}`)
-      .then((r) => (r.ok ? r.json() : null))
+    getRankingSchema(datasetId)
       .then((res) => {
         if (res) {
           setAvailableSchema(res);
@@ -93,18 +93,13 @@ export default function GenericRankingExplorer({
     if (!datasetId || !selectedEntity || !selectedMeasure) return;
 
     setLoading(true);
-    fetch("/api/adaptive-dashboard/ranking", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        dataset_id: Number(datasetId),
-        entity_column: selectedEntity,
-        measure_column: selectedMeasure,
-        direction: mode,
-        limit: limit === "Full" ? "FULL" : limit,
-      }),
+    apiFetchRanking({
+      dataset_id: Number(datasetId),
+      entity_column: selectedEntity,
+      measure_column: selectedMeasure,
+      direction: mode,
+      limit: limit === "Full" ? "FULL" : limit,
     })
-      .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
         if (data) {
           setRankingData(data);

@@ -5,6 +5,7 @@ import FormattedText from "./FormattedText.jsx";
 import SlideChart from "./SlideChart.jsx";
 import { SlideTalent9BoxMatrix, SlideBurnoutStrainPanel } from "./SlidePanels.jsx";
 import { getTitleSuggestions } from "../../../utils/dashboardToPresentation.js";
+import { DEFAULT_FALLBACK_IMAGE_URL } from "../../../config/env.js";
 
 export default function SlideLayoutViews({
   layout,
@@ -664,7 +665,7 @@ export default function SlideLayoutViews({
         <div className="layout-image-story" style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: "28px", height: "100%", alignItems: "stretch" }}>
           <div style={{ height: "100%", borderRadius: "12px", overflow: "hidden", border: `1px solid ${theme.card_border}` }}>
             <img
-              src={slide.image_url || slide.background_image || "https://images.unsplash.com/photo-1542744173-8e7e53415bb0?auto=format&fit=crop&w=1200&q=80"}
+              src={slide.image_url || slide.background_image || DEFAULT_FALLBACK_IMAGE_URL}
               alt={slide.title || "Slide visual"}
               style={{ width: "100%", height: "100%", objectFit: slide.image_fit || "cover" }}
             />

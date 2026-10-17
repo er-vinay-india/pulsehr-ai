@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Volume2, Square } from 'lucide-react';
+import { getDecisionBriefVoiceover } from '../api/client';
 
 export default function VoiceoverPlayer({ text, identity, onEnded, onPlayingChange, label = 'Listen to summary' }) {
   const audio = useRef(null);
@@ -29,15 +30,7 @@ export default function VoiceoverPlayer({ text, identity, onEnded, onPlayingChan
     setLoading(true);
     setError('');
     try {
-      const response = await fetch('/api/analytics/decision-brief/voiceover', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text }), signal: controller.signal
-      });
-      if (!response.ok) {
-        const detail = await response.json().catch(() => ({}));
-        throw new Error(typeof detail.detail === 'string' ? detail.detail : 'Could not prepare voiceover. Please retry.');
-      }
-      const blob = await response.blob();
+      const blob = await getDecisionBriefVoiceover(text, controller.signal);
       if (controller.signal.aborted) return;
       url.current = URL.createObjectURL(blob);
       audio.current.src = url.current;

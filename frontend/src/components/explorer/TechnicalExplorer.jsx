@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Cpu, Table, Database, CheckCircle2, AlertTriangle, Layers, ChevronDown, Activity, Sparkles, ShieldCheck, GitBranch } from "lucide-react";
 import DataTable from "../DataTable";
+import { getAdaptiveDashboardPrimaryElementByDataset } from "../../api/client";
 
 export default function TechnicalExplorer({
   selectedSheet = null,
@@ -28,8 +29,7 @@ export default function TechnicalExplorer({
   useEffect(() => {
     let mounted = true;
     const targetId = datasetId || selectedSheet?.dataset_id || 99750;
-    fetch(`/api/adaptive-dashboard/primary-element?dataset_id=${targetId}`)
-      .then((res) => (res.ok ? res.json() : null))
+    getAdaptiveDashboardPrimaryElementByDataset(targetId)
       .then((d) => {
         if (mounted && d) setDashboardData(d);
       })

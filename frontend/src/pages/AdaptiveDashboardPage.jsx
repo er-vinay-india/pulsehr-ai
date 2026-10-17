@@ -43,6 +43,7 @@ import {
   dispatchNavigationIntent,
 } from "../contracts/NavigationIntentRegistry";
 import { resolveGovernedCount } from "../contracts/DashboardTruthIntegrity";
+import { STORAGE_KEYS } from "../constants/storageKeys";
 import "../styles/adaptive-dashboard.scss";
 import { useTheme } from "../context/ThemeContext";
 import { getThemeTokens } from "../theme/tokens";
@@ -333,7 +334,8 @@ export default function AdaptiveDashboardPage({ onNavigateTab, onOpenUpload }) {
         insightCount: data?.selected_dashboard_insights?.length || 0,
         createdAt: new Date().toISOString(),
       };
-      sessionStorage.setItem("highview_presentation_source", JSON.stringify(storedConfig));
+      sessionStorage.setItem(STORAGE_KEYS.PRESENTATION_SOURCE, JSON.stringify(storedConfig));
+      sessionStorage.setItem(STORAGE_KEYS.PRESENTATION_DASHBOARD_CONTEXT, JSON.stringify(storedConfig));
     } catch {}
     dispatchNavigationIntent(NAVIGATION_INTENTS.CREATE_PRESENTATION, {}, { onNavigateTab });
   };

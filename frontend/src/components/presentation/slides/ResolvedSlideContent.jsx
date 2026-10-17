@@ -2,6 +2,7 @@ import { slideBackground } from '../../../utils/slideBackground';
 import React, { useEffect, useRef, useState } from 'react';
 import { getSlideTheme, slideCssVariables } from '../../../theme/slideTokens.js';
 import SlideChart from './SlideChart.jsx';
+import { getPresentationLayoutPreview } from '../../../api/client';
 import '../../../styles/resolved-slides.scss';
 
 const requests = new Map();
@@ -10,13 +11,7 @@ export function loadSlideLayout(slide, theme) {
   const key = JSON.stringify([themeId, slide]);
   if (!requests.has(key)) {
     if (requests.size >= 64) requests.delete(requests.keys().next().value);
-    const request = fetch(`/api/presentations/layout-preview?theme_id=${encodeURIComponent(themeId)}`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(slide),
-    }).then(async response => {
-      const body = await response.json();
-      if (!response.ok) throw new Error(body.detail || 'Unable to lay out this slide.');
-      return body.plan;
-    }).catch(error => { requests.delete(key); throw error; });
+    const request = getPresentationLayoutPreview(themeId, slide).catch(error => { requests.delete(key); throw error; });
     requests.set(key, request);
   }
   return requests.get(key);

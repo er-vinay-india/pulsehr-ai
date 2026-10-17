@@ -17,6 +17,7 @@ import SafeReactECharts from "../charts/SafeReactECharts";
 import Button from "../../design-system/components/Button";
 import { useTheme } from "../../context/ThemeContext";
 import { getThemeTokens } from "../../theme/tokens";
+import { getExecutiveScenarios, simulateExecutiveScenario } from "../../api/client";
 
 /**
  * ExecutiveScenarioExplorer (Phase 10 & 13.5: Domain-Governed Decision Simulator).
@@ -63,9 +64,7 @@ export default function ExecutiveScenarioExplorer({
     let isMounted = true;
     async function loadBenchmarks() {
       try {
-        const res = await fetch(`/api/adaptive-dashboard/scenarios?dataset_id=${datasetId}`);
-        if (!res.ok) throw new Error("Failed to load scenario benchmarks");
-        const json = await res.json();
+        const json = await getExecutiveScenarios(datasetId);
         if (isMounted) {
           const detDomain = json.domain || "workforce";
           setDomain(detDomain);
@@ -138,20 +137,14 @@ export default function ExecutiveScenarioExplorer({
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/adaptive-dashboard/scenarios/simulate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          dataset_id: datasetId,
-          days_per_week: days,
-          leave_exemption_ratio: ratio,
-          target_compliance_threshold: targetCompliance,
-          period_weeks: 5.0,
-          department_targets: overrides,
-        }),
+      const data = await simulateExecutiveScenario({
+        dataset_id: datasetId,
+        days_per_week: days,
+        leave_exemption_ratio: ratio,
+        target_compliance_threshold: targetCompliance,
+        period_weeks: 5.0,
+        department_targets: overrides,
       });
-      if (!res.ok) throw new Error("Simulation calculation failed");
-      const data = await res.json();
       setActiveScenario(data);
     } catch (err) {
       setError(err.message);
@@ -165,18 +158,12 @@ export default function ExecutiveScenarioExplorer({
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/adaptive-dashboard/scenarios/simulate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          dataset_id: datasetId,
-          promo_multiplier: promo,
-          markdown_discount_pct: discount,
-          fuel_price_sensitivity: fuel,
-        }),
+      const data = await simulateExecutiveScenario({
+        dataset_id: datasetId,
+        promo_multiplier: promo,
+        markdown_discount_pct: discount,
+        fuel_price_sensitivity: fuel,
       });
-      if (!res.ok) throw new Error("Retail simulation calculation failed");
-      const data = await res.json();
       setActiveScenario(data);
     } catch (err) {
       setError(err.message);

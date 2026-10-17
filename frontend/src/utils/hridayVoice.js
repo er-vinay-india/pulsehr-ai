@@ -8,6 +8,8 @@
 export const HRIDAY_ACRONYM = "Human Reasoning Intelligence, Dedicated to Assisting You";
 export const HRIDAY_MOTTO = "Think. Act. Achieve Together.";
 
+import { getDecisionBriefVoiceover } from "../api/client";
+
 export const HRIDAY_INTRO_SCRIPT =
   "Hi, I’m HRIDAY — Human Reasoning Intelligence, Dedicated to Assisting You. I’m here to make your work a little easier, help you find clarity when things get complex, and support you whenever you need it. Think. Act. Achieve Together.";
 
@@ -61,12 +63,7 @@ export function speakHridayIntro(onStart = () => {}, onEnd = () => {}) {
   try {
     const audio = new Audio();
     activeAudio = audio;
-    fetch("/api/analytics/decision-brief/voiceover", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: HRIDAY_INTRO_SCRIPT }),
-    })
-      .then((res) => (res.ok ? res.blob() : null))
+    getDecisionBriefVoiceover(HRIDAY_INTRO_SCRIPT)
       .then((blob) => {
         if (!blob) {
           onEnd(false);
