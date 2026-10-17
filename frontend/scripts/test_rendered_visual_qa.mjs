@@ -16,6 +16,7 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { spawnIsolatedTestBackend, getTestHeaders, assertIsolatedTestTarget } from './test_environment_guard.mjs';
+import { createProgressBar } from './test_progress.mjs';
 import { validateChartFormatters, resolveAxisFormatter, sanitizeOptionFormatters } from '../src/components/visualization/layout/chartFormatterValidator.js';
 import { AdaptiveChartLayoutEngine } from '../src/components/visualization/layout/AdaptiveChartLayoutEngine.js';
 
@@ -96,9 +97,10 @@ async function runUnitVisualChecks() {
   console.log(`  ✅ Legend Overhead: Legend repositioned to top for shallow container (height ${planShallow.chartHeight}px).`);
 }
 
-async function runBrowserGeometryAndScreenshotChecks() {
+async function runBrowserGeometryAndScreenshotChecks(progress) {
   console.log('\n🌐 Step 2: Multi-Viewport Browser Geometry & Rendered QA Suite (Isolated Backend)...');
 
+  progress?.step("Booting isolated backend & uploading benchmark fixture");
   const isolated = await spawnIsolatedTestBackend();
   let browser = null;
   let activeDatasetId = null;
@@ -137,6 +139,7 @@ async function runBrowserGeometryAndScreenshotChecks() {
     ];
 
   for (const vp of viewports) {
+    progress?.step(`Inspecting Viewport: ${vp.name} (${vp.width}x${vp.height})`);
     console.log(`\n  📱 Inspecting Viewport: ${vp.name} (${vp.width}x${vp.height})...`);
     const page = await browser.newPage();
 
@@ -293,12 +296,18 @@ async function runBrowserGeometryAndScreenshotChecks() {
 }
 
 async function main() {
-  await runUnitVisualChecks();
-  await runBrowserGeometryAndScreenshotChecks();
-  process.exit(0);
+  const progress = createProgressBar({ total: 7, title: "Visual QA Suite" });
+  try {
+    progress.step("Unit & contract tests (formatters & layout engines)");
+    await runUnitVisualChecks();
+    await runBrowserGeometryAndScreenshotChecks(progress);
+    progress.complete("All 5 viewports & visual QA checks passed!");
+    process.exit(0);
+  } catch (err) {
+    progress.fail(err);
+    console.error('\n❌ QA Test Suite Failed:', err);
+    process.exit(1);
+  }
 }
 
-main().catch((err) => {
-  console.error('\n❌ QA Test Suite Failed:', err);
-  process.exit(1);
-});
+main();

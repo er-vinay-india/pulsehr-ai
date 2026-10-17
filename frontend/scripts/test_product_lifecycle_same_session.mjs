@@ -27,6 +27,7 @@ import {
   captureUserEnvironmentSnapshot,
   assertEnvironmentSnapshotsIdentical,
 } from "./test_environment_guard.mjs";
+import { createProgressBar } from "./test_progress.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "../..");
@@ -122,6 +123,9 @@ async function runLifecycleSuite() {
   console.log("================================================================================\n");
 
   // Step 0: Capture Pre-Test Environment Snapshot of User's Live Database & Directories
+  const progress = createProgressBar({ total: 8, title: "Lifecycle E2E" });
+  progress.step("Capturing baseline user environment & booting isolated backend");
+
   console.log("0. Capturing Pre-Test Manifest of User's Normal Application State...");
   const preSnapshot = captureUserEnvironmentSnapshot(repoRoot);
   console.log(`   Live DB Path:    ${preSnapshot.liveDb.path}`);
@@ -227,6 +231,7 @@ async function runLifecycleSuite() {
     await page.setViewport({ width: 1440, height: 900 });
 
     // Step 0: Ensure starting state is empty on isolated backend
+    progress.step("Resetting isolated test DB & verifying initial zero-data state");
     console.log("\n0. Initial State Reset: Clearing isolated test database via API...");
     await apiDeleteAllDatasets();
     let currentDatasets = await apiGetDatasets();
@@ -242,6 +247,7 @@ async function runLifecycleSuite() {
     // -------------------------------------------------------------------------
     // STEP A: Upload Workforce Dataset to Isolated Backend
     // -------------------------------------------------------------------------
+    progress.step("Uploading Workforce dataset & verifying Executive Dashboard");
     console.log("\n1. Step A: Uploading Workforce Dataset (workforce_01_headcount_multilevel.csv)...");
     const wfUpload = await apiUploadFile(WORKFORCE_CSV);
     const wfDatasetId = wfUpload.dataset_id || (await apiGetDatasets())[0]?.id;
@@ -261,6 +267,7 @@ async function runLifecycleSuite() {
     // STEP B & SECTION 21: The Exact Original Incident Reproduction
     // While Dashboard is actively open, delete all datasets on isolated backend WITHOUT restarting!
     // -------------------------------------------------------------------------
+    progress.step("Incident reproduction: deleting all datasets & verifying self-healing");
     console.log("\n2. Step B / Section 21: Reproducing the EXACT Original Incident:");
     console.log("   - Live Dashboard is OPEN at dataset_id=" + wfDatasetId);
     console.log("   - User deletes all datasets on isolated backend without server restart...");
@@ -292,6 +299,7 @@ async function runLifecycleSuite() {
     // -------------------------------------------------------------------------
     // SECTION 20: Browser Back/Forward History Test
     // -------------------------------------------------------------------------
+    progress.step("Verifying browser Back/Forward history navigation invariants");
     console.log("\n3. Section 20: Browser Back/Forward History Invariant Test...");
     // Go Back to where dashboard URL was with old dataset_id
     await page.goBack();
@@ -313,6 +321,7 @@ async function runLifecycleSuite() {
     // -------------------------------------------------------------------------
     // STEP C: Upload Retail Dataset to Isolated Backend
     // -------------------------------------------------------------------------
+    progress.step("Uploading Retail dataset & testing domain isolation");
     console.log("\n4. Step C: Uploading Retail Dataset (retail_01_inventory_catalog_multicell.csv)...");
     const retailUpload = await apiUploadFile(RETAIL_CSV);
     const retailDatasetId = retailUpload.dataset_id || (await apiGetDatasets())[0]?.id;
@@ -340,6 +349,7 @@ async function runLifecycleSuite() {
     // -------------------------------------------------------------------------
     // STEP E: Upload Environmental Dataset in Mobile Dark Viewport
     // -------------------------------------------------------------------------
+    progress.step("Testing Mobile Dark Viewport (390x844) with Environmental dataset");
     console.log("\n6. Step E: Uploading Environmental Dataset in Mobile 390x844 Dark Theme...");
     await page.setViewport({ width: 390, height: 844 });
 
@@ -388,6 +398,7 @@ async function runLifecycleSuite() {
     await isolated.teardown();
 
     // Final Environment Invariant Proof: Compare Pre and Post Snapshots
+    progress.step("Final cleanup & verifying bit-for-bit live database immutability");
     console.log("8. Verifying Bit-for-Bit Immutability of User's Live Application State...");
     const postSnapshot = captureUserEnvironmentSnapshot(repoRoot);
     console.log(`   Live DB Path:    ${postSnapshot.liveDb.path}`);
@@ -398,6 +409,7 @@ async function runLifecycleSuite() {
 
     assertEnvironmentSnapshotsIdentical(preSnapshot, postSnapshot, "Lifecycle Same-Session Isolation");
     console.log("   ✅ IMMUTABILITY PROVEN: Live database and user storage were 100% UNTOUCHED throughout test.\n");
+    progress.complete("All 8 lifecycle phases and environment immutability verified!");
   }
 }
 
