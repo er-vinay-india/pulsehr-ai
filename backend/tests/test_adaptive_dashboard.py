@@ -3227,3 +3227,36 @@ def test_element_10_20_multiple_siblings_evaluated_in_dataset_order():
     assert [source.sheet_id for source in result.sources] == [9100, 9101, 9102]
     assert result.lead_finding.source_sheet_ids == [9100, 9102]
     assert result.kind == "matched_comparison"
+
+
+def test_primary_element_cache_busting_on_refresh(seeded_attendance_sheet):
+    """Verify that force_refresh=true, burst_cache=true, or Cache-Control: no-cache bursts the cache."""
+    client = TestClient(app)
+    # 1. Warm call -> populates cache
+    res1 = client.get(f"/api/adaptive-dashboard/primary-element?sheet_id={seeded_attendance_sheet}")
+    assert res1.status_code == 200
+
+    # 2. Immediate second call -> cache HIT
+    res2 = client.get(f"/api/adaptive-dashboard/primary-element?sheet_id={seeded_attendance_sheet}")
+    assert res2.status_code == 200
+    assert res2.headers.get("x-highview-cache") == "HIT"
+
+    # 3. Burst call via force_refresh query param -> cache BURST
+    res3 = client.get(f"/api/adaptive-dashboard/primary-element?sheet_id={seeded_attendance_sheet}&force_refresh=true")
+    assert res3.status_code == 200
+    assert res3.headers.get("x-highview-cache") == "BURST"
+    assert "no-cache" in res3.headers.get("cache-control", "").lower()
+
+    # 4. Burst call via burst_cache query param -> cache BURST
+    res4 = client.get(f"/api/adaptive-dashboard/primary-element?sheet_id={seeded_attendance_sheet}&burst_cache=true")
+    assert res4.status_code == 200
+    assert res4.headers.get("x-highview-cache") == "BURST"
+
+    # 5. Burst call via Cache-Control: no-cache header -> cache BURST
+    res5 = client.get(
+        f"/api/adaptive-dashboard/primary-element?sheet_id={seeded_attendance_sheet}",
+        headers={"Cache-Control": "no-cache"}
+    )
+    assert res5.status_code == 200
+    assert res5.headers.get("x-highview-cache") == "BURST"
+

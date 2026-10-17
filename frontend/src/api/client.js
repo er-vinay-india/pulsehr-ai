@@ -502,11 +502,28 @@ export async function searchPresentationImages(query = "workplace", category = "
   return res.json();
 }
 
-export async function getAdaptiveDashboardPrimaryElement(sheetId, signal = null) {
-  const res = await fetch(`${API_BASE}/adaptive-dashboard/primary-element?sheet_id=${sheetId}`, { signal });
+export async function getAdaptiveDashboardPrimaryElement(sheetId, forceRefresh = false, signal = null) {
+  const qs = forceRefresh
+    ? `?sheet_id=${sheetId}&force_refresh=true&burst_cache=true&_ts=${Date.now()}`
+    : `?sheet_id=${sheetId}`;
+  const headers = forceRefresh
+    ? { "Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache" }
+    : {};
+  const res = await fetch(`${API_BASE}/adaptive-dashboard/primary-element${qs}`, { signal, headers });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.detail || "Failed to load adaptive dashboard primary element");
+  }
+  return res.json();
+}
+
+export async function burstDatasetDashboardCache(datasetId) {
+  const res = await fetch(`${API_BASE}/adaptive-dashboard/cache/dataset/${datasetId}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Failed to burst dataset dashboard cache");
   }
   return res.json();
 }

@@ -1,5 +1,5 @@
 from typing import Any
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel, Field
 from ..db.database import get_connection, session_scope
 from ..services.adaptive_dashboard import AdaptiveDashboardResponse, run_adaptive_dashboard
@@ -31,11 +31,25 @@ class SimulateScenarioRequest(BaseModel):
 
 @router.get("/primary-element", response_model=AdaptiveDashboardResponse)
 def get_primary_element(
+    request: Request,
+    response: Response,
     sheet_id: int | None = Query(None, description="Target sheet ID (resolves to parent dataset)"),
     dataset_id: int | None = Query(None, description="Target dataset ID"),
+    force_refresh: bool = Query(False, description="Burst cache and force fresh recomputation of dashboard intelligence"),
+    burst_cache: bool = Query(False, description="Alias for force_refresh"),
 ):
     """Returns verified dataset-level adaptive dashboard intelligence (WP-9.6)."""
     try:
+        req_headers = request.headers if request else {}
+        cache_control = req_headers.get("cache-control", "").lower()
+        pragma = req_headers.get("pragma", "").lower()
+        is_burst_requested = bool(
+            force_refresh
+            or burst_cache
+            or "no-cache" in cache_control
+            or "no-cache" in pragma
+        )
+
         target_dataset_id = dataset_id
         if target_dataset_id is None and sheet_id is not None:
             with session_scope() as conn:
@@ -49,8 +63,27 @@ def get_primary_element(
                 cache_type=f"primary_element_s{sheet_id or 'all'}",
             )
 
+            if is_burst_requested:
+                dashboard_cache.invalidate_dataset(target_dataset_id)
+                fresh_resp = run_adaptive_dashboard(
+                    sheet_id=sheet_id,
+                    dataset_id=target_dataset_id,
+                    include_dataset_intelligence=True,
+                )
+                computed_dict = fresh_resp.model_dump()
+                try:
+                    dashboard_cache.put(key, computed_dict)
+                except Exception:
+                    pass
+                if response:
+                    response.headers["X-HighView-Cache"] = "BURST"
+                    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+                return fresh_resp
+
             cached_dict = dashboard_cache.get(key)
             if cached_dict is not None:
+                if response:
+                    response.headers["X-HighView-Cache"] = "HIT"
                 return AdaptiveDashboardResponse.model_validate(cached_dict)
 
             def _compute():
@@ -62,13 +95,18 @@ def get_primary_element(
                 return resp.model_dump()
 
             computed_dict = dashboard_cache.get_or_compute(key, _compute)
+            if response:
+                response.headers["X-HighView-Cache"] = "MISS"
             return AdaptiveDashboardResponse.model_validate(computed_dict)
 
-        return run_adaptive_dashboard(
+        resp = run_adaptive_dashboard(
             sheet_id=sheet_id,
             dataset_id=target_dataset_id,
             include_dataset_intelligence=True,
         )
+        if response:
+            response.headers["X-HighView-Cache"] = "BYPASS"
+        return resp
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except Exception as exc:
@@ -76,13 +114,44 @@ def get_primary_element(
 
 
 @router.get("/dataset/{dataset_id}", response_model=DatasetIntelligenceResponse)
-def get_dataset_dashboard(dataset_id: int):
+def get_dataset_dashboard(
+    dataset_id: int,
+    request: Request,
+    response: Response,
+    force_refresh: bool = Query(False, description="Burst cache and force fresh recomputation"),
+    burst_cache: bool = Query(False, description="Alias for force_refresh"),
+):
     """Returns authoritative dataset-wide intelligence, relationships, and globally ranked insights (WP-9.6)."""
     try:
+        req_headers = request.headers if request else {}
+        cache_control = req_headers.get("cache-control", "").lower()
+        pragma = req_headers.get("pragma", "").lower()
+        is_burst_requested = bool(
+            force_refresh
+            or burst_cache
+            or "no-cache" in cache_control
+            or "no-cache" in pragma
+        )
+
         key = build_cache_key(dataset_id=dataset_id, cache_type="dataset_intelligence")
+
+        if is_burst_requested:
+            dashboard_cache.invalidate_dataset(dataset_id)
+            resp = run_dataset_intelligence(dataset_id=dataset_id)
+            computed_dict = resp.model_dump()
+            try:
+                dashboard_cache.put(key, computed_dict)
+            except Exception:
+                pass
+            if response:
+                response.headers["X-HighView-Cache"] = "BURST"
+                response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+            return resp
 
         cached_dict = dashboard_cache.get(key)
         if cached_dict is not None:
+            if response:
+                response.headers["X-HighView-Cache"] = "HIT"
             return DatasetIntelligenceResponse.model_validate(cached_dict)
 
         def _compute():
@@ -90,6 +159,8 @@ def get_dataset_dashboard(dataset_id: int):
             return resp.model_dump()
 
         computed_dict = dashboard_cache.get_or_compute(key, _compute)
+        if response:
+            response.headers["X-HighView-Cache"] = "MISS"
         return DatasetIntelligenceResponse.model_validate(computed_dict)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -108,6 +179,13 @@ def invalidate_dataset_cache(dataset_id: int):
     """Invalidates all cached intelligence entries for a specific dataset."""
     evicted = dashboard_cache.invalidate_dataset(dataset_id)
     return {"dataset_id": dataset_id, "evicted_entries": evicted, "status": "invalidated"}
+
+
+@router.post("/cache/dataset/{dataset_id}/burst")
+def burst_dataset_cache(dataset_id: int):
+    """Bursts and purges all cached intelligence entries for a specific dataset."""
+    evicted = dashboard_cache.invalidate_dataset(dataset_id)
+    return {"dataset_id": dataset_id, "evicted_entries": evicted, "status": "burst"}
 
 
 @router.post("/backfill/async", status_code=status.HTTP_202_ACCEPTED)

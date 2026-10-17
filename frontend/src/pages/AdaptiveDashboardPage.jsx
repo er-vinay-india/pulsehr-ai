@@ -80,6 +80,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab, onOpenUpload }) {
   const [calculating, setCalculating] = useState(false);
   const [calcError, setCalcError] = useState(null);
   const [revision, setRevision] = useState(0);
+  const [burstCache, setBurstCache] = useState(false);
 
   // Inspect & Disclosure State
   const [inspectModalOpen, setInspectModalOpen] = useState(false);
@@ -124,10 +125,19 @@ export default function AdaptiveDashboardPage({ onNavigateTab, onOpenUpload }) {
   };
 
   // 1. Load Datasets/Workbooks on Mount & Normalize Scope (WP-9.6)
-  const loadSources = () => {
+  const loadSources = (forceBurst = false) => {
     setSourcesLoading(true);
     setSourcesError(null);
-    fetchJson("/api/upload/datasets")
+    const qs = forceBurst ? `?_ts=${Date.now()}` : "";
+    const options = forceBurst
+      ? {
+          headers: {
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+          },
+        }
+      : {};
+    fetchJson(`/api/upload/datasets${qs}`, options)
       .then((res) => {
         const list = Array.isArray(res) ? res : res.datasets || [];
         setSources(list);
@@ -149,10 +159,17 @@ export default function AdaptiveDashboardPage({ onNavigateTab, onOpenUpload }) {
       });
   };
 
+  const handleRefresh = () => {
+    if (calculating || !selectedDatasetId) return;
+    setBurstCache(true);
+    setRevision((r) => r + 1);
+    loadSources(true);
+  };
+
   useEffect(() => {
     loadSources();
-    window.addEventListener("workbook-uploaded", loadSources);
-    return () => window.removeEventListener("workbook-uploaded", loadSources);
+    window.addEventListener("workbook-uploaded", () => loadSources(true));
+    return () => window.removeEventListener("workbook-uploaded", () => loadSources(true));
   }, []);
 
   useEffect(() => {
@@ -198,9 +215,23 @@ export default function AdaptiveDashboardPage({ onNavigateTab, onOpenUpload }) {
     setCalculating(true);
     setCalcError(null);
 
-    fetchJson(`/api/adaptive-dashboard/primary-element?dataset_id=${selectedDatasetId}`, {
+    const shouldBurst = burstCache || revision > 0;
+    const burstQuery = shouldBurst
+      ? `&force_refresh=true&burst_cache=true&_ts=${Date.now()}`
+      : "";
+    const fetchOptions = {
       signal: controller.signal,
-    })
+      ...(shouldBurst
+        ? {
+            headers: {
+              "Cache-Control": "no-cache, no-store, must-revalidate",
+              "Pragma": "no-cache",
+            },
+          }
+        : {}),
+    };
+
+    fetchJson(`/api/adaptive-dashboard/primary-element?dataset_id=${selectedDatasetId}${burstQuery}`, fetchOptions)
       .then((res) => {
         if (currentReqId !== requestCounter.current) return;
         setData(res);
@@ -223,6 +254,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab, onOpenUpload }) {
       .finally(() => {
         if (currentReqId === requestCounter.current) {
           setCalculating(false);
+          setBurstCache(false);
         }
       });
 
@@ -372,13 +404,13 @@ export default function AdaptiveDashboardPage({ onNavigateTab, onOpenUpload }) {
                 variant="GHOST"
                 size="sm"
                 icon={RefreshCw}
-                className="scope-refresh-btn"
-                onClick={() => setRevision((r) => r + 1)}
+                className={`scope-refresh-btn ${calculating && (burstCache || revision > 0) ? "is-refreshing" : ""}`}
+                onClick={handleRefresh}
                 disabled={calculating || !selectedDatasetId}
-                ariaLabel="Refresh analysis for selected workbook"
-                title="Refresh analysis for selected workbook"
+                ariaLabel="Refresh and burst cache for selected workbook"
+                title="Refresh and burst cache for selected workbook"
               >
-                Refresh
+                {calculating && (burstCache || revision > 0) ? "Refreshing…" : "Refresh"}
               </Button>
             )}
           </div>
