@@ -39,8 +39,8 @@ class GemmaVisualCritic:
         base_url: str | None = None,
         timeout_seconds: float = 45.0
     ):
-        self.model_name = model_name or getattr(config, "PRESENTATION_VISUAL_QA_MODEL", "gemma4:12b")
-        self.base_url = base_url or getattr(config, "OLLAMA_BASE_URL", "http://localhost:11434")
+        self.model_name = model_name or config.PRESENTATION_VISUAL_QA_MODEL
+        self.base_url = base_url or config.OLLAMA_BASE_URL
         self.timeout_seconds = timeout_seconds
 
     def evaluate_screenshot(

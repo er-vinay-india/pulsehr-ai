@@ -341,9 +341,9 @@ def upload_file(
         raise HTTPException(400, 'Upload a CSV, TSV, or Excel file.')
     path = config.UPLOADS_DIR / f'{uuid4().hex}{suffix}'
     try:
-        content = file.file.read(20 * 1024 * 1024 + 1)
-        if len(content) > 20 * 1024 * 1024:
-            raise ValueError('Maximum upload size is 20 MB.')
+        content = file.file.read(config.MAX_UPLOAD_SIZE_BYTES + 1)
+        if len(content) > config.MAX_UPLOAD_SIZE_BYTES:
+            raise ValueError(f'Maximum upload size is {config.MAX_UPLOAD_SIZE_MB} MB.')
         path.write_bytes(content)
     except Exception as exc:
         path.unlink(missing_ok=True)

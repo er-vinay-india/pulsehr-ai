@@ -28,6 +28,28 @@ class HighviewSettings(BaseSettings):
     PARQUET_STORAGE_DIR: Path = Field(default_factory=lambda: Path(os.getenv("HIGHVIEW_PARQUET_STORAGE_DIR") or os.getenv("PARQUET_STORAGE_DIR") or str(BASE_DIR / "data" / "datasets")))
     SCHEMA_PATH: Path = Field(default=BASE_DIR / "app" / "db" / "schema.sql")
 
+    # Ingestion & Dataset Constraints
+    MAX_UPLOAD_SIZE_MB: int = Field(
+        default_factory=lambda: int(os.getenv("HIGHVIEW_MAX_UPLOAD_MB") or os.getenv("MAX_UPLOAD_SIZE_MB") or "20")
+    )
+    MAX_INGESTION_ROWS: int = Field(
+        default_factory=lambda: int(os.getenv("HIGHVIEW_MAX_ROWS") or os.getenv("MAX_INGESTION_ROWS") or "20000")
+    )
+    MAX_INGESTION_COLUMNS: int = Field(
+        default_factory=lambda: int(os.getenv("HIGHVIEW_MAX_COLUMNS") or os.getenv("MAX_INGESTION_COLUMNS") or "200")
+    )
+
+    # Critic & Decision Engine Modes
+    CRITIC_MODE: str = Field(
+        default_factory=lambda: (os.getenv("HIGHVIEW_CRITIC_MODE") or os.getenv("CRITIC_MODE") or "hybrid").lower()
+    )
+    CRITIC_SEMANTIC_MODEL: str = Field(
+        default_factory=lambda: os.getenv("HIGHVIEW_CRITIC_SEMANTIC_MODEL") or os.getenv("CRITIC_SEMANTIC_MODEL") or "phi4-mini:latest"
+    )
+    DECISION_ENGINE: str = Field(
+        default_factory=lambda: (os.getenv("HIGHVIEW_DECISION_ENGINE") or os.getenv("DECISION_ENGINE") or "rules").lower().strip()
+    )
+
     # Phase G3 Analytical Plane
     DUCKDB_ANALYTICS_ENABLED: bool = Field(default=True)
     G3_ANALYTICS_MODE: str = Field(default="SHADOW")  # SHADOW, CANARY, PRIMARY
@@ -276,3 +298,11 @@ ASSISTANT_IDENTITY_ENABLED = settings.ASSISTANT_IDENTITY_ENABLED
 ASSISTANT_HIDE_MODEL_IDENTITY = settings.ASSISTANT_HIDE_MODEL_IDENTITY
 ASSISTANT_ALLOW_MODEL_DISCLOSURE = settings.ASSISTANT_ALLOW_MODEL_DISCLOSURE
 ASSISTANT_MAX_IDENTITY_RETRIES = settings.ASSISTANT_MAX_IDENTITY_RETRIES
+
+MAX_UPLOAD_SIZE_MB = settings.MAX_UPLOAD_SIZE_MB
+MAX_UPLOAD_SIZE_BYTES = settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024
+MAX_INGESTION_ROWS = settings.MAX_INGESTION_ROWS
+MAX_INGESTION_COLUMNS = settings.MAX_INGESTION_COLUMNS
+CRITIC_MODE = settings.CRITIC_MODE
+CRITIC_SEMANTIC_MODEL = settings.CRITIC_SEMANTIC_MODEL
+DECISION_ENGINE = settings.DECISION_ENGINE

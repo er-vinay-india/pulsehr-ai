@@ -300,3 +300,41 @@ export function assertEnvironmentSnapshotsIdentical(pre, post, contextLabel = 'T
   return true;
 }
 
+/**
+ * Automatically discovers Chrome/Chromium executable path across OS environments.
+ * Respects CHROME_PATH and CHROME_BIN environment variables.
+ */
+export function resolveChromeExecutablePath() {
+  if (process.env.CHROME_PATH && fs.existsSync(process.env.CHROME_PATH)) {
+    return process.env.CHROME_PATH;
+  }
+  if (process.env.CHROME_BIN && fs.existsSync(process.env.CHROME_BIN)) {
+    return process.env.CHROME_BIN;
+  }
+  const macPaths = [
+    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+    '/Applications/Chromium.app/Contents/MacOS/Chromium',
+  ];
+  for (const mp of macPaths) {
+    if (fs.existsSync(mp)) return mp;
+  }
+  const linuxPaths = [
+    '/usr/bin/google-chrome',
+    '/usr/bin/google-chrome-stable',
+    '/usr/bin/chromium-browser',
+    '/usr/bin/chromium',
+    '/snap/bin/chromium',
+  ];
+  for (const lp of linuxPaths) {
+    if (fs.existsSync(lp)) return lp;
+  }
+  const winPaths = [
+    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+    'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+  ];
+  for (const wp of winPaths) {
+    if (fs.existsSync(wp)) return wp;
+  }
+  return undefined;
+}
+

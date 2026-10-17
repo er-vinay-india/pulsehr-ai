@@ -50,8 +50,8 @@ def load_frame(request: CalculationRequest):
             relation = conn.execute("SELECT * FROM sheet_relationships WHERE id=? AND status='linked'", (request.relationship_id,)).fetchone()
             if relation is None:
                 raise ValueError('Linked relationship not found. Refresh the source list.')
-            if relation['matching_pairs'] > 20000:
-                raise ValueError('This join exceeds 20,000 rows. Use a smaller source.')
+            if relation['matching_pairs'] > config.MAX_INGESTION_ROWS:
+                raise ValueError(f'This join exceeds {config.MAX_INGESTION_ROWS:,} rows. Use a smaller source.')
             left = conn.execute('SELECT s.*,d.original_name FROM sheets s JOIN dataset_uploads d ON d.id=s.dataset_id WHERE s.id=?', (relation['left_sheet'],)).fetchone()
             right = conn.execute('SELECT s.*,d.original_name FROM sheets s JOIN dataset_uploads d ON d.id=s.dataset_id WHERE s.id=?', (relation['right_sheet'],)).fetchone()
             from .sheet_catalog import value_key

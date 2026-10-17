@@ -21,6 +21,7 @@ from ..evidence.evidence_models import Finding
 from ..evidence.evidence_store import EvidenceStore
 from ..reporting.writer_agent import WrittenSection
 from ..gateway.model_gateway import ModelGateway
+from ...core import config
 from ...core.models_config import ModelRole
 from .deterministic_claim_validator import (
     DeterministicClaimValidator,
@@ -32,8 +33,8 @@ from .deterministic_claim_validator import (
 logger = logging.getLogger(__name__)
 
 # Operational modes
-CRITIC_MODE = os.getenv("CRITIC_MODE", "hybrid").lower()
-CRITIC_SEMANTIC_MODEL = os.getenv("CRITIC_SEMANTIC_MODEL", "phi4-mini:latest")
+CRITIC_MODE = config.CRITIC_MODE
+CRITIC_SEMANTIC_MODEL = config.CRITIC_SEMANTIC_MODEL
 
 
 class ClaimVerdict(str, Enum):

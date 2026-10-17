@@ -44,9 +44,9 @@ class PresentationDirector:
         model_name: str | None = None,
         max_retries: int | None = None
     ):
-        self.enabled = enabled if enabled is not None else getattr(config, "PRESENTATION_DIRECTOR_ENABLED", True)
-        self.model_name = model_name or getattr(config, "PRESENTATION_DIRECTOR_MODEL", "qwen3.5:9b")
-        self.max_retries = max_retries if max_retries is not None else getattr(config, "PRESENTATION_DIRECTOR_MAX_RETRIES", 2)
+        self.enabled = enabled if enabled is not None else config.PRESENTATION_DIRECTOR_ENABLED
+        self.model_name = model_name or config.PRESENTATION_DIRECTOR_MODEL
+        self.max_retries = max_retries if max_retries is not None else config.PRESENTATION_DIRECTOR_MAX_RETRIES
 
     def plan_presentation(self, ctx: PresentationPlanningContext) -> PresentationPlanSpec:
         """Executes the full hierarchical planning flow to generate a PresentationPlanSpec."""

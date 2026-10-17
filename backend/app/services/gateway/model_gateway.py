@@ -169,7 +169,7 @@ class ModelGateway:
         # 3. Resolve Model Candidate Cascade
         candidates = ModelRouter.route_ai_request(request)
         if not candidates:
-            candidates = [getattr(config, "OLLAMA_MODEL", "qwen3.5:2b")]
+            candidates = [config.OLLAMA_MODEL]
 
         models_attempted: list[str] = []
         last_error: str | None = None

@@ -179,8 +179,8 @@ def read_sheets(path, *, prune_empty=True):
                         frames = {name: pd.read_excel(book, sheet_name=name, dtype=str, keep_default_na=False) for name in book.sheet_names}
                 except Exception as e:
                     raise ValueError(f"Failed to parse Excel spreadsheet: {e}")
-    if sum(len(f) for f in frames.values()) > 20000:
-        raise ValueError('Upload at most 20,000 rows per file. Split larger files before uploading.')
+    if sum(len(f) for f in frames.values()) > config.MAX_INGESTION_ROWS:
+        raise ValueError(f'Upload at most {config.MAX_INGESTION_ROWS:,} rows per file. Split larger files before uploading.')
 
     # Data-quality audits need original empty fields/records before ingestion
     # removes empty columns. Ordinary ingestion keeps its existing behavior.
@@ -202,8 +202,8 @@ def read_sheets(path, *, prune_empty=True):
 
         # If all columns were somehow empty, retain original columns to avoid empty DataFrame crash
         retained_frame = frame[valid_cols] if valid_cols else frame
-        if len(retained_frame.columns) > 200 or retained_frame.columns.duplicated().any() or any(not c for c in retained_frame.columns):
-            raise ValueError('Use unique, nonempty column names and at most 200 columns per sheet.')
+        if len(retained_frame.columns) > config.MAX_INGESTION_COLUMNS or retained_frame.columns.duplicated().any() or any(not c for c in retained_frame.columns):
+            raise ValueError(f'Use unique, nonempty column names and at most {config.MAX_INGESTION_COLUMNS} columns per sheet.')
         pruned_frames[sheet_name] = retained_frame
 
     return pruned_frames

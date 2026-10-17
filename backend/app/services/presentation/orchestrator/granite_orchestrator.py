@@ -64,11 +64,11 @@ class PresentationExecutionOrchestrator:
         max_model_retries: int | None = None,
         tool_registry: ToolRegistry | None = None
     ):
-        self.enabled = enabled if enabled is not None else getattr(config, "PRESENTATION_ORCHESTRATOR_ENABLED", True)
-        self.model_name = model_name or getattr(config, "PRESENTATION_ORCHESTRATOR_MODEL", "granite4:3b-h")
-        self.fallback_model = fallback_model or getattr(config, "PRESENTATION_ORCHESTRATOR_FALLBACK_MODEL", "granite4:3b")
-        self.max_tool_retries = max_tool_retries if max_tool_retries is not None else getattr(config, "PRESENTATION_MAX_TOOL_RETRIES", 2)
-        self.max_model_retries = max_model_retries if max_model_retries is not None else getattr(config, "PRESENTATION_MAX_MODEL_RETRIES", 1)
+        self.enabled = enabled if enabled is not None else config.PRESENTATION_ORCHESTRATOR_ENABLED
+        self.model_name = model_name or config.PRESENTATION_ORCHESTRATOR_MODEL
+        self.fallback_model = fallback_model or config.PRESENTATION_ORCHESTRATOR_FALLBACK_MODEL
+        self.max_tool_retries = max_tool_retries if max_tool_retries is not None else config.PRESENTATION_MAX_TOOL_RETRIES
+        self.max_model_retries = max_model_retries if max_model_retries is not None else config.PRESENTATION_MAX_MODEL_RETRIES
         self.tool_registry = tool_registry or ToolRegistry()
         self.phi_verifier = PhiAnalyticalVerifier(max_retries=self.max_model_retries)
         self.deepseek_reasoner = DeepSeekReasoner(max_retries=self.max_model_retries)

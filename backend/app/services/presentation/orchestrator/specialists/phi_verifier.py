@@ -28,8 +28,8 @@ class PhiAnalyticalVerifier:
         max_retries: int | None = None,
         tolerance: float = 1e-3
     ):
-        self.model_name = model_name or getattr(config, "PRESENTATION_ANALYTICAL_MODEL", "phi4-mini:latest")
-        self.max_retries = max_retries if max_retries is not None else getattr(config, "PRESENTATION_MAX_MODEL_RETRIES", 1)
+        self.model_name = model_name or config.PRESENTATION_ANALYTICAL_MODEL
+        self.max_retries = max_retries if max_retries is not None else config.PRESENTATION_MAX_MODEL_RETRIES
         self.tolerance = tolerance
 
     def verify_metric(

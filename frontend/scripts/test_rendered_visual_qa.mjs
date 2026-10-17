@@ -15,7 +15,7 @@ import puppeteer from 'puppeteer';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
-import { spawnIsolatedTestBackend, getTestHeaders, assertIsolatedTestTarget } from './test_environment_guard.mjs';
+import { spawnIsolatedTestBackend, getTestHeaders, assertIsolatedTestTarget, resolveChromeExecutablePath } from './test_environment_guard.mjs';
 import { validateChartFormatters, resolveAxisFormatter, sanitizeOptionFormatters } from '../src/components/visualization/layout/chartFormatterValidator.js';
 import { AdaptiveChartLayoutEngine } from '../src/components/visualization/layout/AdaptiveChartLayoutEngine.js';
 
@@ -124,7 +124,7 @@ async function runBrowserGeometryAndScreenshotChecks() {
 
     browser = await puppeteer.launch({
       headless: 'new',
-      executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+      executablePath: resolveChromeExecutablePath(),
       args: ['--no-sandbox', '--disable-setuid-sandbox']
     });
 

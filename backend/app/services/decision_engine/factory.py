@@ -1,6 +1,4 @@
-"""Factory for acquiring pluggable DecisionEngine instances."""
-
-import os
+from ...core import config
 from .base import DecisionEngine
 from .rule_engine import RuleDecisionEngine
 from .embedding_engine import EmbeddingDecisionEngine
@@ -14,7 +12,7 @@ def get_decision_engine(engine_type: str | None = None) -> DecisionEngine:
     Supported types: 'rules' (default), 'embedding'
     """
     global _INSTANCE
-    selected = (engine_type or os.getenv("DECISION_ENGINE", "rules")).lower().strip()
+    selected = (engine_type or config.DECISION_ENGINE).lower().strip()
     if selected in ("embedding", "embeddings", "vector"):
         return EmbeddingDecisionEngine()
     if _INSTANCE is None:

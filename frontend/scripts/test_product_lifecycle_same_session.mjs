@@ -26,13 +26,14 @@ import {
   assertIsolatedTestTarget,
   captureUserEnvironmentSnapshot,
   assertEnvironmentSnapshotsIdentical,
+  resolveChromeExecutablePath,
 } from "./test_environment_guard.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "../..");
 
 const FRONTEND_URL = process.env.BASE_URL || "http://localhost:5175";
-const CHROME_PATH = process.env.CHROME_PATH || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+const CHROME_PATH = resolveChromeExecutablePath();
 
 const WORKFORCE_CSV = path.join(repoRoot, "backend/tests/fixtures/reconstruction_benchmark/workforce_01_headcount_multilevel.csv");
 const RETAIL_CSV = path.join(repoRoot, "backend/tests/fixtures/reconstruction_benchmark/retail_01_inventory_catalog_multicell.csv");

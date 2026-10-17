@@ -65,7 +65,7 @@ class ModelEscalator:
                             return preferred
         except Exception:
             pass
-        return getattr(config, "OLLAMA_MODEL", "qwen3.5:2b")
+        return config.OLLAMA_MODEL
 
     def format_context_window(self, case: AmbiguityCase) -> str:
         """Renders compact 5-row structural window for prompt grounding."""

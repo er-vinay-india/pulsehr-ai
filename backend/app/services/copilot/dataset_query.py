@@ -3,6 +3,7 @@ from dataclasses import dataclass
 import logging
 import math
 import re
+from ...core import config
 from .dataset_context import DatasetContextProvider
 from ..gateway.assistant_identity import identity_intent
 from ..data_engine.semantic_classifier import SemanticClassifier
@@ -132,7 +133,7 @@ class DatasetQueryEngine:
                     'snapshot': dataset.snapshot_id, 'calculation_method': 'stored mean of valid source values'})
             if len(evidence) >= count:
                 return evidence
-        if dataset.record_count > 20000:
+        if dataset.record_count > config.MAX_INGESTION_ROWS:
             return evidence  # Do not materialize a large dataset just to reach a requested count.
         from ..adaptive_dashboard.findings import get_shared_findings_for_sheet
         findings = get_shared_findings_for_sheet(dataset.sheet_id)

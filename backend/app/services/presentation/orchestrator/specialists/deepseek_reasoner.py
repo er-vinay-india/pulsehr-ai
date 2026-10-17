@@ -27,9 +27,9 @@ class DeepSeekReasoner:
         enabled: bool | None = None,
         max_retries: int | None = None
     ):
-        self.model_name = model_name or getattr(config, "PRESENTATION_DEEP_REASONING_MODEL", "deepseek-r1:7b")
-        self.enabled = enabled if enabled is not None else getattr(config, "PRESENTATION_ENABLE_DEEP_REASONING", True)
-        self.max_retries = max_retries if max_retries is not None else getattr(config, "PRESENTATION_MAX_MODEL_RETRIES", 1)
+        self.model_name = model_name or config.PRESENTATION_DEEP_REASONING_MODEL
+        self.enabled = enabled if enabled is not None else config.PRESENTATION_ENABLE_DEEP_REASONING
+        self.max_retries = max_retries if max_retries is not None else config.PRESENTATION_MAX_MODEL_RETRIES
 
     def resolve_conflict(
         self,

@@ -2,6 +2,7 @@
 from dataclasses import dataclass, field
 import json
 import pandas as pd
+from ...core import config
 from ...db.database import session_scope
 from ..data_engine.analysis_context import AnalysisContext
 
@@ -36,8 +37,8 @@ class DatasetContext:
     def frame(self):
         # Existing analytics execute on the server; never send this frame to a model.
         if self._frame is None:
-            if self.record_count > 20000:
-                raise ValueError('On-demand analysis exceeds the existing 20,000-record interactive query budget.')
+            if self.record_count > config.MAX_INGESTION_ROWS:
+                raise ValueError(f'On-demand analysis exceeds the existing {config.MAX_INGESTION_ROWS:,}-record interactive query budget.')
             with session_scope() as conn:
                 rows = conn.execute('SELECT data_json FROM sheet_rows WHERE sheet_id=? ORDER BY row_index', (self.sheet_id,)).fetchall()
             self._frame = pd.DataFrame([json.loads(r['data_json']) for r in rows], columns=self.columns)
