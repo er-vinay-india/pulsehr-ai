@@ -116,6 +116,19 @@ from app.services.ingestion_v2.contracts.disagreement import (
     PipelineDisagreementRecord,
     PipelineDisagreementLedger,
 )
+from app.services.ingestion_v2.contracts.cutover import (
+    ConsumerName,
+    CutoverState,
+    Route,
+    CircuitBreakerState,
+    FallbackReason,
+    ConsumerCutoverRecord,
+    ConsumerRouteDecision,
+    FallbackRecord,
+    CutoverTransitionLedgerEntry,
+    ReadinessAssessment,
+    ConsumerRoutingSnapshot,
+)
 
 __all__ = [
     # Provenance & Base
@@ -213,4 +226,16 @@ __all__ = [
     "ReviewStatus",
     "PipelineDisagreementRecord",
     "PipelineDisagreementLedger",
+    # Stage 12: Cutover & Gateway
+    "ConsumerName",
+    "CutoverState",
+    "Route",
+    "CircuitBreakerState",
+    "FallbackReason",
+    "ConsumerCutoverRecord",
+    "ConsumerRouteDecision",
+    "FallbackRecord",
+    "CutoverTransitionLedgerEntry",
+    "ReadinessAssessment",
+    "ConsumerRoutingSnapshot",
 ]

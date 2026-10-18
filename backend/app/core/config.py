@@ -57,6 +57,15 @@ class HighviewSettings(BaseSettings):
     DUCKDB_THREADS: int = Field(default=2)
     PARQUET_COMPRESSION: str = Field(default="snappy")
 
+    # Phase I8 Ingestion V2 Consumer Cutover & Routing Flags
+    V2_GLOBAL_ENABLED: bool = Field(default=False)
+    V2_HRIDAY_ENABLED: bool = Field(default=False)
+    V2_DASHBOARD_ENABLED: bool = Field(default=False)
+    V2_PRESENTATION_ENABLED: bool = Field(default=False)
+    V2_HRIDAY_FALLBACK_ALLOWED: bool = Field(default=True)
+    V2_DASHBOARD_FALLBACK_ALLOWED: bool = Field(default=True)
+    V2_PRESENTATION_FALLBACK_ALLOWED: bool = Field(default=True)
+
     # Security & CORS
     ALLOWED_ORIGINS: list[str] = Field(
         default_factory=lambda: (
@@ -319,3 +328,11 @@ MODEL_ROLE_FAST_PRIMARY = settings.MODEL_ROLE_FAST_PRIMARY
 MODEL_ROLE_ANALYST_PRIMARY = settings.MODEL_ROLE_ANALYST_PRIMARY
 MODEL_ROLE_REASONER_PRIMARY = settings.MODEL_ROLE_REASONER_PRIMARY
 MODEL_ROLE_WRITER_PRIMARY = settings.MODEL_ROLE_WRITER_PRIMARY
+
+V2_GLOBAL_ENABLED = settings.V2_GLOBAL_ENABLED
+V2_HRIDAY_ENABLED = settings.V2_HRIDAY_ENABLED
+V2_DASHBOARD_ENABLED = settings.V2_DASHBOARD_ENABLED
+V2_PRESENTATION_ENABLED = settings.V2_PRESENTATION_ENABLED
+V2_HRIDAY_FALLBACK_ALLOWED = settings.V2_HRIDAY_FALLBACK_ALLOWED
+V2_DASHBOARD_FALLBACK_ALLOWED = settings.V2_DASHBOARD_FALLBACK_ALLOWED
+V2_PRESENTATION_FALLBACK_ALLOWED = settings.V2_PRESENTATION_FALLBACK_ALLOWED

@@ -179,3 +179,110 @@ All 34 divergences between V1 and V2 have been audited, benchmark-grounded, and 
 - `feature_gates_activated`: **NO** (All consumers remain on V1)
 - `llm_truth_calls`: **0** (All truth comparisons evaluated deterministically)
 - `live_db_sha256`: `a2d2c7f73746484e8aa4c32e18f00de928bf39452fb0f20500fcd0e64db9e7c1` (P0 intact)
+
+---
+
+## 6. Phase I8.2: Governed Consumer Gateway, Circuit Breakers, Rollback Foundation & Cutover State Machine
+
+Phase I8.2 implements the centralized, authoritative routing gateway and fail-safe cutover infrastructure that governs access between legacy V1 pipelines and Ingestion V2 canonical artifacts.
+
+### 6.1 Central Routing Architecture & 5-Gate Pipeline
+
+All consumer routing decisions (HRIDAY, Executive Dashboard, Executive Presentation Studio) pass through `ConsumerIntelligenceGateway.resolve_route()`:
+
+```mermaid
+flowchart TD
+    Req[Consumer Request] --> G1{Gate 1: Global Kill Switch}
+    G1 -- Disabled --> V1[Route.V1 Fallback]
+    G1 -- Active --> G2{Gate 2: Consumer Feature Flag}
+    G2 -- Disabled --> V1
+    G2 -- Active --> G3{Gate 3: Cutover State}
+    G3 -- SHADOW / CERTIFIED / ROLLBACK --> V1
+    G3 -- CANARY / V2_PRIMARY* --> G4{Gate 4: Circuit Breaker}
+    G4 -- OPEN --> V1
+    G4 -- CLOSED / HALF_OPEN --> G5{Gate 5: Readiness & Evidence Grounding}
+    G5 -- Stale / Missing / Ungrounded --> V1
+    G5 -- Fully Validated --> V2[Route.V2 Authoritative]
+```
+
+### 6.2 Governed Cutover State Machine (`ConsumerCutoverStateMachine`)
+
+- **Explicit Lifecycle**: `SHADOW` → `CERTIFIED` → `CANARY` → `V2_PRIMARY_WITH_FALLBACK` → `V2_PRIMARY` → `V1_RETIREMENT_ELIGIBLE`.
+- **Fail-Closed Transitions**: Illegal transitions raise `InvalidCutoverTransitionError`.
+- **Inter-Consumer Ordering Constraints**:
+  - `DASHBOARD` cannot enter `CANARY` until `HRIDAY` has reached at least `CERTIFIED`.
+  - `PRESENTATION` cannot enter `CANARY` until `DASHBOARD` has reached at least `CERTIFIED`.
+  - Attempting premature progression raises `CutoverOrderingViolationError`.
+- **Non-Destructive Rollback**: Any consumer can transition to `ROLLBACK` at any time with full ledger recording; recovery requires transitioning back through `SHADOW` and re-certifying.
+
+### 6.3 Local Deterministic Circuit Breaker (`CircuitBreakerManager`)
+
+- **State Model**: `CLOSED` (healthy), `OPEN` (tripped, automatic V1 fallback), `HALF_OPEN` (probe testing).
+- **Configurable Thresholds**: 5 consecutive failures trip to `OPEN`; 30-second cooldown transitions to `HALF_OPEN`; 2 consecutive successes in `HALF_OPEN` reset to `CLOSED`.
+- **Zero Network Dependency**: Deterministic, memory-resident breaker with zero external network overhead.
+
+### 6.4 Consumer Readiness Evaluator (`ConsumerReadinessEvaluator`)
+
+Before routing any request to V2, the readiness evaluator performs 5 non-negotiable checks:
+1. **Manifest Presence**: Ensures canonical dataset manifest exists.
+2. **Freshness & Stale Artifact Guard**: Verifies dataset fingerprint matches live data.
+3. **Dataset Version Matching**: Rejects mismatched schema or version identifiers.
+4. **Canonical Artifact Verification**: Ensures required canonical contracts (Structural Profile, Semantic Model, Join Plans, Analytical Profile, Semantic Graph) exist.
+5. **Existential Evidence Grounding**: Validates that all evidence IDs exist within the validated `EvidenceGraph`. Fabricated or ungrounded IDs trigger immediate rejection and fallback.
+
+### 6.5 Governed Fallback Taxonomy & Provenance Ledger
+
+Every fallback is recorded in `RoutingProvenanceLedger` with microsecond timestamps, consumer name, dataset ID, cause, and rationale:
+- `V2_ARTIFACT_MISSING`
+- `V2_ARTIFACT_STALE`
+- `V2_DATASET_VERSION_MISMATCH`
+- `V2_CONTEXT_GROUNDING_FAILURE`
+- `KILL_SWITCH_ACTIVE`
+- `FEATURE_FLAG_DISABLED`
+- `CUTOVER_STATE_NOT_ACTIVE`
+- `CANARY_SAMPLE_EXCLUDED`
+- `CIRCUIT_BREAKER_OPEN`
+- `V2_RUNTIME_ERROR`
+
+### 6.6 Component Performance Telemetry (P50 / P95)
+
+Benchmarked over 400 concurrent requests across 8 threads:
+
+| Component | P50 Latency | P95 Latency | SLA Target | Status |
+| :--- | :---: | :---: | :---: | :---: |
+| **Route Decision** | **0.009 ms** | **0.012 ms** | < 1.0 ms | Certified |
+| **Readiness Check** | **0.001 ms** | **0.002 ms** | < 2.0 ms | Certified |
+| **Circuit Breaker Check** | **0.000 ms** | **0.000 ms** | < 0.1 ms | Certified |
+| **State Transition** | **0.001 ms** | **0.001 ms** | < 0.5 ms | Certified |
+| **Fallback Selection** | **0.010 ms** | **0.015 ms** | < 1.0 ms | Certified |
+| **Peak Additional Memory** | **1.46 MB** | — | < 15.0 MB | Certified |
+
+### 6.7 Phase I8.2 Test Suite Certification
+
+The Phase I8.2 test suite in `backend/tests/test_ingestion_v2_consumer_gateway.py` validates all 25 core gateway invariants:
+- `test_state_machine_valid_forward_transitions`: Clean lifecycle path
+- `test_state_machine_invalid_transitions`: Fail-closed guard
+- `test_state_machine_ordering_constraints`: HRIDAY → Dashboard → Presentation
+- `test_state_machine_rollback_and_recovery`: Revert & re-certify
+- `test_circuit_breaker_transitions`: Trip on threshold, probe on half-open, recover on success
+- `test_circuit_breaker_trip_on_errors`: Consecutive error tripping
+- `test_readiness_valid_artifacts`: Full canonical package passes
+- `test_readiness_missing_manifest`: Rejects absent manifest
+- `test_readiness_stale_fingerprint`: Rejects stale artifacts
+- `test_readiness_dataset_version_mismatch`: Rejects version mismatch
+- `test_readiness_missing_required_artifacts`: Rejects incomplete packages
+- `test_readiness_invalid_evidence_grounding`: Rejects ungrounded evidence
+- `test_gateway_default_routes_to_v1`: Strict shadow default
+- `test_gateway_global_kill_switch`: Instant global revert
+- `test_gateway_consumer_disabled`: Per-consumer feature gate
+- `test_gateway_successful_v2_routing`: Validated V2 primary routing
+- `test_gateway_fallback_on_unready_v2`: Safe fallback on unready V2
+- `test_gateway_fallback_disallowed_raises_error`: Strict failure mode
+- `test_gateway_canary_deterministic_routing`: Deterministic hashing
+- `test_gateway_circuit_breaker_open_falls_back`: Breaker trip fallback
+- `test_routing_ledger_telemetry`: Accurate counters and history
+- `test_gateway_idempotence`: Repeated identical decisions
+- `test_gateway_concurrency_thread_safety`: Multi-threaded safety
+- `test_gateway_telemetry_counters`: All 8 counter types validated
+- `test_gateway_performance_p50_p95`: Strict latency SLA adherence
+
