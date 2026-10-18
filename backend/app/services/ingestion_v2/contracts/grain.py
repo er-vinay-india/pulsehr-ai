@@ -19,17 +19,26 @@ class CanonicalGrain(str, Enum):
     EVENT = "EVENT"
     TRANSACTION = "TRANSACTION"
     SNAPSHOT = "SNAPSHOT"
+    PRODUCT = "PRODUCT"
+    LOCATION = "LOCATION"
     COMPOSITE = "COMPOSITE"
     UNKNOWN = "UNKNOWN"
+    AMBIGUOUS = "AMBIGUOUS"
 
 
 class TemporalGrain(str, Enum):
     NONE = "NONE"
-    DAILY = "DAILY"
-    WEEKLY = "WEEKLY"
-    MONTHLY = "MONTHLY"
-    QUARTERLY = "QUARTERLY"
-    ANNUAL = "ANNUAL"
+    DAY = "DAY"
+    DAILY = "DAY"  # backward-compat alias
+    WEEK = "WEEK"
+    WEEKLY = "WEEK"  # backward-compat alias
+    MONTH = "MONTH"
+    MONTHLY = "MONTH"  # backward-compat alias
+    QUARTER = "QUARTER"
+    QUARTERLY = "QUARTER"  # backward-compat alias
+    YEAR = "YEAR"
+    ANNUAL = "YEAR"  # backward-compat alias
+    DATETIME_EVENT = "DATETIME_EVENT"
 
 
 class TableGrainProfile(BaseModel):
@@ -44,11 +53,14 @@ class TableGrainProfile(BaseModel):
     primary_entity: CanonicalGrain
     temporal_grain: TemporalGrain = TemporalGrain.NONE
     key_columns: list[str] = Field(default_factory=list)
-    grain_expression: str  # e.g., "PERSON x DAY", "DEPARTMENT x MONTH", "EMPLOYEE"
+    grain_dimensions: list[str] = Field(default_factory=list)
+    grain_expression: str  # e.g., "PERSON x DAY", "DEPARTMENT x MONTH", "EMPLOYEE", "TRANSACTION"
     is_unique: bool
     uniqueness_ratio: float = Field(ge=0.0, le=1.0)
     grain_confidence: float = Field(ge=0.0, le=1.0)
     duplicate_key_rows: int = 0
+    candidate_grains: list[str] = Field(default_factory=list)
+    grain_status: str = "RESOLVED"  # "RESOLVED", "AMBIGUOUS", "UNKNOWN"
     rationale: str
 
 

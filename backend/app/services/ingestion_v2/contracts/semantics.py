@@ -12,12 +12,21 @@ from app.services.ingestion_v2.contracts.base import IngestionContractBase
 
 
 class SemanticColumnRole(str, Enum):
-    IDENTIFIER = "IDENTIFIER"
+    ENTITY_IDENTIFIER = "ENTITY_IDENTIFIER"
+    IDENTIFIER = "ENTITY_IDENTIFIER"  # backward-compat alias
+    ENTITY_LABEL = "ENTITY_LABEL"
     DIMENSION = "DIMENSION"
     MEASURE = "MEASURE"
-    TIMESTAMP = "TIMESTAMP"
+    TIME = "TIME"
+    TIMESTAMP = "TIME"  # backward-compat alias
+    STATUS = "STATUS"
+    BOOLEAN = "BOOLEAN"
+    LOCATION = "LOCATION"
+    CATEGORY = "CATEGORY"
+    FREE_TEXT = "FREE_TEXT"
     ATTRIBUTE = "ATTRIBUTE"
-    METADATA = "METADATA"
+    TECHNICAL_METADATA = "TECHNICAL_METADATA"
+    METADATA = "TECHNICAL_METADATA"  # backward-compat alias
     UNKNOWN = "UNKNOWN"
     AMBIGUOUS = "AMBIGUOUS"
 
@@ -26,9 +35,16 @@ class SemanticEntityType(str, Enum):
     PERSON = "PERSON"
     ORGANIZATION = "ORGANIZATION"
     DEPARTMENT = "DEPARTMENT"
+    TEAM = "TEAM"
+    STORE = "STORE"
+    PRODUCT = "PRODUCT"
     LOCATION = "LOCATION"
-    EVENT = "EVENT"
+    REGION = "REGION"
     TRANSACTION = "TRANSACTION"
+    ACCOUNT = "ACCOUNT"
+    FACILITY = "FACILITY"
+    DEVICE = "DEVICE"
+    EVENT = "EVENT"
     FINANCIAL = "FINANCIAL"
     TEMPORAL = "TEMPORAL"
     CONCEPT = "CONCEPT"
@@ -40,7 +56,9 @@ class ClassificationSource(str, Enum):
     HEURISTIC = "HEURISTIC"
     DICTIONARY = "DICTIONARY"
     STATISTICAL = "STATISTICAL"
+    MODEL_ASSISTED = "MODEL_ASSISTED"
     MANUAL = "MANUAL"
+    FALLBACK = "FALLBACK"
 
 
 class SemanticColumnAssignment(BaseModel):
