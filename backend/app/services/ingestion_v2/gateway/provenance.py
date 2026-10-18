@@ -100,6 +100,30 @@ class RoutingProvenanceLedger:
                 "total_fallbacks": len(self._fallbacks),
             }
 
+    def get_consumer_counts(self, consumer: ConsumerName) -> dict[str, int]:
+        """Returns route and fallback counts for an individual consumer."""
+        with self._lock:
+            routes = self._per_consumer_routes.get(consumer, {Route.V1: 0, Route.V2: 0})
+            fb_count = sum(1 for f in self._fallbacks if f.consumer == consumer)
+            return {
+                "route_v1": routes.get(Route.V1, 0),
+                "route_v2": routes.get(Route.V2, 0),
+                "fallback": fb_count,
+            }
+
+    def get_last_fallback(self, consumer: ConsumerName) -> FallbackRecord | None:
+        """Returns the most recent fallback record for a consumer."""
+        with self._lock:
+            for f in reversed(self._fallbacks):
+                if f.consumer == consumer:
+                    return f
+            return None
+
+    def get_counter(self, name: str) -> int:
+        """Returns value of a specific telemetry counter."""
+        with self._lock:
+            return self._counters.get(name, 0)
+
     def get_decisions(self) -> list[ConsumerRouteDecision]:
         """Returns all recorded routing decisions."""
         with self._lock:

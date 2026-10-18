@@ -65,6 +65,17 @@ class FallbackReason(str, Enum):
     MANUAL_OVERRIDE = "MANUAL_OVERRIDE"
 
 
+class ConfigurationSource(str, Enum):
+    """Governed source authorizing state transitions and feature gate modifications."""
+    ENVIRONMENT = "ENVIRONMENT"
+    CONTROL_PLANE = "CONTROL_PLANE"
+    DECISION_LEDGER = "DECISION_LEDGER"
+    TEST_FIXTURE = "TEST_FIXTURE"
+
+
+CURRENT_CUTOVER_STATE_SCHEMA_VERSION: int = 1
+
+
 class ConsumerCutoverRecord(BaseModel):
     """
     Governed state record for an individual consumer.
@@ -87,6 +98,9 @@ class ConsumerCutoverRecord(BaseModel):
     fallback_count: int = 0
     last_fallback_reason: FallbackReason | None = None
     transition_version: int = 1
+    configuration_source: ConfigurationSource = ConfigurationSource.CONTROL_PLANE
+    cutover_state_schema_version: int = CURRENT_CUTOVER_STATE_SCHEMA_VERSION
+    last_transition_timestamp: str | None = None
 
 
 class ConsumerRouteDecision(BaseModel):
@@ -152,7 +166,8 @@ class CutoverTransitionLedgerEntry(BaseModel):
     certification_evidence: str
     commit: str
     artifact_fingerprints: dict[str, str] = Field(default_factory=dict)
-    authorized_configuration_source: str = "control-plane"
+    authorized_configuration_source: ConfigurationSource = ConfigurationSource.CONTROL_PLANE
+    cutover_state_schema_version: int = CURRENT_CUTOVER_STATE_SCHEMA_VERSION
     timestamp: str
 
 

@@ -6,7 +6,15 @@ readiness evaluator, and routing ledger.
 """
 
 from app.services.ingestion_v2.gateway.circuit_breaker import CircuitBreakerManager
-from app.services.ingestion_v2.gateway.gateway import ConsumerIntelligenceGateway
+from app.services.ingestion_v2.gateway.gateway import (
+    ConsumerIntelligenceGateway,
+    RoutingFallbackDisallowedError,
+)
+from app.services.ingestion_v2.gateway.persistence import (
+    CutoverPersistenceStore,
+    CutoverStateCorruptionError,
+    UnknownCutoverSchemaVersionError,
+)
 from app.services.ingestion_v2.gateway.provenance import RoutingProvenanceLedger
 from app.services.ingestion_v2.gateway.readiness import ConsumerReadinessEvaluator
 from app.services.ingestion_v2.gateway.state_machine import (
@@ -17,10 +25,15 @@ from app.services.ingestion_v2.gateway.state_machine import (
 
 __all__ = [
     "ConsumerIntelligenceGateway",
+    "RoutingFallbackDisallowedError",
     "ConsumerCutoverStateMachine",
     "CircuitBreakerManager",
     "ConsumerReadinessEvaluator",
     "RoutingProvenanceLedger",
+    "CutoverPersistenceStore",
+    "CutoverStateCorruptionError",
+    "UnknownCutoverSchemaVersionError",
     "InvalidCutoverTransitionError",
     "CutoverOrderingViolationError",
 ]
+

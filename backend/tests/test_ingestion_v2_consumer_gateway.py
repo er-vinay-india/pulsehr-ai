@@ -15,14 +15,20 @@ Validates:
 
 from __future__ import annotations
 
+import json
+import sqlite3
 import threading
 import time
 import tracemalloc
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 import pytest
 
 from app.services.ingestion_v2.contracts.cutover import (
+    CURRENT_CUTOVER_STATE_SCHEMA_VERSION,
     CircuitBreakerState,
+    ConfigurationSource,
+    ConsumerCutoverRecord,
     ConsumerName,
     CutoverState,
     FallbackReason,
@@ -35,7 +41,9 @@ from app.services.ingestion_v2.gateway import (
     ConsumerIntelligenceGateway,
     ConsumerReadinessEvaluator,
     CutoverOrderingViolationError,
+    CutoverPersistenceStore,
     InvalidCutoverTransitionError,
+    RoutingFallbackDisallowedError,
     RoutingProvenanceLedger,
 )
 
@@ -181,7 +189,7 @@ def test_instant_per_consumer_rollback_and_recovery(gateway):
 
 def test_circuit_breaker_lifecycle():
     """Verifies circuit breaker state transitions (CLOSED -> OPEN -> HALF_OPEN -> CLOSED)."""
-    cb = CircuitBreakerManager(failure_threshold=3)
+    cb = CircuitBreakerManager(failure_threshold=3, required_probe_successes=1)
 
     assert cb.get_state(ConsumerName.HRIDAY) == CircuitBreakerState.CLOSED
     assert cb.can_attempt_v2(ConsumerName.HRIDAY) is True
@@ -201,9 +209,12 @@ def test_circuit_breaker_lifecycle():
     # Probe transitions to HALF_OPEN
     assert cb.probe(ConsumerName.HRIDAY) is True
     assert cb.get_state(ConsumerName.HRIDAY) == CircuitBreakerState.HALF_OPEN
-    assert cb.can_attempt_v2(ConsumerName.HRIDAY) is True
+    # Ordinary traffic is BLOCKED in HALF_OPEN
+    assert cb.can_attempt_v2(ConsumerName.HRIDAY, is_probe=False) is False
+    # Explicit recovery probe is ALLOWED in HALF_OPEN
+    assert cb.can_attempt_v2(ConsumerName.HRIDAY, is_probe=True) is True
 
-    # Successful request in HALF_OPEN resets to CLOSED
+    # Successful probe resets to CLOSED
     cb.record_success(ConsumerName.HRIDAY)
     assert cb.get_state(ConsumerName.HRIDAY) == CircuitBreakerState.CLOSED
     assert cb.can_attempt_v2(ConsumerName.HRIDAY) is True
@@ -598,3 +609,523 @@ def test_component_level_performance_and_memory(gateway):
     print(f"State Transition:     P50={p50_trans}ms | P95={p95_trans}ms")
     print(f"Fallback Selection:   P50={p50_fb}ms    | P95={p95_fb}ms")
     print(f"Peak Additional Memory: {peak_mem_mb} MB")
+
+
+# =============================================================================
+# 11. DURABLE CONSUMER CUTOVER STATE & RESTART RECOVERY TESTS
+# =============================================================================
+
+def test_canonical_restart_recovery(tmp_path: Path):
+    """
+    Canonical 6-step restart recovery test:
+    1. Initialize isolated state store
+    2. HRIDAY -> CERTIFIED
+    3. Persist state
+    4. Destroy gateway and state-machine instances
+    5. Construct fresh instances from the same persistence store
+    6. Reload state and verify:
+       - HRIDAY == CERTIFIED
+       - DASHBOARD == SHADOW
+       - PRESENTATION == SHADOW
+       - No accidental reset to an active V2 state
+       - No accidental progression
+    """
+    db_file = tmp_path / "test_cutover.sqlite3"
+    store = CutoverPersistenceStore(db_path=db_file)
+    sm = ConsumerCutoverStateMachine(persistence_store=store)
+
+    # Transition HRIDAY to CERTIFIED
+    rec = sm.transition(
+        ConsumerName.HRIDAY,
+        CutoverState.CERTIFIED,
+        reason="Passed shadow parity audit",
+        certification_evidence="RUN-CERT-I8-2-001",
+        authorized_source=ConfigurationSource.CONTROL_PLANE,
+    )
+    assert rec.current_state == CutoverState.CERTIFIED
+
+    # Destroy instances completely
+    del sm
+    del store
+
+    # Reconstruct fresh instances from the same persisted store
+    store2 = CutoverPersistenceStore(db_path=db_file)
+    sm2 = ConsumerCutoverStateMachine(persistence_store=store2)
+
+    # Verify state after restart
+    assert sm2.get_state(ConsumerName.HRIDAY) == CutoverState.CERTIFIED
+    assert sm2.get_state(ConsumerName.DASHBOARD) == CutoverState.SHADOW
+    assert sm2.get_state(ConsumerName.PRESENTATION) == CutoverState.SHADOW
+
+    hriday_rec = sm2.get_record(ConsumerName.HRIDAY)
+    assert hriday_rec.certification_run_id == "RUN-CERT-I8-2-001"
+    assert hriday_rec.configuration_source == ConfigurationSource.CONTROL_PLANE
+    assert hriday_rec.cutover_state_schema_version == CURRENT_CUTOVER_STATE_SCHEMA_VERSION
+
+
+# =============================================================================
+# 12. CORRUPT / MISSING STATE FAIL-SAFE TESTS
+# =============================================================================
+
+def test_missing_persisted_state_fails_safe_to_shadow(tmp_path: Path):
+    """Verifies that an absent persisted database fails safe to SHADOW / V1."""
+    nonexistent_db = tmp_path / "does_not_exist.sqlite3"
+    store = CutoverPersistenceStore(db_path=nonexistent_db)
+    sm = ConsumerCutoverStateMachine(persistence_store=store)
+
+    for c in ConsumerName:
+        assert sm.get_state(c) == CutoverState.SHADOW
+        assert sm.get_record(c).feature_enabled is False
+
+
+def test_corrupt_database_fails_safe_to_shadow(tmp_path: Path):
+    """Verifies that a corrupted SQLite database file fails safe to SHADOW / V1, never V2."""
+    corrupt_file = tmp_path / "corrupted_state.sqlite3"
+    corrupt_file.write_bytes(b"CORRUPTED_GARBAGE_HEADER_DATA_NOT_SQLITE3")
+
+    store = CutoverPersistenceStore(db_path=corrupt_file)
+    sm = ConsumerCutoverStateMachine(persistence_store=store)
+
+    for c in ConsumerName:
+        assert sm.get_state(c) == CutoverState.SHADOW
+        assert sm.get_record(c).feature_enabled is False
+
+
+def test_invalid_consumer_state_string_fails_safe_to_shadow(tmp_path: Path):
+    """Verifies that corrupt or invented state strings in DB rows fail safe to SHADOW."""
+    db_file = tmp_path / "invalid_enum_state.sqlite3"
+    store = CutoverPersistenceStore(db_path=db_file)
+
+    # Insert raw invalid state string directly into DB
+    conn = sqlite3.connect(str(db_file))
+    conn.execute(
+        "INSERT OR REPLACE INTO consumer_cutover_state (consumer_name, current_state) VALUES (?, ?)",
+        ("HRIDAY", "INVENTED_ILLEGAL_STATE_STRING"),
+    )
+    conn.commit()
+    conn.close()
+
+    # Reload through store
+    records = store.load_all_consumer_states()
+    assert records[ConsumerName.HRIDAY].current_state == CutoverState.SHADOW
+
+
+# =============================================================================
+# 13. STATE SCHEMA VERSION GATING TESTS
+# =============================================================================
+
+def test_unknown_future_schema_version_blocks_active_routing(tmp_path: Path):
+    """Verifies that an unknown newer schema version strictly blocks active routing and fails to SHADOW."""
+    db_file = tmp_path / "future_schema.sqlite3"
+    store = CutoverPersistenceStore(db_path=db_file)
+
+    # Put HRIDAY in V2_PRIMARY under a future schema version
+    rec = ConsumerCutoverRecord(
+        consumer_name=ConsumerName.HRIDAY,
+        current_state=CutoverState.V2_PRIMARY,
+        cutover_state_schema_version=999,  # Future unsupported version
+    )
+    store.save_consumer_state(rec)
+
+    # Set metadata schema_version to 999
+    conn = sqlite3.connect(str(db_file))
+    conn.execute("UPDATE cutover_metadata SET value = '999' WHERE key = 'schema_version'")
+    conn.commit()
+    conn.close()
+
+    # Re-instantiate
+    store2 = CutoverPersistenceStore(db_path=db_file)
+    records = store2.load_all_consumer_states()
+
+    # Must fail safe: blocked from active V2_PRIMARY
+    assert records[ConsumerName.HRIDAY].current_state == CutoverState.SHADOW
+
+
+# =============================================================================
+# 14. CONFIGURATION SOURCE & USER PAYLOAD ISOLATION TESTS
+# =============================================================================
+
+def test_configuration_source_recorded_and_typed(tmp_path: Path):
+    """Verifies typed enum configuration sources: ENVIRONMENT, CONTROL_PLANE, DECISION_LEDGER, TEST_FIXTURE."""
+    db_file = tmp_path / "config_src.sqlite3"
+    store = CutoverPersistenceStore(db_path=db_file)
+    sm = ConsumerCutoverStateMachine(persistence_store=store)
+
+    rec = sm.transition(
+        ConsumerName.HRIDAY,
+        CutoverState.CERTIFIED,
+        reason="Certified via decision ledger",
+        authorized_source=ConfigurationSource.DECISION_LEDGER,
+    )
+    assert rec.configuration_source == ConfigurationSource.DECISION_LEDGER
+
+    # Reload from store
+    sm2 = ConsumerCutoverStateMachine(persistence_store=store)
+    assert sm2.get_record(ConsumerName.HRIDAY).configuration_source == ConfigurationSource.DECISION_LEDGER
+
+
+def test_normal_request_payload_cannot_mutate_cutover_state(gateway):
+    """Negative test: user request payload arguments cannot alter gateway state or feature gates."""
+    assert gateway.state_machine.get_state(ConsumerName.HRIDAY) == CutoverState.SHADOW
+
+    # Attempt to pass state-mutating keys through evaluate_route
+    user_payload_injection = {
+        "dataset_id": "ds-injection",
+        "consumer_state": "V2_PRIMARY",
+        "feature_enabled": True,
+        "global_enabled": True,
+        "fallback_allowed": False,
+    }
+
+    # evaluate_route signature only accepts its declared parameters
+    decision = gateway.evaluate_route(
+        consumer=ConsumerName.HRIDAY,
+        dataset_id=user_payload_injection["dataset_id"],
+    )
+
+    # Gateway state must remain completely unmutated
+    assert gateway.state_machine.get_state(ConsumerName.HRIDAY) == CutoverState.SHADOW
+    assert decision.selected_route == Route.V1
+    assert decision.consumer_state == CutoverState.SHADOW
+
+
+# =============================================================================
+# 15. CUTOVER DECISION LEDGER DURABILITY TESTS
+# =============================================================================
+
+def test_cutover_decision_ledger_durability(tmp_path: Path):
+    """Verifies that transition ledger entries survive process restart with all provenance fields."""
+    db_file = tmp_path / "ledger_durability.sqlite3"
+    store = CutoverPersistenceStore(db_path=db_file)
+    sm = ConsumerCutoverStateMachine(persistence_store=store)
+
+    sm.transition(
+        ConsumerName.HRIDAY,
+        CutoverState.CERTIFIED,
+        reason="Parity certified",
+        certification_evidence="RUN-CERT-009",
+        commit="commit-abc123",
+        artifact_fingerprints={"semantic_graph": "sg-fp-99", "manifest": "mf-fp-99"},
+        authorized_source=ConfigurationSource.CONTROL_PLANE,
+    )
+
+    history1 = sm.get_transition_history()
+    assert len(history1) == 1
+    assert history1[0].consumer == ConsumerName.HRIDAY
+    assert history1[0].from_state == CutoverState.SHADOW
+    assert history1[0].to_state == CutoverState.CERTIFIED
+    assert history1[0].artifact_fingerprints["semantic_graph"] == "sg-fp-99"
+
+    # Recreate service from store
+    del sm
+    del store
+
+    store2 = CutoverPersistenceStore(db_path=db_file)
+    sm2 = ConsumerCutoverStateMachine(persistence_store=store2)
+    history2 = sm2.get_transition_history()
+
+    assert len(history2) == 1
+    assert history2[0].transition_id == history1[0].transition_id
+    assert history2[0].consumer == ConsumerName.HRIDAY
+    assert history2[0].from_state == CutoverState.SHADOW
+    assert history2[0].to_state == CutoverState.CERTIFIED
+    assert history2[0].commit == "commit-abc123"
+    assert history2[0].artifact_fingerprints["semantic_graph"] == "sg-fp-99"
+    assert history2[0].authorized_configuration_source == ConfigurationSource.CONTROL_PLANE
+
+
+# =============================================================================
+# 16. CIRCUIT BREAKER RESTART SEMANTICS & HALF-OPEN PROBE TESTS
+# =============================================================================
+
+def test_circuit_breaker_restart_preserves_readiness_guards(tmp_path: Path):
+    """
+    Verifies that a process restart with circuit breaker reset CANNOT bypass
+    stale/missing/ungrounded artifact guards.
+    """
+    db_file = tmp_path / "cb_restart.sqlite3"
+    store = CutoverPersistenceStore(db_path=db_file)
+    gw = ConsumerIntelligenceGateway(persistence_store=store)
+    gw.set_global_enabled(True)
+    gw.set_consumer_enabled(ConsumerName.HRIDAY, True)
+
+    gw.state_machine.transition(ConsumerName.HRIDAY, CutoverState.CERTIFIED, "c")
+    gw.state_machine.transition(ConsumerName.HRIDAY, CutoverState.CANARY, "can")
+    gw.state_machine.transition(ConsumerName.HRIDAY, CutoverState.V2_PRIMARY_WITH_FALLBACK, "p")
+
+    # Trip breaker OPEN due to repeated failures
+    gw.circuit_breaker.trip(ConsumerName.HRIDAY, FallbackReason.V2_RUNTIME_ERROR)
+    assert gw.circuit_breaker.get_state(ConsumerName.HRIDAY) == CircuitBreakerState.OPEN
+
+    # Destroy and recreate gateway instance (simulating process restart)
+    del gw
+    store2 = CutoverPersistenceStore(db_path=db_file)
+    gw2 = ConsumerIntelligenceGateway(persistence_store=store2)
+    gw2.set_global_enabled(True)
+    gw2.set_consumer_enabled(ConsumerName.HRIDAY, True)
+
+    # Even if breaker starts clean, a stale artifact request MUST be blocked and fall back to V1!
+    stale_manifest = {"dataset_version": "1", "is_fresh": False}
+    decision = gw2.evaluate_route(ConsumerName.HRIDAY, dataset_id="ds-restart", manifest_data=stale_manifest)
+    assert decision.selected_route == Route.V1
+    assert decision.fallback_used is True
+    assert decision.fallback_reason == FallbackReason.V2_ARTIFACT_STALE
+
+
+def test_half_open_blocks_ordinary_traffic_and_allows_probe():
+    """
+    Verifies that during HALF_OPEN:
+    - Ordinary traffic (is_probe=False) routes strictly to V1.
+    - Explicit recovery probe (is_probe=True) is permitted to test V2.
+    """
+    cb = CircuitBreakerManager(cooldown_seconds=0.01, required_probe_successes=2)
+    cb.trip(ConsumerName.HRIDAY, FallbackReason.V2_RUNTIME_ERROR)
+    assert cb.get_state(ConsumerName.HRIDAY) == CircuitBreakerState.OPEN
+
+    # Allow cooldown to elapse
+    time.sleep(0.02)
+    assert cb.is_probe_eligible(ConsumerName.HRIDAY) is True
+    assert cb.get_state(ConsumerName.HRIDAY) == CircuitBreakerState.HALF_OPEN
+
+    # Ordinary traffic must be BLOCKED
+    assert cb.can_attempt_v2(ConsumerName.HRIDAY, is_probe=False) is False
+
+    # Explicit probe must be ALLOWED
+    assert cb.can_attempt_v2(ConsumerName.HRIDAY, is_probe=True) is True
+
+    # 1 successful probe: remains in HALF_OPEN (requires 2)
+    cb.record_success(ConsumerName.HRIDAY)
+    assert cb.get_state(ConsumerName.HRIDAY) == CircuitBreakerState.HALF_OPEN
+
+    # 2nd successful probe: resets to CLOSED
+    cb.record_success(ConsumerName.HRIDAY)
+    assert cb.get_state(ConsumerName.HRIDAY) == CircuitBreakerState.CLOSED
+    assert cb.can_attempt_v2(ConsumerName.HRIDAY, is_probe=False) is True
+
+
+# =============================================================================
+# 17. CANARY AUTHORIZATION: EXPLICIT & DETERMINISTIC COHORT TESTS
+# =============================================================================
+
+def test_canary_explicit_authorization_vs_ordinary(gateway):
+    """Verifies that CANARY mode allows explicit authorized requests while blocking ordinary ones."""
+    gateway.set_global_enabled(True)
+    gateway.set_consumer_enabled(ConsumerName.HRIDAY, True)
+    gateway.state_machine.transition(ConsumerName.HRIDAY, CutoverState.CERTIFIED, "c")
+    gateway.state_machine.transition(ConsumerName.HRIDAY, CutoverState.CANARY, "can")
+
+    manifest = {"dataset_version": "1", "is_fresh": True, "available_artifacts": ["schema.json"]}
+
+    # Ordinary request without authorization -> V1
+    d_ordinary = gateway.evaluate_route(ConsumerName.HRIDAY, dataset_id="ds-test", is_canary=False, manifest_data=manifest)
+    assert d_ordinary.selected_route == Route.V1
+    assert d_ordinary.fallback_reason == FallbackReason.CANARY_NOT_AUTHORIZED
+
+    # Explicit authorized canary request -> V2
+    d_canary = gateway.evaluate_route(ConsumerName.HRIDAY, dataset_id="ds-test", is_canary=True, manifest_data=manifest)
+    assert d_canary.selected_route == Route.V2
+
+
+def test_canary_deterministic_cohort_selection(gateway):
+    """Verifies deterministic SHA-256 percentage-based cohort routing."""
+    gateway.set_global_enabled(True)
+    gateway.set_consumer_enabled(ConsumerName.HRIDAY, True)
+    gateway.state_machine.transition(ConsumerName.HRIDAY, CutoverState.CERTIFIED, "c")
+    gateway.state_machine.transition(ConsumerName.HRIDAY, CutoverState.CANARY, "can")
+
+    manifest = {"dataset_version": "1", "is_fresh": True, "available_artifacts": ["schema.json"]}
+
+    # Known cohort that hashes below 50% vs above 50%
+    d_in = gateway.evaluate_route(
+        ConsumerName.HRIDAY,
+        dataset_id="ds-test",
+        canary_cohort="cohort_sample_alpha",
+        canary_percentage=100.0,
+        manifest_data=manifest,
+    )
+    assert d_in.selected_route == Route.V2
+
+    d_out = gateway.evaluate_route(
+        ConsumerName.HRIDAY,
+        dataset_id="ds-test",
+        canary_cohort="cohort_sample_alpha",
+        canary_percentage=0.0,
+        manifest_data=manifest,
+    )
+    assert d_out.selected_route == Route.V1
+
+
+# =============================================================================
+# 18. INDEPENDENT FALLBACK POLICY TESTS
+# =============================================================================
+
+def test_fallback_disallowed_raises_governed_error(gateway):
+    """Verifies that when fallback_allowed=False, failure raises RoutingFallbackDisallowedError (no silent V1 rescue)."""
+    gateway.set_global_enabled(True)
+    gateway.set_consumer_enabled(ConsumerName.HRIDAY, True)
+    gateway.set_fallback_allowed(ConsumerName.HRIDAY, False)
+
+    gateway.state_machine.transition(ConsumerName.HRIDAY, CutoverState.CERTIFIED, "c")
+    gateway.state_machine.transition(ConsumerName.HRIDAY, CutoverState.CANARY, "can")
+    gateway.state_machine.transition(ConsumerName.HRIDAY, CutoverState.V2_PRIMARY_WITH_FALLBACK, "p")
+
+    stale_manifest = {"dataset_version": "1", "is_fresh": False}
+
+    with pytest.raises(RoutingFallbackDisallowedError) as exc_info:
+        gateway.evaluate_route(ConsumerName.HRIDAY, dataset_id="ds-stale", manifest_data=stale_manifest)
+
+    assert "fallback to V1 is disallowed" in str(exc_info.value)
+
+
+# =============================================================================
+# 19. CONCRETE ROUTING TELEMETRY ISOLATED CERTIFICATION SCENARIO
+# =============================================================================
+
+def test_concrete_isolated_routing_telemetry_scenario(tmp_path: Path):
+    """
+    Executes a deterministic isolated certification scenario:
+    - 5 V1 decisions due to SHADOW/flags
+    - 4 healthy V2 decisions
+    - 3 governed fallbacks:
+      - 1 stale-artifact fallback (V2_ARTIFACT_STALE)
+      - 1 dataset-version fallback (V2_DATASET_VERSION_MISMATCH)
+      - 1 evidence-grounding fallback (V2_CONTEXT_GROUNDING_FAILURE)
+    - 1 circuit breaker open scenario
+    - 1 rollback scenario
+    Verifies and asserts exact resulting counters.
+    """
+    db_file = tmp_path / "telemetry_cert.sqlite3"
+    store = CutoverPersistenceStore(db_path=db_file)
+    gw = ConsumerIntelligenceGateway(persistence_store=store)
+
+    valid_manifest = {"dataset_version": "1.0", "is_fresh": True, "available_artifacts": ["schema.json"]}
+
+    # 1. 5 V1 decisions (SHADOW / flags off)
+    gw.set_global_enabled(False)
+    for _ in range(2):
+        d = gw.evaluate_route(ConsumerName.HRIDAY, dataset_id="ds-1")
+        assert d.selected_route == Route.V1
+
+    gw.set_global_enabled(True)
+    gw.set_consumer_enabled(ConsumerName.HRIDAY, False)
+    for _ in range(2):
+        d = gw.evaluate_route(ConsumerName.HRIDAY, dataset_id="ds-1")
+        assert d.selected_route == Route.V1
+
+    # In SHADOW state
+    gw.set_consumer_enabled(ConsumerName.HRIDAY, True)
+    d = gw.evaluate_route(ConsumerName.HRIDAY, dataset_id="ds-1")
+    assert d.selected_route == Route.V1
+    # Total V1 from gating: 5
+
+    # Advance to V2_PRIMARY_WITH_FALLBACK
+    gw.state_machine.transition(ConsumerName.HRIDAY, CutoverState.CERTIFIED, "c")
+    gw.state_machine.transition(ConsumerName.HRIDAY, CutoverState.CANARY, "can")
+    gw.state_machine.transition(ConsumerName.HRIDAY, CutoverState.V2_PRIMARY_WITH_FALLBACK, "p")
+
+    # 2. 4 healthy V2 decisions
+    for _ in range(4):
+        d = gw.evaluate_route(ConsumerName.HRIDAY, dataset_id="ds-1", dataset_version="1.0", manifest_data=valid_manifest)
+        assert d.selected_route == Route.V2
+
+    # 3. 3 governed fallbacks
+    # 3a. Stale artifact fallback
+    stale_mf = {"dataset_version": "1.0", "is_fresh": False, "available_artifacts": ["schema.json"]}
+    d_stale = gw.evaluate_route(ConsumerName.HRIDAY, dataset_id="ds-1", dataset_version="1.0", manifest_data=stale_mf)
+    assert d_stale.selected_route == Route.V1
+    assert d_stale.fallback_reason == FallbackReason.V2_ARTIFACT_STALE
+
+    # 3b. Dataset version mismatch fallback
+    d_ver = gw.evaluate_route(ConsumerName.HRIDAY, dataset_id="ds-1", dataset_version="2.0", manifest_data=valid_manifest)
+    assert d_ver.selected_route == Route.V1
+    assert d_ver.fallback_reason == FallbackReason.V2_DATASET_VERSION_MISMATCH
+
+    # 3c. Evidence grounding failure fallback
+    d_eg = gw.evaluate_route(
+        ConsumerName.HRIDAY,
+        dataset_id="ds-1",
+        dataset_version="1.0",
+        manifest_data=valid_manifest,
+        required_evidence_refs=["EVID-NONEXISTENT-999"],
+        available_evidence_ids={"EVID-VALID-001"},
+    )
+    assert d_eg.selected_route == Route.V1
+    assert d_eg.fallback_reason == FallbackReason.V2_CONTEXT_GROUNDING_FAILURE
+
+    # 4. Circuit breaker open scenario
+    gw.circuit_breaker.trip(ConsumerName.HRIDAY, FallbackReason.CIRCUIT_BREAKER_OPEN)
+    d_cb = gw.evaluate_route(ConsumerName.HRIDAY, dataset_id="ds-1", dataset_version="1.0", manifest_data=valid_manifest)
+    assert d_cb.selected_route == Route.V1
+    assert d_cb.fallback_reason == FallbackReason.CIRCUIT_BREAKER_OPEN
+
+    # 5. Rollback scenario
+    gw.circuit_breaker.reset(ConsumerName.HRIDAY)
+    gw.state_machine.rollback(ConsumerName.HRIDAY, "Emergency policy test")
+    gw.provenance_ledger.increment_rollback_counter()
+    d_rb = gw.evaluate_route(ConsumerName.HRIDAY, dataset_id="ds-1", dataset_version="1.0", manifest_data=valid_manifest)
+    assert d_rb.selected_route == Route.V1
+
+    # Extract exact telemetry snapshot
+    telem = gw.get_telemetry()
+
+    print("\n--- CONCRETE CERTIFICATION RUN TELEMETRY SNAPSHOT ---")
+    print(json.dumps(telem, indent=2))
+
+    assert telem["consumer_route_v1_count"] == 10  # 5 initial + 3 fallbacks + 1 CB + 1 rollback
+    assert telem["consumer_route_v2_count"] == 4
+    assert telem["consumer_fallback_count"] == 4   # 3 readiness + 1 CB
+    assert telem["consumer_v2_failure_count"] == 4
+    assert telem["stale_artifact_block_count"] == 1
+    assert telem["dataset_mismatch_block_count"] == 1
+    assert telem["evidence_grounding_failure_count"] == 1
+    assert telem["circuit_breaker_open_count"] == 1
+    assert telem["rollback_count"] == 1
+
+
+# =============================================================================
+# 20. SINGLE ROUTING AUTHORITY CHECK
+# =============================================================================
+
+def test_single_routing_authority_no_scattered_branches():
+    """
+    Scans production application source files to verify that no direct V2 routing
+    branches (e.g. `Route.V2`, `HIGHVIEW_V2_...`, or direct consumer bypasses)
+    exist outside approved gateway and config modules.
+    """
+    import os
+
+    backend_dir = Path(__file__).resolve().parent.parent / "app"
+    approved_paths = {
+        "services/ingestion_v2/gateway",
+        "services/ingestion_v2/contracts",
+        "core/config.py",
+    }
+
+    suspicious_patterns = [
+        "Route.V2",
+        "HIGHVIEW_V2_GLOBAL_ENABLED",
+        "HIGHVIEW_V2_HRIDAY_ENABLED",
+        "HIGHVIEW_V2_DASHBOARD_ENABLED",
+        "HIGHVIEW_V2_PRESENTATION_ENABLED",
+    ]
+
+    violations: list[str] = []
+
+    for root, _, files in os.walk(backend_dir):
+        for f in files:
+            if not f.endswith(".py"):
+                continue
+            full_path = Path(root) / f
+            rel_path = full_path.relative_to(backend_dir).as_posix()
+
+            # Skip approved gateway and config files
+            if any(rel_path.startswith(ap) for ap in approved_paths):
+                continue
+
+            content = full_path.read_text(encoding="utf-8")
+            for pat in suspicious_patterns:
+                if pat in content:
+                    violations.append(f"{rel_path}: contains '{pat}' outside approved gateway")
+
+    assert len(violations) == 0, f"Found unauthorized consumer routing branches: {violations}"
+

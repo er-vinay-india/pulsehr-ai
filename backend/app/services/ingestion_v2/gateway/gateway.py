@@ -3,11 +3,12 @@ HighView Ingestion V2 — Phase I8.2 Central Consumer Intelligence Gateway
 Stage: Governed Consumer Gateway & Single Routing Boundary
 The sole authoritative routing decision layer for HRIDAY, Dashboard, and Presentation.
 Eliminates scattered conditional logic, enforces independent feature gates, circuit breakers,
-readiness inspections, and non-destructive rollbacks.
+readiness inspections, durable cutover state persistence, and non-destructive rollbacks.
 """
 
 from __future__ import annotations
 
+import hashlib
 import os
 import uuid
 from datetime import datetime, timezone
@@ -15,7 +16,9 @@ from typing import Any
 
 from app.core import config
 from app.services.ingestion_v2.contracts.cutover import (
+    CURRENT_CUTOVER_STATE_SCHEMA_VERSION,
     CircuitBreakerState,
+    ConfigurationSource,
     ConsumerCutoverRecord,
     ConsumerName,
     ConsumerRouteDecision,
@@ -27,9 +30,15 @@ from app.services.ingestion_v2.contracts.cutover import (
     Route,
 )
 from app.services.ingestion_v2.gateway.circuit_breaker import CircuitBreakerManager
+from app.services.ingestion_v2.gateway.persistence import CutoverPersistenceStore
 from app.services.ingestion_v2.gateway.provenance import RoutingProvenanceLedger
 from app.services.ingestion_v2.gateway.readiness import ConsumerReadinessEvaluator
 from app.services.ingestion_v2.gateway.state_machine import ConsumerCutoverStateMachine
+
+
+class RoutingFallbackDisallowedError(RuntimeError):
+    """Raised when a V2 failure occurs but fallback to V1 is disallowed by policy."""
+    pass
 
 
 class ConsumerIntelligenceGateway:
@@ -41,6 +50,7 @@ class ConsumerIntelligenceGateway:
     - 0 changes to analytical calculations or semantics.
     - Deterministic, fail-closed routing logic.
     - Full decision provenance and fallback accountability.
+    - Durable state persistence and restart recovery.
     """
 
     def __init__(
@@ -48,8 +58,10 @@ class ConsumerIntelligenceGateway:
         state_machine: ConsumerCutoverStateMachine | None = None,
         circuit_breaker: CircuitBreakerManager | None = None,
         provenance_ledger: RoutingProvenanceLedger | None = None,
+        persistence_store: CutoverPersistenceStore | None = None,
     ) -> None:
-        self.state_machine = state_machine or ConsumerCutoverStateMachine()
+        self.persistence_store = persistence_store
+        self.state_machine = state_machine or ConsumerCutoverStateMachine(persistence_store=persistence_store)
         self.circuit_breaker = circuit_breaker or CircuitBreakerManager()
         self.provenance_ledger = provenance_ledger or RoutingProvenanceLedger()
 
@@ -125,6 +137,10 @@ class ConsumerIntelligenceGateway:
         dataset_id: str | None = None,
         dataset_version: str | None = None,
         is_canary: bool = False,
+        canary_authorized: bool = False,
+        canary_cohort: str | None = None,
+        canary_percentage: float | None = None,
+        is_probe: bool = False,
         request_id: str | None = None,
         readiness_override: ReadinessAssessment | None = None,
         manifest_data: dict[str, Any] | None = None,
@@ -138,7 +154,8 @@ class ConsumerIntelligenceGateway:
         - Global kill switch
         - Consumer feature gate
         - Cutover state machine
-        - Circuit breaker state
+        - Circuit breaker state (with explicit HALF_OPEN probe guard)
+        - Canary authorization (explicit flag or deterministic cohort)
         - Readiness & evidence grounding
         Returns strongly-typed ConsumerRouteDecision and updates ledger.
         """
@@ -259,34 +276,45 @@ class ConsumerIntelligenceGateway:
             return decision
 
         # CANARY: Ordinary request stays V1; authorized canary request evaluates V2
-        if consumer_state == CutoverState.CANARY and not is_canary:
-            decision = ConsumerRouteDecision(
-                decision_id=decision_id,
-                decision_timestamp=now_iso,
-                consumer=consumer,
-                requested_route=Route.V2,
-                selected_route=Route.V1,
-                consumer_state=consumer_state,
-                feature_enabled=consumer_on,
-                global_enabled=global_on,
-                fallback_allowed=fallback_allowed,
-                fallback_used=False,
-                fallback_reason=FallbackReason.CANARY_NOT_AUTHORIZED,
-                circuit_breaker_state=circuit_state,
-                dataset_id=dataset_id,
-                dataset_version=dataset_version,
-                v2_manifest_fingerprint=manifest_fp,
-                semantic_graph_fingerprint=sem_graph_fp,
-                rationale=f"Consumer {consumer.value} in CANARY state: non-canary request routed to V1",
-            )
-            self.provenance_ledger.record_decision(decision)
-            return decision
+        if consumer_state == CutoverState.CANARY:
+            canary_active = False
+            if is_canary or canary_authorized:
+                canary_active = True
+            elif canary_cohort and canary_percentage is not None:
+                # Deterministic SHA-256 cohort selection
+                chash = hashlib.sha256(canary_cohort.encode("utf-8")).hexdigest()
+                score = (int(chash[:8], 16) % 10000) / 100.0  # 0.00 to 99.99
+                if score < canary_percentage:
+                    canary_active = True
+
+            if not canary_active:
+                decision = ConsumerRouteDecision(
+                    decision_id=decision_id,
+                    decision_timestamp=now_iso,
+                    consumer=consumer,
+                    requested_route=Route.V2,
+                    selected_route=Route.V1,
+                    consumer_state=consumer_state,
+                    feature_enabled=consumer_on,
+                    global_enabled=global_on,
+                    fallback_allowed=fallback_allowed,
+                    fallback_used=False,
+                    fallback_reason=FallbackReason.CANARY_NOT_AUTHORIZED,
+                    circuit_breaker_state=circuit_state,
+                    dataset_id=dataset_id,
+                    dataset_version=dataset_version,
+                    v2_manifest_fingerprint=manifest_fp,
+                    semantic_graph_fingerprint=sem_graph_fp,
+                    rationale=f"Consumer {consumer.value} in CANARY state: non-canary request routed to V1",
+                )
+                self.provenance_ledger.record_decision(decision)
+                return decision
 
         # ---------------------------------------------------------------------
         # Gate 4: Circuit Breaker Inspection
         # ---------------------------------------------------------------------
-        if not self.circuit_breaker.can_attempt_v2(consumer):
-            # Circuit is OPEN
+        if not self.circuit_breaker.can_attempt_v2(consumer, is_probe=is_probe):
+            cb_state = self.circuit_breaker.get_state(consumer)
             last_reason = self.circuit_breaker.get_last_trip_reason(consumer) or FallbackReason.CIRCUIT_BREAKER_OPEN
             self._record_governed_fallback(
                 consumer=consumer,
@@ -295,6 +323,11 @@ class ConsumerIntelligenceGateway:
                 request_id=req_id,
                 reason=FallbackReason.CIRCUIT_BREAKER_OPEN,
                 manifest_fp=manifest_fp,
+            )
+            rationale_msg = (
+                f"Circuit breaker for {consumer.value} in HALF_OPEN: ordinary traffic routes to V1, only probe allowed"
+                if cb_state == CircuitBreakerState.HALF_OPEN
+                else f"Circuit breaker for {consumer.value} is OPEN (last trip reason: {last_reason.value})"
             )
             decision = ConsumerRouteDecision(
                 decision_id=decision_id,
@@ -308,12 +341,12 @@ class ConsumerIntelligenceGateway:
                 fallback_allowed=fallback_allowed,
                 fallback_used=True,
                 fallback_reason=FallbackReason.CIRCUIT_BREAKER_OPEN,
-                circuit_breaker_state=CircuitBreakerState.OPEN,
+                circuit_breaker_state=cb_state,
                 dataset_id=dataset_id,
                 dataset_version=dataset_version,
                 v2_manifest_fingerprint=manifest_fp,
                 semantic_graph_fingerprint=sem_graph_fp,
-                rationale=f"Circuit breaker for {consumer.value} is OPEN (last trip reason: {last_reason.value})",
+                rationale=rationale_msg,
             )
             self.provenance_ledger.record_decision(decision)
             return decision
@@ -345,29 +378,19 @@ class ConsumerIntelligenceGateway:
             tripped = self.circuit_breaker.record_failure(consumer, primary_reason)
             new_circuit_state = CircuitBreakerState.OPEN if tripped else self.circuit_breaker.get_state(consumer)
 
-            # In V2_PRIMARY, normal automatic V1 fallback is disabled
-            if consumer_state == CutoverState.V2_PRIMARY and not fallback_allowed:
-                decision = ConsumerRouteDecision(
-                    decision_id=decision_id,
-                    decision_timestamp=now_iso,
+            # If fallback is explicitly disallowed for this consumer, raise governed error!
+            if not fallback_allowed:
+                self._record_governed_fallback(
                     consumer=consumer,
-                    requested_route=Route.V2,
-                    selected_route=Route.V1,  # Fails safe to V1 with critical severity
-                    consumer_state=consumer_state,
-                    feature_enabled=consumer_on,
-                    global_enabled=global_on,
-                    fallback_allowed=False,
-                    fallback_used=False,
-                    fallback_reason=primary_reason,
-                    circuit_breaker_state=new_circuit_state,
                     dataset_id=dataset_id,
                     dataset_version=dataset_version,
-                    v2_manifest_fingerprint=readiness.manifest_fingerprint,
-                    semantic_graph_fingerprint=readiness.semantic_graph_fingerprint,
-                    rationale=f"CRITICAL: Consumer in V2_PRIMARY encountered readiness failure {primary_reason.value}; fallback disallowed",
+                    request_id=req_id,
+                    reason=primary_reason,
+                    manifest_fp=readiness.manifest_fingerprint,
                 )
-                self.provenance_ledger.record_decision(decision)
-                return decision
+                raise RoutingFallbackDisallowedError(
+                    f"V2 failure for {consumer.value} ({primary_reason.value}), and fallback to V1 is disallowed by policy."
+                )
 
             # In V2_PRIMARY_WITH_FALLBACK or CANARY: governed fallback to V1
             self._record_governed_fallback(
@@ -448,42 +471,46 @@ class ConsumerIntelligenceGateway:
             original_route=Route.V2,
             fallback_route=Route.V1,
             timestamp=datetime.now(timezone.utc).isoformat(),
-            resolved=True,
         )
         self.provenance_ledger.record_fallback(rec)
 
     # =========================================================================
-    # 3. OBSERVABILITY & SNAPSHOT APIS
+    # 3. OBSERVABILITY & TELEMETRY
     # =========================================================================
     def get_snapshot(self, consumer: ConsumerName) -> ConsumerRoutingSnapshot:
-        """Returns a snapshot of the consumer's current state, circuit breaker, and route counts."""
-        rec = self.state_machine.get_record(consumer)
-        telemetry = self.provenance_ledger.get_telemetry()
-        consumer_routes = telemetry["per_consumer_routes"].get(consumer.value, {"V1": 0, "V2": 0})
+        """Returns the current observability snapshot for a consumer."""
+        state = self.state_machine.get_state(consumer)
+        c_counts = self.provenance_ledger.get_consumer_counts(consumer)
+        last_fb = self.provenance_ledger.get_last_fallback(consumer)
+
         return ConsumerRoutingSnapshot(
             consumer=consumer,
-            state=rec.current_state,
+            state=state,
             feature_enabled=self.is_consumer_v2_enabled(consumer),
             global_enabled=self.is_global_v2_enabled(),
             fallback_allowed=self.is_fallback_allowed(consumer),
-            route_v1_count=consumer_routes.get("V1", 0),
-            route_v2_count=consumer_routes.get("V2", 0),
-            fallback_count=rec.fallback_count + telemetry["consumer_fallback_count"],
-            last_fallback_reason=self.circuit_breaker.get_last_trip_reason(consumer),
+            route_v1_count=c_counts["route_v1"],
+            route_v2_count=c_counts["route_v2"],
+            fallback_count=c_counts["fallback"],
+            last_fallback_reason=last_fb.reason if last_fb else None,
             circuit_state=self.circuit_breaker.get_state(consumer),
-            v2_failures=telemetry["consumer_v2_failure_count"],
+            v2_failures=self.provenance_ledger.get_counter("consumer_v2_failure_count"),
         )
 
     def get_telemetry(self) -> dict[str, Any]:
-        """Returns the full telemetry dictionary from the ledger."""
+        """Returns all global telemetry counters and summaries from the provenance ledger."""
+        return self.provenance_ledger.get_telemetry()
+
+    def get_telemetry_counters(self) -> dict[str, Any]:
+        """Returns all global telemetry counters."""
         return self.provenance_ledger.get_telemetry()
 
     def reset(self) -> None:
-        """Resets all consumer states to SHADOW and clears circuit breakers & telemetry."""
-        for c in (ConsumerName.HRIDAY, ConsumerName.DASHBOARD, ConsumerName.PRESENTATION):
+        """Resets dynamic overrides, consumer states to SHADOW, circuit breakers, and telemetry."""
+        self._override_global_enabled = None
+        self._override_consumer_enabled = {c: None for c in ConsumerName}
+        self._override_fallback_allowed = {c: None for c in ConsumerName}
+        for c in ConsumerName:
             self.state_machine.reset_to_shadow(c)
             self.circuit_breaker.reset(c)
-            self._override_consumer_enabled[c] = None
-            self._override_fallback_allowed[c] = None
-        self._override_global_enabled = None
         self.provenance_ledger.reset_telemetry()

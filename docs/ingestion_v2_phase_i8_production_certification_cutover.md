@@ -282,7 +282,29 @@ The Phase I8.2 test suite in `backend/tests/test_ingestion_v2_consumer_gateway.p
 - `test_gateway_circuit_breaker_open_falls_back`: Breaker trip fallback
 - `test_routing_ledger_telemetry`: Accurate counters and history
 - `test_gateway_idempotence`: Repeated identical decisions
-- `test_gateway_concurrency_thread_safety`: Multi-threaded safety
-- `test_gateway_telemetry_counters`: All 8 counter types validated
 - `test_gateway_performance_p50_p95`: Strict latency SLA adherence
+
+### 6.8 Durable State Persistence & Circuit Breaker Restart Semantics
+
+To guarantee deterministic recovery across service restarts and prevent split-brain routing:
+1. **Durable Persistence (`CutoverPersistenceStore`)**:
+   - Backed by an isolated SQLite database (`cutover_state.sqlite3`), completely separated from the live application database.
+   - Enforces ACID state transitions and persistent transition ledger history with re-entrant thread safety (`threading.RLock`).
+   - Gated by schema versioning (`CURRENT_CUTOVER_STATE_SCHEMA_VERSION = 1`). Corrupt database files or unparseable future schema versions fail safe to `SHADOW` state.
+   - Durably tracks configuration source (`ConfigurationSource`: `ENVIRONMENT`, `CONTROL_PLANE`, `DECISION_LEDGER`, `TEST_FIXTURE`).
+2. **Circuit Breaker Restart Semantics**:
+   - The circuit breaker runtime failure counters reset cleanly on process restart.
+   - Persistent cutover state and transition history are fully preserved across restarts.
+   - Gate 5 readiness and existential evidence grounding checks execute on every request and can never be bypassed by restart.
+   - In `HALF_OPEN` state, ordinary traffic (`is_probe=False`) is blocked and routed to V1; only explicit diagnostic recovery probes (`is_probe=True`) are evaluated against V2.
+3. **Independent Fallback Policy**:
+   - Fallback policy is decoupled from V2 enablement.
+   - When `fallback_allowed=False`, routing failure raises `RoutingFallbackDisallowedError` rather than silently degrading to V1.
+4. **Concrete Routing Telemetry Certification Run**:
+   - 10 V1 routing decisions (5 initial gating + 3 readiness fallbacks + 1 circuit breaker + 1 rollback)
+   - 4 healthy V2 routing decisions
+   - 4 governed fallbacks (`V2_ARTIFACT_STALE`: 1, `V2_DATASET_VERSION_MISMATCH`: 1, `V2_CONTEXT_GROUNDING_FAILURE`: 1, `CIRCUIT_BREAKER_OPEN`: 1)
+   - 4 V2 failures
+   - 1 circuit breaker open event
+   - 1 governed rollback
 

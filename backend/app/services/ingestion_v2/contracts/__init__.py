@@ -128,6 +128,8 @@ from app.services.ingestion_v2.contracts.cutover import (
     CutoverTransitionLedgerEntry,
     ReadinessAssessment,
     ConsumerRoutingSnapshot,
+    ConfigurationSource,
+    CURRENT_CUTOVER_STATE_SCHEMA_VERSION,
 )
 
 __all__ = [
@@ -238,4 +240,6 @@ __all__ = [
     "CutoverTransitionLedgerEntry",
     "ReadinessAssessment",
     "ConsumerRoutingSnapshot",
+    "ConfigurationSource",
+    "CURRENT_CUTOVER_STATE_SCHEMA_VERSION",
 ]

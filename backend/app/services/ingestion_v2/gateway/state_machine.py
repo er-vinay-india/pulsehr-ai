@@ -11,12 +11,15 @@ from datetime import datetime, timezone
 from typing import Any
 
 from app.services.ingestion_v2.contracts.cutover import (
+    CURRENT_CUTOVER_STATE_SCHEMA_VERSION,
     CircuitBreakerState,
+    ConfigurationSource,
     ConsumerCutoverRecord,
     ConsumerName,
     CutoverState,
     CutoverTransitionLedgerEntry,
 )
+from app.services.ingestion_v2.gateway.persistence import CutoverPersistenceStore
 
 
 class InvalidCutoverTransitionError(ValueError):
@@ -65,31 +68,41 @@ class ConsumerCutoverStateMachine:
     2. HRIDAY advances first, Dashboard advances second, Presentation advances third.
     3. Rollback can be triggered instantly from any state.
     4. Recovery from rollback requires explicit recovery validation.
+    5. Durable persistence and fail-closed restart recovery when backed by CutoverPersistenceStore.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, persistence_store: CutoverPersistenceStore | None = None) -> None:
         self._lock = threading.Lock()
-        self._records: dict[ConsumerName, ConsumerCutoverRecord] = {
-            ConsumerName.HRIDAY: ConsumerCutoverRecord(
-                consumer_name=ConsumerName.HRIDAY,
-                current_state=CutoverState.SHADOW,
-                feature_enabled=False,
-                fallback_allowed=True,
-            ),
-            ConsumerName.DASHBOARD: ConsumerCutoverRecord(
-                consumer_name=ConsumerName.DASHBOARD,
-                current_state=CutoverState.SHADOW,
-                feature_enabled=False,
-                fallback_allowed=True,
-            ),
-            ConsumerName.PRESENTATION: ConsumerCutoverRecord(
-                consumer_name=ConsumerName.PRESENTATION,
-                current_state=CutoverState.SHADOW,
-                feature_enabled=False,
-                fallback_allowed=True,
-            ),
-        }
-        self._transition_history: list[CutoverTransitionLedgerEntry] = []
+        self._store = persistence_store
+
+        if self._store is not None:
+            self._records = self._store.load_all_consumer_states()
+            self._transition_history = self._store.load_transition_history()
+        else:
+            self._records = {
+                ConsumerName.HRIDAY: ConsumerCutoverRecord(
+                    consumer_name=ConsumerName.HRIDAY,
+                    current_state=CutoverState.SHADOW,
+                    feature_enabled=False,
+                    fallback_allowed=True,
+                    configuration_source=ConfigurationSource.CONTROL_PLANE,
+                ),
+                ConsumerName.DASHBOARD: ConsumerCutoverRecord(
+                    consumer_name=ConsumerName.DASHBOARD,
+                    current_state=CutoverState.SHADOW,
+                    feature_enabled=False,
+                    fallback_allowed=True,
+                    configuration_source=ConfigurationSource.CONTROL_PLANE,
+                ),
+                ConsumerName.PRESENTATION: ConsumerCutoverRecord(
+                    consumer_name=ConsumerName.PRESENTATION,
+                    current_state=CutoverState.SHADOW,
+                    feature_enabled=False,
+                    fallback_allowed=True,
+                    configuration_source=ConfigurationSource.CONTROL_PLANE,
+                ),
+            }
+            self._transition_history = []
 
     def get_state(self, consumer: ConsumerName) -> CutoverState:
         """Returns the current CutoverState of the consumer."""
@@ -113,13 +126,21 @@ class ConsumerCutoverStateMachine:
         reason: str,
         certification_evidence: str = "",
         commit: str = "HEAD",
-        authorized_source: str = "control-plane",
+        authorized_source: ConfigurationSource | str = ConfigurationSource.CONTROL_PLANE,
         artifact_fingerprints: dict[str, str] | None = None,
     ) -> ConsumerCutoverRecord:
         """
         Executes a validated transition for a consumer.
         Fails closed with InvalidCutoverTransitionError or CutoverOrderingViolationError.
         """
+        if isinstance(authorized_source, str):
+            try:
+                auth_src = ConfigurationSource(authorized_source)
+            except ValueError:
+                auth_src = ConfigurationSource.CONTROL_PLANE
+        else:
+            auth_src = authorized_source
+
         with self._lock:
             current_rec = self._records[consumer]
             current_state = current_rec.current_state
@@ -148,6 +169,9 @@ class ConsumerCutoverStateMachine:
                     "current_state": target_state,
                     "previous_state": current_state,
                     "transition_version": new_version,
+                    "configuration_source": auth_src,
+                    "last_transition_timestamp": now_iso,
+                    "cutover_state_schema_version": CURRENT_CUTOVER_STATE_SCHEMA_VERSION,
                     "activated_at": now_iso if target_state in (CutoverState.CANARY, CutoverState.V2_PRIMARY_WITH_FALLBACK, CutoverState.V2_PRIMARY) else current_rec.activated_at,
                     "certification_run_id": certification_evidence if target_state == CutoverState.CERTIFIED else current_rec.certification_run_id,
                 }
@@ -163,10 +187,16 @@ class ConsumerCutoverStateMachine:
                 certification_evidence=certification_evidence,
                 commit=commit,
                 artifact_fingerprints=artifact_fingerprints or {},
-                authorized_configuration_source=authorized_source,
+                authorized_configuration_source=auth_src,
+                cutover_state_schema_version=CURRENT_CUTOVER_STATE_SCHEMA_VERSION,
                 timestamp=now_iso,
             )
             self._transition_history.append(ledger_entry)
+
+            if self._store is not None:
+                self._store.save_consumer_state(new_record)
+                self._store.append_transition_entry(ledger_entry)
+
             return new_record.model_copy()
 
     def rollback(self, consumer: ConsumerName, reason: str, commit: str = "HEAD") -> ConsumerCutoverRecord:
@@ -222,6 +252,8 @@ class ConsumerCutoverStateMachine:
                 circuit_breaker_state=CircuitBreakerState.CLOSED,
             )
             self._records[consumer] = rec
+            if self._store is not None:
+                self._store.save_consumer_state(rec)
             return rec.model_copy()
 
     def _validate_ordering_constraints(self, consumer: ConsumerName, target_state: CutoverState) -> None:
