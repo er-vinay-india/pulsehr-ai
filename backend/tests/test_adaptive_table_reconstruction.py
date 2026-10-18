@@ -27,6 +27,7 @@ from app.services.adaptive_table_reconstruction import (
     GridCapture,
     ModelContinuationDecision,
     ModelEscalator,
+    ModelSentinelDecision,
     RowRole,
     RowRoleClassifier,
 )
@@ -238,7 +239,7 @@ def test_end_to_end_sheet_catalog_integration(tmp_path):
     assert "PM 2.5 Data" in s_comp["metric_identity"]
 
 
-def test_ambiguous_continuation_model_escalation():
+def test_ambiguous_continuation_model_escalation(monkeypatch):
     """Verifies that an ambiguous free-text continuation fragment (Contract renewal pending + Quarterly terms)
     triggers ModelEscalator, exercises the risk/semantic-confidence gate, and lands safely in MODEL_ASSISTED_PROPOSED."""
     csv_data = (
@@ -247,6 +248,20 @@ def test_ambiguous_continuation_model_escalation():
         ",Quarterly terms,\n"
         "2,Annual payment processing,1500\n"
     )
+    mock_decision = ModelContinuationDecision(
+        relationship=ContinuationType.SUFFIX_OF_PREVIOUS_ROW,
+        target_row_index=1,
+        confidence=0.88,
+        evidence=["Quarterly terms is continuation of contract renewal description"],
+    )
+
+    def _mock_call(self, prompt, response_model, temperature=0.0):
+        self.telemetry.model_calls += 1
+        if self.model_name not in self.telemetry.models_used:
+            self.telemetry.models_used.append(self.model_name)
+        return mock_decision, mock_decision.model_dump(), 12.0
+
+    monkeypatch.setattr(ModelEscalator, "_call_model_json", _mock_call)
     result = AdaptiveTableReconstructionEngine.reconstruct(io.StringIO(csv_data))
     assert result.telemetry.model_calls >= 1
     assert len(result.audits) >= 1
@@ -272,7 +287,7 @@ def test_lexical_split_model_assisted_validated():
     assert "Rajamahendravaram" in result.reconstructed_df["City"].iloc[1]
 
 
-def test_narrative_sentinel_model_escalation():
+def test_narrative_sentinel_model_escalation(monkeypatch):
     """Verifies that narrative footnote with unknown sentinel triggers ModelEscalator
     and is resolved without hardcoded mapping."""
     csv_data = (
@@ -282,6 +297,21 @@ def test_narrative_sentinel_model_escalation():
         "S3,38,Moderate\n"
         "Note: Regions marked NR were not evaluated in the current reporting cycle.\n"
     )
+    mock_sentinel = ModelSentinelDecision(
+        token="NR",
+        meaning="Not evaluated in the current reporting cycle",
+        is_missing_indicator=True,
+        confidence=0.95,
+        evidence=["Regions marked NR were not evaluated in the current reporting cycle"],
+    )
+
+    def _mock_sentinel_call(self, prompt, response_model, temperature=0.0):
+        self.telemetry.model_calls += 1
+        if self.model_name not in self.telemetry.models_used:
+            self.telemetry.models_used.append(self.model_name)
+        return mock_sentinel, mock_sentinel.model_dump(), 12.0
+
+    monkeypatch.setattr(ModelEscalator, "_call_model_json", _mock_sentinel_call)
     result = AdaptiveTableReconstructionEngine.reconstruct(io.StringIO(csv_data))
     assert result.telemetry.model_calls >= 1
     assert any(s.token == "NR" for s in result.sentinels)
