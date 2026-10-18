@@ -1,7 +1,7 @@
 """
 HighView Ingestion V2 — Phase I8.1 Shadow Parity & Disagreement Certification Tests
-Boundary: Verifies that V1 and V2 side-by-side evaluation over the 6-domain canonical
-benchmark corpus satisfies all certification gates before consumer cutover.
+Boundary: Verifies that real V1 and V2 runtime side-by-side evaluation over the 6-domain
+canonical benchmark corpus satisfies all certification gates before consumer cutover.
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ from app.services.ingestion_v2.shadow_runner import ShadowStorageManager
 
 @pytest.fixture
 def audit_report() -> ShadowParityAuditReport:
-    auditor = ShadowParityAuditor(run_id="test-audit-i8-1")
+    auditor = ShadowParityAuditor(run_id="test-audit-i8-1-real-runtime")
     return auditor.run_audit()
 
 
@@ -34,6 +34,36 @@ def test_shadow_parity_total_comparison_volume(audit_report):
     assert audit_report.total_comparisons == 60
     assert len(audit_report.comparisons) == 60
     assert len(audit_report.domain_summaries) == 6
+
+
+def test_real_v1_and_v2_runtime_producers_and_fingerprints(audit_report):
+    """Verifies that EVERY comparison record carries real V1 and V2 producers and fingerprints."""
+    for rec in audit_report.comparisons:
+        assert rec.v1_producer is not None and len(rec.v1_producer.strip()) > 0
+        assert rec.v2_producer is not None and len(rec.v2_producer.strip()) > 0
+        assert len(rec.v1_fingerprint) == 64, f"Invalid SHA-256 fingerprint for V1 in {rec.comparison_id}"
+        assert len(rec.v2_fingerprint) == 64, f"Invalid SHA-256 fingerprint for V2 in {rec.comparison_id}"
+        assert rec.benchmark_truth_source is not None and len(rec.benchmark_truth_source.strip()) > 0
+        assert rec.review_status == ReviewStatus.APPROVED
+
+
+def test_comparison_category_coverage(audit_report):
+    """Verifies 10 categories are covered with exactly 6 comparisons each (1 per domain)."""
+    expected_categories = [
+        "schema",
+        "semantic_role",
+        "grain",
+        "relationships",
+        "join_plans",
+        "metric_definitions",
+        "analytical_values",
+        "denominators",
+        "evidence",
+        "retrieval_context",
+    ]
+    for cat in expected_categories:
+        cat_records = [c for c in audit_report.comparisons if c.category == cat]
+        assert len(cat_records) == 6, f"Category {cat} must have exactly 6 comparisons (1 per domain)"
 
 
 def test_shadow_parity_zero_blockers(audit_report):
@@ -82,24 +112,26 @@ def test_shadow_parity_per_domain_summaries(audit_report):
 
 
 def test_all_expected_fixes_are_benchmark_grounded(audit_report):
-    """All EXPECTED_FIX cases must have benchmark truth, rationale, and APPROVED review status."""
+    """All 20 EXPECTED_FIX cases must have benchmark truth, rationale, and APPROVED review status."""
     fix_records = [c for c in audit_report.comparisons if c.disagreement_type == DisagreementType.EXPECTED_FIX]
     assert len(fix_records) == 20
     for rec in fix_records:
         assert rec.benchmark_truth is not None
         assert len(str(rec.benchmark_truth).strip()) > 0
-        assert rec.review_status in (ReviewStatus.APPROVED, ReviewStatus.ACCEPTED_DIFFERENCE)
+        assert rec.review_status == ReviewStatus.APPROVED
         assert len(rec.reason) > 10
         assert rec.evidence_ref.startswith("EVID-")
 
 
-def test_all_expected_differences_are_reviewed(audit_report):
-    """All EXPECTED_DIFFERENCE cases must be reviewed and approved."""
-    diff_records = [c for c in audit_report.comparisons if c.comparison_class == ComparisonClass.EXPECTED_DIFFERENCE]
-    assert len(diff_records) == 12
-    for rec in diff_records:
-        assert rec.review_status in (ReviewStatus.APPROVED, ReviewStatus.ACCEPTED_DIFFERENCE)
+def test_all_expected_refactors_are_semantically_equivalent(audit_report):
+    """All 14 EXPECTED_REFACTOR cases must preserve business meaning and carry APPROVED status."""
+    refactor_records = [c for c in audit_report.comparisons if c.disagreement_type == DisagreementType.EXPECTED_REFACTOR]
+    assert len(refactor_records) == 14
+    for rec in refactor_records:
+        assert rec.review_status == ReviewStatus.APPROVED
         assert rec.severity == Severity.INFO
+        assert len(rec.reason) > 10
+        assert rec.evidence_ref.startswith("EVID-")
 
 
 def test_mathematical_safety_invariants(audit_report):
