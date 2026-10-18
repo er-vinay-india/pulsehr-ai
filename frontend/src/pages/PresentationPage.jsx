@@ -7,7 +7,7 @@ import {
   deletePresentationDeck,
   getDatasetPersonas
 } from "../api/client";
-import { STORAGE_KEYS } from "../constants/storageKeys";
+import { STORAGE_KEYS } from "../constants/storageKeys.js";
 import EvidenceInspectionDrawer from "../components/EvidenceInspectionDrawer.jsx";
 import DeckGeneratingView from "../components/presentation/DeckGeneratingView.jsx";
 import DeckStudioView from "../components/presentation/DeckStudioView.jsx";

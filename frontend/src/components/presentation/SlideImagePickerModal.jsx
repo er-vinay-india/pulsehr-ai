@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Search, Image, X, Check, Sliders, Sparkles, ExternalLink } from "lucide-react";
 import { searchPresentationImages } from "../../api/client";
-import { IMAGE_PICKER_TIMEOUT_MS } from "../../config/env";
+import { IMAGE_PICKER_TIMEOUT_MS } from "../../config/env.js";
 
 const CATEGORIES = [
   { id: "all", label: "All Curated" },

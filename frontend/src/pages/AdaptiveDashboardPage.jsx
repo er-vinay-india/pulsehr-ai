@@ -43,7 +43,7 @@ import {
   dispatchNavigationIntent,
 } from "../contracts/NavigationIntentRegistry";
 import { resolveGovernedCount } from "../contracts/DashboardTruthIntegrity";
-import { STORAGE_KEYS } from "../constants/storageKeys";
+import { STORAGE_KEYS } from "../constants/storageKeys.js";
 import "../styles/adaptive-dashboard.scss";
 import { useTheme } from "../context/ThemeContext";
 import { getThemeTokens } from "../theme/tokens";

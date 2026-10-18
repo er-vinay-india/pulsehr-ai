@@ -17,7 +17,7 @@ import {
   getIngestionJob,
   subscribeToIngestionJobStream
 } from "../../api/client";
-import { INGESTION_POLL_INTERVAL_MS, INGESTION_COMPLETION_DELAY_MS } from "../../config/env";
+import { INGESTION_POLL_INTERVAL_MS, INGESTION_COMPLETION_DELAY_MS } from "../../config/env.js";
 import UploadProgressCard from "./UploadProgressCard";
 
 export default function UploadModal({

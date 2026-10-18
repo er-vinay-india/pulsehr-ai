@@ -13,7 +13,7 @@ import {
   previewPresentationScope
 } from "../../api/client";
 import { exportStandaloneHtmlPresentation } from "../../utils/standaloneHtmlExporter";
-import { PRESENTATION_ACTIVE_POLL_MS, PRESENTATION_IDLE_POLL_MS } from "../../config/env";
+import { PRESENTATION_ACTIVE_POLL_MS, PRESENTATION_IDLE_POLL_MS } from "../../config/env.js";
 
 export const STAGES = [
   { id: "brief_setup", label: "Objective & Brief Setup", desc: "Defining audience seniority, time budget, and decision requested" },

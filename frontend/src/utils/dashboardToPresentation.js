@@ -5,7 +5,7 @@
  * Zero manual scope entry or artificial data hallucination:
  * Direct 1:1 binding between dashboard truth tokens and slide specifications.
  */
-import { DEFAULT_FALLBACK_IMAGE_URL } from "../config/env";
+import { DEFAULT_FALLBACK_IMAGE_URL } from "../config/env.js";
 
 export function transformDashboardToDeck(dashboardData, options = {}) {
   if (!dashboardData) return null;

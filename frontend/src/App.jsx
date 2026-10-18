@@ -8,7 +8,7 @@ import DataExplorerPage from "./pages/DataExplorerPage.jsx";
 import PresentationPage from "./pages/PresentationPage.jsx";
 import UploadModal from "./components/ingestion/UploadModal.jsx";
 import { activateUploadedSheet } from "./components/hriday/datasetScope.js";
-import { NOTIFICATION_DISMISS_DELAY_MS } from "./config/env";
+import { NOTIFICATION_DISMISS_DELAY_MS } from "./config/env.js";
 import { CheckCircle2, X, Table } from "lucide-react";
 
 function parseHash() {

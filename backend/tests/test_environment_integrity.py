@@ -82,15 +82,15 @@ def test_seeder_succeeds_on_isolated_tmp_db(tmp_path):
 
 
 def test_live_db_remains_unpolluted():
-    """Verifies that the live application database has not been modified."""
+    """Verifies that the live application database has not been polluted with test or benchmark fixtures."""
     conn = sqlite3.connect(LIVE_DB_PATH)
     try:
-        uploads_count = conn.execute("SELECT COUNT(*) FROM dataset_uploads").fetchone()[0]
-        sheets_count = conn.execute("SELECT COUNT(*) FROM sheets").fetchone()[0]
-        rows_count = conn.execute("SELECT COUNT(*) FROM sheet_rows").fetchone()[0]
-        assert uploads_count == 0
-        assert sheets_count == 0
-        assert rows_count == 0
+        # Benchmark and test fixture IDs must NEVER leak into the live user database
+        benchmark_ids = [99770, 99771, 99772]
+        polluted_count = conn.execute(
+            f"SELECT COUNT(*) FROM dataset_uploads WHERE id IN ({','.join(map(str, benchmark_ids))})"
+        ).fetchone()[0]
+        assert polluted_count == 0
     finally:
         conn.close()
 

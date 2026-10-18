@@ -1,4 +1,4 @@
-import { API_BASE } from "../config/env";
+import { API_BASE } from "../config/env.js";
 export { API_BASE };
 
 export async function getAnalyticsOverview(sheetId = null) {
