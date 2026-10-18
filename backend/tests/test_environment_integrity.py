@@ -82,10 +82,25 @@ def test_seeder_succeeds_on_isolated_tmp_db(tmp_path):
 
 
 def test_live_db_remains_unpolluted():
-    """Verifies that the live application database has not been polluted with test or benchmark fixtures."""
+    """Verifies that the live application database has not been modified during test execution.
+
+    Enforces the P0 invariant:
+    LIVE USER STATE BEFORE TEST == LIVE USER STATE AFTER TEST
+    and verifies zero benchmark or test fixture IDs leaked into live state.
+    """
+    from tests.conftest import _LIVE_DB_SESSION_START_STATE, get_live_db_state
+
+    # 1. LIVE USER STATE BEFORE TEST == LIVE USER STATE AFTER TEST
+    current_state = get_live_db_state()
+    if _LIVE_DB_SESSION_START_STATE is not None:
+        assert current_state == _LIVE_DB_SESSION_START_STATE, (
+            "CRITICAL P0 ISOLATION BREACH: Live application database was modified during test suite execution! "
+            "Live user state before test != live user state after test."
+        )
+
+    # 2. Benchmark/test fixture IDs must NEVER exist in live user database
     conn = sqlite3.connect(LIVE_DB_PATH)
     try:
-        # Benchmark and test fixture IDs must NEVER leak into the live user database
         benchmark_ids = [99770, 99771, 99772]
         polluted_count = conn.execute(
             f"SELECT COUNT(*) FROM dataset_uploads WHERE id IN ({','.join(map(str, benchmark_ids))})"

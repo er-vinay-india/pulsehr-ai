@@ -9,6 +9,39 @@ from app.services import sheet_catalog
 
 from app.core.db_isolation import assert_test_database_isolation, LIVE_DB_PATH
 
+_LIVE_DB_SESSION_START_STATE = None
+
+def get_live_db_state():
+    if not LIVE_DB_PATH.exists():
+        return None
+    conn = sqlite3.connect(LIVE_DB_PATH)
+    try:
+        try:
+            import sqlite_vec
+            conn.enable_load_extension(True)
+            sqlite_vec.load(conn)
+            conn.enable_load_extension(False)
+        except Exception:
+            pass
+
+        tables = [
+            r[0] for r in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE 'tabular_vectors%'"
+            ).fetchall()
+        ]
+        tables.sort()
+        state = {}
+        for t in tables:
+            rows = conn.execute(f"SELECT * FROM {t}").fetchall()
+            state[t] = rows
+        return state
+    finally:
+        conn.close()
+
+def pytest_sessionstart(session):
+    global _LIVE_DB_SESSION_START_STATE
+    _LIVE_DB_SESSION_START_STATE = get_live_db_state()
+
 @pytest.fixture(autouse=True)
 def isolated_workspace(request, tmp_path, monkeypatch):
     test_db = tmp_path / 'db' / 'test.sqlite3'
