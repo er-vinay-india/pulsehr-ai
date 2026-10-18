@@ -18,6 +18,10 @@ class GraphNodeType(str, Enum):
     GRAIN = "GRAIN"
     METRIC = "METRIC"
     FINDING = "FINDING"
+    DIMENSION = "DIMENSION"
+    MEASURE = "MEASURE"
+    TIME = "TIME"
+    SEMANTIC_FAMILY = "SEMANTIC_FAMILY"
 
 
 class GraphEdgeType(str, Enum):
@@ -27,6 +31,15 @@ class GraphEdgeType(str, Enum):
     RELATES_TO = "RELATES_TO"
     MEASURES = "MEASURES"
     SUPPORTS_FINDING = "SUPPORTS_FINDING"
+    STRUCTURAL_RELATIONSHIP = "STRUCTURAL_RELATIONSHIP"
+    SEMANTIC_RELATIONSHIP = "SEMANTIC_RELATIONSHIP"
+    DERIVED_FROM = "DERIVED_FROM"
+    MEASURED_AT_GRAIN = "MEASURED_AT_GRAIN"
+    USES_JOIN_PLAN = "USES_JOIN_PLAN"
+    SUPPORTED_BY_EVIDENCE = "SUPPORTED_BY_EVIDENCE"
+    HAS_DIMENSION = "HAS_DIMENSION"
+    SOURCE_PROVENANCE = "SOURCE_PROVENANCE"
+    BELONGS_TO_FAMILY = "BELONGS_TO_FAMILY"
 
 
 class SemanticGraphNode(BaseModel):
@@ -67,3 +80,7 @@ class SemanticGraph(IngestionContractBase):
     edges: list[SemanticGraphEdge] = Field(default_factory=list)
     node_count: int = 0
     edge_count: int = 0
+    metrics_count: int = 0
+    families_count: int = 0
+    graph_fingerprint: str = ""
+

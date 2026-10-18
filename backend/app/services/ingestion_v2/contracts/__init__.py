@@ -77,8 +77,10 @@ from app.services.ingestion_v2.contracts.analytics import (
 )
 from app.services.ingestion_v2.contracts.enrichment import (
     MetricScope,
+    MetricAdditivity,
     LocalDerivedMetric,
     RelationalDerivedMetric,
+    SemanticFamily,
     EnrichedDataset,
 )
 from app.services.ingestion_v2.contracts.semantic_graph import (
@@ -178,8 +180,10 @@ __all__ = [
     "AnalyticalProfile",
     # Stage 9: Enrichment
     "MetricScope",
+    "MetricAdditivity",
     "LocalDerivedMetric",
     "RelationalDerivedMetric",
+    "SemanticFamily",
     "EnrichedDataset",
     # Stage 10: Semantic Graph
     "GraphNodeType",
