@@ -412,6 +412,7 @@ def test_routing_rollback_forces_v1(gateway):
 
     dec = gateway.evaluate_route(ConsumerName.HRIDAY, dataset_id="ds-1")
     assert dec.selected_route == Route.V1
+    assert dec.fallback_reason == FallbackReason.CONSUMER_ROLLBACK_ACTIVE
 
 
 # =============================================================================

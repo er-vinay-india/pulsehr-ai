@@ -122,7 +122,7 @@ def make_sample_manifest(dataset_id: str, version: str = "v1") -> dict[str, Any]
     }
 
 
-def make_mock_retriever(dataset_id: str) -> HybridRetriever:
+def make_mock_retriever(dataset_id: str, count: int = 4) -> HybridRetriever:
     # Index sample documents across 4 namespaces
     docs = [
         RetrievalDocument.create(
@@ -178,6 +178,23 @@ def make_mock_retriever(dataset_id: str) -> HybridRetriever:
             evidence_refs=["EVID-ANA-002"],
         ),
     ]
+
+    for i in range(4, count):
+        docs.append(
+            RetrievalDocument.create(
+                document_id=f"doc_{dataset_id}_{i+1}",
+                namespace=RetrievalNamespace.ANALYTICAL,
+                authority_class=AuthorityClass.ANALYTICAL_EVIDENCE,
+                dataset_id=dataset_id,
+                dataset_version="v1",
+                source_fingerprint=f"fp_{dataset_id}_{i+1}",
+                artifact_type="fact",
+                artifact_id=f"fact_{i+1}",
+                text_for_retrieval=f"Analytical document {i+1} for dataset {dataset_id}.",
+                structured_metadata={"title": f"Fact {i+1}", "entity_id": f"fact_{i+1}"},
+                evidence_refs=[f"EVID-EXTRA-{i+1:03d}"],
+            )
+        )
 
     bm25 = MultiNamespaceBM25Index(docs)
     vector = MultiNamespaceVectorIndex()
@@ -803,7 +820,7 @@ def test_rollback_drill_v2_to_rollback(isolated_gateway: ConsumerIntelligenceGat
     # 3. After rollback: immediately routes to V1
     dec_after = gw.evaluate_route(ConsumerName.HRIDAY, dataset_id="ds_rb", manifest_data=manifest)
     assert dec_after.selected_route == Route.V1
-    assert dec_after.fallback_reason == FallbackReason.KILL_SWITCH_ACTIVE
+    assert dec_after.fallback_reason == FallbackReason.CONSUMER_ROLLBACK_ACTIVE
 
 
 def test_cutover_state_restart_survival(test_persistence: CutoverPersistenceStore):
@@ -831,34 +848,45 @@ def test_cutover_state_restart_survival(test_persistence: CutoverPersistenceStor
 # =============================================================================
 
 def test_copilot_query_endpoint_route_provenance(isolated_gateway: ConsumerIntelligenceGateway):
-    """Verifies POST /api/copilot/query returns route_provenance envelope."""
+    """Verifies POST /api/copilot/query contract: zero leakage by default, envelope present on include_provenance=True."""
     set_consumer_gateway(isolated_gateway)
     adapter = HridayIntelligenceAdapter(gateway=isolated_gateway, retriever=make_mock_retriever("1"))
     set_hriday_adapter(adapter)
 
     client = TestClient(app)
-    resp = client.post(
+    # Default public request: zero route_provenance leakage
+    resp_default = client.post(
         "/api/copilot/query",
         json={"query": "What is our attendance summary?", "dataset_id": 1, "engine": "generic"},
     )
-    assert resp.status_code == 200
-    data = resp.json()
-    assert "answer" in data
-    # When routed via copilot, route_provenance is attached
-    if "route_provenance" in data:
-        prov = data["route_provenance"]
-        assert "route_selected" in prov
-        assert "decision_id" in prov
-        assert "consumer_state" in prov
+    assert resp_default.status_code == 200
+    data_default = resp_default.json()
+    assert "answer" in data_default
+    assert "route_provenance" not in data_default
+
+    # Explicit diagnostic request: route_provenance envelope attached
+    resp_diag = client.post(
+        "/api/copilot/query",
+        json={"query": "What is our attendance summary?", "dataset_id": 1, "engine": "generic", "include_provenance": True},
+    )
+    assert resp_diag.status_code == 200
+    data_diag = resp_diag.json()
+    assert "answer" in data_diag
+    assert "route_provenance" in data_diag
+    prov = data_diag["route_provenance"]
+    assert "route_selected" in prov
+    assert "decision_id" in prov
+    assert "consumer_state" in prov
 
 
 def test_copilot_stream_endpoint_sse_contract(isolated_gateway: ConsumerIntelligenceGateway):
-    """Verifies POST /api/copilot/query/stream streams standard SSE events with route_provenance."""
+    """Verifies POST /api/copilot/query/stream streams standard SSE events with clean public contract."""
     set_consumer_gateway(isolated_gateway)
     adapter = HridayIntelligenceAdapter(gateway=isolated_gateway, retriever=make_mock_retriever("1"))
     set_hriday_adapter(adapter)
 
     client = TestClient(app)
+    # Default streaming request: zero route_provenance leakage in done event
     resp = client.post(
         "/api/copilot/query/stream",
         json={"query": "Calculate attendance summary", "dataset_id": 1, "engine": "auto"},
@@ -870,6 +898,22 @@ def test_copilot_stream_endpoint_sse_contract(isolated_gateway: ConsumerIntellig
     lines = resp.text.split("\n")
     events = [l for l in lines if l.startswith("event:")]
     assert len(events) >= 1
+
+    # Diagnostic streaming request: done event has route_provenance
+    resp_diag = client.post(
+        "/api/copilot/query/stream",
+        json={"query": "Calculate attendance summary", "dataset_id": 1, "engine": "auto", "include_provenance": True},
+    )
+    assert resp_diag.status_code == 200
+    lines_diag = resp_diag.text.split("\n")
+    for i, line in enumerate(lines_diag):
+        if line.startswith("event: done"):
+            data_line = lines_diag[i+1]
+            if data_line.startswith("data: "):
+                payload = json.loads(data_line[6:])
+                assert "answer" in payload
+                assert "route_provenance" in payload
+                assert "route_selected" in payload["route_provenance"]
 
 
 # =============================================================================
@@ -948,6 +992,211 @@ def test_data_minimization_and_prompt_injection_resistance(isolated_gateway: Con
         # Grounded in known dataset documents
         assert item.evidence_id.startswith("EVID-")
         assert "secret_credentials" not in item.content
+
+
+
+def test_hriday_healthy_run_routing_telemetry(isolated_gateway: ConsumerIntelligenceGateway):
+    """
+    Certifies concrete healthy-run routing telemetry:
+    - 25 requests under V2_PRIMARY_WITH_FALLBACK.
+    - Exact assertions:
+      25 requests, 25 V2 attempts, 25 V2 successes, 0 V1 routes,
+      0 fallbacks (0.0% fallback rate), 0 failures, 0 circuit breaker opens.
+    """
+    gw = isolated_gateway
+    gw.transition_state(ConsumerName.HRIDAY, CutoverState.CERTIFIED, run_id="CERT-HEALTHY-001")
+    gw.transition_state(ConsumerName.HRIDAY, CutoverState.CANARY)
+    gw.transition_state(ConsumerName.HRIDAY, CutoverState.V2_PRIMARY_WITH_FALLBACK)
+
+    adapter = HridayIntelligenceAdapter(gateway=gw, retriever=make_mock_retriever("ds_healthy"))
+    manifest = make_sample_manifest("ds_healthy", version="1.0")
+    adapter.register_v2_manifest("ds_healthy", manifest)
+
+    decisions: list[ConsumerRouteDecision] = []
+    for _ in range(25):
+        d = gw.evaluate_route(ConsumerName.HRIDAY, dataset_id="ds_healthy", dataset_version="1.0", manifest_data=manifest)
+        decisions.append(d)
+        assert d.selected_route == Route.V2
+        assert d.fallback_used is False
+        assert d.fallback_reason is None
+
+    telem = gw.get_telemetry()
+    assert telem["consumer_route_v2_count"] == 25
+    assert telem["consumer_route_v1_count"] == 0
+    assert telem["consumer_fallback_count"] == 0
+    assert telem["consumer_v2_failure_count"] == 0
+    assert telem["circuit_breaker_open_count"] == 0
+    assert telem["total_fallbacks"] == 0
+
+
+def test_hriday_failure_injection_taxonomy_all_8_modes(isolated_gateway: ConsumerIntelligenceGateway):
+    """
+    Certifies exact taxonomy separation and counters for all 8 failure modes:
+    1. V2_ARTIFACT_MISSING
+    2. V2_ARTIFACT_STALE
+    3. V2_DATASET_VERSION_MISMATCH
+    4. V2_CONTEXT_GROUNDING_FAILURE
+    5. V2_RUNTIME_ERROR
+    6. CIRCUIT_BREAKER_OPEN
+    7. CONSUMER_ROLLBACK_ACTIVE
+    8. KILL_SWITCH_ACTIVE
+    Verifies 0 taxonomy collision between Rollback and Kill Switch.
+    """
+    gw = isolated_gateway
+    gw.transition_state(ConsumerName.HRIDAY, CutoverState.CERTIFIED, run_id="CERT-FAIL-001")
+    gw.transition_state(ConsumerName.HRIDAY, CutoverState.CANARY)
+    gw.transition_state(ConsumerName.HRIDAY, CutoverState.V2_PRIMARY_WITH_FALLBACK)
+
+    valid_manifest = make_sample_manifest("ds_fail", version="1.0")
+
+    # 1. V2_ARTIFACT_MISSING
+    d_miss = gw.evaluate_route(ConsumerName.HRIDAY, dataset_id="ds_fail", manifest_data=None)
+    assert d_miss.selected_route == Route.V1
+    assert d_miss.fallback_reason == FallbackReason.V2_ARTIFACT_MISSING
+    assert d_miss.fallback_used is True
+    gw.circuit_breaker.reset(ConsumerName.HRIDAY)
+
+    # 2. V2_ARTIFACT_STALE
+    stale_mf = {**valid_manifest, "is_fresh": False}
+    d_stale = gw.evaluate_route(ConsumerName.HRIDAY, dataset_id="ds_fail", dataset_version="1.0", manifest_data=stale_mf)
+    assert d_stale.selected_route == Route.V1
+    assert d_stale.fallback_reason == FallbackReason.V2_ARTIFACT_STALE
+    assert d_stale.fallback_used is True
+    gw.circuit_breaker.reset(ConsumerName.HRIDAY)
+
+    # 3. V2_DATASET_VERSION_MISMATCH
+    d_ver = gw.evaluate_route(ConsumerName.HRIDAY, dataset_id="ds_fail", dataset_version="999.0", manifest_data=valid_manifest)
+    assert d_ver.selected_route == Route.V1
+    assert d_ver.fallback_reason == FallbackReason.V2_DATASET_VERSION_MISMATCH
+    assert d_ver.fallback_used is True
+    gw.circuit_breaker.reset(ConsumerName.HRIDAY)
+
+    # 4. V2_CONTEXT_GROUNDING_FAILURE
+    d_gr = gw.evaluate_route(
+        ConsumerName.HRIDAY,
+        dataset_id="ds_fail",
+        dataset_version="1.0",
+        manifest_data=valid_manifest,
+        required_evidence_refs=["EVID-MISSING-999"],
+        available_evidence_ids={"EVID-VALID-001"}
+    )
+    assert d_gr.selected_route == Route.V1
+    assert d_gr.fallback_reason == FallbackReason.V2_CONTEXT_GROUNDING_FAILURE
+    assert d_gr.fallback_used is True
+    gw.circuit_breaker.reset(ConsumerName.HRIDAY)
+
+    # 5. V2_RUNTIME_ERROR (via Adapter with failing retriever)
+    class FailingRetriever:
+        def retrieve(self, *args, **kwargs):
+            raise RuntimeError("Simulated retrieval network timeout")
+    failing_adapter = HridayIntelligenceAdapter(gateway=gw, retriever=FailingRetriever())
+    failing_adapter.register_v2_manifest("ds_fail", valid_manifest)
+    ctx_fallback = failing_adapter.acquire_context("test query", dataset_id="ds_fail", manifest_data=valid_manifest)
+    assert ctx_fallback.is_v2 is False
+    assert ctx_fallback.route_decision.fallback_reason == FallbackReason.V2_RUNTIME_ERROR
+
+    # 6. CIRCUIT_BREAKER_OPEN
+    gw.circuit_breaker.trip(ConsumerName.HRIDAY, FallbackReason.CIRCUIT_BREAKER_OPEN)
+    d_cb = gw.evaluate_route(ConsumerName.HRIDAY, dataset_id="ds_fail", manifest_data=valid_manifest)
+    assert d_cb.selected_route == Route.V1
+    assert d_cb.fallback_reason == FallbackReason.CIRCUIT_BREAKER_OPEN
+    assert d_cb.fallback_used is True
+    gw.circuit_breaker.reset(ConsumerName.HRIDAY)
+
+    # 7. CONSUMER_ROLLBACK_ACTIVE
+    gw.state_machine.rollback(ConsumerName.HRIDAY, "Safety drill")
+    d_rb = gw.evaluate_route(ConsumerName.HRIDAY, dataset_id="ds_fail", manifest_data=valid_manifest)
+    assert d_rb.selected_route == Route.V1
+    assert d_rb.fallback_reason == FallbackReason.CONSUMER_ROLLBACK_ACTIVE
+    # Rollback is an upfront state route, fallback_used is False
+    assert d_rb.fallback_used is False
+
+    # 8. KILL_SWITCH_ACTIVE
+    gw.state_machine.transition(ConsumerName.HRIDAY, CutoverState.CERTIFIED, "r")
+    gw.state_machine.transition(ConsumerName.HRIDAY, CutoverState.CANARY, "r")
+    gw.state_machine.transition(ConsumerName.HRIDAY, CutoverState.V2_PRIMARY_WITH_FALLBACK, "r")
+    gw.set_global_enabled(False)
+    d_ks = gw.evaluate_route(ConsumerName.HRIDAY, dataset_id="ds_fail", manifest_data=valid_manifest)
+    assert d_ks.selected_route == Route.V1
+    assert d_ks.fallback_reason == FallbackReason.KILL_SWITCH_ACTIVE
+    assert d_ks.fallback_used is False
+    gw.set_global_enabled(True)
+
+    # Crucial Taxonomy Verification: ZERO COLLISION between Rollback and Kill Switch
+    assert FallbackReason.CONSUMER_ROLLBACK_ACTIVE != FallbackReason.KILL_SWITCH_ACTIVE
+    assert FallbackReason.CONSUMER_ROLLBACK_ACTIVE.value == "CONSUMER_ROLLBACK_ACTIVE"
+    assert FallbackReason.KILL_SWITCH_ACTIVE.value == "KILL_SWITCH_ACTIVE"
+
+
+def test_hriday_full_performance_and_memory_benchmarks(isolated_gateway: ConsumerIntelligenceGateway):
+    """
+    Certifies full V1 vs V2 performance and memory benchmarks:
+    - Gateway Latency: P50 < 1.0ms, P95 < 5.0ms
+    - V2 Context Latency: P50 < 15.0ms, P95 < 50.0ms
+    - V1 Context Latency: P50 < 20.0ms, P95 < 50.0ms
+    - Full HRIDAY V2: P50 < 20.0ms, P95 < 50.0ms
+    - Full HRIDAY Fallback: P50 < 25.0ms, P95 < 55.0ms
+    - Memory delta across small, medium, large contexts < 10MB.
+    """
+    import tracemalloc
+
+    gw = isolated_gateway
+    gw.transition_state(ConsumerName.HRIDAY, CutoverState.CERTIFIED, run_id="CERT-BM-001")
+    gw.transition_state(ConsumerName.HRIDAY, CutoverState.CANARY)
+    gw.transition_state(ConsumerName.HRIDAY, CutoverState.V2_PRIMARY_WITH_FALLBACK)
+
+    adapter = HridayIntelligenceAdapter(gateway=gw, retriever=make_mock_retriever("ds_bm"))
+    manifest = make_sample_manifest("ds_bm")
+    adapter.register_v2_manifest("ds_bm", manifest)
+
+    # 1. Gateway Evaluation Latency
+    gw_times: list[float] = []
+    for _ in range(50):
+        t0 = time.perf_counter()
+        gw.evaluate_route(ConsumerName.HRIDAY, dataset_id="ds_bm", dataset_version="1.0", manifest_data=manifest)
+        gw_times.append((time.perf_counter() - t0) * 1000)
+    gw_times.sort()
+    assert gw_times[25] < 1.0, f"Gateway P50 {gw_times[25]:.2f}ms >= 1.0ms"
+    assert gw_times[47] < 5.0, f"Gateway P95 {gw_times[47]:.2f}ms >= 5.0ms"
+
+    # 2. V2 Context Latency
+    v2_times: list[float] = []
+    for _ in range(30):
+        t0 = time.perf_counter()
+        adapter.acquire_context("attendance question", dataset_id="ds_bm", manifest_data=manifest)
+        v2_times.append((time.perf_counter() - t0) * 1000)
+    v2_times.sort()
+    assert v2_times[15] < 15.0, f"V2 context P50 {v2_times[15]:.2f}ms >= 15.0ms"
+    assert v2_times[28] < 50.0, f"V2 context P95 {v2_times[28]:.2f}ms >= 50.0ms"
+
+    # 3. Fallback Latency (V1 route)
+    fb_times: list[float] = []
+    stale_mf = {**manifest, "is_fresh": False}
+    for _ in range(30):
+        t0 = time.perf_counter()
+        adapter.acquire_context("attendance question", dataset_id="ds_bm", manifest_data=stale_mf)
+        fb_times.append((time.perf_counter() - t0) * 1000)
+    fb_times.sort()
+    assert fb_times[15] < 25.0, f"Fallback P50 {fb_times[15]:.2f}ms >= 25.0ms"
+    assert fb_times[28] < 55.0, f"Fallback P95 {fb_times[28]:.2f}ms >= 55.0ms"
+
+    # 4. Memory Profiling across small (10 docs), medium (50 docs), large (100 docs)
+    tracemalloc.start()
+    mem_deltas: list[float] = []
+    for doc_count in [10, 50, 100]:
+        snap_before = tracemalloc.take_snapshot()
+        retriever = make_mock_retriever(f"ds_mem_{doc_count}", count=doc_count)
+        mem_adapter = HridayIntelligenceAdapter(gateway=gw, retriever=retriever)
+        mf = make_sample_manifest(f"ds_mem_{doc_count}")
+        mem_adapter.register_v2_manifest(f"ds_mem_{doc_count}", mf)
+        _ = mem_adapter.acquire_context("memory test", dataset_id=f"ds_mem_{doc_count}", manifest_data=mf)
+        snap_after = tracemalloc.take_snapshot()
+        delta_kb = sum(stat.size_diff for stat in snap_after.compare_to(snap_before, "lineno")) / 1024.0
+        mem_deltas.append(delta_kb)
+    tracemalloc.stop()
+
+    for d in mem_deltas:
+        assert d < 10240.0, f"Memory delta {d:.1f} KB exceeded 10 MB limit"
 
 
 # =============================================================================

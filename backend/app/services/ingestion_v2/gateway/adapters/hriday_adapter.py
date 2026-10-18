@@ -16,6 +16,7 @@ import json
 import logging
 import sqlite3
 import time
+from pathlib import Path
 from typing import Any, Sequence
 
 from app.core import config
@@ -37,6 +38,7 @@ from app.services.ingestion_v2.gateway.gateway import (
     RoutingFallbackDisallowedError,
     get_consumer_gateway,
 )
+from app.services.ingestion_v2.retrieval.bm25_index import MultiNamespaceBM25Index
 from app.services.ingestion_v2.retrieval.context_assembler import (
     ContextAssembler,
     GovernedContextPackage,
@@ -46,6 +48,7 @@ from app.services.ingestion_v2.retrieval.hybrid_retriever import (
     HybridRetriever,
 )
 from app.services.ingestion_v2.retrieval.namespaces import RetrievalNamespace
+from app.services.ingestion_v2.retrieval.vector_index import MultiNamespaceVectorIndex
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +70,10 @@ class HridayIntelligenceAdapter:
         context_assembler: ContextAssembler | None = None,
     ) -> None:
         self.gateway = gateway or get_consumer_gateway()
-        self.retriever = retriever
+        self.retriever = retriever or HybridRetriever(
+            bm25_index=MultiNamespaceBM25Index([]),
+            vector_index=MultiNamespaceVectorIndex()
+        )
         self.context_assembler = context_assembler or ContextAssembler()
         self._cached_v2_manifests: dict[str, dict[str, Any]] = {}
 
@@ -104,6 +110,16 @@ class HridayIntelligenceAdapter:
         active_manifest = manifest_data
         if active_manifest is None and str_ds_id is not None:
             active_manifest = self._cached_v2_manifests.get(str_ds_id)
+            if active_manifest is None:
+                try:
+                    data_dir = getattr(config, "DATA_DIR", Path("data"))
+                    m_path = Path(data_dir) / "datasets" / str_ds_id / "manifest.json"
+                    if m_path.exists():
+                        with open(m_path, "r", encoding="utf-8") as f:
+                            active_manifest = json.load(f)
+                            self._cached_v2_manifests[str_ds_id] = active_manifest
+                except Exception:
+                    pass
 
         # 2. Evaluate route via the sole authoritative Gateway
         decision: ConsumerRouteDecision = self.gateway.evaluate_route(

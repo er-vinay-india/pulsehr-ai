@@ -238,7 +238,8 @@ def query_copilot(
     prior_context: dict | None = None,
     snapshot_id: str | None = None,
     page: str | None = None,
-    allow_inferred_tools: bool = True
+    allow_inferred_tools: bool = True,
+    include_provenance: bool = False
 ) -> dict:
     t_start = time.perf_counter()
     from .sheet_catalog import linked_evidence
@@ -359,7 +360,7 @@ def query_copilot(
     answer = identity_answer(user_query, identity_result.runtime_model) or answer
     total_ms = (time.perf_counter() - t_start) * 1000
 
-    return {
+    response_payload = {
         'query': user_query,
         'answer': answer,
         'model_used': target_model,
@@ -370,15 +371,6 @@ def query_copilot(
         'exact_matches': [],
         'suggested_questions': [],
         'related_rows': len(related),
-        'route_provenance': {
-            'route_selected': normalized_ctx.route_selected.value,
-            'decision_id': normalized_ctx.route_decision.decision_id,
-            'consumer_state': normalized_ctx.route_decision.consumer_state.value,
-            'fallback_reason': normalized_ctx.route_decision.fallback_reason.value if normalized_ctx.route_decision.fallback_reason else None,
-            'dataset_id': normalized_ctx.dataset_id,
-            'dataset_version': normalized_ctx.dataset_version,
-            'evidence_count': len(normalized_ctx.evidence_items),
-        },
         'timings': {
             'retrieval_ms': round(retrieval_ms, 1),
             'context_ms': round(context_ms, 1),
@@ -387,6 +379,17 @@ def query_copilot(
             'is_deterministic': False
         }
     }
+    if include_provenance:
+        response_payload['route_provenance'] = {
+            'route_selected': normalized_ctx.route_selected.value,
+            'decision_id': normalized_ctx.route_decision.decision_id,
+            'consumer_state': normalized_ctx.route_decision.consumer_state.value,
+            'fallback_reason': normalized_ctx.route_decision.fallback_reason.value if normalized_ctx.route_decision.fallback_reason else None,
+            'dataset_id': normalized_ctx.dataset_id,
+            'dataset_version': normalized_ctx.dataset_version,
+            'evidence_count': len(normalized_ctx.evidence_items),
+        }
+    return response_payload
 
 
 class _ReasoningStreamFilter:
@@ -427,7 +430,8 @@ def stream_copilot_generator(
     prior_context: dict | None = None,
     snapshot_id: str | None = None,
     page: str | None = None,
-    allow_inferred_tools: bool = True
+    allow_inferred_tools: bool = True,
+    include_provenance: bool = False
 ) -> Generator[str, None, None]:
     """Streams Copilot responses as Server-Sent Events (SSE).
     Substantially lowers perceived latency by streaming tokens in real time.
@@ -620,15 +624,6 @@ def stream_copilot_generator(
         'exact_matches': [],
         'suggested_questions': [],
         'related_rows': len(related),
-        'route_provenance': {
-            'route_selected': normalized_ctx.route_selected.value,
-            'decision_id': normalized_ctx.route_decision.decision_id,
-            'consumer_state': normalized_ctx.route_decision.consumer_state.value,
-            'fallback_reason': normalized_ctx.route_decision.fallback_reason.value if normalized_ctx.route_decision.fallback_reason else None,
-            'dataset_id': normalized_ctx.dataset_id,
-            'dataset_version': normalized_ctx.dataset_version,
-            'evidence_count': len(normalized_ctx.evidence_items),
-        },
         'timings': {
             'retrieval_ms': round(retrieval_ms, 1),
             'context_ms': round(context_ms, 1),
@@ -637,4 +632,14 @@ def stream_copilot_generator(
             'is_deterministic': False
         }
     }
+    if include_provenance:
+        done_payload['route_provenance'] = {
+            'route_selected': normalized_ctx.route_selected.value,
+            'decision_id': normalized_ctx.route_decision.decision_id,
+            'consumer_state': normalized_ctx.route_decision.consumer_state.value,
+            'fallback_reason': normalized_ctx.route_decision.fallback_reason.value if normalized_ctx.route_decision.fallback_reason else None,
+            'dataset_id': normalized_ctx.dataset_id,
+            'dataset_version': normalized_ctx.dataset_version,
+            'evidence_count': len(normalized_ctx.evidence_items),
+        }
     yield f"event: done\ndata: {json.dumps(done_payload)}\n\n"

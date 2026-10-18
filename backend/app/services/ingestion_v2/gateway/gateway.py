@@ -264,7 +264,7 @@ class ConsumerIntelligenceGateway:
                 global_enabled=global_on,
                 fallback_allowed=fallback_allowed,
                 fallback_used=False,
-                fallback_reason=FallbackReason.KILL_SWITCH_ACTIVE,
+                fallback_reason=FallbackReason.CONSUMER_ROLLBACK_ACTIVE,
                 circuit_breaker_state=circuit_state,
                 dataset_id=dataset_id,
                 dataset_version=dataset_version,

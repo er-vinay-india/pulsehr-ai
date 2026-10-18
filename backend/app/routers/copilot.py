@@ -49,6 +49,7 @@ class CopilotQueryRequest(BaseModel):
     timeout_seconds: float | None = 30.0
     canary_cohort: str | None = None
     canary_authorized: bool | None = None
+    include_provenance: bool = False
 
 
 def _load_active_sheet_dataframe(sheet_id: int | None = None, dataset_id: int | None = None) -> tuple[pd.DataFrame | None, str | None, AnalysisContext | None, int | None]:
@@ -841,13 +842,14 @@ def ask_copilot(req: CopilotQueryRequest):
     df, name, ctx, sid = _load_active_sheet_dataframe(req.sheet_id, req.dataset_id)
     target_sheet_id = req.sheet_id or sid
 
-    if req.canary_cohort or req.canary_authorized is not None:
-        if req.prior_context is None:
-            req.prior_context = {}
-        if req.canary_cohort:
-            req.prior_context["canary_cohort"] = req.canary_cohort
-        if req.canary_authorized is not None:
-            req.prior_context["canary_authorized"] = req.canary_authorized
+    if req.prior_context is None:
+        req.prior_context = {}
+    if req.canary_cohort:
+        req.prior_context["canary_cohort"] = req.canary_cohort
+    if req.canary_authorized is not None:
+        req.prior_context["canary_authorized"] = req.canary_authorized
+    if req.include_provenance:
+        req.prior_context["include_provenance"] = req.include_provenance
 
     # 1. Authoritative Highview AI Control Plane Routing (Phase 12 Mandatory Gateway)
     control_response = HighviewAI.execute(
@@ -1079,7 +1081,8 @@ def ask_copilot(req: CopilotQueryRequest):
         sheet_id=req.sheet_id,
         prior_context=req.prior_context,
         snapshot_id=req.snapshot_id,
-        page=req.page
+        page=req.page,
+        include_provenance=req.include_provenance
     )
 
 
@@ -1092,13 +1095,14 @@ def ask_copilot_stream(req: CopilotQueryRequest):
     df, name, ctx, sid = _load_active_sheet_dataframe(req.sheet_id, req.dataset_id)
     target_sheet_id = req.sheet_id or sid
 
-    if req.canary_cohort or req.canary_authorized is not None:
-        if req.prior_context is None:
-            req.prior_context = {}
-        if req.canary_cohort:
-            req.prior_context["canary_cohort"] = req.canary_cohort
-        if req.canary_authorized is not None:
-            req.prior_context["canary_authorized"] = req.canary_authorized
+    if req.prior_context is None:
+        req.prior_context = {}
+    if req.canary_cohort:
+        req.prior_context["canary_cohort"] = req.canary_cohort
+    if req.canary_authorized is not None:
+        req.prior_context["canary_authorized"] = req.canary_authorized
+    if req.include_provenance:
+        req.prior_context["include_provenance"] = req.include_provenance
 
     # 1. Authoritative Highview AI Control Plane Routing (Phase 12 Mandatory Gateway)
     control_response = HighviewAI.execute(
@@ -1437,7 +1441,8 @@ def ask_copilot_stream(req: CopilotQueryRequest):
             sheet_id=req.sheet_id,
             prior_context=req.prior_context,
             snapshot_id=req.snapshot_id,
-            page=req.page
+            page=req.page,
+            include_provenance=req.include_provenance
         ),
         media_type="text/event-stream",
         headers={
