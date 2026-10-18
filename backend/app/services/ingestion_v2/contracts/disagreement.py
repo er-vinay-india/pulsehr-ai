@@ -47,6 +47,9 @@ class ReviewStatus(str, Enum):
     RESOLVED = "RESOLVED"
     ACCEPTED_DIFFERENCE = "ACCEPTED_DIFFERENCE"
     IGNORED = "IGNORED"
+    PENDING = "PENDING"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
 
 
 class PipelineDisagreementRecord(BaseModel):
