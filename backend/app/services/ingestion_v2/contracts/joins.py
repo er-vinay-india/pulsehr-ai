@@ -13,10 +13,7 @@ from app.services.ingestion_v2.contracts.base import IngestionContractBase
 
 class JoinSafetyStatus(str, Enum):
     SAFE = "SAFE"
-    FORBIDDEN_CARTESIAN = "FORBIDDEN_CARTESIAN"
-    REQUIRES_PRE_AGGREGATION = "REQUIRES_PRE_AGGREGATION"
     SAFE_WITH_PREAGGREGATION = "SAFE_WITH_PREAGGREGATION"
-    LOSS_OF_GRAIN = "LOSS_OF_GRAIN"
     UNSAFE = "UNSAFE"
     AMBIGUOUS = "AMBIGUOUS"
 

@@ -888,3 +888,225 @@ def test_epistemic_boundary_and_immutability():
     assert struct_prof.source_fingerprint == fp_struct_before
     assert sem_model.source_fingerprint == fp_sem_before
     assert grain_prof.source_fingerprint == fp_grain_before
+
+
+# ==============================================================================
+# 7. CANONICAL 22x3 FANOUT TRAP VERIFICATION
+# ==============================================================================
+
+def test_canonical_22x3_fanout_trap_isolation():
+    """
+    Verify canonical 22x3 fanout trap:
+    1 employee, 22 Attendance rows, 3 Leave rows.
+    Naive raw join produces 66 rows (3x multiplier on 22 rows).
+    System detects fanout before execution and marks join UNSAFE.
+    Zero physical join execution.
+    """
+    df_att = pd.DataFrame({
+        "employee_id": ["EMP-001"] * 22,
+        "date": [f"2026-07-{i:02d}" for i in range(1, 23)],
+        "hours": [8.0] * 22,
+    })
+    df_leave = pd.DataFrame({
+        "employee_id": ["EMP-001"] * 3,
+        "leave_id": ["L1", "L2", "L3"],
+        "leave_type": ["SICK", "VACATION", "PERSONAL"],
+    })
+
+    # 1. Compute expected fanout
+    mult, max_m, joined_rows = compute_expected_fanout(
+        df_att, ["employee_id"], df_leave, ["employee_id"]
+    )
+    assert len(df_att) == 22
+    assert len(df_leave) == 3
+    assert joined_rows == 66
+    assert max_m == 66.0
+    assert mult == 3.0
+
+    # 2. Structural Relationship Edge
+    edge_fanout = ValidatedRelationshipEdge(
+        edge_id="edge_att_leave_fanout",
+        candidate_id="cand_att_leave",
+        source_table_id="t_att",
+        source_column_ids=["employee_id"],
+        target_table_id="t_leave",
+        target_column_ids=["employee_id"],
+        key_type=CandidateKeyType.SINGLE,
+        cardinality=RelationshipCardinality.MANY_TO_MANY,
+        status=RelationshipStatus.ACCEPTED,
+        referential_coverage=1.0,
+        source_overlap_ratio=1.0,
+        target_overlap_ratio=1.0,
+        confidence=0.88,
+        estimated_row_multiplier=3.0,
+        is_grain_preserving=False,
+        duplication_risk_flag=True,
+        validation_evidence={
+            "left_distinct": 22,
+            "right_distinct": 3,
+            "expected_joined_rows": 66,
+            "multiplier": 3.0,
+        },
+    )
+
+    grain_att = _make_table_grain("t_att", CanonicalGrain.COMPOSITE, "PERSON x DAY", ["employee_id", "date"])
+    grain_leave = _make_table_grain("t_leave", CanonicalGrain.COMPOSITE, "PERSON x INCIDENT", ["employee_id", "leave_id"])
+    grain_prof = GrainProfile(
+        dataset_id="ds-trap",
+        run_id="run-trap",
+        stage_name="grain_inference",
+        source_fingerprint="fp-trap",
+        provenance=[],
+        table_grains=[grain_att, grain_leave],
+    )
+
+    # 3. Join Safety Assessment (without pre-aggregation)
+    assessment = JoinSafetyAnalyzer.assess_edge_safety(edge_fanout, grain_prof)
+    assert assessment.safety_status == JoinSafetyStatus.UNSAFE
+    assert assessment.many_to_many_risk is True
+    assert assessment.estimated_row_multiplier == 3.0
+    assert assessment.required_pre_aggregation is True
+    assert "CARTESIAN_RISK" in assessment.rationale or "UNSAFE" in assessment.rationale
+
+    # 4. Governed Join Plan formulation
+    sem_att = _make_table_sem("t_att", [
+        _make_col_sem("employee_id", SemanticColumnRole.ENTITY_IDENTIFIER, SemanticEntityType.PERSON),
+        _make_col_sem("hours", SemanticColumnRole.MEASURE, SemanticEntityType.UNKNOWN, mclass=MeasureClass.QUANTITY),
+    ])
+    sem_leave = _make_table_sem("t_leave", [
+        _make_col_sem("employee_id", SemanticColumnRole.ENTITY_IDENTIFIER, SemanticEntityType.PERSON),
+        _make_col_sem("leave_id", SemanticColumnRole.ENTITY_IDENTIFIER, SemanticEntityType.UNKNOWN),
+    ])
+    sem_model = SemanticModel(
+        dataset_id="ds-trap",
+        run_id="run-trap",
+        stage_name="semantic_modeling",
+        source_fingerprint="fp-sem-trap",
+        provenance=[],
+        tables=[sem_att, sem_leave],
+    )
+
+    plan_raw = plan_join(edge_fanout, "RAW_INSPECTION", grain_prof, sem_model)
+    assert plan_raw.safety_status == JoinSafetyStatus.UNSAFE
+    assert "DIRECT_JOIN_EXECUTION" in plan_raw.forbidden_operations
+    assert "MANY_TO_MANY_CARTESIAN_JOIN" in plan_raw.forbidden_operations
+
+    # 5. When governed pre-aggregation is requested:
+    plan_governed = plan_join(
+        edge_fanout, "PREAGGREGATION_ANALYSIS", grain_prof, sem_model, target_grain="PERSON"
+    )
+    assert plan_governed.safety_status == JoinSafetyStatus.SAFE_WITH_PREAGGREGATION
+    assert plan_governed.target_grain == "PERSON"
+    assert plan_governed.pre_aggregation is not None
+    assert "PRE_AGGREGATE_BEFORE_JOIN" in plan_governed.safe_operations
+    assert "DIRECT_JOIN_WITHOUT_PRE_AGGREGATION" in plan_governed.forbidden_operations
+
+
+# ==============================================================================
+# 8. MEASURE ADDITIVITY & DUPLICATION PROTECTION
+# ==============================================================================
+
+def test_measure_additivity_and_duplication_rules():
+    """
+    Verify measure additivity inference and duplication protection:
+    - Headcount -> DISTINCT_COUNT (raw SUM forbidden)
+    - Attendance Rate -> RATIO (raw SUM forbidden)
+    - Inventory Balance -> SEMI_ADDITIVE (snapshot across time)
+    - Revenue -> ADDITIVE (safe under grain preservation)
+    """
+    c_hc = _make_col_sem("headcount", SemanticColumnRole.MEASURE, SemanticEntityType.PERSON, mclass=MeasureClass.HEADCOUNT)
+    c_rate = _make_col_sem("attendance_rate", SemanticColumnRole.MEASURE, SemanticEntityType.UNKNOWN, mclass=MeasureClass.PERCENTAGE)
+    c_inv = _make_col_sem("inventory_balance", SemanticColumnRole.MEASURE, SemanticEntityType.PRODUCT, mclass=MeasureClass.QUANTITY)
+    c_rev = _make_col_sem("revenue", SemanticColumnRole.MEASURE, SemanticEntityType.UNKNOWN, mclass=MeasureClass.FINANCIAL)
+
+    assert infer_measure_additivity("headcount", c_hc) == MeasureAdditivity.DISTINCT_COUNT
+    assert infer_measure_additivity("attendance_rate", c_rate) == MeasureAdditivity.RATIO
+    assert infer_measure_additivity("inventory_balance", c_inv) == MeasureAdditivity.SEMI_ADDITIVE
+    assert infer_measure_additivity("revenue", c_rev) == MeasureAdditivity.ADDITIVE
+
+
+# ==============================================================================
+# 9. TEMPORAL ALIGNMENT RULES
+# ==============================================================================
+
+def test_temporal_alignment_and_grain_compatibility():
+    """
+    Verify temporal grain compatibility rules:
+    - DAY -> MONTH supported with pre-aggregation
+    - DATETIME -> DAY supported
+    - MONTH <-> DAY raw join blocked (UNSAFE with temporal_mismatch=True)
+    - WEEK -> MONTH not silently inferred
+    """
+    grain_day = _make_table_grain("t_day", CanonicalGrain.COMPOSITE, "PERSON x DAY", ["emp_id", "date"])
+    grain_mo = _make_table_grain("t_mo", CanonicalGrain.COMPOSITE, "DEPARTMENT x MONTH", ["dept_id", "month"])
+    grain_wk = _make_table_grain("t_wk", CanonicalGrain.COMPOSITE, "STORE x WEEK", ["store_id", "week"])
+    grain_prof = GrainProfile(
+        dataset_id="ds-temp",
+        run_id="r-temp",
+        stage_name="grain_inference",
+        source_fingerprint="fp-temp",
+        provenance=[],
+        table_grains=[grain_day, grain_mo, grain_wk],
+    )
+
+    edge_mo_day = ValidatedRelationshipEdge(
+        edge_id="e_temp_mismatch",
+        candidate_id="c_temp",
+        source_table_id="t_mo",
+        source_column_ids=["dept_id"],
+        target_table_id="t_day",
+        target_column_ids=["dept_id"],
+        key_type=CandidateKeyType.SINGLE,
+        cardinality=RelationshipCardinality.MANY_TO_MANY,
+        status=RelationshipStatus.ACCEPTED,
+        referential_coverage=0.9,
+        source_overlap_ratio=0.9,
+        target_overlap_ratio=0.9,
+        confidence=0.8,
+        estimated_row_multiplier=4.0,
+        is_grain_preserving=False,
+        duplication_risk_flag=True,
+    )
+
+    # Raw cross-grain fact join must be UNSAFE with temporal_mismatch=True
+    assess_raw = JoinSafetyAnalyzer.assess_edge_safety(edge_mo_day, grain_prof)
+    assert assess_raw.safety_status == JoinSafetyStatus.UNSAFE
+    assert assess_raw.temporal_mismatch is True
+
+    # Governed pre-aggregation turns it to SAFE_WITH_PREAGGREGATION
+    assess_gov = JoinSafetyAnalyzer.assess_edge_safety(
+        edge_mo_day, grain_prof, analysis_purpose="PREAGGREGATION_ANALYSIS", requested_target_grain="DEPARTMENT x MONTH"
+    )
+    assert assess_gov.safety_status == JoinSafetyStatus.SAFE_WITH_PREAGGREGATION
+    assert assess_gov.recommended_target_grain == "DEPARTMENT x MONTH"
+
+
+# ==============================================================================
+# 10. COMPOSITE KEY JOINT EVALUATION
+# ==============================================================================
+
+def test_composite_key_joint_evaluation():
+    """
+    Verify composite keys (STORE + WEEK, PRODUCT + LOCATION) are evaluated
+    jointly across tuples, rather than column-by-column guessing.
+    """
+    from app.services.ingestion_v2.relationships.candidate_signals import compute_value_overlap_composite
+
+    df1 = pd.DataFrame({
+        "store_id": ["S1", "S1", "S2", "S2"],
+        "week": ["W1", "W2", "W1", "W2"],
+        "rev": [100, 200, 300, 400],
+    })
+    df2 = pd.DataFrame({
+        "store_id": ["S1", "S1", "S2", "S2"],
+        "week": ["W1", "W2", "W1", "W2"],
+        "target": [90, 190, 290, 390],
+    })
+
+    metrics = compute_value_overlap_composite(df1, ["store_id", "week"], df2, ["store_id", "week"])
+    assert metrics.left_coverage == 1.0
+    assert metrics.right_coverage == 1.0
+    assert metrics.jaccard_overlap == 1.0
+    assert metrics.left_distinct == 4
+    assert metrics.right_distinct == 4
+

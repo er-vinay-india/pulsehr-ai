@@ -152,7 +152,7 @@ def plan_join(
     # Pre-aggregation specification
     pre_agg: PreAggregationSpec | None = None
     if (
-        safety_status in (JoinSafetyStatus.SAFE_WITH_PREAGGREGATION, JoinSafetyStatus.REQUIRES_PRE_AGGREGATION)
+        safety_status == JoinSafetyStatus.SAFE_WITH_PREAGGREGATION
         or (target_grain and target_grain != t_grain and " x " in t_grain)
         or ("PREAGGREGATION" in (analysis_purpose or "").upper())
     ):
@@ -221,7 +221,7 @@ def plan_join(
             elif additivity == MeasureAdditivity.NON_ADDITIVE:
                 forbidden_ops.append(f"SUM({m_name})")
 
-    elif safety_status in (JoinSafetyStatus.SAFE_WITH_PREAGGREGATION, JoinSafetyStatus.REQUIRES_PRE_AGGREGATION):
+    elif safety_status == JoinSafetyStatus.SAFE_WITH_PREAGGREGATION:
         safe_ops.append("PRE_AGGREGATE_BEFORE_JOIN")
         for agg_col, agg_fn in (pre_agg.aggregations if pre_agg else {}).items():
             safe_ops.append(f"{agg_fn}(pre_aggregated.{agg_col})")
@@ -258,7 +258,7 @@ def plan_join(
         safety_status=safety_status,
         measure_additivity_rules=measure_rules,
         pre_aggregation=pre_agg,
-        forbidden_reason=safety_assessment.rationale if safety_status in (JoinSafetyStatus.UNSAFE, JoinSafetyStatus.FORBIDDEN_CARTESIAN) else None,
+        forbidden_reason=safety_assessment.rationale if safety_status == JoinSafetyStatus.UNSAFE else None,
         safe_operations=safe_ops,
         forbidden_operations=forbidden_ops,
         join_keys=join_keys,

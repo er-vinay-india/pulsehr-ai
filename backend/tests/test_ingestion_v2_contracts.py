@@ -250,7 +250,7 @@ def test_composite_grain_and_join_plan_safety():
         right_grain="PERSON x DAY",
         target_grain="PERSON",
         join_type="LEFT",
-        safety_status=JoinSafetyStatus.REQUIRES_PRE_AGGREGATION,
+        safety_status=JoinSafetyStatus.SAFE_WITH_PREAGGREGATION,
         measure_additivity_rules={
             "salary": MeasureAdditivity.NON_ADDITIVE,
             "hours_worked": MeasureAdditivity.ADDITIVE,
@@ -260,7 +260,7 @@ def test_composite_grain_and_join_plan_safety():
         safe_operations=["SUM(pre_aggregated.hours_worked)", "COUNT(DISTINCT employee_id)"],
         forbidden_operations=["DIRECT_JOIN_WITHOUT_PRE_AGGREGATION", "SUM(raw_salary_after_join)"],
     )
-    assert join_plan.safety_status == JoinSafetyStatus.REQUIRES_PRE_AGGREGATION
+    assert join_plan.safety_status == JoinSafetyStatus.SAFE_WITH_PREAGGREGATION
     assert join_plan.measure_additivity_rules["salary"] == MeasureAdditivity.NON_ADDITIVE
 
 
