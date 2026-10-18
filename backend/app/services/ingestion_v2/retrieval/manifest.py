@@ -26,6 +26,9 @@ def compute_manifest_fingerprint(
     embedding_model: str,
     bm25_version: str,
     vector_version: str,
+    analytical_profile_fingerprint: str | None = None,
+    embedding_model_version: str = "v1.5",
+    normalization_policy: str = "l2",
 ) -> str:
     """
     Computes a deterministic SHA-256 fingerprint for the entire multi-namespace retrieval manifest.
@@ -36,8 +39,11 @@ def compute_manifest_fingerprint(
         "dataset_version": str(dataset_version),
         "source_fingerprint": str(source_fingerprint),
         "semantic_graph_fingerprint": str(semantic_graph_fingerprint or ""),
+        "analytical_profile_fingerprint": str(analytical_profile_fingerprint or ""),
         "document_fingerprints": sorted(document_fingerprints),
         "embedding_model": embedding_model,
+        "embedding_model_version": embedding_model_version,
+        "normalization_policy": normalization_policy,
         "bm25_version": bm25_version,
         "vector_version": vector_version,
     }
@@ -56,7 +62,11 @@ class MultiNamespaceRetrievalManifest(BaseModel):
     dataset_version: str
     source_fingerprint: str
     semantic_graph_fingerprint: str | None = None
+    analytical_profile_fingerprint: str | None = None
     embedding_model: str = "nomic-embed-text:latest"
+    embedding_model_id: str = "nomic-embed-text"
+    embedding_model_version: str = "v1.5"
+    normalization_policy: str = "l2"
     embedding_dimension: int = 768
     bm25_index_version: str = "v1"
     vector_index_version: str = "v1"
@@ -72,7 +82,11 @@ class MultiNamespaceRetrievalManifest(BaseModel):
         source_fingerprint: str,
         documents: Sequence[RetrievalDocument],
         semantic_graph_fingerprint: str | None = None,
+        analytical_profile_fingerprint: str | None = None,
         embedding_model: str = "nomic-embed-text:latest",
+        embedding_model_id: str = "nomic-embed-text",
+        embedding_model_version: str = "v1.5",
+        normalization_policy: str = "l2",
         embedding_dimension: int = 768,
         bm25_index_version: str = "v1",
         vector_index_version: str = "v1",
@@ -93,6 +107,9 @@ class MultiNamespaceRetrievalManifest(BaseModel):
             embedding_model=embedding_model,
             bm25_version=bm25_index_version,
             vector_version=vector_index_version,
+            analytical_profile_fingerprint=analytical_profile_fingerprint,
+            embedding_model_version=embedding_model_version,
+            normalization_policy=normalization_policy,
         )
 
         return cls(
@@ -100,7 +117,11 @@ class MultiNamespaceRetrievalManifest(BaseModel):
             dataset_version=str(dataset_version),
             source_fingerprint=source_fingerprint,
             semantic_graph_fingerprint=semantic_graph_fingerprint,
+            analytical_profile_fingerprint=analytical_profile_fingerprint,
             embedding_model=embedding_model,
+            embedding_model_id=embedding_model_id,
+            embedding_model_version=embedding_model_version,
+            normalization_policy=normalization_policy,
             embedding_dimension=embedding_dimension,
             bm25_index_version=bm25_index_version,
             vector_index_version=vector_index_version,
@@ -114,7 +135,10 @@ class MultiNamespaceRetrievalManifest(BaseModel):
         current_dataset_version: str,
         current_source_fingerprint: str,
         current_semantic_graph_fingerprint: str | None = None,
+        current_analytical_profile_fingerprint: str | None = None,
         current_embedding_model: str | None = None,
+        current_embedding_model_version: str | None = None,
+        current_normalization_policy: str | None = None,
     ) -> bool:
         """
         Detects whether this index manifest is stale compared to live artifact states.
@@ -125,6 +149,12 @@ class MultiNamespaceRetrievalManifest(BaseModel):
             return True
         if current_semantic_graph_fingerprint and self.semantic_graph_fingerprint != str(current_semantic_graph_fingerprint):
             return True
+        if current_analytical_profile_fingerprint and self.analytical_profile_fingerprint != str(current_analytical_profile_fingerprint):
+            return True
         if current_embedding_model and self.embedding_model != current_embedding_model:
+            return True
+        if current_embedding_model_version and self.embedding_model_version != current_embedding_model_version:
+            return True
+        if current_normalization_policy and self.normalization_policy != current_normalization_policy:
             return True
         return False

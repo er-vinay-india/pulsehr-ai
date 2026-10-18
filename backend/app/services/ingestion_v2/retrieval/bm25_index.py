@@ -56,7 +56,10 @@ class MultiNamespaceBM25Index:
         self._ns_docs: dict[RetrievalNamespace, list[RetrievalDocument]] = {}
         self._ns_corpus: dict[RetrievalNamespace, list[list[str]]] = {}
         self._ns_bm25: dict[RetrievalNamespace, BM25Plus | None] = {}
+        self._rebuild_partitions()
 
+    def _rebuild_partitions(self) -> None:
+        """Partitions documents by namespace and initializes BM25 instances."""
         for ns in RetrievalNamespace:
             docs = [d for d in self._documents if d.namespace == ns]
             self._ns_docs[ns] = docs
@@ -66,6 +69,21 @@ class MultiNamespaceBM25Index:
                 self._ns_bm25[ns] = BM25Plus(corpus)
             else:
                 self._ns_bm25[ns] = None
+
+    def delete_dataset(self, dataset_id: str) -> int:
+        """Removes all documents belonging to dataset_id and rebuilds partitions."""
+        initial_len = len(self._documents)
+        self._documents = [d for d in self._documents if str(d.dataset_id) != str(dataset_id)]
+        self._doc_by_id = {d.document_id: d for d in self._documents}
+        self._rebuild_partitions()
+        return initial_len - len(self._documents)
+
+    def replace_dataset(self, dataset_id: str, new_documents: Sequence[RetrievalDocument]) -> int:
+        """Replaces all dataset documents with new version documents."""
+        self._documents = [d for d in self._documents if str(d.dataset_id) != str(dataset_id)] + list(new_documents)
+        self._doc_by_id = {d.document_id: d for d in self._documents}
+        self._rebuild_partitions()
+        return len(new_documents)
 
     @property
     def total_documents(self) -> int:

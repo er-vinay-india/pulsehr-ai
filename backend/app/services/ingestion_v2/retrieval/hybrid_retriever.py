@@ -52,6 +52,18 @@ class HybridRetriever:
         self.intent_router = intent_router or QueryIntentRouter()
         self.reranker = reranker or GovernedReranker()
 
+    def delete_dataset(self, dataset_id: str) -> None:
+        """Propagates dataset deletion cascade across BM25 and vector indices."""
+        self.bm25_index.delete_dataset(dataset_id)
+        if self.vector_index:
+            self.vector_index.delete_dataset(dataset_id)
+
+    def replace_dataset(self, dataset_id: str, new_documents: Sequence[RetrievalDocument]) -> None:
+        """Replaces all dataset artifacts with new version documents."""
+        self.bm25_index.replace_dataset(dataset_id, new_documents)
+        if self.vector_index:
+            self.vector_index.replace_dataset(dataset_id, new_documents)
+
     def retrieve(
         self,
         query: str,

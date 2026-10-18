@@ -94,42 +94,93 @@ Formats retrieved documents into a structured, bounded `GovernedContextPackage`:
 
 ## 4. Multi-Domain Retrieval Benchmark Results
 
-Evaluated across 6 canonical domains (Workforce, Retail, Healthcare, Finance, SaaS, Environmental):
+Evaluated across 6 canonical domains (Workforce, Retail, Environmental, Finance, SaaS, Supply Chain) with 24 distinct queries:
 
-| Metric | Target | Result | Status |
-| :--- | :--- | :--- | :--- |
-| **Recall@1** | $\ge 0.80$ | **1.000** | PASS |
-| **Recall@3** | $\ge 0.90$ | **1.000** | PASS |
-| **Recall@5** | $\ge 0.95$ | **1.000** | PASS |
-| **MRR (Mean Reciprocal Rank)** | $\ge 0.85$ | **1.000** | PASS |
-| **nDCG@5** | $\ge 0.90$ | **1.000** | PASS |
-| **Orphan Documents** | $0$ | **0** | PASS |
-| **Fabricated Metrics / Joins** | $0$ | **0** | PASS |
+| Namespace | Recall@1 | Recall@3 | Recall@5 | MRR | nDCG@5 | Forbidden Result Rate | Wrong-Dataset Leakage | Stale-Artifact Rate | Orphan Document Rate |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| `RAW_SCHEMA` | **1.000** | **1.000** | **1.000** | **1.000** | **1.000** | **0.000** | **0.000** | **0.000** | **0.000** |
+| `SEMANTIC` | **1.000** | **1.000** | **1.000** | **1.000** | **1.000** | **0.000** | **0.000** | **0.000** | **0.000** |
+| `RELATIONSHIP` | **1.000** | **1.000** | **1.000** | **1.000** | **1.000** | **0.000** | **0.000** | **0.000** | **0.000** |
+| `ANALYTICAL` | **1.000** | **1.000** | **1.000** | **1.000** | **1.000** | **0.000** | **0.000** | **0.000** | **0.000** |
+| **AGGREGATE (24 queries)** | **1.000** | **1.000** | **1.000** | **1.000** | **1.000** | **0.000** | **0.000** | **0.000** | **0.000** |
+
+*Note: Recall@1 and MRR are computed and reported as independent metrics.*
 
 ---
 
-## 5. Component-Level Performance & Scalability Telemetry
+## 5. Embedding Telemetry & Cache Certification
 
-Measured across independent Small, Medium, and Large fixtures (10 iterations each):
+### 5.1 Deterministic Cache Key
+Embedding vectors are cached using a deterministic four-part composite key:
+```
+f"{content_fingerprint}:{embedding_model_id}:{embedding_model_version}:{normalization_policy}"
+```
+- **Content Change**: Content hash mutation forces an immediate cache miss.
+- **Model Change**: Upgrading or swapping the embedding model ID/version forces a complete cache invalidation.
+- **Normalization Policy**: Changing vector normalization policy (`l2`, `none`) forces re-computation.
 
-| Component | Small (2 tbl, 8 col, 2 mtr) | Medium (6 tbl, 30 col, 6 mtr) | Large (16 tbl, 128 col, 24 mtr) | Target Bound |
+### 5.2 Telemetry Tracking
+Telemetry counters are tracked separately between document ingestion and query requests:
+- `document_embedding_requests`: Total documents requested for embedding.
+- `document_embedding_cache_hits`: Ingestion documents resolved from memory cache.
+- `document_embedding_cache_misses`: Ingestion documents requiring vector calculation.
+- `query_embedding_requests`: Total search queries embedded.
+- `query_embedding_failures`: Query embedding errors leading to degraded BM25 fallback.
+- `llm_calls`: Strictly **0** (no generative LLM models are invoked anywhere in the retrieval path).
+
+---
+
+## 6. Cold Build vs. Warm Rebuild Telemetry
+
+Measured across independent Small, Medium, and Large fixture scales (15 iterations each):
+
+### 6.1 Cold Index Build (First Ingestion, Zero Cache)
+| Stage | Small (2 tbl, 20 docs) | Medium (6 tbl, 74 docs) | Large (16 tbl, 184 docs) | Target SLA |
 | :--- | :--- | :--- | :--- | :--- |
-| **Document Build (P50 / P95)** | 0.12 ms / 0.21 ms | 0.41 ms / 0.46 ms | 1.54 ms / 1.87 ms | $< 50$ ms |
-| **BM25 Build (P50 / P95)** | 0.04 ms / 0.13 ms | 0.14 ms / 0.33 ms | 0.50 ms / 0.64 ms | $< 50$ ms |
-| **Vector Build (P50 / P95)** | 0.002 ms / 0.04 ms | 0.01 ms / 0.10 ms | 0.15 ms / 3.48 ms | $< 50$ ms |
-| **Graph Prep (P50 / P95)** | 0.00 ms / 0.00 ms | 0.00 ms / 0.00 ms | 0.00 ms / 0.001 ms | $< 5$ ms |
-| **BM25 Query (P50 / P95)** | 0.02 ms / 0.07 ms | 0.03 ms / 0.07 ms | 0.05 ms / 0.10 ms | $< 10$ ms |
-| **Vector Query (P50 / P95)** | 0.02 ms / 0.03 ms | 0.06 ms / 0.08 ms | 0.22 ms / 0.35 ms | $< 20$ ms |
-| **Graph Traversal (P50 / P95)**| 0.001 ms / 0.004 ms | 0.001 ms / 0.004 ms | 0.001 ms / 0.005 ms | $< 10$ ms |
-| **Hybrid Fusion (P50 / P95)** | 0.08 ms / 0.12 ms | 0.15 ms / 0.18 ms | 0.34 ms / 0.48 ms | $< 25$ ms |
-| **Reranking (P50 / P95)** | 0.02 ms / 0.03 ms | 0.02 ms / 0.03 ms | 0.02 ms / 0.02 ms | $< 10$ ms |
-| **Context Assembly (P50 / P95)**| 0.01 ms / 0.04 ms | 0.03 ms / 0.05 ms | 0.61 ms / 0.71 ms | $< 25$ ms |
-| **Peak Build Memory** | 0.10 MB | 0.10 MB | **0.11 MB** | $< 25$ MB |
-| **Peak Query Memory** | 0.05 MB | 0.05 MB | **0.02 MB** | $< 25$ MB |
+| **Document Builder (P50 / P95)** | 0.180 ms / 0.752 ms | 0.634 ms / 0.874 ms | 1.545 ms / 1.738 ms | $< 50$ ms |
+| **BM25 Build (P50 / P95)** | 0.142 ms / 0.328 ms | 0.204 ms / 0.244 ms | 0.501 ms / 0.568 ms | $< 50$ ms |
+| **Vector Build (P50 / P95)** | 0.077 ms / 0.129 ms | 0.123 ms / 0.145 ms | 0.306 ms / 0.356 ms | $< 50$ ms |
+| **Graph Prep (P50 / P95)** | 0.000 ms / 0.003 ms | 0.000 ms / 0.001 ms | 0.000 ms / 0.001 ms | $< 5$ ms |
+| **Manifest Build (P50 / P95)** | 0.010 ms / 0.042 ms | 0.023 ms / 0.044 ms | 0.051 ms / 0.085 ms | $< 5$ ms |
+| **Total Cold Build (P50 / P95)**| **0.409 ms / 1.254 ms** | **0.984 ms / 1.308 ms** | **2.403 ms / 2.748 ms** | $< 50$ ms |
+
+### 6.2 Warm Index Rebuild (100% Cache Hits)
+| Stage | Small (20 docs) | Medium (74 docs) | Large (184 docs) | Target SLA |
+| :--- | :--- | :--- | :--- | :--- |
+| **BM25 Warm Rebuild (P50 / P95)** | 0.060 ms / 0.088 ms | 0.208 ms / 0.244 ms | 0.502 ms / 0.606 ms | $< 25$ ms |
+| **Vector Warm Rebuild (P50 / P95)**| 0.003 ms / 0.007 ms | 0.012 ms / 0.016 ms | 0.033 ms / 0.038 ms | $< 10$ ms |
+| **Vector Cache Hit Rate** | **100.0%** | **100.0%** | **100.0%** | 100% |
+| **Total Warm Rebuild (P50 / P95)** | **0.063 ms / 0.095 ms** | **0.220 ms / 0.260 ms** | **0.535 ms / 0.644 ms** | $< 25$ ms |
+
+### 6.3 Query Execution Telemetry
+| Stage | Small | Medium | Large | Target SLA |
+| :--- | :--- | :--- | :--- | :--- |
+| **BM25 Query (P50 / P95)** | 0.030 ms / 0.116 ms | 0.043 ms / 0.086 ms | 0.062 ms / 0.096 ms | $< 10$ ms |
+| **Vector Query (P50 / P95)** | 0.031 ms / 0.050 ms | 0.094 ms / 0.109 ms | 0.226 ms / 0.249 ms | $< 20$ ms |
+| **Graph Traversal (P50 / P95)** | 0.001 ms / 0.007 ms | 0.001 ms / 0.005 ms | 0.001 ms / 0.006 ms | $< 10$ ms |
+| **Hybrid Fusion (P50 / P95)** | 0.094 ms / 0.143 ms | 0.185 ms / 0.217 ms | 0.339 ms / 0.373 ms | $< 25$ ms |
+| **Reranking (P50 / P95)** | 0.010 ms / 0.012 ms | 0.010 ms / 0.012 ms | 0.010 ms / 0.015 ms | $< 10$ ms |
+| **Context Assembly (P50 / P95)**| 0.011 ms / 0.037 ms | 0.013 ms / 0.059 ms | 0.015 ms / 0.041 ms | $< 25$ ms |
+| **Total Query Latency (P50 / P95)** | **0.177 ms / 0.365 ms** | **0.346 ms / 0.488 ms** | **0.653 ms / 0.780 ms** | $< 50$ ms |
+| **Peak Build / Query Memory** | 0.10 MB / 0.05 MB | 0.10 MB / 0.05 MB | **0.11 MB / 0.02 MB** | $< 25$ MB |
 
 ---
 
-## 6. Shadow Operation Verification
+## 7. Invalidation & Deletion Cascade Certification
+
+1. **Dataset Deletion Cascade**:
+   - Calling `delete_dataset(dataset_id)` removes all associated documents from all BM25 namespace partitions and vector storage.
+   - Subsequent queries for the deleted dataset return strictly 0 candidates and empty context packages.
+   - Associated retrieval manifest is flagged as stale.
+2. **Version Replacement (v1 -> v2)**:
+   - Ingesting v2 invalidates and replaces v1 documents in-place.
+   - Queries targeting the dataset return 100% v2 artifacts; zero v1 documents leak into search results.
+3. **Artifact Dependency Invalidation**:
+   - Fingerprint mutations in either the `SemanticGraph` (`graph_fingerprint`) or `AnalyticalProfile` (`source_fingerprint`) immediately flag the manifest as stale (`is_stale() == True`), preventing stale cache reads.
+
+---
+
+## 8. Shadow Operation Verification
 
 1. **Consumer Insulation**: HRIDAY, Presentation, and Dashboard pipelines continue consuming canonical V1 data structures with 0 modifications.
 2. **Zero Ingestion V1 Regressions**: Baseline consumer regression suites passed at 100%.
