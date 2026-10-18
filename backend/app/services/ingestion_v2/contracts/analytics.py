@@ -19,6 +19,23 @@ class OutlierMethod(str, Enum):
     MODIFIED_Z_SCORE = "MODIFIED_Z_SCORE"
 
 
+class FindingType(str, Enum):
+    DISTRIBUTION = "DISTRIBUTION"
+    GROUP_COMPARISON = "GROUP_COMPARISON"
+    RANKING = "RANKING"
+    TREND = "TREND"
+    CHANGE = "CHANGE"
+    CONCENTRATION = "CONCENTRATION"
+    OUTLIER = "OUTLIER"
+    CORRELATION = "CORRELATION"
+    VARIANCE = "VARIANCE"
+    PROPORTION = "PROPORTION"
+    RATE = "RATE"
+    COUNT = "COUNT"
+    DISTINCT_COUNT = "DISTINCT_COUNT"
+    CROSS_TABLE_COMPARISON = "CROSS_TABLE_COMPARISON"
+
+
 class TukeyIqrEvidence(BaseModel):
     """
     Evidence for rule-based Tukey IQR outlier detection.
@@ -52,6 +69,25 @@ class HypothesisTestEvidence(BaseModel):
     is_statistically_significant: bool
 
 
+class StatisticalTestEvidence(BaseModel):
+    """
+    Evidence for formal statistical tests in Phase I5.
+    Includes effect sizes, sample size, assumptions, and warnings.
+    """
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    test_name: str
+    test_statistic: float
+    p_value: float = Field(ge=0.0, le=1.0)
+    effect_size: float | None = None
+    sample_size: int | None = None
+    alpha: float = 0.05
+    degrees_of_freedom: float | None = None
+    is_statistically_significant: bool = False
+    assumptions: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
 class AnalyticalReliability(BaseModel):
     """
     Measures analytical confidence, join coverage, grain safety, and evidence sufficiency.
@@ -64,6 +100,10 @@ class AnalyticalReliability(BaseModel):
     metric_definition_confidence: float = Field(ge=0.0, le=1.0)
     evidence_sufficiency_score: float = Field(ge=0.0, le=1.0)
     overall_analytical_reliability: float = Field(ge=0.0, le=1.0)
+    reliability_level: str = "HIGH"
+    sample_sufficiency_score: float = 1.0
+    statistical_support_score: float = 1.0
+    rationale: str = ""
 
 
 class AnalyticalFinding(BaseModel):
@@ -73,14 +113,36 @@ class AnalyticalFinding(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     finding_id: str
-    finding_type: str  # e.g., "OUTLIER_DETECTED", "CORRELATION_DISCOVERED", "TEMPORAL_TREND"
+    finding_type: str  # FindingType or string
     affected_tables: list[str] = Field(default_factory=list)
     affected_columns: list[str] = Field(default_factory=list)
     evidence_ref: str | None = None
     description: str
     tukey_outlier_evidence: TukeyIqrEvidence | None = None
     hypothesis_test_evidence: HypothesisTestEvidence | None = None
+    statistical_test_evidence: StatisticalTestEvidence | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+    # I5 Governance & Precision extensions
+    dataset_id: str = ""
+    source_table_ids: list[str] = Field(default_factory=list)
+    source_column_ids: list[str] = Field(default_factory=list)
+    target_grain: str | None = None
+    join_plan_ids: list[str] = Field(default_factory=list)
+    metric_definition: str | None = None
+    dimension_definition: str | None = None
+    population_definition: str | None = None
+    numerator_definition: str | None = None
+    denominator_definition: str | None = None
+    result: Any = None
+    effect_size: float | None = None
+    confidence: float = 1.0
+    evidence_refs: list[str] = Field(default_factory=list)
+    provenance_refs: list[str] = Field(default_factory=list)
+    analytical_reliability: AnalyticalReliability | None = None
+    limitations: list[str] = Field(default_factory=list)
+    finding_fingerprint: str | None = None
+    filter_provenance: dict[str, Any] = Field(default_factory=dict)
 
 
 class AnalyticalProfile(IngestionContractBase):

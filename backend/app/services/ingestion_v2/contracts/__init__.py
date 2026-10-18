@@ -66,8 +66,10 @@ from app.services.ingestion_v2.contracts.joins import (
 )
 from app.services.ingestion_v2.contracts.analytics import (
     OutlierMethod,
+    FindingType,
     TukeyIqrEvidence,
     HypothesisTestEvidence,
+    StatisticalTestEvidence,
     AnalyticalReliability,
     AnalyticalFinding,
     AnalyticalProfile,
@@ -165,8 +167,10 @@ __all__ = [
     "GovernedJoinPlanSet",
     # Stage 8: Analytics (EDA-B)
     "OutlierMethod",
+    "FindingType",
     "TukeyIqrEvidence",
     "HypothesisTestEvidence",
+    "StatisticalTestEvidence",
     "AnalyticalReliability",
     "AnalyticalFinding",
     "AnalyticalProfile",
