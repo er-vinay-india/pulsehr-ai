@@ -116,14 +116,31 @@ def sample_deck_spec():
     }
 
 
-# TEST 1: Text embedding works
-def test_text_embedding_works():
+# TEST 1: Text embedding works (hermetic with httpx mock and in-memory cache verification)
+def test_text_embedding_works(monkeypatch):
+    import httpx
+    called_urls = []
+
+    def mock_post(self, url, *args, **kwargs):
+        called_urls.append(str(url))
+        req = httpx.Request("POST", str(url))
+        return httpx.Response(status_code=200, json={"embedding": [0.042] * 768}, request=req)
+
+    monkeypatch.setattr(httpx.Client, "post", mock_post)
+
     emb = NomicEmbeddingService()
-    # Test fallback or live Ollama call
     vec = emb.embed_text("Executive Presentation Review")
-    if vec is not None:
-        assert len(vec) == 768
-        assert isinstance(vec[0], float)
+    assert vec is not None
+    assert len(vec) == 768
+    assert isinstance(vec[0], float)
+    assert vec[0] == 0.042
+    assert len(called_urls) == 1
+    assert "/api/embeddings" in called_urls[0]
+
+    # Memory cache hit verification (zero additional HTTP calls)
+    vec2 = emb.embed_text("Executive Presentation Review")
+    assert len(called_urls) == 1
+    assert vec2 == vec
 
 
 # TEST 2: Same unchanged content does not embed twice (caching / hash check)
@@ -415,3 +432,30 @@ def test_current_evidence_remains_distinguishable(temp_store, mock_embedder, sam
     assert len(historical_items) > 0
     for h in historical_items:
         assert h.evidence_status != EvidenceStatus.CURRENT
+
+
+# TEST 19: Embedding service offline graceful degradation
+def test_embedding_service_offline_graceful_fallback(monkeypatch):
+    import httpx
+
+    def mock_post_fail(self, url, *args, **kwargs):
+        raise httpx.ConnectError("Connection refused to Ollama daemon on port 11434")
+
+    monkeypatch.setattr(httpx.Client, "post", mock_post_fail)
+
+    emb = NomicEmbeddingService()
+    vec = emb.embed_text("Executive Presentation Review")
+    assert vec is None
+
+
+# TEST 20: Unmocked Ollama network call blocked by hermetic test firewall
+def test_unmocked_ollama_network_call_blocked_by_guard():
+    import socket
+
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        with pytest.raises(ConnectionRefusedError, match="HERMETIC TEST FIREWALL"):
+            s.connect(("localhost", 11434))
+    finally:
+        s.close()
+

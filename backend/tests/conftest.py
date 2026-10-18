@@ -1,6 +1,7 @@
 """Every test uses an isolated database, never the running application's data."""
 from pathlib import Path
 import sqlite3
+import socket
 import pandas as pd
 import pytest
 from app.core import config
@@ -54,6 +55,18 @@ def isolated_workspace(request, tmp_path, monkeypatch):
     config.UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
     config.EXPORTS_DIR.mkdir(parents=True, exist_ok=True)
     monkeypatch.setattr(sheet_catalog, 'model_embeddings', lambda texts: [])
+
+    # Hermetic test firewall: block unmocked connections to Ollama / model port 11434 in presentation & ingestion suites
+    if "presentation" in request.node.nodeid or "ingestion" in request.node.nodeid:
+        orig_connect = socket.socket.connect
+        def guarded_connect(self, address):
+            if isinstance(address, tuple) and len(address) >= 2 and address[1] == 11434:
+                raise ConnectionRefusedError(
+                    "HERMETIC TEST FIREWALL: Connection to port 11434 is blocked in test environment. "
+                    "Tests must mock embedding/model HTTP requests."
+                )
+            return orig_connect(self, address)
+        monkeypatch.setattr(socket.socket, "connect", guarded_connect)
 
     # If marked unit and not marked db, skip disk DB initialization for maximum velocity
     if request.node.get_closest_marker("unit") and not request.node.get_closest_marker("db"):

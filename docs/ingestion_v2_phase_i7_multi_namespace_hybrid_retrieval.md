@@ -186,3 +186,32 @@ Measured across independent Small, Medium, and Large fixture scales (15 iteratio
 2. **Zero Ingestion V1 Regressions**: Baseline consumer regression suites passed at 100%.
 3. **Database Immutability**: Production SQLite database (`pulsehr.sqlite3`) verified bit-for-bit unchanged (70,385,664 bytes).
 4. **Zero LLM Calls**: System runs completely deterministic search without invoking LLMs during index construction or context assembly (`llm_calls = 0`).
+
+---
+
+## 9. Embedding Telemetry & Hermetic Test Certification
+
+### 9.1 Embedding Telemetry Counters (Canonical 24-Query 6-Domain Benchmark)
+
+| Telemetry Field | Benchmark Value | Description |
+| :--- | :--- | :--- |
+| `document_embedding_requests` (Cold Build) | **24** | 24 canonical documents across 6 domains (4 per domain across 4 namespaces) |
+| `document_embedding_cache_hits` (Cold Build) | **0** | Initial cold index construction |
+| `document_embedding_cache_misses` (Cold Build) | **24** | 100% computed on cold build |
+| `query_embedding_requests` | **24** | Exactly 1 per retrieval benchmark query |
+| `query_embedding_failures` | **0** | Zero embedding failures during evaluation |
+| `llm_calls` | **0** | Zero generative model or council calls during retrieval |
+| `embedding_model_id` | `"nomic-embed-text"` | Dedicated local embedding model identifier |
+| `embedding_model_version` | `"v1.5"` | Pinned model weight version |
+| `normalization_policy` | `"l2"` | Euclidean unit length normalization |
+
+### 9.2 Warm Index Rebuild Cache Invariant
+- **Reusable Documents Evaluated**: **24**
+- **Document Embedding Cache Hits**: **24** (`document_embedding_cache_hits == reusable_documents`)
+- **New Embedding Computations**: **0**
+
+### 9.3 Hermetic Network Isolation & Offline Graceful Degradation
+1. **Network Firewall Guard**: Socket connection to port 11434 intercepted in test environment; unmocked attempts raise `ConnectionRefusedError("HERMETIC TEST FIREWALL: Connection to port 11434 is blocked in test environment. Tests must mock embedding/model HTTP requests.")`.
+2. **HTTP Transport Mocking**: `test_text_embedding_works` explicitly mocks `httpx.Client.post` transport, verifying exact endpoint, vector dimensionality (768), and memory cache hit behavior without network I/O.
+3. **Offline Graceful Degradation**: `NomicEmbeddingService.embed_text` catches connection errors and returns `None`, degrading gracefully to keyword/BM25 without unhandled exceptions.
+
