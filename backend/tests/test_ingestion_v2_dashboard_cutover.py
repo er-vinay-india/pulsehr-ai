@@ -1080,7 +1080,12 @@ def test_dashboard_acquisition_performance_benchmark(
 ):
     """
     Acquisition Performance Benchmark:
-    Measures 35 iterations per route and verifies P50 and P95 latency distributions.
+    Separately measures 35 iterations across all 4 operational execution paths:
+    1. Gateway Route Evaluation latency
+    2. V1 Dashboard Acquisition latency
+    3. V2 Dashboard Acquisition latency
+    4. V2 -> V1 Governed Fallback latency
+    Verifies P50 and P95 latency distributions.
     """
     import time
     seed_workforce_dataset(hermetic_db, dataset_id=101)
@@ -1104,7 +1109,22 @@ def test_dashboard_acquisition_performance_benchmark(
     assert gw_p50 < 1.0, f"Gateway P50 too slow: {gw_p50}ms"
     assert gw_p95 < 5.0, f"Gateway P95 too slow: {gw_p95}ms"
 
-    # 2. V2 Dashboard Acquisition latency
+    # 2. V1 Dashboard Acquisition latency
+    gw_v1 = ConsumerIntelligenceGateway()
+    gw_v1.reset()
+    adapter_v1 = DashboardIntelligenceAdapter(gateway=gw_v1)
+    v1_times = []
+    for _ in range(35):
+        t0 = time.perf_counter()
+        adapter_v1.acquire_dashboard_intelligence(dataset_id=101, manifest_data=None, db_conn=hermetic_db)
+        v1_times.append((time.perf_counter() - t0) * 1000)
+    v1_sorted = sorted(v1_times)
+    v1_p50 = v1_sorted[17]
+    v1_p95 = v1_sorted[33]
+    assert v1_p50 < 20.0, f"V1 P50 too slow: {v1_p50}ms"
+    assert v1_p95 < 50.0, f"V1 P95 too slow: {v1_p95}ms"
+
+    # 3. V2 Dashboard Acquisition latency
     v2_times = []
     for _ in range(35):
         t0 = time.perf_counter()
@@ -1116,6 +1136,21 @@ def test_dashboard_acquisition_performance_benchmark(
     assert v2_p50 < 30.0, f"V2 P50 too slow: {v2_p50}ms"
     assert v2_p95 < 60.0, f"V2 P95 too slow: {v2_p95}ms"
 
+    # 4. V2 -> V1 Governed Fallback latency
+    fb_times = []
+    bad_m = dict(valid_m)
+    bad_m["is_stale"] = True
+    for _ in range(35):
+        isolated_gateway.circuit_breaker.reset(ConsumerName.DASHBOARD)
+        t0 = time.perf_counter()
+        adapter.acquire_dashboard_intelligence(dataset_id=101, manifest_data=bad_m, db_conn=hermetic_db)
+        fb_times.append((time.perf_counter() - t0) * 1000)
+    fb_sorted = sorted(fb_times)
+    fb_p50 = fb_sorted[17]
+    fb_p95 = fb_sorted[33]
+    assert fb_p50 < 20.0, f"Fallback P50 too slow: {fb_p50}ms"
+    assert fb_p95 < 50.0, f"Fallback P95 too slow: {fb_p95}ms"
+
 
 def test_incremental_memory_benchmark(
     isolated_gateway: ConsumerIntelligenceGateway,
@@ -1123,7 +1158,10 @@ def test_incremental_memory_benchmark(
 ):
     """
     Incremental Memory Benchmark:
-    Measures memory allocation delta across small, medium, and large dataset payloads.
+    Measures memory allocation delta and peak across small, medium, and large dataset payloads.
+    - Small: 50 rows
+    - Medium: 1,000 rows
+    - Large: 10,000 rows
     """
     import tracemalloc
 
@@ -1132,7 +1170,7 @@ def test_incremental_memory_benchmark(
     isolated_gateway.transition_state(ConsumerName.DASHBOARD, CutoverState.V2_PRIMARY_WITH_FALLBACK)
     adapter = DashboardIntelligenceAdapter(gateway=isolated_gateway)
 
-    # Small: 50 rows
+    # 1. Small: 50 rows
     seed_workforce_dataset(hermetic_db, dataset_id=401)
     m_small = make_sample_manifest("401")
     adapter.register_v2_manifest("401", m_small)
@@ -1144,8 +1182,46 @@ def test_incremental_memory_benchmark(
 
     small_delta_mb = curr_s / (1024 * 1024)
     small_peak_mb = peak_s / (1024 * 1024)
-    assert small_delta_mb < 2.0
-    assert small_peak_mb < 5.0
+    assert small_delta_mb < 2.0, f"Small delta too large: {small_delta_mb} MB"
+    assert small_peak_mb < 5.0, f"Small peak too large: {small_peak_mb} MB"
+
+    # Helper for medium/large synthetic tables
+    def seed_synthetic_dataset(ds_id: int, n_rows: int):
+        hermetic_db.execute("INSERT OR REPLACE INTO dataset_uploads VALUES (?, ?, ?)", (ds_id, f"data_{ds_id}.xlsx", f"Dataset {ds_id}"))
+        hermetic_db.execute("INSERT OR REPLACE INTO sheets VALUES (?, ?, ?, ?, ?, ?)", (1000 + ds_id, ds_id, "data", "Data", json.dumps(["id", "metric", "val"]), n_rows))
+        rows = [(1000 + ds_id, i, json.dumps({"id": i, "metric": f"cat_{i%5}", "val": 100.0 + (i % 20)})) for i in range(n_rows)]
+        hermetic_db.executemany("INSERT INTO sheet_curated_rows (sheet_id, row_index, data_json) VALUES (?, ?, ?)", rows)
+        hermetic_db.commit()
+
+    # 2. Medium: 1,000 rows
+    seed_synthetic_dataset(402, 1000)
+    m_med = make_sample_manifest("402")
+    adapter.register_v2_manifest("402", m_med)
+
+    tracemalloc.start()
+    resp_med = adapter.acquire_dashboard_intelligence(dataset_id=402, manifest_data=m_med, db_conn=hermetic_db)
+    curr_m, peak_m = tracemalloc.get_traced_memory()
+    tracemalloc.stop()
+
+    med_delta_mb = curr_m / (1024 * 1024)
+    med_peak_mb = peak_m / (1024 * 1024)
+    assert med_delta_mb < 3.0, f"Medium delta too large: {med_delta_mb} MB"
+    assert med_peak_mb < 8.0, f"Medium peak too large: {med_peak_mb} MB"
+
+    # 3. Large: 10,000 rows
+    seed_synthetic_dataset(403, 10000)
+    m_large = make_sample_manifest("403")
+    adapter.register_v2_manifest("403", m_large)
+
+    tracemalloc.start()
+    resp_large = adapter.acquire_dashboard_intelligence(dataset_id=403, manifest_data=m_large, db_conn=hermetic_db)
+    curr_l, peak_l = tracemalloc.get_traced_memory()
+    tracemalloc.stop()
+
+    large_delta_mb = curr_l / (1024 * 1024)
+    large_peak_mb = peak_l / (1024 * 1024)
+    assert large_delta_mb < 5.0, f"Large delta too large: {large_delta_mb} MB"
+    assert large_peak_mb < 15.0, f"Large peak too large: {large_peak_mb} MB"
 
 
 # =============================================================================
@@ -1226,7 +1302,39 @@ def test_cross_consumer_truth_consistency_table(
     for r_hr in ret_hr:
         r_dash = next((d for d in ret_dash if d["metric_id"] == r_hr["metric_id"]), None)
         assert r_dash is not None
-        if r_hr["value"] != r_dash["value"] or r_hr["unit"] != r_dash["unit"]:
+        if r_hr["value"] != r_dash["value"]:
+            mismatches += 1
+        if r_hr["unit"] != r_dash["unit"]:
+            mismatches += 1
+        if r_hr["grain"] != r_dash["grain"]:
+            mismatches += 1
+        if r_hr["denominator"] != r_dash["denominator"]:
+            mismatches += 1
+        if r_hr["evidence_refs"] != r_dash["evidence_refs"]:
+            mismatches += 1
+        if r_hr["dataset_version"] != r_dash["dataset_version"]:
+            mismatches += 1
+        hash_r_hr = compute_semantic_render_hash(
+            topic_or_kpi_id=f"KPI-{r_hr['metric_id']}",
+            metric_id=r_hr["metric_id"],
+            value=r_hr["value"],
+            unit=r_hr["unit"],
+            grain=r_hr["grain"],
+            denominator=r_hr["denominator"],
+            evidence_ids=r_hr["evidence_refs"],
+            dataset_version=r_hr["dataset_version"],
+        )
+        hash_r_dash = compute_semantic_render_hash(
+            topic_or_kpi_id=f"KPI-{r_dash['metric_id']}",
+            metric_id=r_dash["metric_id"],
+            value=r_dash["value"],
+            unit=r_dash["unit"],
+            grain=r_dash["grain"],
+            denominator=r_dash["denominator"],
+            evidence_ids=r_dash["evidence_refs"],
+            dataset_version=r_dash["dataset_version"],
+        )
+        if hash_r_hr != hash_r_dash:
             mismatches += 1
 
     assert mismatches == 0, f"Found {mismatches} cross-consumer fact discrepancies!"

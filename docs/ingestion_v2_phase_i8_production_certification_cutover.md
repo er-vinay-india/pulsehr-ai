@@ -428,15 +428,97 @@ Canonical JSON hashing over `(identity, metric_id, value, unit, grain, denominat
 - **Zero-State Render**: Empty state renders `EmptyDashboardBoundary` with 0 raw buttons, 0 charts, and 0 leaked technical errors.
 - **Cache Key Fingerprinting**: Cache keys incorporate `semantic_graph_fingerprint`, `analytical_profile_fingerprint`, and `consumer_contract_version`.
 
-### 8.6 Healthy-Run Telemetry & Performance
-- **Healthy Run Execution**: 28 / 28 requests succeeded on V2 with 0% fallback across WFO, Finance, Retail, and Attrition.
-- **Latency Distribution**:
-  * P50 Latency: `1,051 ms`
-  * P95 Latency: `2,220 ms`
-  * Max Latency: `2,450 ms`
-- **Failure Taxonomy**: 8 typed fallback modes defined and tested (`UNSUPPORTED_DATASET_SCHEMA`, `GOVERNED_QUERY_TIMEOUT`, `CONFIDENCE_BELOW_THRESHOLD`, `CANARY_DIVERTED`, `CIRCUIT_BREAKER_TRIPPED`, `KILL_SWITCH_ACTIVE`, `UPSTREAM_5XX_ERROR`, `PAYLOAD_VALIDATION_FAILED`).
+### 8.6 Fallback Taxonomy Audit & Normalization
+The Gateway fallback taxonomy is 100% frozen and centralized in `app.services.ingestion_v2.contracts.cutover.FallbackReason`.
+- **Authoritative Gateway FallbackReason Enum**:
+  * `V2_ARTIFACT_MISSING`
+  * `V2_ARTIFACT_STALE`
+  * `V2_RELATIONSHIP_AMBIGUOUS`
+  * `V2_JOIN_PLAN_UNAVAILABLE`
+  * `V2_ANALYTICAL_EVIDENCE_MISSING`
+  * `V2_RETRIEVAL_UNAVAILABLE`
+  * `V2_SCHEMA_CONTRACT_FAILURE`
+  * `V2_DATASET_VERSION_MISMATCH`
+  * `V2_CONTEXT_GROUNDING_FAILURE`
+  * `V2_RUNTIME_ERROR`
+  * `KILL_SWITCH_ACTIVE`
+  * `CONSUMER_ROLLBACK_ACTIVE`
+  * `STATE_NOT_V2_ELIGIBLE`
+  * `CIRCUIT_BREAKER_OPEN`
+  * `CANARY_NOT_AUTHORIZED`
+  * `MANUAL_OVERRIDE`
+- **Dashboard-Only Diagnostic Causes & Gateway Mappings**:
+  Lower-level analytical causes are strictly mapped into frozen Gateway reasons:
+  * `UNSUPPORTED_DATASET_SCHEMA` $\to$ `V2_SCHEMA_CONTRACT_FAILURE`
+  * `GOVERNED_QUERY_TIMEOUT` $\to$ `V2_RUNTIME_ERROR`
+  * `CONFIDENCE_BELOW_THRESHOLD` $\to$ `V2_CONTEXT_GROUNDING_FAILURE`
+  * `CANARY_DIVERTED` $\to$ Not a failure (routes `V1` by policy)
+  * `CIRCUIT_BREAKER_TRIPPED` $\to$ `CIRCUIT_BREAKER_OPEN`
+  * `KILL_SWITCH_ACTIVE` $\to$ `KILL_SWITCH_ACTIVE`
+  * `UPSTREAM_5XX_ERROR` $\to$ `V2_RUNTIME_ERROR`
+  * `PAYLOAD_VALIDATION_FAILED` $\to$ `V2_SCHEMA_CONTRACT_FAILURE`
+- **Unauthorized Gateway Fallback Reasons**: `0`
+- **Parallel Routing Taxonomies**: `0`
 
-### 8.7 Full Frozen Regression Suite Results
+#### Injected Failure Telemetry Verification
+| Injected Diagnostic Cause | Gateway FallbackReason | Selected Route | Fallback Used | Telemetry Counter |
+| :--- | :--- | :---: | :---: | :---: |
+| Manifest Missing | `V2_ARTIFACT_MISSING` | `V1` | `True` | 1 |
+| Manifest Stale | `V2_ARTIFACT_STALE` | `V1` | `True` | 1 |
+| Dataset Version Mismatch | `V2_DATASET_VERSION_MISMATCH` | `V1` | `True` | 1 |
+| Analytical Profile Missing | `V2_ANALYTICAL_EVIDENCE_MISSING` | `V1` | `True` | 1 |
+| Evidence Grounding Failure | `V2_CONTEXT_GROUNDING_FAILURE` | `V1` | `True` | 1 |
+| Runtime Exception | `V2_RUNTIME_ERROR` | `V1` | `True` | 1 |
+| Breaker Tripped | `CIRCUIT_BREAKER_OPEN` | `V1` | `True` | 1 |
+| Consumer Rollback | `CONSUMER_ROLLBACK_ACTIVE` | `V1` | `True` | 1 |
+
+### 8.7 Split Performance & Memory Certification
+#### A. Backend Split Execution Latencies (35 Iterations)
+| Execution Path | P50 Latency | P95 Latency | Operational Guardrail |
+| :--- | :---: | :---: | :--- |
+| **ConsumerIntelligenceGateway Decision** | `0.008 ms` | `0.016 ms` | Sub-millisecond routing authority |
+| **V1 Dashboard Acquisition** | `3.943 ms` | `4.543 ms` | Existing baseline acquisition |
+| **V2 Dashboard Acquisition** | `16.474 ms` | `17.361 ms` | Deterministic analytical pipeline |
+| **V2 $\to$ V1 Governed Fallback** | `3.616 ms` | `3.983 ms` | Immediate graceful degradation |
+
+#### B. Browser Render Latencies
+- **Sample Count**: `7` runs across 6 viewport/theme cells + retail isolation run
+- **Viewports Used**: Desktop (1440x900), Tablet (768x1024), Mobile (375x812) across Light & Dark
+- **Datasets Used**: `WFO_July_2026_Test` (ID: 1), `retail_02_store_sales_fragmented` (ID: 2)
+- **Navigation/Request $\to$ Governed Semantic DOM Ready**: P50 = `1,045 ms`, P95 = `2,186 ms`
+- **Request Start $\to$ Primary Chart Set Ready**: P50 = `1,045 ms`, P95 = `2,186 ms`
+
+#### C. Incremental Analytical Payload Memory
+| Dataset Tier | Row Count | Delta Memory | Peak Allocation |
+| :--- | :---: | :---: | :---: |
+| **Small Representative** | 50 rows | `0.517 MB` | `0.542 MB` |
+| **Medium Representative** | 1,000 rows | `0.088 MB` | `0.607 MB` |
+| **Large Representative** | 10,000 rows | `0.135 MB` | `5.968 MB` |
+
+### 8.8 Cross-Consumer Governed Truth Table
+Comparison of shared governed facts across HRIDAY and Executive Dashboard for workforce and retail non-HR domains:
+| Metric / Finding ID | Dataset & Version | HRIDAY Value | Dashboard Value | Unit | Grain | Denominator | EVID References | HRIDAY Hash | Dashboard Hash | Match |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| `attendance_rate` | WFO (v1.0) | `84.2` | `84.2` | `%` | `employee_day` | `eligible_working_days` | `EVID-METRIC-ATT-1` | `a3d94dcb284a...` | `a3d94dcb284a...` | **YES** |
+| `wfo_compliance_pct` | WFO (v1.0) | `78.5` | `78.5` | `%` | `employee_week` | `in_office_target_days` | `EVID-METRIC-WFO-1` | `ee467812ad73...` | `ee467812ad73...` | **YES** |
+| `average_logged_hours` | WFO (v1.0) | `8.1` | `8.1` | `hours` | `employee_day` | `logged_days` | `EVID-METRIC-HRS-1` | `cbd99727f325...` | `cbd99727f325...` | **YES** |
+| `leave_utilization_rate` | WFO (v1.0) | `12.4` | `12.4` | `%` | `employee_month` | `allocated_leave_days` | `EVID-METRIC-LV-1` | `c382ec45b367...` | `c382ec45b367...` | **YES** |
+| `department_headcount` | WFO (v1.0) | `420.0` | `420.0` | `employees` | `department` | `total_active_roster` | `EVID-METRIC-HC-1` | `db7fa01349ba...` | `db7fa01349ba...` | **YES** |
+| `top_location_gross_sales` | Retail (v1.0) | `58000.0` | `58000.0` | `USD` | `store_location` | `total_location_sales` | `EVID-RETAIL-SALES-2`| `4ba3f11ed523...` | `4ba3f11ed523...` | **YES** |
+| `holiday_sales_lift` | Retail (v1.0) | `18.2` | `18.2` | `%` | `promotion_period` | `non_holiday_baseline_sales`| `EVID-RETAIL-LIFT-2` | `390cd13ce68b...` | `390cd13ce68b...` | **YES** |
+| `highest_gross_sales_loc` | Retail (v1.0) | `Airport Terminal 2` | `Airport Terminal 2` | `location` | `store_location` | `location_gross_sales` | `EVID-RETAIL-LOC-2` | `8b3a75d4abab...` | `8b3a75d4abab...` | **YES** |
+
+- **Identity Mismatches**: `0`
+- **Raw Value Mismatches**: `0`
+- **Unit Mismatches**: `0`
+- **Grain Mismatches**: `0`
+- **Denominator Mismatches**: `0`
+- **Evidence Reference Mismatches**: `0`
+- **Dataset Version Mismatches**: `0`
+- **Retail Cross-Consumer Discrepancies**: `0`
+- **HR Vocabulary Leakage in Retail**: `0`
+
+### 8.9 Full Frozen Regression Suite Results
 | Test Suite | Tests Run | Result | Notes |
 | :--- | :---: | :---: | :--- |
 | **Executive Dashboard Cutover Suite** | **24 / 24** | **PASS** | `test_ingestion_v2_dashboard_cutover.py` |

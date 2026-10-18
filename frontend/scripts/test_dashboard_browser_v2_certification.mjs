@@ -597,8 +597,11 @@ print('SUCCESS_CUTOVER_SEEDED')
     console.log(`\n================================================================`);
     console.log(`  REAL BROWSER TIMING METRICS (P50 / P95)`);
     console.log(`================================================================\n`);
-    console.log(`  Navigation/Request -> Semantic DOM Ready: P50 = ${Math.round(calcP50(semanticReadyTimings))}ms, P95 = ${Math.round(calcP95(semanticReadyTimings))}ms`);
-    console.log(`  Request Start      -> Charts Ready (SVG/Canvas): P50 = ${Math.round(calcP50(chartReadyTimings))}ms, P95 = ${Math.round(calcP95(chartReadyTimings))}ms`);
+    console.log(`  Sample Count:   ${semanticReadyTimings.length} runs`);
+    console.log(`  Viewports Used: Desktop (1440x900), Tablet (768x1024), Mobile (375x812) [Light & Dark]`);
+    console.log(`  Datasets Used:  WFO_July_2026_Test (ID: ${wfoDatasetId}), retail_02_store_sales_fragmented (ID: ${retailDatasetId})`);
+    console.log(`  Navigation/Request -> Governed Semantic DOM Ready: P50 = ${Math.round(calcP50(semanticReadyTimings))}ms, P95 = ${Math.round(calcP95(semanticReadyTimings))}ms`);
+    console.log(`  Request Start      -> Primary Chart Set Ready:     P50 = ${Math.round(calcP50(chartReadyTimings))}ms, P95 = ${Math.round(calcP95(chartReadyTimings))}ms`);
 
     console.log('\n================================================================');
     console.log('  ALL LIVE BROWSER DASHBOARD CERTIFICATION TESTS PASSED (6/6)');
