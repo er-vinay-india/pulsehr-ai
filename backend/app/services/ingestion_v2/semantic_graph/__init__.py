@@ -42,6 +42,8 @@ from app.services.ingestion_v2.semantic_graph.validators import (
     MissingProvenanceError,
     MissingJoinPlanError,
     InvalidEvidenceRefError,
+    NonexistentEvidenceError,
+    ObservedValueInMetricError,
 )
 from app.services.ingestion_v2.semantic_graph.graph_identity import (
     compute_graph_fingerprint,
@@ -60,6 +62,8 @@ __all__ = [
     "MissingProvenanceError",
     "MissingJoinPlanError",
     "InvalidEvidenceRefError",
+    "NonexistentEvidenceError",
+    "ObservedValueInMetricError",
     "compute_graph_fingerprint",
     "serialize_graph_canonical",
     "create_table_node",

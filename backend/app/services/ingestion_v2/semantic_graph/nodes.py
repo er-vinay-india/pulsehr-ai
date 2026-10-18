@@ -252,6 +252,12 @@ def create_metric_node(
         "display_aliases": display_aliases or [],
     }
     if properties:
+        for forbidden in ("observed_value", "value", "result", "metric_value", "actual_value", "finding_value"):
+            if forbidden in properties:
+                raise ValueError(
+                    f"Observed analytical value '{forbidden}' cannot be embedded into semantic MetricNode '{metric_id}'. "
+                    f"EvidenceGraph owns observed facts; SemanticGraph owns metric definitions."
+                )
         props.update(properties)
 
     return SemanticGraphNode(

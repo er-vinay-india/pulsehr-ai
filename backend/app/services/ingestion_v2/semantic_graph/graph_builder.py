@@ -98,6 +98,7 @@ class SemanticGraphBuilder:
         enriched_dataset: EnrichedDataset | None = None,
         intent: AnalysisIntent | None = None,
         provenance: list[SourceCoordinateRef] | None = None,
+        evidence_registry: set[str] | Sequence[str] | None = None,
     ) -> SemanticGraph:
         """
         Assembles and validates a complete SemanticGraph.
@@ -150,7 +151,8 @@ class SemanticGraphBuilder:
         if hasattr(semantic_model, "tables") and semantic_model.tables:
             for t_model in semantic_model.tables:
                 for sc in t_model.columns:
-                    sem_col_map[(sc.table_id, sc.column_name)] = sc
+                    tbl_id = getattr(sc, "table_id", None) or t_model.table_id
+                    sem_col_map[(tbl_id, sc.column_name)] = sc
         elif hasattr(semantic_model, "columns") and semantic_model.columns:
             for sc in semantic_model.columns:
                 sem_col_map[(sc.table_id, sc.column_name)] = sc
@@ -277,6 +279,13 @@ class SemanticGraphBuilder:
                 )
                 add_edge(str_edge)
 
+        # Build join plan lookup map
+        jp_map: dict[str, JoinPlan] = {}
+        if isinstance(join_plans, GovernedJoinPlanSet):
+            jp_map = {jp.join_plan_id: jp for jp in join_plans.plans}
+        elif isinstance(join_plans, (list, tuple)):
+            jp_map = {jp.join_plan_id: jp for jp in join_plans}
+
         # 4. Metrics from Stage 9 EnrichedDataset
         if enriched_dataset:
             # Local Metrics
@@ -348,7 +357,26 @@ class SemanticGraphBuilder:
                 add_edge(create_measured_at_grain_edge(rm_node.node_id, g_node_id))
 
                 # Link Metric USES_JOIN_PLAN
-                add_edge(create_uses_join_plan_edge(rm_node.node_id, rm.join_plan_id, target_grain=rm.target_grain))
+                matched_jp = jp_map.get(rm.join_plan_id)
+                jp_props = {}
+                if matched_jp:
+                    jp_props["safety_status"] = (
+                        matched_jp.safety_status.value
+                        if hasattr(matched_jp.safety_status, "value")
+                        else str(matched_jp.safety_status)
+                    )
+                    if matched_jp.pre_aggregation:
+                        jp_props["pre_aggregation"] = {
+                            "source_table_id": matched_jp.pre_aggregation.source_table_id,
+                            "target_grain": matched_jp.pre_aggregation.target_grain,
+                            "group_by_columns": matched_jp.pre_aggregation.group_by_columns,
+                        }
+                add_edge(create_uses_join_plan_edge(
+                    rm_node.node_id,
+                    rm.join_plan_id,
+                    target_grain=rm.target_grain,
+                    properties=jp_props or None,
+                ))
 
                 # Link Metric DERIVED_FROM source columns / tables
                 for s_tbl in rm.source_table_ids:
@@ -430,8 +458,29 @@ class SemanticGraphBuilder:
             families_count=family_count,
         )
 
-        # Validate topological integrity
-        self.validator.validate(temp_graph, raise_on_error=True)
+        # Resolve evidence registry for existence verification
+        active_evidence_registry: set[str] | None = None
+        if evidence_registry is not None:
+            active_evidence_registry = set(evidence_registry)
+        elif analytical_profile and analytical_profile.findings:
+            active_evidence_registry = set()
+            for finding in analytical_profile.findings:
+                ev = (
+                    finding.evidence_ref if hasattr(finding, "evidence_ref") and finding.evidence_ref
+                    else getattr(finding, "evidence_id", None)
+                    or (finding.evidence_refs[0] if hasattr(finding, "evidence_refs") and finding.evidence_refs else None)
+                )
+                if ev:
+                    active_evidence_registry.add(ev)
+                if hasattr(finding, "evidence_refs") and finding.evidence_refs:
+                    active_evidence_registry.update(finding.evidence_refs)
+
+        # Validate topological integrity and evidence existence
+        self.validator.validate(
+            temp_graph,
+            evidence_registry=active_evidence_registry,
+            raise_on_error=True,
+        )
 
         # Compute deterministic graph fingerprint
         graph_fp = compute_graph_fingerprint(temp_graph)

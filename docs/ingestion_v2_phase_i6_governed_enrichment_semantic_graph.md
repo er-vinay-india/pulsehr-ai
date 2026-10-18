@@ -148,7 +148,11 @@ Every metric definition produces a deterministic fingerprint computed over its c
 3. **Metric Derivation Cycles**: Circular derivation dependencies (`A -> B -> A`) are detected via DFS cycle detection and strictly rejected with `MetricDerivationCycleError`.
 4. **Missing Grain**: Every `MetricNode` must declare a target grain. Missing grain raises `MissingGrainError`.
 5. **Missing JoinPlan**: Relational metrics without an explicit `join_plan_id` raise `MissingJoinPlanError`.
-6. **Evidence Format**: Non-standard or competing evidence IDs raise `InvalidEvidenceRefError`.
+6. **Evidence Reference & EvidenceGraph Integrity**:
+   - Evidence Namespace: Must strictly match `EVID-[A-Za-z0-9_-]+`. Non-matching namespaces (e.g., `ABC-001`, empty string) raise `InvalidEvidenceRefError`.
+   - Evidence Existence: Verified against the isolated upstream evidence registry/manifest. Well-formed nonexistent tokens (e.g., `EVID-999999`) raise `NonexistentEvidenceError` (or record in `unresolved_evidence` during soft inspection).
+   - Zero Observed Value Copying: `MetricNode` is purely definitional (formula, source columns, grain, unit, additivity). Attempting to embed observed analytical results (e.g., `83.4%`, sample means, p-values) raises `ObservedValueInMetricError`.
+   - Zero Evidence Minting: SemanticGraph strictly references upstream `EVID-*` tokens and never mints new evidence IDs.
 
 ---
 
@@ -185,14 +189,30 @@ Every metric definition produces a deterministic fingerprint computed over its c
 - **Recall: 1.000**
 - **F1: 1.000**
 
-### B. Performance & Memory Telemetry
-- `LocalMetricDeriver`: P50 = 0.03 ms / P95 = 0.08 ms
-- `RelationalMetricDeriver`: P50 = 0.04 ms / P95 = 0.12 ms
-- `SemanticFamilyBuilder`: P50 = 0.02 ms / P95 = 0.06 ms
-- `SemanticGraph` Build: P50 = 0.45 ms / P95 = 0.95 ms
-- `SemanticGraph` Validation: P50 = 0.12 ms / P95 = 0.28 ms
-- `Graph` Fingerprinting: P50 = 0.08 ms / P95 = 0.18 ms
-- **Peak Memory Usage**: < 1.0 MB
+### B. Component Performance Telemetry (Small, Medium, Large)
+Benchmarked across three representative fixture scales:
+- **SMALL** (2 tables, 8 cols, 2 metrics, 1 family, 22 nodes, 25 edges):
+  - `LocalMetricDeriver`: P50 = 0.008 ms | P95 = 0.022 ms
+  - `RelationalMetricDeriver`: P50 = 0.009 ms | P95 = 0.019 ms
+  - `SemanticFamilyBuilder`: P50 = 0.004 ms | P95 = 0.010 ms
+  - `SemanticGraph build`: P50 = 0.169 ms | P95 = 0.199 ms
+  - `SemanticGraph validation`: P50 = 0.010 ms | P95 = 0.013 ms
+  - `Graph fingerprint generation`: P50 = 0.081 ms | P95 = 0.084 ms
+- **MEDIUM** (6 tables, 30 cols, 6 metrics, 3 families, 76 nodes, 89 edges):
+  - `LocalMetricDeriver`: P50 = 0.008 ms | P95 = 0.017 ms
+  - `RelationalMetricDeriver`: P50 = 0.009 ms | P95 = 0.014 ms
+  - `SemanticFamilyBuilder`: P50 = 0.007 ms | P95 = 0.012 ms
+  - `SemanticGraph build`: P50 = 0.572 ms | P95 = 0.991 ms
+  - `SemanticGraph validation`: P50 = 0.030 ms | P95 = 0.057 ms
+  - `Graph fingerprint generation`: P50 = 0.516 ms | P95 = 1.098 ms
+- **LARGE** (16 tables, 128 cols, 24 metrics, 8 families, 305 nodes, 367 edges):
+  - `LocalMetricDeriver`: P50 = 0.008 ms | P95 = 0.032 ms
+  - `RelationalMetricDeriver`: P50 = 0.010 ms | P95 = 0.019 ms
+  - `SemanticFamilyBuilder`: P50 = 0.020 ms | P95 = 0.031 ms
+  - `SemanticGraph build`: P50 = 18.313 ms | P95 = 29.648 ms
+  - `SemanticGraph validation`: P50 = 0.120 ms | P95 = 0.211 ms
+  - `Graph fingerprint generation`: P50 = 1.055 ms | P95 = 1.110 ms
+  - **Peak Additional Graph Memory**: 1.41 MB (Budget: < 150 MB)
 
 ---
 
