@@ -67,6 +67,7 @@ from app.services.ingestion_v2.contracts.joins import (
 from app.services.ingestion_v2.contracts.analytics import (
     OutlierMethod,
     FindingType,
+    NullPolicy,
     TukeyIqrEvidence,
     HypothesisTestEvidence,
     StatisticalTestEvidence,
@@ -168,6 +169,7 @@ __all__ = [
     # Stage 8: Analytics (EDA-B)
     "OutlierMethod",
     "FindingType",
+    "NullPolicy",
     "TukeyIqrEvidence",
     "HypothesisTestEvidence",
     "StatisticalTestEvidence",

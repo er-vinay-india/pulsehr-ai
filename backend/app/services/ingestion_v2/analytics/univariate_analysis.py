@@ -18,7 +18,7 @@ from app.services.ingestion_v2.analytics.helpers import (
     get_column_role,
     get_column_type,
 )
-from app.services.ingestion_v2.contracts.analytics import FindingType
+from app.services.ingestion_v2.contracts.analytics import FindingType, NullPolicy
 from app.services.ingestion_v2.contracts.profiling import TableStructuralProfile
 from app.services.ingestion_v2.contracts.semantics import SemanticColumnRole, SemanticConcept
 
@@ -160,5 +160,10 @@ def analyze_univariate_profiles(
                     metric_definition=f"PROPORTION({col_id})",
                     dimension_definition=col_id,
                     population_definition="ALL_ROWS",
+                    numerator_definition=f"COUNT(CASE WHEN {col_id} = '{top_cat}' THEN 1 END)",
+                    denominator_definition=f"COUNT({col_id})",
+                    eligible_population=f"NON_NULL({col_id})",
+                    filter_provenance={"null_filter": f"{col_id} IS NOT NULL"},
+                    null_policy=NullPolicy.EXCLUDE_NULL,
                     confidence=1.0,
                 )

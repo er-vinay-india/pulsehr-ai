@@ -174,6 +174,8 @@ def analyze_trends(
             metric_definition=f"{'PERIOD_END' if is_semi_additive else 'SUM'}({metric_col})",
             dimension_definition=time_col,
             population_definition="ALL_ROWS",
+            time_range=f"{first_period}..{last_period}",
+            filter_provenance={"null_filter": f"{time_col} IS NOT NULL AND {metric_col} IS NOT NULL"},
             confidence=1.0,
             analysis_method=f"TEMPORAL_TREND_{bucket_grain}",
         )

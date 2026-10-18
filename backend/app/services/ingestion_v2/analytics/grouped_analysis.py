@@ -18,7 +18,7 @@ from app.services.ingestion_v2.analytics.helpers import (
     get_column_type,
 )
 from app.services.ingestion_v2.analytics.statistical_tests import perform_anova, perform_two_sample_test
-from app.services.ingestion_v2.contracts.analytics import FindingType
+from app.services.ingestion_v2.contracts.analytics import FindingType, NullPolicy
 from app.services.ingestion_v2.contracts.profiling import TableStructuralProfile
 from app.services.ingestion_v2.contracts.semantics import SemanticColumnRole
 
@@ -268,6 +268,9 @@ def analyze_governed_ratio(
         population_definition="ALL_ROWS",
         numerator_definition=f"SUM({numerator_col})",
         denominator_definition=f"SUM({denominator_col})",
+        eligible_population="VALID_NON_NULL_PAIRS",
+        filter_provenance={"null_filter": f"{numerator_col} IS NOT NULL AND {denominator_col} IS NOT NULL"},
+        null_policy=NullPolicy.EXCLUDE_NULL,
         confidence=1.0,
         analysis_method="GOVERNED_RATIO_SUM_OVER_SUM",
     )

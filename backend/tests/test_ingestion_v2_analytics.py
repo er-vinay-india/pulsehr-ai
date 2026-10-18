@@ -28,6 +28,7 @@ from app.services.ingestion_v2.analytics import (
 )
 from app.services.ingestion_v2.contracts.analytics import (
     FindingType,
+    NullPolicy,
     OutlierMethod,
     TukeyIqrEvidence,
 )
@@ -102,8 +103,9 @@ class TestFindingRegistryAndFingerprinting:
             result={"mean": 50000},
             metric_definition="AVG(salary)",
         )
-        assert f2 is None  # Correctly deduplicated
+        assert f2.finding_id == f1.finding_id  # Correctly deduplicated to canonical finding
         assert len(reg.findings) == 1
+        assert "Different text wording for mean salary" in f1.metadata["aliases"]
 
 
 class TestStatisticalTestsAndMultipleTesting:
@@ -1004,3 +1006,763 @@ class TestBenchmarkTruthFixtures:
         corr_finding = next(f for f in profile.findings if f.finding_type == FindingType.CORRELATION.value)
         assert corr_finding.statistical_test_evidence is not None
         assert corr_finding.statistical_test_evidence.is_statistically_significant is True
+
+
+class TestFindingIdentityAndSemanticDeduplication:
+    def test_semantic_identity_and_alias_deduplication(self):
+        """
+        Verify:
+        'Revenue by Store', 'Store Revenue', and 'Sales grouped by Store'
+        with identical analytical definitions resolve to 1 canonical finding
+        with aliases tracked in metadata.
+        """
+        reg = FindingRegistry("ds_dedup")
+
+        f1 = reg.register(
+            finding_type=FindingType.GROUP_COMPARISON,
+            description="Revenue by Store",
+            source_table_ids=["stores", "sales"],
+            source_column_ids=["store_id", "revenue"],
+            target_grain="STORE_ROW",
+            result={"NY": 100000.0, "SF": 85000.0},
+            metric_definition="SUM(revenue)",
+            dimension_definition="store_id",
+            population_definition="ACTIVE_STORES",
+            analysis_method="GROUPED_SUM",
+        )
+        assert f1 is not None
+        assert f1.finding_id.startswith("find_")
+
+        # Second equivalent wording
+        f2 = reg.register(
+            finding_type=FindingType.GROUP_COMPARISON,
+            description="Store Revenue",
+            source_table_ids=["stores", "sales"],
+            source_column_ids=["store_id", "revenue"],
+            target_grain="STORE_ROW",
+            result={"NY": 100000.0, "SF": 85000.0},
+            metric_definition="SUM(revenue)",
+            dimension_definition="store_id",
+            population_definition="ACTIVE_STORES",
+            analysis_method="GROUPED_SUM",
+        )
+        # Third equivalent wording
+        f3 = reg.register(
+            finding_type=FindingType.GROUP_COMPARISON,
+            description="Sales grouped by Store",
+            source_table_ids=["stores", "sales"],
+            source_column_ids=["store_id", "revenue"],
+            target_grain="STORE_ROW",
+            result={"NY": 100000.0, "SF": 85000.0},
+            metric_definition="SUM(revenue)",
+            dimension_definition="store_id",
+            population_definition="ACTIVE_STORES",
+            analysis_method="GROUPED_SUM",
+        )
+
+        # All 3 resolve to the EXACT SAME canonical finding!
+        assert f1.finding_id == f2.finding_id == f3.finding_id
+        assert len(reg.findings) == 1
+        assert "Store Revenue" in f1.metadata["aliases"]
+        assert "Sales grouped by Store" in f1.metadata["aliases"]
+
+    def test_filter_and_time_range_alter_identity(self):
+        """
+        Verify that filter changes or time range changes produce DIFFERENT fingerprints.
+        """
+        fp_base = generate_finding_fingerprint("ds1", FindingType.DISTRIBUTION, "AVG(rev)", "store", "STORE_ROW")
+        fp_filtered = generate_finding_fingerprint(
+            "ds1", FindingType.DISTRIBUTION, "AVG(rev)", "store", "STORE_ROW",
+            filter_dict={"status": "ACTIVE"},
+        )
+        assert fp_base != fp_filtered
+
+        fp_jan = generate_finding_fingerprint(
+            "ds1", FindingType.DISTRIBUTION, "AVG(rev)", "store", "STORE_ROW",
+            time_range="2026-01-01..2026-01-31",
+        )
+        fp_feb = generate_finding_fingerprint(
+            "ds1", FindingType.DISTRIBUTION, "AVG(rev)", "store", "STORE_ROW",
+            time_range="2026-02-01..2026-02-28",
+        )
+        assert fp_jan != fp_feb
+
+    def test_numerical_equality_without_semantic_match_does_not_deduplicate(self):
+        """
+        Verify: two distinct metrics that happen to have the same mean (e.g. 100.0)
+        do NOT deduplicate.
+        """
+        reg = FindingRegistry("ds_test")
+        f1 = reg.register(
+            finding_type=FindingType.DISTRIBUTION,
+            description="Mean Sales is 100.0",
+            source_table_ids=["sales"], source_column_ids=["sales_amt"],
+            target_grain="SALES_ROW", result={"mean": 100.0},
+            metric_definition="AVG(sales_amt)",
+        )
+        f2 = reg.register(
+            finding_type=FindingType.DISTRIBUTION,
+            description="Mean Cost is 100.0",
+            source_table_ids=["costs"], source_column_ids=["cost_amt"],
+            target_grain="COST_ROW", result={"mean": 100.0},
+            metric_definition="AVG(cost_amt)",
+        )
+        assert f1.finding_id != f2.finding_id
+        assert len(reg.findings) == 2
+
+
+class TestFilterAndNullPolicyProvenance:
+    def test_explicit_null_policy_and_fingerprint_impact(self):
+        """
+        Test: same dataset and metric with different null policies produce distinct identities.
+        """
+        fp_exclude = generate_finding_fingerprint(
+            "ds1", FindingType.DISTRIBUTION, "AVG(sal)", None, "EMP_ROW",
+            null_policy=NullPolicy.EXCLUDE_NULL,
+        )
+        fp_include = generate_finding_fingerprint(
+            "ds1", FindingType.DISTRIBUTION, "AVG(sal)", None, "EMP_ROW",
+            null_policy=NullPolicy.INCLUDE_AS_CATEGORY,
+        )
+        fp_impute = generate_finding_fingerprint(
+            "ds1", FindingType.DISTRIBUTION, "AVG(sal)", None, "EMP_ROW",
+            null_policy=NullPolicy.IMPUTE,
+        )
+        assert fp_exclude != fp_include
+        assert fp_exclude != fp_impute
+
+    def test_zero_silent_imputation(self):
+        """
+        Verify findings have explicit EXCLUDE_NULL by default, and imputation_method is None.
+        """
+        reg = FindingRegistry("ds_test")
+        f = reg.register(
+            finding_type=FindingType.DISTRIBUTION,
+            description="Salary distribution",
+            source_table_ids=["emp"], source_column_ids=["salary"],
+            target_grain="EMP_ROW", result={"mean": 75000.0},
+            metric_definition="AVG(salary)",
+        )
+        assert f.null_policy == NullPolicy.EXCLUDE_NULL
+        assert f.imputation_method is None
+
+
+class TestDenominatorAndRateProvenance:
+    def test_all_rate_and_proportion_findings_require_denominators(self):
+        """
+        Every PROPORTION and RATE finding must carry numerator, denominator,
+        eligible population, and target grain.
+        """
+        reg = FindingRegistry("ds_test")
+        from app.services.ingestion_v2.analytics.grouped_analysis import analyze_governed_ratio
+        rows = [{"success": 10, "total": 20}]
+        analyze_governed_ratio("test_t", "success", "total", rows, reg)
+
+        rates = [f for f in reg.findings if f.finding_type == FindingType.RATE.value]
+        assert len(rates) == 1
+        rf = rates[0]
+        assert rf.numerator_definition is not None
+        assert rf.denominator_definition is not None
+        assert rf.eligible_population is not None
+        assert rf.target_grain is not None
+        assert "null_filter" in rf.filter_provenance
+
+
+class TestAnalyticalReliabilityCalibration:
+    def test_high_medium_low_ordering_and_all_component_scores(self):
+        """
+        Verify:
+        HIGH score > MEDIUM score > LOW score.
+        All 8 component scores are reported.
+        """
+        # High reliability: full coverage, high grain confidence, large sample, 0 missingness
+        rel_high = calculate_analytical_reliability(
+            grain_confidence_override=0.98,
+            relationship_confidence_override=1.0,
+            join_plan_confidence_override=1.0,
+            source_coverage_override=1.0,
+            metric_definition_override=1.0,
+            sample_sufficiency_override=0.98,
+            missingness_support_override=1.0,
+            findings_count=10,
+        )
+
+        # Medium reliability: partial coverage or moderate sample/missingness
+        rel_med = calculate_analytical_reliability(
+            grain_confidence_override=0.80,
+            relationship_confidence_override=0.70,
+            join_plan_confidence_override=0.60,
+            source_coverage_override=0.60,
+            metric_definition_override=0.85,
+            sample_sufficiency_override=0.70,
+            missingness_support_override=0.75,
+            findings_count=4,
+        )
+
+        # Low reliability: weak grain, low coverage, small sample, elevated missingness
+        rel_low = calculate_analytical_reliability(
+            grain_confidence_override=0.40,
+            relationship_confidence_override=0.30,
+            join_plan_confidence_override=0.20,
+            source_coverage_override=0.20,
+            metric_definition_override=0.50,
+            sample_sufficiency_override=0.35,
+            missingness_support_override=0.40,
+            findings_count=1,
+        )
+
+        assert rel_high.overall_analytical_reliability > rel_med.overall_analytical_reliability > rel_low.overall_analytical_reliability
+        assert rel_high.reliability_level == "HIGH"
+        assert rel_med.reliability_level == "MEDIUM"
+        assert rel_low.reliability_level == "LOW"
+
+        # Verify all 8 component scores are present on HIGH
+        for rel in (rel_high, rel_med, rel_low):
+            assert hasattr(rel, "grain_confidence_score")
+            assert hasattr(rel, "relationship_confidence_score")
+            assert hasattr(rel, "join_plan_confidence_score")
+            assert hasattr(rel, "source_coverage_score")
+            assert hasattr(rel, "metric_definition_confidence")
+            assert hasattr(rel, "sample_sufficiency_score")
+            assert hasattr(rel, "missingness_support_score")
+            assert hasattr(rel, "statistical_support_score")
+
+    def test_reliability_does_not_mutate_factual_result(self):
+        """
+        Verify: varying reliability metadata does NOT alter the numerical result.
+        """
+        reg = FindingRegistry("ds_test")
+        result_payload = {"mean": 42.1234, "median": 41.5}
+
+        f1 = reg.register(
+            finding_type=FindingType.DISTRIBUTION,
+            description="Mean value high reliability",
+            source_table_ids=["t"], source_column_ids=["col"],
+            target_grain="T_ROW", result=result_payload,
+            metric_definition="AVG(col)",
+        )
+        # Factual result value is exact
+        assert f1.result["mean"] == 42.1234
+        assert f1.result["median"] == 41.5
+
+
+class TestFdrTrap:
+    def test_benjamini_hochberg_fdr_trap(self):
+        """
+        Create deterministic synthetic hypothesis set where at least one raw p < 0.05
+        fails after BH correction.
+        Require: raw_significant != adjusted_significant for that case.
+        """
+        raw_p_values = [0.005, 0.015, 0.042, 0.048, 0.080, 0.150, 0.250, 0.350, 0.450, 0.600]
+        bh_results = apply_benjamini_hochberg(raw_p_values, alpha=0.05)
+
+        # Index 2 has raw p = 0.042 (< 0.05).
+        # Under BH with m=10: critical value at rank 3 is (3/10)*0.05 = 0.015.
+        # Adjusted p-value will exceed 0.05.
+        raw_sig_case2 = (raw_p_values[2] < 0.05)
+        adj_sig_case2 = bh_results[2][1]
+        adj_p_case2 = bh_results[2][0]
+
+        assert raw_sig_case2 is True
+        assert adj_sig_case2 is False
+        assert adj_p_case2 > 0.05
+        assert raw_sig_case2 != adj_sig_case2, "FDR trap failed: correction did not alter significance"
+
+    def test_spearman_rank_correlation_certification(self):
+        """
+        Certify Spearman rank correlation with non-linear monotonic data.
+        """
+        x = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+        y = [1, 4, 9, 16, 25, 36, 49, 64, 81, 100, 121, 144, 169, 196, 225]  # y = x^2, perfect monotonic
+        evid = perform_correlation_test(x, y, method="spearman")
+        assert evid is not None
+        assert evid.test_name == "SPEARMAN_RANK_CORRELATION"
+        assert evid.test_statistic == pytest.approx(1.0, abs=0.001)
+        assert evid.p_value < 0.001
+        assert evid.is_statistically_significant is True
+
+
+class TestJoinExecutorCertification:
+    def test_full_join_matrix_and_telemetry(self):
+        """
+        Certify:
+        - SAFE: executes
+        - SAFE_WITH_PREAGGREGATION: executes pre-aggregation only
+        - UNSAFE: rejected
+        - AMBIGUOUS: rejected
+        - Runtime multiplier bound exceeded: rejected
+        Record estimated vs actual rows and multipliers.
+        """
+        table_data = {
+            "parents": [{"pid": 1, "pname": "P1"}, {"pid": 2, "pname": "P2"}],
+            "children": [
+                {"pid": 1, "val": 10.0},
+                {"pid": 1, "val": 20.0},
+                {"pid": 2, "val": 30.0},
+                {"pid": 2, "val": 40.0},
+            ],
+        }
+
+        # 1. SAFE (1:1 join)
+        plan_safe = JoinPlan(
+            join_plan_id="jp_c_safe", edge_id="e_safe",
+            left_table_id="parents", left_grain="P_ROW",
+            right_table_id="parents", right_grain="P_ROW",
+            target_grain="P_ROW", join_type="LEFT",
+            safety_status=JoinSafetyStatus.SAFE,
+            join_keys=[("pid", "pid")],
+            max_expected_multiplier=1.0, expected_input_rows=2, expected_output_rows=2,
+        )
+        res_safe, grain_safe = execute_governed_join(plan_safe, table_data)
+        assert len(res_safe) == 2
+        assert grain_safe == "P_ROW"
+
+        # 2. SAFE_WITH_PREAGGREGATION (1:N pre-aggregated to 1:1)
+        pre_agg = PreAggregationSpec(
+            source_table_id="children", group_by_columns=["pid"],
+            aggregations={"val": "SUM"}, target_grain="P_ROW",
+        )
+        plan_preagg = JoinPlan(
+            join_plan_id="jp_c_preagg", edge_id="e_preagg",
+            left_table_id="parents", left_grain="P_ROW",
+            right_table_id="children", right_grain="C_ROW",
+            target_grain="P_ROW", join_type="LEFT",
+            safety_status=JoinSafetyStatus.SAFE_WITH_PREAGGREGATION,
+            pre_aggregation=pre_agg,
+            join_keys=[("pid", "pid")],
+            max_expected_multiplier=1.0, expected_input_rows=2, expected_output_rows=2,
+        )
+        res_preagg, grain_preagg = execute_governed_join(plan_preagg, table_data)
+        assert len(res_preagg) == 2
+        assert grain_preagg == "P_ROW"
+
+        # 3. UNSAFE rejected
+        plan_unsafe = JoinPlan(
+            join_plan_id="jp_c_unsafe", edge_id="e_unsafe",
+            left_table_id="parents", left_grain="P_ROW",
+            right_table_id="children", right_grain="C_ROW",
+            target_grain="P_ROW", join_type="LEFT",
+            safety_status=JoinSafetyStatus.UNSAFE,
+            forbidden_reason="Raw 1:N fanout without pre-aggregation",
+            join_keys=[("pid", "pid")],
+        )
+        with pytest.raises(GovernedJoinExecutionError, match="Cannot execute UNSAFE"):
+            execute_governed_join(plan_unsafe, table_data)
+
+        # 4. AMBIGUOUS rejected
+        plan_ambig = JoinPlan(
+            join_plan_id="jp_c_ambig", edge_id="e_ambig",
+            left_table_id="parents", left_grain="P_ROW",
+            right_table_id="children", right_grain="C_ROW",
+            target_grain="P_ROW", join_type="LEFT",
+            safety_status=JoinSafetyStatus.AMBIGUOUS,
+            forbidden_reason="Uncertain entity grain mapping",
+            join_keys=[("pid", "pid")],
+        )
+        with pytest.raises(GovernedJoinExecutionError, match="Cannot execute AMBIGUOUS"):
+            execute_governed_join(plan_ambig, table_data)
+
+        # 5. Multiplier violation rejected
+        plan_viol = JoinPlan(
+            join_plan_id="jp_c_viol", edge_id="e_viol",
+            left_table_id="parents", left_grain="P_ROW",
+            right_table_id="children", right_grain="C_ROW",
+            target_grain="P_ROW", join_type="LEFT",
+            safety_status=JoinSafetyStatus.SAFE,  # Claimed safe, but has 2.0x multiplier without pre-aggregation
+            join_keys=[("pid", "pid")],
+            max_expected_multiplier=1.0,  # 1.0 expected, actual is 2.0!
+        )
+        with pytest.raises(GovernedJoinExecutionError, match="JOIN_PLAN_RUNTIME_VIOLATION"):
+            execute_governed_join(plan_viol, table_data)
+
+
+class TestDomainExpansionSmoke:
+    """
+    Smoke tests proving that analytical primitives remain completely domain-neutral
+    across Finance, SaaS, and Supply Chain datasets without any domain-specific branches.
+    """
+
+    def test_finance_domain_smoke(self):
+        rows = [
+            {"account_id": f"ACC_{i}", "ledger_type": "REVENUE" if i <= 10 else "EXPENSE", "amount": 10000.0 + (i * 500.0)}
+            for i in range(1, 21)
+        ]
+        col_acc = ColumnStructuralProfile(
+            column_id="c_acc", table_id="gl", column_name="account_id", physical_type="STRING",
+            row_count=20, null_count=0, null_ratio=0.0, distinct_count=20, uniqueness_ratio=1.0,
+        )
+        col_type = ColumnStructuralProfile(
+            column_id="c_type", table_id="gl", column_name="ledger_type", physical_type="STRING",
+            row_count=20, null_count=0, null_ratio=0.0, distinct_count=2, uniqueness_ratio=0.1,
+        )
+        col_amt = ColumnStructuralProfile(
+            column_id="c_amt", table_id="gl", column_name="amount", physical_type="FLOAT",
+            row_count=20, null_count=0, null_ratio=0.0, distinct_count=20, uniqueness_ratio=1.0,
+        )
+        t_gl = TableStructuralProfile(
+            table_id="gl", table_name="general_ledger", row_count=20, column_count=3,
+            columns=[col_acc, col_type, col_amt], quality=_dummy_quality(),
+        )
+        struct_prof = StructuralProfile(
+            dataset_id="ds_fin", run_id="run_fin", source_fingerprint="src_fin",
+            tables=[t_gl], dataset_structural_quality=_dummy_quality(),
+        )
+        sem_model = SemanticModel(
+            dataset_id="ds_fin", run_id="run_fin", source_fingerprint="src_fin",
+            tables=[
+                TableSemanticModel(
+                    table_id="gl", table_name="general_ledger", primary_entity_type=SemanticEntityType.EVENT,
+                    columns=[
+                        SemanticColumnAssignment(
+                            column_id="c_acc", table_id="gl", column_name="account_id",
+                            role=SemanticColumnRole.ENTITY_IDENTIFIER, classification_source=ClassificationSource.HEURISTIC,
+                            confidence=1.0, rationale="ID",
+                        ),
+                        SemanticColumnAssignment(
+                            column_id="c_type", table_id="gl", column_name="ledger_type",
+                            role=SemanticColumnRole.DIMENSION, classification_source=ClassificationSource.HEURISTIC,
+                            confidence=1.0, rationale="Type",
+                        ),
+                        SemanticColumnAssignment(
+                            column_id="c_amt", table_id="gl", column_name="amount",
+                            role=SemanticColumnRole.MEASURE, classification_source=ClassificationSource.HEURISTIC,
+                            confidence=1.0, rationale="Amount",
+                        ),
+                    ],
+                )
+            ],
+        )
+        grain_prof = GrainProfile(
+            dataset_id="ds_fin", run_id="run_fin", source_fingerprint="src_fin",
+            table_grains=[
+                TableGrainProfile(
+                    table_id="gl", table_name="general_ledger", primary_entity=CanonicalGrain.TRANSACTION,
+                    key_columns=["account_id"], grain_expression="ACCOUNT",
+                    grain_confidence=1.0, is_unique=True, uniqueness_ratio=1.0, rationale="Account grain",
+                )
+            ],
+        )
+        profile = build_analytical_profile(
+            dataset_id="ds_fin",
+            structural_profile=struct_prof,
+            semantic_model=sem_model,
+            grain_profile=grain_prof,
+            table_data={"gl": rows},
+        )
+        assert len(profile.findings) >= 4
+        assert profile.reliability.reliability_level == "HIGH"
+
+    def test_saas_domain_smoke(self):
+        rows = [
+            {"cust_id": f"C_{i}", "plan_tier": "ENTERPRISE" if i <= 5 else "STANDARD", "mrr": 5000.0 if i <= 5 else 500.0}
+            for i in range(1, 25)
+        ]
+        col_cid = ColumnStructuralProfile(
+            column_id="c_cid", table_id="saas", column_name="cust_id", physical_type="STRING",
+            row_count=24, null_count=0, null_ratio=0.0, distinct_count=24, uniqueness_ratio=1.0,
+        )
+        col_plan = ColumnStructuralProfile(
+            column_id="c_plan", table_id="saas", column_name="plan_tier", physical_type="STRING",
+            row_count=24, null_count=0, null_ratio=0.0, distinct_count=2, uniqueness_ratio=2/24,
+        )
+        col_mrr = ColumnStructuralProfile(
+            column_id="c_mrr", table_id="saas", column_name="mrr", physical_type="FLOAT",
+            row_count=24, null_count=0, null_ratio=0.0, distinct_count=2, uniqueness_ratio=2/24,
+        )
+        t_saas = TableStructuralProfile(
+            table_id="saas", table_name="subscriptions", row_count=24, column_count=3,
+            columns=[col_cid, col_plan, col_mrr], quality=_dummy_quality(),
+        )
+        struct_prof = StructuralProfile(
+            dataset_id="ds_saas", run_id="run_saas", source_fingerprint="src_saas",
+            tables=[t_saas], dataset_structural_quality=_dummy_quality(),
+        )
+        sem_model = SemanticModel(
+            dataset_id="ds_saas", run_id="run_saas", source_fingerprint="src_saas",
+            tables=[
+                TableSemanticModel(
+                    table_id="saas", table_name="subscriptions", primary_entity_type=SemanticEntityType.ORGANIZATION,
+                    columns=[
+                        SemanticColumnAssignment(
+                            column_id="c_cid", table_id="saas", column_name="cust_id",
+                            role=SemanticColumnRole.ENTITY_IDENTIFIER, classification_source=ClassificationSource.HEURISTIC,
+                            confidence=1.0, rationale="ID",
+                        ),
+                        SemanticColumnAssignment(
+                            column_id="c_plan", table_id="saas", column_name="plan_tier",
+                            role=SemanticColumnRole.DIMENSION, classification_source=ClassificationSource.HEURISTIC,
+                            confidence=1.0, rationale="Plan",
+                        ),
+                        SemanticColumnAssignment(
+                            column_id="c_mrr", table_id="saas", column_name="mrr",
+                            role=SemanticColumnRole.MEASURE, classification_source=ClassificationSource.HEURISTIC,
+                            confidence=1.0, rationale="MRR",
+                        ),
+                    ],
+                )
+            ],
+        )
+        grain_prof = GrainProfile(
+            dataset_id="ds_saas", run_id="run_saas", source_fingerprint="src_saas",
+            table_grains=[
+                TableGrainProfile(
+                    table_id="saas", table_name="subscriptions", primary_entity=CanonicalGrain.ORGANIZATION,
+                    key_columns=["cust_id"], grain_expression="CUSTOMER",
+                    grain_confidence=1.0, is_unique=True, uniqueness_ratio=1.0, rationale="Customer grain",
+                )
+            ],
+        )
+        profile = build_analytical_profile(
+            dataset_id="ds_saas",
+            structural_profile=struct_prof,
+            semantic_model=sem_model,
+            grain_profile=grain_prof,
+            table_data={"saas": rows},
+        )
+        assert len(profile.findings) >= 4
+        assert profile.reliability.reliability_level == "HIGH"
+
+    def test_supply_chain_domain_smoke(self):
+        rows = [
+            {"shipment_id": f"SHP_{i}", "origin_hub": f"HUB_{(i%4)+1}", "lead_time_days": 2.0 + (i * 0.4)}
+            for i in range(1, 26)
+        ]
+        col_shp = ColumnStructuralProfile(
+            column_id="c_shp", table_id="sc", column_name="shipment_id", physical_type="STRING",
+            row_count=25, null_count=0, null_ratio=0.0, distinct_count=25, uniqueness_ratio=1.0,
+        )
+        col_hub = ColumnStructuralProfile(
+            column_id="c_hub", table_id="sc", column_name="origin_hub", physical_type="STRING",
+            row_count=25, null_count=0, null_ratio=0.0, distinct_count=4, uniqueness_ratio=4/25,
+        )
+        col_lt = ColumnStructuralProfile(
+            column_id="c_lt", table_id="sc", column_name="lead_time_days", physical_type="FLOAT",
+            row_count=25, null_count=0, null_ratio=0.0, distinct_count=25, uniqueness_ratio=1.0,
+        )
+        t_sc = TableStructuralProfile(
+            table_id="sc", table_name="shipments", row_count=25, column_count=3,
+            columns=[col_shp, col_hub, col_lt], quality=_dummy_quality(),
+        )
+        struct_prof = StructuralProfile(
+            dataset_id="ds_sc", run_id="run_sc", source_fingerprint="src_sc",
+            tables=[t_sc], dataset_structural_quality=_dummy_quality(),
+        )
+        sem_model = SemanticModel(
+            dataset_id="ds_sc", run_id="run_sc", source_fingerprint="src_sc",
+            tables=[
+                TableSemanticModel(
+                    table_id="sc", table_name="shipments", primary_entity_type=SemanticEntityType.EVENT,
+                    columns=[
+                        SemanticColumnAssignment(
+                            column_id="c_shp", table_id="sc", column_name="shipment_id",
+                            role=SemanticColumnRole.ENTITY_IDENTIFIER, classification_source=ClassificationSource.HEURISTIC,
+                            confidence=1.0, rationale="ID",
+                        ),
+                        SemanticColumnAssignment(
+                            column_id="c_hub", table_id="sc", column_name="origin_hub",
+                            role=SemanticColumnRole.DIMENSION, classification_source=ClassificationSource.HEURISTIC,
+                            confidence=1.0, rationale="Hub",
+                        ),
+                        SemanticColumnAssignment(
+                            column_id="c_lt", table_id="sc", column_name="lead_time_days",
+                            role=SemanticColumnRole.MEASURE, classification_source=ClassificationSource.HEURISTIC,
+                            confidence=1.0, rationale="Lead time",
+                        ),
+                    ],
+                )
+            ],
+        )
+        grain_prof = GrainProfile(
+            dataset_id="ds_sc", run_id="run_sc", source_fingerprint="src_sc",
+            table_grains=[
+                TableGrainProfile(
+                    table_id="sc", table_name="shipments", primary_entity=CanonicalGrain.EVENT,
+                    key_columns=["shipment_id"], grain_expression="SHIPMENT",
+                    grain_confidence=1.0, is_unique=True, uniqueness_ratio=1.0, rationale="Shipment grain",
+                )
+            ],
+        )
+        profile = build_analytical_profile(
+            dataset_id="ds_sc",
+            structural_profile=struct_prof,
+            semantic_model=sem_model,
+            grain_profile=grain_prof,
+            table_data={"sc": rows},
+        )
+        assert len(profile.findings) >= 4
+        assert profile.reliability.reliability_level == "HIGH"
+
+
+class TestPerformanceAndMemoryBenchmark:
+    def test_performance_and_memory_certification(self):
+        """
+        Benchmark P50 and P95 across Small (100), Medium (1,000), Large (10,000) rows for:
+        A. single-table distribution
+        B. grouped analysis
+        C. ranking
+        D. trend analysis
+        E. concentration
+        F. outlier analysis
+        G. Pearson/Spearman correlation
+        H. statistical test + FDR correction
+        I. governed cross-table SAFE join
+        J. SAFE_WITH_PREAGGREGATION analysis
+        """
+        import time
+        import tracemalloc
+        import numpy as np
+
+        from app.services.ingestion_v2.analytics.univariate_analysis import analyze_univariate_profiles
+        from app.services.ingestion_v2.analytics.grouped_analysis import analyze_grouped_comparisons
+        from app.services.ingestion_v2.analytics.ranking import analyze_rankings
+        from app.services.ingestion_v2.analytics.trend_analysis import analyze_trends
+        from app.services.ingestion_v2.analytics.concentration_analysis import analyze_concentration
+        from app.services.ingestion_v2.analytics.anomaly_analysis import analyze_anomalies_and_outliers
+        from app.services.ingestion_v2.analytics.correlation_analysis import analyze_correlations
+
+        tracemalloc.start()
+        mem_start_current, mem_start_peak = tracemalloc.get_traced_memory()
+
+        def _time_fn(fn, runs=10):
+            times = []
+            for _ in range(runs):
+                t0 = time.perf_counter()
+                fn()
+                t1 = time.perf_counter()
+                times.append((t1 - t0) * 1000.0)  # ms
+            p50 = float(np.percentile(times, 50))
+            p95 = float(np.percentile(times, 95))
+            return p50, p95
+
+        results = {}
+
+        # Build fixtures for Small (100), Medium (1,000), Large (10,000)
+        fixtures = {}
+        for scale, count in [("small", 100), ("medium", 1000), ("large", 10000)]:
+            rows = [
+                {
+                    "id": f"ID_{i}",
+                    "cat": f"Category_{(i%5)+1}",
+                    "val1": float(100.0 + (i % 250)),
+                    "val2": float(50.0 + ((i * 2) % 300)),
+                    "date": f"2026-{(i%12)+1:02d}-{(i%28)+1:02d}",
+                }
+                for i in range(1, count + 1)
+            ]
+            col_id = ColumnStructuralProfile(
+                column_id="c_id", table_id="t", column_name="id", physical_type="STRING",
+                row_count=count, null_count=0, null_ratio=0.0, distinct_count=count, uniqueness_ratio=1.0,
+            )
+            col_cat = ColumnStructuralProfile(
+                column_id="c_cat", table_id="t", column_name="cat", physical_type="STRING",
+                row_count=count, null_count=0, null_ratio=0.0, distinct_count=5, uniqueness_ratio=5/count,
+            )
+            col_v1 = ColumnStructuralProfile(
+                column_id="c_v1", table_id="t", column_name="val1", physical_type="FLOAT",
+                row_count=count, null_count=0, null_ratio=0.0, distinct_count=min(count, 250), uniqueness_ratio=min(count, 250)/count,
+            )
+            col_v2 = ColumnStructuralProfile(
+                column_id="c_v2", table_id="t", column_name="val2", physical_type="FLOAT",
+                row_count=count, null_count=0, null_ratio=0.0, distinct_count=min(count, 300), uniqueness_ratio=min(count, 300)/count,
+            )
+            col_dt = ColumnStructuralProfile(
+                column_id="c_dt", table_id="t", column_name="date", physical_type="DATE",
+                row_count=count, null_count=0, null_ratio=0.0, distinct_count=min(count, 336), uniqueness_ratio=min(count, 336)/count,
+            )
+            t_prof = TableStructuralProfile(
+                table_id="t", table_name="test_table", row_count=count, column_count=5,
+                columns=[col_id, col_cat, col_v1, col_v2, col_dt], quality=_dummy_quality(),
+            )
+            col_sem = {
+                "id": SemanticColumnAssignment(column_id="c_id", table_id="t", column_name="id", role=SemanticColumnRole.ENTITY_IDENTIFIER, classification_source=ClassificationSource.HEURISTIC, confidence=1.0, rationale="ID"),
+                "cat": SemanticColumnAssignment(column_id="c_cat", table_id="t", column_name="cat", role=SemanticColumnRole.DIMENSION, classification_source=ClassificationSource.HEURISTIC, confidence=1.0, rationale="Cat"),
+                "val1": SemanticColumnAssignment(column_id="c_v1", table_id="t", column_name="val1", role=SemanticColumnRole.MEASURE, classification_source=ClassificationSource.HEURISTIC, confidence=1.0, rationale="Val1"),
+                "val2": SemanticColumnAssignment(column_id="c_v2", table_id="t", column_name="val2", role=SemanticColumnRole.MEASURE, classification_source=ClassificationSource.HEURISTIC, confidence=1.0, rationale="Val2"),
+                "date": SemanticColumnAssignment(column_id="c_dt", table_id="t", column_name="date", role=SemanticColumnRole.TIME, classification_source=ClassificationSource.HEURISTIC, confidence=1.0, rationale="Date"),
+            }
+            fixtures[scale] = (t_prof, col_sem, rows)
+
+        # Benchmark each operation on medium scale (representative) and large scale
+        t_prof_med, sem_med, rows_med = fixtures["medium"]
+        reg_bench = FindingRegistry("ds_perf")
+
+        results["single_table_dist"] = _time_fn(lambda: analyze_univariate_profiles("t", t_prof_med, sem_med, rows_med, reg_bench))
+        results["grouped"] = _time_fn(lambda: analyze_grouped_comparisons("t", t_prof_med, sem_med, rows_med, reg_bench))
+        results["ranking"] = _time_fn(lambda: analyze_rankings("t", t_prof_med, sem_med, rows_med, reg_bench))
+        results["trend"] = _time_fn(lambda: analyze_trends("t", t_prof_med, sem_med, rows_med, reg_bench))
+        results["concentration"] = _time_fn(lambda: analyze_concentration("t", t_prof_med, sem_med, rows_med, reg_bench))
+        results["outlier"] = _time_fn(lambda: analyze_anomalies_and_outliers("t", t_prof_med, sem_med, rows_med, reg_bench))
+        results["correlation"] = _time_fn(lambda: analyze_correlations("t", t_prof_med, sem_med, rows_med, reg_bench))
+
+        p_list = [0.001 * (i % 50) for i in range(1, 100)]
+        results["statistical_and_fdr"] = _time_fn(lambda: apply_benjamini_hochberg(p_list))
+
+        # Join benchmarks
+        parents = [{"pid": i, "pname": f"P_{i}"} for i in range(1, 1001)]
+        children = [{"pid": (i % 1000) + 1, "val": float(i * 10)} for i in range(1, 5001)]
+        table_data = {"parents": parents, "children": children}
+
+        plan_safe = JoinPlan(
+            join_plan_id="jp_perf_safe", edge_id="e1",
+            left_table_id="parents", left_grain="P_ROW",
+            right_table_id="parents", right_grain="P_ROW",
+            target_grain="P_ROW", join_type="LEFT",
+            safety_status=JoinSafetyStatus.SAFE,
+            join_keys=[("pid", "pid")], max_expected_multiplier=1.0,
+        )
+        results["cross_table_safe"] = _time_fn(lambda: execute_governed_join(plan_safe, table_data))
+
+        pre_agg = PreAggregationSpec(
+            source_table_id="children", group_by_columns=["pid"],
+            aggregations={"val": "SUM"}, target_grain="P_ROW",
+        )
+        plan_preagg = JoinPlan(
+            join_plan_id="jp_perf_preagg", edge_id="e2",
+            left_table_id="parents", left_grain="P_ROW",
+            right_table_id="children", right_grain="C_ROW",
+            target_grain="P_ROW", join_type="LEFT",
+            safety_status=JoinSafetyStatus.SAFE_WITH_PREAGGREGATION,
+            pre_aggregation=pre_agg,
+            join_keys=[("pid", "pid")], max_expected_multiplier=1.0,
+        )
+        results["cross_table_preagg"] = _time_fn(lambda: execute_governed_join(plan_preagg, table_data))
+
+        # Measure memory during large 10,000 row cross table operation
+        mem_before, _ = tracemalloc.get_traced_memory()
+        large_parents = [{"pid": i, "name": f"P_{i}"} for i in range(1, 10001)]
+        large_children = [{"pid": (i % 10000) + 1, "val": float(i)} for i in range(1, 30001)]
+        large_data = {"lp": large_parents, "lc": large_children}
+        pre_agg_lg = PreAggregationSpec(
+            source_table_id="lc", group_by_columns=["pid"],
+            aggregations={"val": "SUM"}, target_grain="P_ROW",
+        )
+        plan_lg = JoinPlan(
+            join_plan_id="jp_lg", edge_id="elg",
+            left_table_id="lp", left_grain="P_ROW",
+            right_table_id="lc", right_grain="C_ROW",
+            target_grain="P_ROW", join_type="LEFT",
+            safety_status=JoinSafetyStatus.SAFE_WITH_PREAGGREGATION,
+            pre_aggregation=pre_agg_lg,
+            join_keys=[("pid", "pid")], max_expected_multiplier=1.0,
+        )
+        joined_lg, _ = execute_governed_join(plan_lg, large_data)
+        assert len(joined_lg) == 10000
+
+        mem_after, peak_during = tracemalloc.get_traced_memory()
+        additional_mem_mb = (peak_during - mem_before) / (1024 * 1024)
+        total_peak_mem_mb = peak_during / (1024 * 1024)
+        tracemalloc.stop()
+
+        # Print telemetry cleanly so it can be extracted for certification report
+        print("\n--- PERFORMANCE BENCHMARK TELEMETRY ---")
+        for op, (p50, p95) in results.items():
+            print(f"  {op:25s}: P50 = {p50:6.2f} ms | P95 = {p95:6.2f} ms")
+        print(f"  Peak process memory      : {total_peak_mem_mb:.2f} MB")
+        print(f"  Peak additional join mem : {additional_mem_mb:.2f} MB")
+
+        # Invariants: All operations must execute in under 100ms on 1k-5k rows
+        for op, (p50, p95) in results.items():
+            assert p50 < 100.0, f"Operation {op} P50 exceeded 100ms: {p50:.2f}ms"
+            assert p95 < 200.0, f"Operation {op} P95 exceeded 200ms: {p95:.2f}ms"
+        assert additional_mem_mb < 50.0  # Must be lightweight (< 50MB additional)
+

@@ -88,6 +88,12 @@ class StatisticalTestEvidence(BaseModel):
     warnings: list[str] = Field(default_factory=list)
 
 
+class NullPolicy(str, Enum):
+    EXCLUDE_NULL = "EXCLUDE_NULL"
+    INCLUDE_AS_CATEGORY = "INCLUDE_AS_CATEGORY"
+    IMPUTE = "IMPUTE"
+
+
 class AnalyticalReliability(BaseModel):
     """
     Measures analytical confidence, join coverage, grain safety, and evidence sufficiency.
@@ -104,6 +110,12 @@ class AnalyticalReliability(BaseModel):
     sample_sufficiency_score: float = 1.0
     statistical_support_score: float = 1.0
     rationale: str = ""
+
+    # Fine-grained component scores for certification
+    relationship_confidence_score: float = Field(default=1.0, ge=0.0, le=1.0)
+    join_plan_confidence_score: float = Field(default=1.0, ge=0.0, le=1.0)
+    source_coverage_score: float = Field(default=1.0, ge=0.0, le=1.0)
+    missingness_support_score: float = Field(default=1.0, ge=0.0, le=1.0)
 
 
 class AnalyticalFinding(BaseModel):
@@ -143,6 +155,10 @@ class AnalyticalFinding(BaseModel):
     limitations: list[str] = Field(default_factory=list)
     finding_fingerprint: str | None = None
     filter_provenance: dict[str, Any] = Field(default_factory=dict)
+    null_policy: NullPolicy = NullPolicy.EXCLUDE_NULL
+    time_range: str | None = None
+    eligible_population: str | None = None
+    imputation_method: str | None = None
 
 
 class AnalyticalProfile(IngestionContractBase):
