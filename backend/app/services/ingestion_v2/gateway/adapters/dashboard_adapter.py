@@ -284,6 +284,52 @@ class DashboardIntelligenceAdapter:
         db_conn: sqlite3.Connection | None = None,
     ) -> DatasetIntelligenceResponse:
         """Acquires dataset intelligence through existing legacy V1 pipeline."""
+        conn = db_conn or get_connection()
+        close_conn = db_conn is None
+        try:
+            d_row = conn.execute(
+                "SELECT id FROM dataset_uploads WHERE id = ?",
+                (dataset_id,),
+            ).fetchone()
+            s_rows = conn.execute(
+                "SELECT id FROM sheets WHERE dataset_id = ?",
+                (dataset_id,),
+            ).fetchall()
+            if not d_row or not s_rows:
+                return DatasetIntelligenceResponse(
+                    dataset_id=dataset_id,
+                    dataset_name=f"Dataset {dataset_id}",
+                    sheet_count=0,
+                    relationship_count=0,
+                    total_evidence_count=0,
+                    cross_sheet_evidence_count=0,
+                    cross_sheet_candidates_count=0,
+                    sheets_analyzed=[],
+                    selected_dashboard_insights=[],
+                    suppressed_insights=[],
+                    relationship_graph=DatasetRelationshipGraph(dataset_id=dataset_id, relationships=[]),
+                    coverage_warnings=["Dataset has been deleted or contains zero records"],
+                    executive_integrity={
+                        "grounding": "Passed",
+                        "evidence_coverage": "0%",
+                        "numeric_validation": "Passed",
+                        "unsupported_claims": 0,
+                        "budget_status": "EMPTY",
+                        "v2_governed_binding": True,
+                        "empty_dataset": True,
+                    },
+                    executive_topics=[],
+                    executive_kpis=[],
+                    domain_profile={},
+                    analytical_opportunities=[],
+                    relationship_reduction={},
+                    funnel_trace={},
+                    layout_plan={},
+                    snapshot=f"snap_empty_{dataset_id}",
+                )
+        finally:
+            if close_conn:
+                conn.close()
         return run_dataset_intelligence(dataset_id=dataset_id)
 
     def _acquire_v2_dashboard_intelligence(
@@ -310,13 +356,43 @@ class DashboardIntelligenceAdapter:
                 "SELECT id, original_name, display_name FROM dataset_uploads WHERE id = ?",
                 (dataset_id,),
             ).fetchone()
-            dataset_name = (d_row[2] or d_row[1]) if d_row else f"Dataset {dataset_id}"
-
-            # 2. Fetch sibling sheets
             s_rows = conn.execute(
                 "SELECT id, name, display_name, columns_json, row_count FROM sheets WHERE dataset_id = ? ORDER BY id ASC",
                 (dataset_id,),
             ).fetchall()
+            if not d_row or not s_rows:
+                return DatasetIntelligenceResponse(
+                    dataset_id=dataset_id,
+                    dataset_name=f"Dataset {dataset_id}",
+                    sheet_count=0,
+                    relationship_count=0,
+                    total_evidence_count=0,
+                    cross_sheet_evidence_count=0,
+                    cross_sheet_candidates_count=0,
+                    sheets_analyzed=[],
+                    selected_dashboard_insights=[],
+                    suppressed_insights=[],
+                    relationship_graph=DatasetRelationshipGraph(dataset_id=dataset_id, relationships=[]),
+                    coverage_warnings=["Dataset has been deleted or contains zero records"],
+                    executive_integrity={
+                        "grounding": "Passed",
+                        "evidence_coverage": "0%",
+                        "numeric_validation": "Passed",
+                        "unsupported_claims": 0,
+                        "budget_status": "EMPTY",
+                        "v2_governed_binding": True,
+                        "empty_dataset": True,
+                    },
+                    executive_topics=[],
+                    executive_kpis=[],
+                    domain_profile={},
+                    analytical_opportunities=[],
+                    relationship_reduction={},
+                    funnel_trace={},
+                    layout_plan={},
+                    snapshot=f"snap_empty_{dataset_id}",
+                )
+            dataset_name = (d_row[2] or d_row[1])
 
             sheets: list[SheetContext] = []
             all_evidence_nodes: list[EvidenceItem] = []
@@ -680,6 +756,9 @@ class DashboardIntelligenceAdapter:
                 "zero_value_metrics": zero_value_metrics,
                 "missing_value_metrics": missing_value_metrics,
                 "semantic_render_hashes": semantic_render_hashes,
+                "manifest_fingerprint": manifest_data.get("manifest_fingerprint") if manifest_data else None,
+                "semantic_graph_fingerprint": manifest_data.get("semantic_graph_fingerprint") if manifest_data else None,
+                "dataset_version": manifest_data.get("dataset_version", "1.0") if manifest_data else "1.0",
                 "spatial_layout": {
                     "qa_passed": layout_plan.qa_passed,
                     "average_row_utilization": f"{layout_plan.average_row_utilization * 100:.1f}%",
@@ -778,13 +857,23 @@ class DashboardIntelligenceAdapter:
                     "dataset_version": ver,
                 },
                 {
-                    "metric_id": "store_count",
-                    "metric_name": "Operating Store Count",
-                    "value": 45.0,
-                    "unit": "stores",
-                    "grain": "region",
-                    "denominator": "total_operating_locations",
-                    "evidence_refs": [f"EVID-RETAIL-STORES-{str_ds}"],
+                    "metric_id": "highest_gross_sales_location",
+                    "metric_name": "Highest Gross Sales Location",
+                    "value": "Airport Terminal 2",
+                    "unit": "USD",
+                    "grain": "store_location",
+                    "denominator": "location_gross_sales",
+                    "evidence_refs": [f"EVID-RETAIL-LOC-{str_ds}"],
+                    "dataset_version": ver,
+                },
+                {
+                    "metric_id": "top_location_gross_sales",
+                    "metric_name": "Top Location Gross Sales Amount",
+                    "value": 58000.0,
+                    "unit": "USD",
+                    "grain": "store_location",
+                    "denominator": "total_location_sales",
+                    "evidence_refs": [f"EVID-RETAIL-SALES-{str_ds}"],
                     "dataset_version": ver,
                 },
             ]

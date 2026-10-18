@@ -59,7 +59,7 @@ class ConsumerReadinessEvaluator:
         semantic_graph_fp = manifest_data.get("semantic_graph_fingerprint")
 
         # 2. Manifest Freshness Guard
-        if not manifest_fresh:
+        if not manifest_fresh or bool(manifest_data.get("is_stale", False)):
             failure_reasons.append(FallbackReason.V2_ARTIFACT_STALE)
 
         # 3. Dataset Version Guard
@@ -73,7 +73,12 @@ class ConsumerReadinessEvaluator:
                 if art not in available_artifacts:
                     missing_artifacts.append(art)
             if missing_artifacts:
-                failure_reasons.append(FallbackReason.V2_ARTIFACT_MISSING)
+                if any("profile" in a or "analytical" in a for a in missing_artifacts):
+                    failure_reasons.append(FallbackReason.V2_ANALYTICAL_EVIDENCE_MISSING)
+                elif any("join" in a for a in missing_artifacts):
+                    failure_reasons.append(FallbackReason.V2_JOIN_PLAN_UNAVAILABLE)
+                else:
+                    failure_reasons.append(FallbackReason.V2_ARTIFACT_MISSING)
 
         # 5. Evidence Grounding Guard
         evidence_valid = True

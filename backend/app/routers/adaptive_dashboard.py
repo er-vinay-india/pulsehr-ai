@@ -72,6 +72,9 @@ def get_primary_element(
             key = build_cache_key(
                 dataset_id=target_dataset_id,
                 cache_type=f"primary_element_s{sheet_id or 'all'}{v_tag}",
+                semantic_graph_fingerprint=route_dec.semantic_graph_fingerprint,
+                analytical_profile_fingerprint=route_dec.v2_manifest_fingerprint,
+                consumer_contract_version="2.0.0" if route_dec.selected_route.value == "V2" else "1.0.0",
             )
 
             if is_burst_requested:
@@ -170,7 +173,13 @@ def get_dataset_dashboard(
         )
 
         v_tag = f"_v2_{route_dec.v2_manifest_fingerprint[:8]}" if route_dec.selected_route.value == "V2" and route_dec.v2_manifest_fingerprint else ""
-        key = build_cache_key(dataset_id=dataset_id, cache_type=f"dataset_intelligence{v_tag}")
+        key = build_cache_key(
+            dataset_id=dataset_id,
+            cache_type=f"dataset_intelligence{v_tag}",
+            semantic_graph_fingerprint=route_dec.semantic_graph_fingerprint,
+            analytical_profile_fingerprint=route_dec.v2_manifest_fingerprint,
+            consumer_contract_version="2.0.0" if route_dec.selected_route.value == "V2" else "1.0.0",
+        )
 
         if is_burst_requested:
             dashboard_cache.invalidate_dataset(dataset_id)

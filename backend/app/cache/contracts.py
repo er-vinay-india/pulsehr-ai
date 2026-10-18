@@ -38,19 +38,25 @@ class DashboardCacheKey(BaseModel):
     filter_hash: str = ""
     tenant_id: str | None = None
     cache_type: str = "dataset_intelligence"  # e.g., 'primary_element' or 'dataset_intelligence'
+    semantic_graph_fingerprint: str | None = None
+    analytical_profile_fingerprint: str | None = None
+    consumer_contract_version: str = "1.0.0"
 
     def canonical_dict(self) -> dict[str, Any]:
         """Returns sorted, normalized canonical dictionary for deterministic hashing."""
         return {
+            "analytical_profile_fingerprint": self.analytical_profile_fingerprint or "",
             "analytics_engine_version": self.analytics_engine_version,
             "cache_type": self.cache_type,
             "composition_engine_version": self.composition_engine_version,
+            "consumer_contract_version": self.consumer_contract_version or "1.0.0",
             "context_version": self.context_version,
             "dataset_content_hash": self.dataset_content_hash,
             "dataset_id": self.dataset_id,
             "dataset_version": self.dataset_version,
             "filter_hash": self.filter_hash or "",
             "policy_version": self.policy_version,
+            "semantic_graph_fingerprint": self.semantic_graph_fingerprint or "",
             "semantic_schema_version": self.semantic_schema_version,
             "tenant_id": self.tenant_id or "",
         }

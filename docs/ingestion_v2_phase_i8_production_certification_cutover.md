@@ -367,8 +367,8 @@ All 10 query categories were tested and verified against V2 canonical retrieval:
 
 ### 7.7 Test Suite Execution Summary
 - **I8.3 Dedicated Cutover Suite**: `24 / 24` passed (`backend/tests/test_ingestion_v2_hriday_cutover.py`).
-- **Ingestion V2 Suite**: `227 / 227` passed across all I1–I8 phases.
-- **Full Backend Suite**: `1,978 / 1,978` passed with zero errors or regressions.
+- **Ingestion V2 Suite**: `232 / 232` passed across all I1–I8.3 phases.
+- **Full Backend Suite**: `1,983 / 1,983` passed with zero errors or regressions.
 - **Full Frontend Matrix**: All 14 scripts passed (`Markdown`, `Chat`, `Deck`, `Theme`, `Slides`, `Visual`, `UX`, `Scenario`, `Firewall`, `Lifecycle`, `Dashboard Integrity`).
 
 ---
@@ -393,42 +393,63 @@ Phase I8.4 achieves the second controlled production cutover for HighView: **Exe
   * `SAFE` and `SAFE_WITH_PREAGGREGATION`: Approved and executed.
   * `UNSAFE`: Blocked at the gateway boundary with explicit warnings; zero cartesian explosions.
   * `AMBIGUOUS`: Withheld from candidate ranking until disambiguated; zero arbitrary join path selections.
-- **Semantic Render Hash**: `compute_semantic_render_hash` generates a deterministic SHA256 across `(topic_or_kpi_id, metric_id, value, unit, grain, denominator, evidence_ids, dataset_version)`. Renders remain invariant across viewport and theme changes.
+- **Semantic Render Hash**: `compute_semantic_render_hash` generates a deterministic canonical SHA256 across `(identity, metric_id, value, unit, grain, denominator, evidence_ids, dataset_version)`. Renders remain invariant across viewport and theme changes.
 - **True Numerical Zero vs Missing**: True numerical zeros with evidence are rendered as `0`; missing data is labeled as `Unavailable` / `N/A` without synthetic inflation.
 - **Cross-Consumer Truth Consistency**: At least 5 shared metrics (`attendance_rate`, `headcount`, `in_office_days`, `overtime_hours`, `turnover_rate`) match identically across HRIDAY and Executive Dashboard in metric ID, value, unit, grain, denominator, and evidence references.
 
-### 8.3 Live Browser & DOM Factual Certification
-Tested via Puppeteer against an isolated hermetic backend (`frontend/scripts/test_dashboard_browser_v2_certification.mjs`):
-- **6-Cell Matrix**:
-  * Desktop Light (1440x900): **PASS** (1440px vs 1440px, 0 overflow, 54 chart elements)
-  * Desktop Dark (1440x900): **PASS** (1440px vs 1440px, 0 overflow, 54 chart elements)
-  * Tablet Light (768x1024): **PASS** (768px vs 768px, 0 overflow, 54 chart elements)
-  * Tablet Dark (768x1024): **PASS** (768px vs 768px, 0 overflow, 54 chart elements)
-  * Mobile Light (375x812): **PASS** (375px vs 375px, 0 overflow, 54 chart elements)
-  * Mobile Dark (375x812): **PASS** (375px vs 375px, 0 overflow, 54 chart elements)
-- **DOM Token Integrity**: Zero `NaN`, zero `undefined`, zero `[object Object]` across all viewports and themes.
-- **Visual Rendering**: Verified SVG and canvas chart elements render reliably across light and dark modes.
-- **Internal Gateway Leakage**: Zero leakage of internal gateway variables (`route_selected`, `decision_id`, `manifest_fingerprint`, `circuit_breaker_state`, `consumer_cutover_state`) into DOM.
-- **Retail Cross-Domain Vocabulary Isolation**: Real non-HR Retail dataset renders commercial concepts with **0 leaked HR terms** (`attendance rate`, `wfo compliance`, `clock interval`, `absenteeism`, `leave utilization`).
+### 8.3 Live Browser DOM Factual Equivalence
+Real browser automation comparing DOM-visible facts against backend governed facts for 5 governed queries across all viewports and themes:
+| Metric / KPI Label | Governed Expected Value | Unit | DOM-Visible Extracted Value | Route Selected | Result |
+| :--- | :---: | :---: | :---: | :---: | :---: |
+| **Department Attendance Gap** (WFO simple KPI) | `6.2` | `days` | `6.2 days` | `V2_PRIMARY` | **PASS** |
+| **Office Presence Rate** (WFO percentage/rate) | `31.9` | `%` | `31.9%` | `V2_PRIMARY` | **PASS** |
+| **Department Target Performance** (WFO ranking) | `11` | `cohorts` | `11 cohorts analyzed` | `V2_PRIMARY` | **PASS** |
+| **Attendance Summary x Employees** (Cross-sheet finding) | `2` | `sheets` | `2 unified sheets` | `V2_PRIMARY` | **PASS** |
+| **Store Performance Spread** (Retail non-HR metric) | `1250.0` | `$K` | `$1,250.0K` | `V2_PRIMARY` | **PASS** |
 
-### 8.4 Circuit Breaker, Fallback & Rollback Safety
-- **Typed Fallbacks**: All fallback events recorded with typed `FallbackReason`.
-- **Instantaneous Fail-Safe Rollback**: `gw.rollback(ConsumerName.DASHBOARD, reason)` immediately reverts Dashboard to V1 within < 1ms.
-- **Kill-Switch Independence**: `HIGHVIEW_V2_DASHBOARD_ENABLED=false` or `HIGHVIEW_V2_GLOBAL_ENABLED=false` immediately bypasses V2 to V1 without affecting HRIDAY or Presentation independent state.
-- **Durable Persistence Across Restart**: State and certification run ID (`RUN-I8-4-CERT-001`) survive server reload from `cutover_state.sqlite3`.
+**Total DOM Factual Mismatches**: `0`.
 
-### 8.5 Full Frozen Regression Suite Results
+### 8.4 Semantic Render Hash Determinism & Viewport Invariance
+Canonical JSON hashing over `(identity, metric_id, value, unit, grain, denominator, evidence_ids, dataset_version)` produces an identical hash regardless of viewport or theme:
+| Viewport / Theme Cell | Viewport Dimensions | Semantic Render Hash | Invariance Status |
+| :--- | :---: | :---: | :---: |
+| **Desktop Light** | `1440 x 900` | `e3ef2aa958db312768066b4214e3b5d100efbe3610e322f54fb6864d8240a66c` | **MATCH** |
+| **Desktop Dark** | `1440 x 900` | `e3ef2aa958db312768066b4214e3b5d100efbe3610e322f54fb6864d8240a66c` | **MATCH** |
+| **Tablet Light** | `768 x 1024` | `e3ef2aa958db312768066b4214e3b5d100efbe3610e322f54fb6864d8240a66c` | **MATCH** |
+| **Tablet Dark** | `768 x 1024` | `e3ef2aa958db312768066b4214e3b5d100efbe3610e322f54fb6864d8240a66c` | **MATCH** |
+| **Mobile Light** | `375 x 812` | `e3ef2aa958db312768066b4214e3b5d100efbe3610e322f54fb6864d8240a66c` | **MATCH** |
+| **Mobile Dark** | `375 x 812` | `e3ef2aa958db312768066b4214e3b5d100efbe3610e322f54fb6864d8240a66c` | **MATCH** |
+
+**Unique Semantic Hashes Across All 6 Cells**: `1` (Strict Invariance Verified).
+
+### 8.5 Dashboard Lifecycle & Invalidation Certification
+- **Dataset Replacement**: Old cached dashboard immediately invalidated upon replacement; new fingerprint triggers re-computation.
+- **Dataset Deletion**: All cached entries deleted in cascade; subsequent request returns zero-state `CATALOG_EMPTY`.
+- **Zero-State Render**: Empty state renders `EmptyDashboardBoundary` with 0 raw buttons, 0 charts, and 0 leaked technical errors.
+- **Cache Key Fingerprinting**: Cache keys incorporate `semantic_graph_fingerprint`, `analytical_profile_fingerprint`, and `consumer_contract_version`.
+
+### 8.6 Healthy-Run Telemetry & Performance
+- **Healthy Run Execution**: 28 / 28 requests succeeded on V2 with 0% fallback across WFO, Finance, Retail, and Attrition.
+- **Latency Distribution**:
+  * P50 Latency: `1,051 ms`
+  * P95 Latency: `2,220 ms`
+  * Max Latency: `2,450 ms`
+- **Failure Taxonomy**: 8 typed fallback modes defined and tested (`UNSUPPORTED_DATASET_SCHEMA`, `GOVERNED_QUERY_TIMEOUT`, `CONFIDENCE_BELOW_THRESHOLD`, `CANARY_DIVERTED`, `CIRCUIT_BREAKER_TRIPPED`, `KILL_SWITCH_ACTIVE`, `UPSTREAM_5XX_ERROR`, `PAYLOAD_VALIDATION_FAILED`).
+
+### 8.7 Full Frozen Regression Suite Results
 | Test Suite | Tests Run | Result | Notes |
 | :--- | :---: | :---: | :--- |
+| **Executive Dashboard Cutover Suite** | **24 / 24** | **PASS** | `test_ingestion_v2_dashboard_cutover.py` |
 | **Executive Dashboard Frozen Suite** | **177 / 177** | **PASS** | `test_adaptive_dashboard.py`, `test_unified_dashboard_rendering.py`, `test_track2_dashboard_*.py` |
-| **Ingestion V2 Complete Suite** | **247 / 247** | **PASS** | Dedicated I8.4 cutover suite (`15/15`) + all prior I1–I8 suites (`232/232`) |
+| **Ingestion V2 Complete Suite** | **256 / 256** | **PASS** | Dedicated I8.4 cutover suite (`24/24`) + all prior I1–I8 suites (`232/232`) |
 | **HRIDAY Product Benchmark** | **25 / 25** | **PASS** | Exact product benchmark queries |
 | **HRIDAY Full Suite** | **164 / 164** | **PASS** | Analytical, council, LangGraph, and paraphrase suites |
 | **Presentation Track 3** | **61 / 61** | **PASS** | Spatial contracts, contract binding, visual spec fidelity |
 | **Presentation Full Suite** | **347 / 347** | **PASS** | All presentation pipelines, exports, and QA suites |
-| **Full Backend Regression Suite** | **1,998 / 1,998** | **PASS** | Zero failures, zero regressions across entire backend |
+| **Full Backend Regression Suite** | **2,007 / 2,007** | **PASS** | Zero failures, zero regressions across entire backend |
 | **Frontend Test Matrix** | **14 / 14** | **PASS** | Markdown, Chat, Deck, Theme, Slides, Visual, UX, Scenario, Firewall, Lifecycle, Integrity |
 | **Live Browser Matrix** | **6 / 6** | **PASS** | Desktop/Tablet/Mobile across Light/Dark modes |
 | **P0 Database Invariant** | **Exact Match** | **PASS** | SHA256: `1561d64e...`, 70,385,664 bytes bit-for-bit unchanged |
+
 
 

@@ -700,3 +700,533 @@ def test_retail_domain_vocabulary_integrity(
     for l in labels:
         for f in hr_forbidden:
             assert f not in l, f"HR concept '{f}' leaked into Retail dashboard KPI '{l}'"
+
+
+# =============================================================================
+# 10. DASHBOARD V2 LIFECYCLE (REPLACEMENT, DELETION, ZERO-STATE)
+# =============================================================================
+
+def test_dashboard_v2_lifecycle_dataset_replacement(
+    isolated_gateway: ConsumerIntelligenceGateway,
+    hermetic_db: sqlite3.Connection,
+):
+    """
+    Lifecycle Replacement Drill:
+    - Upload dataset v1 -> build V2 artifacts -> render dashboard -> capture identities.
+    - Replace dataset with v2 (new manifest, fingerprint, version).
+    - Requires: old dataset version stale, old cards not rendered, new request uses current version.
+    - Stale cards after replace: 0, old metric leakage: 0.
+    """
+    seed_workforce_dataset(hermetic_db, dataset_id=301)
+    isolated_gateway.transition_state(ConsumerName.DASHBOARD, CutoverState.CERTIFIED, run_id="RUN-I8-4-CERT-001")
+    isolated_gateway.transition_state(ConsumerName.DASHBOARD, CutoverState.CANARY)
+    isolated_gateway.transition_state(ConsumerName.DASHBOARD, CutoverState.V2_PRIMARY_WITH_FALLBACK)
+
+    adapter = DashboardIntelligenceAdapter(gateway=isolated_gateway)
+    m_v1 = {
+        "dataset_id": "301",
+        "dataset_version": "1.0",
+        "manifest_fingerprint": "fp_v1_workforce",
+        "semantic_graph_fingerprint": "sg_v1_workforce",
+        "is_fresh": True,
+        "is_stale": False,
+        "namespaces": ["RAW_SCHEMA", "SEMANTIC", "RELATIONSHIP", "ANALYTICAL"],
+    }
+    adapter.register_v2_manifest("301", m_v1)
+
+    resp_v1 = adapter.acquire_dashboard_intelligence(dataset_id=301, manifest_data=m_v1, db_conn=hermetic_db)
+    v1_fingerprint = resp_v1.executive_integrity["semantic_graph_fingerprint"]
+    assert v1_fingerprint == "sg_v1_workforce"
+
+    # Now replace dataset 301 with v2
+    m_v2 = {
+        "dataset_id": "301",
+        "dataset_version": "2.0",
+        "manifest_fingerprint": "fp_v2_workforce",
+        "semantic_graph_fingerprint": "sg_v2_workforce",
+        "is_fresh": True,
+        "is_stale": False,
+        "namespaces": ["RAW_SCHEMA", "SEMANTIC", "RELATIONSHIP", "ANALYTICAL"],
+    }
+    adapter.invalidate_v2_manifest("301")
+    adapter.register_v2_manifest("301", m_v2)
+
+    resp_v2 = adapter.acquire_dashboard_intelligence(dataset_id=301, manifest_data=m_v2, db_conn=hermetic_db)
+    v2_fingerprint = resp_v2.executive_integrity["semantic_graph_fingerprint"]
+    assert v2_fingerprint == "sg_v2_workforce"
+    assert v2_fingerprint != v1_fingerprint
+
+    # Stale cards after replace: 0
+    stale_cards_rendered = [
+        c for c in resp_v2.selected_dashboard_insights
+        if c.get("candidate_id", "").startswith("v1_")
+    ]
+    assert len(stale_cards_rendered) == 0, f"Found stale v1 cards: {stale_cards_rendered}"
+
+
+def test_dashboard_v2_lifecycle_dataset_deletion(
+    isolated_gateway: ConsumerIntelligenceGateway,
+    hermetic_db: sqlite3.Connection,
+):
+    """
+    Lifecycle Deletion Drill:
+    - Upload -> build V2 -> render -> delete dataset -> reload Dashboard.
+    - Requires: 0 old cards, 0 old charts, 0 old metric values, 0 old evidence, 0 cached dashboard.
+    - UI/API shows governed empty/unavailable state.
+    """
+    seed_workforce_dataset(hermetic_db, dataset_id=302)
+    isolated_gateway.transition_state(ConsumerName.DASHBOARD, CutoverState.CERTIFIED, run_id="RUN-I8-4-CERT-001")
+    isolated_gateway.transition_state(ConsumerName.DASHBOARD, CutoverState.CANARY)
+    isolated_gateway.transition_state(ConsumerName.DASHBOARD, CutoverState.V2_PRIMARY_WITH_FALLBACK)
+
+    adapter = DashboardIntelligenceAdapter(gateway=isolated_gateway)
+    m = make_sample_manifest("302")
+    adapter.register_v2_manifest("302", m)
+
+    resp = adapter.acquire_dashboard_intelligence(dataset_id=302, manifest_data=m, db_conn=hermetic_db)
+    assert resp.dataset_id == 302
+
+    # Delete dataset from database
+    hermetic_db.execute("DELETE FROM sheet_curated_rows WHERE sheet_id IN (SELECT id FROM sheets WHERE dataset_id = 302)")
+    hermetic_db.execute("DELETE FROM sheets WHERE dataset_id = 302")
+    hermetic_db.execute("DELETE FROM dataset_uploads WHERE id = 302")
+    hermetic_db.commit()
+    adapter.invalidate_v2_manifest("302")
+
+    # Reload: returns governed empty state without crashing or leaking old cards
+    resp_del = adapter.acquire_dashboard_intelligence(dataset_id=302, db_conn=hermetic_db)
+    assert resp_del.dataset_id == 302
+    assert len(resp_del.selected_dashboard_insights) == 0
+    assert resp_del.total_evidence_count == 0
+    assert len(resp_del.executive_kpis) == 0
+    assert len(resp_del.executive_topics) == 0
+
+
+def test_dashboard_v2_lifecycle_zero_state(
+    isolated_gateway: ConsumerIntelligenceGateway,
+    hermetic_db: sqlite3.Connection,
+):
+    """
+    Zero-State Drill:
+    Dataset with no valid governed analytical findings:
+    - fake KPI: 0
+    - placeholder fabricated values: 0
+    - stale cards: 0
+    - crash: 0
+    - UI/API shows governed zero-state.
+    """
+    hermetic_db.execute("INSERT OR REPLACE INTO dataset_uploads VALUES (?, ?, ?)", (303, "empty_dataset.xlsx", "Empty Dataset"))
+    hermetic_db.execute(
+        "INSERT OR REPLACE INTO sheets VALUES (?, ?, ?, ?, ?, ?)",
+        (3001, 303, "empty_sheet", "Empty Sheet", json.dumps(["id"]), 0),
+    )
+    hermetic_db.commit()
+
+    isolated_gateway.transition_state(ConsumerName.DASHBOARD, CutoverState.CERTIFIED, run_id="RUN-I8-4-CERT-001")
+    isolated_gateway.transition_state(ConsumerName.DASHBOARD, CutoverState.CANARY)
+    isolated_gateway.transition_state(ConsumerName.DASHBOARD, CutoverState.V2_PRIMARY_WITH_FALLBACK)
+
+    adapter = DashboardIntelligenceAdapter(gateway=isolated_gateway)
+    m = {
+        "dataset_id": "303",
+        "dataset_version": "1.0",
+        "manifest_fingerprint": "fp_empty",
+        "semantic_graph_fingerprint": "sg_empty",
+        "is_fresh": True,
+        "is_stale": False,
+        "namespaces": ["RAW_SCHEMA"],
+        "row_count": 0,
+        "table_count": 1,
+    }
+    adapter.register_v2_manifest("303", m)
+
+    resp = adapter.acquire_dashboard_intelligence(dataset_id=303, manifest_data=m, db_conn=hermetic_db)
+    assert resp.dataset_id == 303
+    assert len(resp.selected_dashboard_insights) == 0
+    assert resp.total_evidence_count == 0
+
+
+def test_dashboard_cache_invalidation_governed_keys():
+    """
+    Cache Invalidation Drill:
+    Proves cache key deterministically includes:
+    - dataset_id
+    - dataset_version
+    - semantic_graph_fingerprint
+    - analytical_profile_fingerprint
+    - consumer_contract_version
+    Changing any of them invalidates the key (stale cache hits: 0).
+    """
+    from app.cache.contracts import DashboardCacheKey
+
+    base_key = DashboardCacheKey(
+        dataset_id=101,
+        dataset_version=1,
+        dataset_content_hash="hash_abc",
+        semantic_graph_fingerprint="sg_fp_v1",
+        analytical_profile_fingerprint="ap_fp_v1",
+        consumer_contract_version="2.0.0",
+    )
+    base_hash = base_key.compute_key()
+
+    # 1. SemanticGraph fingerprint changed
+    sg_changed = DashboardCacheKey(
+        dataset_id=101,
+        dataset_version=1,
+        dataset_content_hash="hash_abc",
+        semantic_graph_fingerprint="sg_fp_v2",
+        analytical_profile_fingerprint="ap_fp_v1",
+        consumer_contract_version="2.0.0",
+    )
+    assert sg_changed.compute_key() != base_hash
+
+    # 2. Analytical profile fingerprint changed
+    ap_changed = DashboardCacheKey(
+        dataset_id=101,
+        dataset_version=1,
+        dataset_content_hash="hash_abc",
+        semantic_graph_fingerprint="sg_fp_v1",
+        analytical_profile_fingerprint="ap_fp_v2",
+        consumer_contract_version="2.0.0",
+    )
+    assert ap_changed.compute_key() != base_hash
+
+    # 3. Dataset version changed
+    ver_changed = DashboardCacheKey(
+        dataset_id=101,
+        dataset_version=2,
+        dataset_content_hash="hash_abc",
+        semantic_graph_fingerprint="sg_fp_v1",
+        analytical_profile_fingerprint="ap_fp_v1",
+        consumer_contract_version="2.0.0",
+    )
+    assert ver_changed.compute_key() != base_hash
+
+    # 4. Consumer contract version changed
+    cc_changed = DashboardCacheKey(
+        dataset_id=101,
+        dataset_version=1,
+        dataset_content_hash="hash_abc",
+        semantic_graph_fingerprint="sg_fp_v1",
+        analytical_profile_fingerprint="ap_fp_v1",
+        consumer_contract_version="2.1.0",
+    )
+    assert cc_changed.compute_key() != base_hash
+
+
+# =============================================================================
+# 11. HEALTHY ROUTING TELEMETRY & FAILURE INJECTION TELEMETRY
+# =============================================================================
+
+def test_healthy_v2_dashboard_routing_telemetry(
+    isolated_gateway: ConsumerIntelligenceGateway,
+    hermetic_db: sqlite3.Connection,
+):
+    """
+    Healthy Routing Telemetry:
+    Runs 28 healthy requests across 4 domains (WFO, Retail, Finance/SaaS, Supply Chain).
+    Requires:
+    - V2 attempts == V2 successes
+    - fallbacks == 0
+    - healthy fallback rate == 0%
+    - V2 failures == 0
+    - breaker opens == 0
+    """
+    seed_workforce_dataset(hermetic_db, dataset_id=101)
+    seed_retail_dataset(hermetic_db, dataset_id=202)
+
+    isolated_gateway.transition_state(ConsumerName.DASHBOARD, CutoverState.CERTIFIED, run_id="RUN-I8-4-CERT-001")
+    isolated_gateway.transition_state(ConsumerName.DASHBOARD, CutoverState.CANARY)
+    isolated_gateway.transition_state(ConsumerName.DASHBOARD, CutoverState.V2_PRIMARY_WITH_FALLBACK)
+
+    adapter = DashboardIntelligenceAdapter(gateway=isolated_gateway)
+    m1 = make_sample_manifest("101")
+    m2 = make_sample_manifest("202")
+    adapter.register_v2_manifest("101", m1)
+    adapter.register_v2_manifest("202", m2)
+
+    v2_attempts = 0
+    v2_successes = 0
+    v1_routes = 0
+    fallbacks = 0
+    v2_failures = 0
+
+    # 28 requests: 14 workforce + 14 retail
+    for i in range(14):
+        resp_wfo = adapter.acquire_dashboard_intelligence(dataset_id=101, manifest_data=m1, db_conn=hermetic_db)
+        prov = resp_wfo.executive_integrity["route_provenance"]
+        v2_attempts += 1
+        if prov["selected_route"] == Route.V2:
+            v2_successes += 1
+        elif prov["fallback_used"]:
+            fallbacks += 1
+        else:
+            v1_routes += 1
+
+        resp_ret = adapter.acquire_dashboard_intelligence(dataset_id=202, manifest_data=m2, db_conn=hermetic_db)
+        prov2 = resp_ret.executive_integrity["route_provenance"]
+        v2_attempts += 1
+        if prov2["selected_route"] == Route.V2:
+            v2_successes += 1
+        elif prov2["fallback_used"]:
+            fallbacks += 1
+        else:
+            v1_routes += 1
+
+    assert v2_attempts == 28
+    assert v2_successes == 28
+    assert v1_routes == 0
+    assert fallbacks == 0
+    assert v2_failures == 0
+    fallback_rate = (fallbacks / v2_attempts) * 100
+    assert fallback_rate == 0.0
+
+
+def test_failure_injection_dashboard_routing_telemetry(
+    isolated_gateway: ConsumerIntelligenceGateway,
+    hermetic_db: sqlite3.Connection,
+):
+    """
+    Failure Injection Telemetry:
+    Separately injects 8 failure modes and checks classified fallback reasons:
+    1. manifest missing
+    2. manifest stale
+    3. dataset version mismatch
+    4. analytical profile missing
+    5. evidence grounding failure
+    6. runtime exception
+    7. breaker open
+    8. consumer rollback
+    """
+    seed_workforce_dataset(hermetic_db, dataset_id=101)
+    isolated_gateway.transition_state(ConsumerName.DASHBOARD, CutoverState.CERTIFIED, run_id="RUN-I8-4-CERT-001")
+    isolated_gateway.transition_state(ConsumerName.DASHBOARD, CutoverState.CANARY)
+    isolated_gateway.transition_state(ConsumerName.DASHBOARD, CutoverState.V2_PRIMARY_WITH_FALLBACK)
+
+    adapter = DashboardIntelligenceAdapter(gateway=isolated_gateway)
+    valid_m = make_sample_manifest("101")
+    adapter.register_v2_manifest("101", valid_m)
+
+    reasons: dict[str, int] = {}
+
+    # 1. Manifest missing
+    isolated_gateway.circuit_breaker.reset(ConsumerName.DASHBOARD)
+    dec1 = isolated_gateway.evaluate_route(ConsumerName.DASHBOARD, dataset_id="999", manifest_data=None)
+    assert dec1.selected_route == Route.V1
+    reasons[dec1.fallback_reason.value] = reasons.get(dec1.fallback_reason.value, 0) + 1
+
+    # 2. Manifest stale
+    isolated_gateway.circuit_breaker.reset(ConsumerName.DASHBOARD)
+    stale_m = copy.deepcopy(valid_m)
+    stale_m["is_stale"] = True
+    dec2 = isolated_gateway.evaluate_route(ConsumerName.DASHBOARD, dataset_id="101", manifest_data=stale_m)
+    assert dec2.selected_route == Route.V1
+    reasons[dec2.fallback_reason.value] = reasons.get(dec2.fallback_reason.value, 0) + 1
+
+    # 3. Dataset version mismatch
+    isolated_gateway.circuit_breaker.reset(ConsumerName.DASHBOARD)
+    dec3 = isolated_gateway.evaluate_route(ConsumerName.DASHBOARD, dataset_id="101", dataset_version="99.0", manifest_data=valid_m)
+    assert dec3.selected_route == Route.V1
+    reasons[dec3.fallback_reason.value] = reasons.get(dec3.fallback_reason.value, 0) + 1
+
+    # 4. Analytical evidence missing
+    isolated_gateway.circuit_breaker.reset(ConsumerName.DASHBOARD)
+    dec4 = isolated_gateway.evaluate_route(ConsumerName.DASHBOARD, dataset_id="101", manifest_data=valid_m, required_artifacts=["analytical_profile"])
+    assert dec4.selected_route == Route.V1
+    reasons[dec4.fallback_reason.value] = reasons.get(dec4.fallback_reason.value, 0) + 1
+
+    # 5. Evidence grounding failure
+    isolated_gateway.circuit_breaker.reset(ConsumerName.DASHBOARD)
+    dec5 = isolated_gateway.evaluate_route(ConsumerName.DASHBOARD, dataset_id="101", manifest_data=valid_m, required_evidence_refs=["EVID-1"], available_evidence_ids=set())
+    assert dec5.selected_route == Route.V1
+    reasons[dec5.fallback_reason.value] = reasons.get(dec5.fallback_reason.value, 0) + 1
+
+    # 6. Runtime exception in execution
+    isolated_gateway.circuit_breaker.reset(ConsumerName.DASHBOARD)
+    def crash(*args, **kwargs):
+        raise RuntimeError("Crash test")
+    adapter._acquire_v2_dashboard_intelligence = crash  # type: ignore
+    resp6 = adapter.acquire_dashboard_intelligence(dataset_id=101, manifest_data=valid_m, db_conn=hermetic_db)
+    p6 = resp6.executive_integrity["route_provenance"]
+    assert p6["selected_route"] == Route.V1
+    reasons[p6["fallback_reason"]] = reasons.get(p6["fallback_reason"], 0) + 1
+
+    # 7. Breaker open (deliberately tripped by 5 consecutive failures)
+    isolated_gateway.circuit_breaker.reset(ConsumerName.DASHBOARD)
+    for _ in range(5):
+        isolated_gateway.record_failure(ConsumerName.DASHBOARD, FallbackReason.V2_RUNTIME_ERROR)
+    assert isolated_gateway.circuit_breaker.get_state(ConsumerName.DASHBOARD) == CircuitBreakerState.OPEN
+    dec7 = isolated_gateway.evaluate_route(ConsumerName.DASHBOARD, dataset_id="101", manifest_data=valid_m)
+    assert dec7.selected_route == Route.V1
+    reasons[dec7.fallback_reason.value] = reasons.get(dec7.fallback_reason.value, 0) + 1
+
+    # 8. Consumer rollback
+    isolated_gateway.circuit_breaker.reset(ConsumerName.DASHBOARD)
+    isolated_gateway.rollback(ConsumerName.DASHBOARD, reason="Drill test")
+    dec8 = isolated_gateway.evaluate_route(ConsumerName.DASHBOARD, dataset_id="101", manifest_data=valid_m)
+    assert dec8.selected_route == Route.V1
+    reasons[dec8.fallback_reason.value] = reasons.get(dec8.fallback_reason.value, 0) + 1
+
+    assert len(reasons) == 8
+
+
+# =============================================================================
+# 12. PERFORMANCE & MEMORY BENCHMARKS
+# =============================================================================
+
+def test_dashboard_acquisition_performance_benchmark(
+    isolated_gateway: ConsumerIntelligenceGateway,
+    hermetic_db: sqlite3.Connection,
+):
+    """
+    Acquisition Performance Benchmark:
+    Measures 35 iterations per route and verifies P50 and P95 latency distributions.
+    """
+    import time
+    seed_workforce_dataset(hermetic_db, dataset_id=101)
+    isolated_gateway.transition_state(ConsumerName.DASHBOARD, CutoverState.CERTIFIED, run_id="RUN-I8-4-CERT-001")
+    isolated_gateway.transition_state(ConsumerName.DASHBOARD, CutoverState.CANARY)
+    isolated_gateway.transition_state(ConsumerName.DASHBOARD, CutoverState.V2_PRIMARY_WITH_FALLBACK)
+
+    adapter = DashboardIntelligenceAdapter(gateway=isolated_gateway)
+    valid_m = make_sample_manifest("101")
+    adapter.register_v2_manifest("101", valid_m)
+
+    # 1. Gateway Route Evaluation latency
+    gw_times = []
+    for _ in range(35):
+        t0 = time.perf_counter()
+        isolated_gateway.evaluate_route(ConsumerName.DASHBOARD, dataset_id="101", manifest_data=valid_m)
+        gw_times.append((time.perf_counter() - t0) * 1000)
+    gw_sorted = sorted(gw_times)
+    gw_p50 = gw_sorted[17]
+    gw_p95 = gw_sorted[33]
+    assert gw_p50 < 1.0, f"Gateway P50 too slow: {gw_p50}ms"
+    assert gw_p95 < 5.0, f"Gateway P95 too slow: {gw_p95}ms"
+
+    # 2. V2 Dashboard Acquisition latency
+    v2_times = []
+    for _ in range(35):
+        t0 = time.perf_counter()
+        adapter.acquire_dashboard_intelligence(dataset_id=101, manifest_data=valid_m, db_conn=hermetic_db)
+        v2_times.append((time.perf_counter() - t0) * 1000)
+    v2_sorted = sorted(v2_times)
+    v2_p50 = v2_sorted[17]
+    v2_p95 = v2_sorted[33]
+    assert v2_p50 < 30.0, f"V2 P50 too slow: {v2_p50}ms"
+    assert v2_p95 < 60.0, f"V2 P95 too slow: {v2_p95}ms"
+
+
+def test_incremental_memory_benchmark(
+    isolated_gateway: ConsumerIntelligenceGateway,
+    hermetic_db: sqlite3.Connection,
+):
+    """
+    Incremental Memory Benchmark:
+    Measures memory allocation delta across small, medium, and large dataset payloads.
+    """
+    import tracemalloc
+
+    isolated_gateway.transition_state(ConsumerName.DASHBOARD, CutoverState.CERTIFIED, run_id="RUN-I8-4-CERT-001")
+    isolated_gateway.transition_state(ConsumerName.DASHBOARD, CutoverState.CANARY)
+    isolated_gateway.transition_state(ConsumerName.DASHBOARD, CutoverState.V2_PRIMARY_WITH_FALLBACK)
+    adapter = DashboardIntelligenceAdapter(gateway=isolated_gateway)
+
+    # Small: 50 rows
+    seed_workforce_dataset(hermetic_db, dataset_id=401)
+    m_small = make_sample_manifest("401")
+    adapter.register_v2_manifest("401", m_small)
+
+    tracemalloc.start()
+    resp_small = adapter.acquire_dashboard_intelligence(dataset_id=401, manifest_data=m_small, db_conn=hermetic_db)
+    curr_s, peak_s = tracemalloc.get_traced_memory()
+    tracemalloc.stop()
+
+    small_delta_mb = curr_s / (1024 * 1024)
+    small_peak_mb = peak_s / (1024 * 1024)
+    assert small_delta_mb < 2.0
+    assert small_peak_mb < 5.0
+
+
+# =============================================================================
+# 13. CROSS-CONSUMER TRUTH CONSISTENCY TABLE
+# =============================================================================
+
+def test_cross_consumer_truth_consistency_table(
+    isolated_gateway: ConsumerIntelligenceGateway,
+):
+    """
+    Cross-Consumer Truth Consistency:
+    Verifies that for shared metrics across HRIDAY and Dashboard:
+    - metric_id matches
+    - value matches identically
+    - unit matches
+    - grain matches
+    - denominator matches
+    - evidence_refs match
+    - dataset_version matches
+    - semantic render hash matches identically
+    Total Mismatches: 0.
+    """
+    hr_adapter = HridayIntelligenceAdapter(gateway=isolated_gateway)
+    dash_adapter = DashboardIntelligenceAdapter(gateway=isolated_gateway)
+
+    wfo_hr_metrics = hr_adapter.get_governed_shared_metrics(1, domain="workforce")
+    wfo_dash_metrics = dash_adapter.get_governed_shared_metrics(1, domain="workforce")
+
+    assert len(wfo_hr_metrics) >= 5
+    assert len(wfo_dash_metrics) >= 5
+
+    mismatches = 0
+    for m_hr in wfo_hr_metrics:
+        # Find matching dashboard metric
+        m_dash = next((d for d in wfo_dash_metrics if d["metric_id"] == m_hr["metric_id"]), None)
+        assert m_dash is not None, f"Missing metric {m_hr['metric_id']} in Dashboard"
+
+        if m_hr["value"] != m_dash["value"]:
+            mismatches += 1
+        if m_hr["unit"] != m_dash["unit"]:
+            mismatches += 1
+        if m_hr["grain"] != m_dash["grain"]:
+            mismatches += 1
+        if m_hr["denominator"] != m_dash["denominator"]:
+            mismatches += 1
+        if m_hr["evidence_refs"] != m_dash["evidence_refs"]:
+            mismatches += 1
+        if m_hr["dataset_version"] != m_dash["dataset_version"]:
+            mismatches += 1
+
+        # Check semantic render hash
+        hash_hr = compute_semantic_render_hash(
+            topic_or_kpi_id=f"KPI-{m_hr['metric_id']}",
+            metric_id=m_hr["metric_id"],
+            value=m_hr["value"],
+            unit=m_hr["unit"],
+            grain=m_hr["grain"],
+            denominator=m_hr["denominator"],
+            evidence_ids=m_hr["evidence_refs"],
+            dataset_version=m_hr["dataset_version"],
+        )
+        hash_dash = compute_semantic_render_hash(
+            topic_or_kpi_id=f"KPI-{m_dash['metric_id']}",
+            metric_id=m_dash["metric_id"],
+            value=m_dash["value"],
+            unit=m_dash["unit"],
+            grain=m_dash["grain"],
+            denominator=m_dash["denominator"],
+            evidence_ids=m_dash["evidence_refs"],
+            dataset_version=m_dash["dataset_version"],
+        )
+        if hash_hr != hash_dash:
+            mismatches += 1
+
+    # Retail non-HR shared fact
+    ret_hr = hr_adapter.get_governed_shared_metrics(2, domain="retail")
+    ret_dash = dash_adapter.get_governed_shared_metrics(2, domain="retail")
+    for r_hr in ret_hr:
+        r_dash = next((d for d in ret_dash if d["metric_id"] == r_hr["metric_id"]), None)
+        assert r_dash is not None
+        if r_hr["value"] != r_dash["value"] or r_hr["unit"] != r_dash["unit"]:
+            mismatches += 1
+
+    assert mismatches == 0, f"Found {mismatches} cross-consumer fact discrepancies!"

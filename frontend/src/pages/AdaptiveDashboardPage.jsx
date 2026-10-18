@@ -588,7 +588,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab, onOpenUpload }) {
               )}
 
               {/* Governed Unified Executive Insights Grid */}
-              {!calcError && data?.selected_dashboard_insights && data.selected_dashboard_insights.length > 0 && (
+              {!calcError && data && ((data.selected_dashboard_insights && data.selected_dashboard_insights.length > 0) || (data.executive_kpis && data.executive_kpis.length > 0) || (data.executive_topics && data.executive_topics.length > 0)) && (
                 <ErrorBoundary
                   fallback={
                     <div className="adaptive-status-notice error" role="alert" style={{ margin: "20px 0" }}>
@@ -598,7 +598,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab, onOpenUpload }) {
                   }
                 >
                   <UnifiedExecutiveInsightsGrid
-                    insights={data.selected_dashboard_insights}
+                    insights={data.selected_dashboard_insights || []}
                     executiveTopics={data.executive_topics || []}
                     executiveKpis={data.executive_kpis || []}
                     coverageWarnings={data.coverage_warnings || []}
@@ -615,8 +615,8 @@ export default function AdaptiveDashboardPage({ onNavigateTab, onOpenUpload }) {
                 </ErrorBoundary>
               )}
 
-              {/* Truthful Empty State for Dataset with Zero Insights */}
-              {!calculating && !calcError && (!data?.selected_dashboard_insights || data.selected_dashboard_insights.length === 0) && (
+              {/* Truthful Empty State for Dataset with Zero Insights and Zero KPIs */}
+              {!calculating && !calcError && data && (!data.selected_dashboard_insights || data.selected_dashboard_insights.length === 0) && (!data.executive_kpis || data.executive_kpis.length === 0) && (!data.executive_topics || data.executive_topics.length === 0) && (
                 <EmptyDashboardState
                   onNavigateTab={onNavigateTab}
                   onOpenUpload={onOpenUpload}

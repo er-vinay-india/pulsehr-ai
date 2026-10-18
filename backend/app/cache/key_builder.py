@@ -111,6 +111,9 @@ def build_cache_key(
     filters: dict[str, Any] | None = None,
     tenant_id: str | None = None,
     conn: sqlite3.Connection | None = None,
+    semantic_graph_fingerprint: str | None = None,
+    analytical_profile_fingerprint: str | None = None,
+    consumer_contract_version: str = "1.0.0",
 ) -> DashboardCacheKey:
     """
     Builds a canonical DashboardCacheKey.
@@ -136,4 +139,7 @@ def build_cache_key(
         filter_hash=filter_hash,
         tenant_id=tenant_id,
         cache_type=cache_type,
+        semantic_graph_fingerprint=semantic_graph_fingerprint,
+        analytical_profile_fingerprint=analytical_profile_fingerprint,
+        consumer_contract_version=consumer_contract_version,
     )

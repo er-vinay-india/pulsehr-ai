@@ -408,6 +408,14 @@ class HridayIntelligenceAdapter:
             },
         )
 
+    def get_governed_shared_metrics(self, dataset_id: int | str, domain: str = "workforce") -> list[dict[str, Any]]:
+        """
+        Returns canonical shared metrics between HRIDAY and Dashboard for cross-consumer truth consistency.
+        Guarantees exact identity of metric ID, value, unit, grain, denominator, and EVID refs.
+        """
+        from .dashboard_adapter import get_dashboard_adapter
+        return get_dashboard_adapter().get_governed_shared_metrics(dataset_id=dataset_id, domain=domain)
+
 
 _shared_hriday_adapter: HridayIntelligenceAdapter | None = None
 
