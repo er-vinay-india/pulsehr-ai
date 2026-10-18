@@ -371,3 +371,64 @@ All 10 query categories were tested and verified against V2 canonical retrieval:
 - **Full Backend Suite**: `1,978 / 1,978` passed with zero errors or regressions.
 - **Full Frontend Matrix**: All 14 scripts passed (`Markdown`, `Chat`, `Deck`, `Theme`, `Slides`, `Visual`, `UX`, `Scenario`, `Firewall`, `Lifecycle`, `Dashboard Integrity`).
 
+---
+
+## 8. Phase I8.4: Executive Dashboard Controlled V2 Cutover Certification
+
+Phase I8.4 achieves the second controlled production cutover for HighView: **Executive Dashboard** (`ConsumerName.DASHBOARD`).
+
+### 8.1 Single Routing Authority & Consumer Isolation
+- **Sole Routing Authority**: Executive Dashboard routes exclusively through `ConsumerIntelligenceGateway`. Zero scattered `Route.V2` conditional logic or feature flag checks exist across router or dashboard services.
+- **Consumer State Progression**:
+  * `HRIDAY`: `V2_PRIMARY_WITH_FALLBACK` (FROZEN in I8.3, strictly untouched).
+  * `DASHBOARD`: `V2_PRIMARY_WITH_FALLBACK` (advanced through `SHADOW` → `CERTIFIED` → `CANARY` → `V2_PRIMARY_WITH_FALLBACK`).
+  * `PRESENTATION`: `SHADOW` (strictly untouched, zero V2 routes).
+- **One Dataset = One Executive Dashboard**: Dataset-level executive intelligence aggregation preserved with zero regression to sheet-level fragmentation.
+- **P0 Live DB Invariant**: Production SQLite database (`backend/data/db/pulsehr.sqlite3`) remains 100% bit-for-bit unchanged (`SHA256: 1561d64eeae26f4d30926371740d6ca9dc41eb6ea7c537281763b7d5aabd9496`, `70,385,664 bytes`).
+
+### 8.2 Governed Dashboard Adapter (`DashboardIntelligenceAdapter`)
+- **Zero LLM Calls for Analytical Binding**: All KPI values, topics, rankings, distributions, and evidence bindings are computed deterministically from governed V2 canonical data.
+- **Grain and Denominator Preservation**: Explicit grain and denominator identities (`in_office_target_days`, `eligible_working_days`) are strictly preserved in executive telemetry.
+- **Join Safety Enforcement**:
+  * `SAFE` and `SAFE_WITH_PREAGGREGATION`: Approved and executed.
+  * `UNSAFE`: Blocked at the gateway boundary with explicit warnings; zero cartesian explosions.
+  * `AMBIGUOUS`: Withheld from candidate ranking until disambiguated; zero arbitrary join path selections.
+- **Semantic Render Hash**: `compute_semantic_render_hash` generates a deterministic SHA256 across `(topic_or_kpi_id, metric_id, value, unit, grain, denominator, evidence_ids, dataset_version)`. Renders remain invariant across viewport and theme changes.
+- **True Numerical Zero vs Missing**: True numerical zeros with evidence are rendered as `0`; missing data is labeled as `Unavailable` / `N/A` without synthetic inflation.
+- **Cross-Consumer Truth Consistency**: At least 5 shared metrics (`attendance_rate`, `headcount`, `in_office_days`, `overtime_hours`, `turnover_rate`) match identically across HRIDAY and Executive Dashboard in metric ID, value, unit, grain, denominator, and evidence references.
+
+### 8.3 Live Browser & DOM Factual Certification
+Tested via Puppeteer against an isolated hermetic backend (`frontend/scripts/test_dashboard_browser_v2_certification.mjs`):
+- **6-Cell Matrix**:
+  * Desktop Light (1440x900): **PASS** (1440px vs 1440px, 0 overflow, 54 chart elements)
+  * Desktop Dark (1440x900): **PASS** (1440px vs 1440px, 0 overflow, 54 chart elements)
+  * Tablet Light (768x1024): **PASS** (768px vs 768px, 0 overflow, 54 chart elements)
+  * Tablet Dark (768x1024): **PASS** (768px vs 768px, 0 overflow, 54 chart elements)
+  * Mobile Light (375x812): **PASS** (375px vs 375px, 0 overflow, 54 chart elements)
+  * Mobile Dark (375x812): **PASS** (375px vs 375px, 0 overflow, 54 chart elements)
+- **DOM Token Integrity**: Zero `NaN`, zero `undefined`, zero `[object Object]` across all viewports and themes.
+- **Visual Rendering**: Verified SVG and canvas chart elements render reliably across light and dark modes.
+- **Internal Gateway Leakage**: Zero leakage of internal gateway variables (`route_selected`, `decision_id`, `manifest_fingerprint`, `circuit_breaker_state`, `consumer_cutover_state`) into DOM.
+- **Retail Cross-Domain Vocabulary Isolation**: Real non-HR Retail dataset renders commercial concepts with **0 leaked HR terms** (`attendance rate`, `wfo compliance`, `clock interval`, `absenteeism`, `leave utilization`).
+
+### 8.4 Circuit Breaker, Fallback & Rollback Safety
+- **Typed Fallbacks**: All fallback events recorded with typed `FallbackReason`.
+- **Instantaneous Fail-Safe Rollback**: `gw.rollback(ConsumerName.DASHBOARD, reason)` immediately reverts Dashboard to V1 within < 1ms.
+- **Kill-Switch Independence**: `HIGHVIEW_V2_DASHBOARD_ENABLED=false` or `HIGHVIEW_V2_GLOBAL_ENABLED=false` immediately bypasses V2 to V1 without affecting HRIDAY or Presentation independent state.
+- **Durable Persistence Across Restart**: State and certification run ID (`RUN-I8-4-CERT-001`) survive server reload from `cutover_state.sqlite3`.
+
+### 8.5 Full Frozen Regression Suite Results
+| Test Suite | Tests Run | Result | Notes |
+| :--- | :---: | :---: | :--- |
+| **Executive Dashboard Frozen Suite** | **177 / 177** | **PASS** | `test_adaptive_dashboard.py`, `test_unified_dashboard_rendering.py`, `test_track2_dashboard_*.py` |
+| **Ingestion V2 Complete Suite** | **247 / 247** | **PASS** | Dedicated I8.4 cutover suite (`15/15`) + all prior I1–I8 suites (`232/232`) |
+| **HRIDAY Product Benchmark** | **25 / 25** | **PASS** | Exact product benchmark queries |
+| **HRIDAY Full Suite** | **164 / 164** | **PASS** | Analytical, council, LangGraph, and paraphrase suites |
+| **Presentation Track 3** | **61 / 61** | **PASS** | Spatial contracts, contract binding, visual spec fidelity |
+| **Presentation Full Suite** | **347 / 347** | **PASS** | All presentation pipelines, exports, and QA suites |
+| **Full Backend Regression Suite** | **1,998 / 1,998** | **PASS** | Zero failures, zero regressions across entire backend |
+| **Frontend Test Matrix** | **14 / 14** | **PASS** | Markdown, Chat, Deck, Theme, Slides, Visual, UX, Scenario, Firewall, Lifecycle, Integrity |
+| **Live Browser Matrix** | **6 / 6** | **PASS** | Desktop/Tablet/Mobile across Light/Dark modes |
+| **P0 Database Invariant** | **Exact Match** | **PASS** | SHA256: `1561d64e...`, 70,385,664 bytes bit-for-bit unchanged |
+
+

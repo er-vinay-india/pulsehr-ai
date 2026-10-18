@@ -37,6 +37,7 @@ def get_primary_element(
     dataset_id: int | None = Query(None, description="Target dataset ID"),
     force_refresh: bool = Query(False, description="Burst cache and force fresh recomputation of dashboard intelligence"),
     burst_cache: bool = Query(False, description="Alias for force_refresh"),
+    include_provenance: bool = Query(False, description="Attach diagnostic route provenance"),
 ):
     """Returns verified dataset-level adaptive dashboard intelligence (WP-9.6)."""
     try:
@@ -58,9 +59,19 @@ def get_primary_element(
                     target_dataset_id = row[0]
 
         if target_dataset_id:
+            from ..services.ingestion_v2.contracts.cutover import ConsumerName
+            from ..services.ingestion_v2.gateway.adapters.dashboard_adapter import get_dashboard_adapter
+            adapter = get_dashboard_adapter()
+            active_m = adapter.get_active_manifest(target_dataset_id)
+            route_dec = adapter.gateway.evaluate_route(
+                consumer=ConsumerName.DASHBOARD,
+                dataset_id=str(target_dataset_id),
+                manifest_data=active_m,
+            )
+            v_tag = f"_v2_{route_dec.v2_manifest_fingerprint[:8]}" if route_dec.selected_route.value == "V2" and route_dec.v2_manifest_fingerprint else ""
             key = build_cache_key(
                 dataset_id=target_dataset_id,
-                cache_type=f"primary_element_s{sheet_id or 'all'}",
+                cache_type=f"primary_element_s{sheet_id or 'all'}{v_tag}",
             )
 
             if is_burst_requested:
@@ -78,13 +89,22 @@ def get_primary_element(
                 if response:
                     response.headers["X-HighView-Cache"] = "BURST"
                     response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+                    if include_provenance:
+                        response.headers["X-HighView-Route"] = route_dec.selected_route.value
+                if include_provenance and fresh_resp.executive_integrity is not None:
+                    fresh_resp.executive_integrity["route_provenance"] = route_dec.model_dump()
                 return fresh_resp
 
             cached_dict = dashboard_cache.get(key)
             if cached_dict is not None:
                 if response:
                     response.headers["X-HighView-Cache"] = "HIT"
-                return AdaptiveDashboardResponse.model_validate(cached_dict)
+                    if include_provenance:
+                        response.headers["X-HighView-Route"] = route_dec.selected_route.value
+                resp_obj = AdaptiveDashboardResponse.model_validate(cached_dict)
+                if include_provenance and resp_obj.executive_integrity is not None:
+                    resp_obj.executive_integrity["route_provenance"] = route_dec.model_dump()
+                return resp_obj
 
             def _compute():
                 resp = run_adaptive_dashboard(
@@ -97,7 +117,12 @@ def get_primary_element(
             computed_dict = dashboard_cache.get_or_compute(key, _compute)
             if response:
                 response.headers["X-HighView-Cache"] = "MISS"
-            return AdaptiveDashboardResponse.model_validate(computed_dict)
+                if include_provenance:
+                    response.headers["X-HighView-Route"] = route_dec.selected_route.value
+            resp_obj = AdaptiveDashboardResponse.model_validate(computed_dict)
+            if include_provenance and resp_obj.executive_integrity is not None:
+                resp_obj.executive_integrity["route_provenance"] = route_dec.model_dump()
+            return resp_obj
 
         resp = run_adaptive_dashboard(
             sheet_id=sheet_id,
@@ -120,9 +145,20 @@ def get_dataset_dashboard(
     response: Response,
     force_refresh: bool = Query(False, description="Burst cache and force fresh recomputation"),
     burst_cache: bool = Query(False, description="Alias for force_refresh"),
+    include_provenance: bool = Query(False, description="Attach diagnostic route provenance"),
 ):
     """Returns authoritative dataset-wide intelligence, relationships, and globally ranked insights (WP-9.6)."""
     try:
+        from ..services.ingestion_v2.contracts.cutover import ConsumerName
+        from ..services.ingestion_v2.gateway.adapters.dashboard_adapter import get_dashboard_adapter
+        adapter = get_dashboard_adapter()
+        active_m = adapter.get_active_manifest(dataset_id)
+        route_dec = adapter.gateway.evaluate_route(
+            consumer=ConsumerName.DASHBOARD,
+            dataset_id=str(dataset_id),
+            manifest_data=active_m,
+        )
+
         req_headers = request.headers if request else {}
         cache_control = req_headers.get("cache-control", "").lower()
         pragma = req_headers.get("pragma", "").lower()
@@ -133,11 +169,12 @@ def get_dataset_dashboard(
             or "no-cache" in pragma
         )
 
-        key = build_cache_key(dataset_id=dataset_id, cache_type="dataset_intelligence")
+        v_tag = f"_v2_{route_dec.v2_manifest_fingerprint[:8]}" if route_dec.selected_route.value == "V2" and route_dec.v2_manifest_fingerprint else ""
+        key = build_cache_key(dataset_id=dataset_id, cache_type=f"dataset_intelligence{v_tag}")
 
         if is_burst_requested:
             dashboard_cache.invalidate_dataset(dataset_id)
-            resp = run_dataset_intelligence(dataset_id=dataset_id)
+            resp = adapter.acquire_dashboard_intelligence(dataset_id=dataset_id)
             computed_dict = resp.model_dump()
             try:
                 dashboard_cache.put(key, computed_dict)
@@ -146,22 +183,36 @@ def get_dataset_dashboard(
             if response:
                 response.headers["X-HighView-Cache"] = "BURST"
                 response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+                if include_provenance:
+                    response.headers["X-HighView-Route"] = route_dec.selected_route.value
+            if include_provenance and resp.executive_integrity is not None:
+                resp.executive_integrity["route_provenance"] = route_dec.model_dump()
             return resp
 
         cached_dict = dashboard_cache.get(key)
         if cached_dict is not None:
             if response:
                 response.headers["X-HighView-Cache"] = "HIT"
-            return DatasetIntelligenceResponse.model_validate(cached_dict)
+                if include_provenance:
+                    response.headers["X-HighView-Route"] = route_dec.selected_route.value
+            resp_obj = DatasetIntelligenceResponse.model_validate(cached_dict)
+            if include_provenance and resp_obj.executive_integrity is not None:
+                resp_obj.executive_integrity["route_provenance"] = route_dec.model_dump()
+            return resp_obj
 
         def _compute():
-            resp = run_dataset_intelligence(dataset_id=dataset_id)
+            resp = adapter.acquire_dashboard_intelligence(dataset_id=dataset_id)
             return resp.model_dump()
 
         computed_dict = dashboard_cache.get_or_compute(key, _compute)
         if response:
             response.headers["X-HighView-Cache"] = "MISS"
-        return DatasetIntelligenceResponse.model_validate(computed_dict)
+            if include_provenance:
+                response.headers["X-HighView-Route"] = route_dec.selected_route.value
+        resp_obj = DatasetIntelligenceResponse.model_validate(computed_dict)
+        if include_provenance and resp_obj.executive_integrity is not None:
+            resp_obj.executive_integrity["route_provenance"] = route_dec.model_dump()
+        return resp_obj
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except Exception as exc:

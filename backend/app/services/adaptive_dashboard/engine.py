@@ -436,8 +436,8 @@ def run_adaptive_dashboard(
         # 16. Multi-Sheet Dataset Orchestration & Global Candidate Pool Integration (WP-9.6)
         if include_dataset_intelligence and target_dataset_id:
             try:
-                from .dataset_orchestrator import run_dataset_intelligence
-                ds_intel = run_dataset_intelligence(dataset_id=target_dataset_id)
+                from ..ingestion_v2.gateway.adapters.dashboard_adapter import get_dashboard_adapter
+                ds_intel = get_dashboard_adapter().acquire_dashboard_intelligence(dataset_id=target_dataset_id)
                 resp.dataset_id = ds_intel.dataset_id
                 resp.dataset_name = ds_intel.dataset_name
                 resp.sheet_count = ds_intel.sheet_count

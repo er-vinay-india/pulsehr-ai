@@ -510,14 +510,20 @@ class ConsumerIntelligenceGateway:
         target_state: CutoverState,
         rationale: str = "",
         run_id: str | None = None,
+        reason: str = "",
     ) -> ConsumerCutoverRecord:
         """Transitions consumer state via authoritative internal state machine."""
+        effective_reason = rationale or reason or f"Transition to {target_state.value}"
         return self.state_machine.transition(
             consumer=consumer,
             target_state=target_state,
-            reason=rationale or f"Transition to {target_state.value}",
+            reason=effective_reason,
             certification_evidence=run_id or "",
         )
+
+    def rollback(self, consumer: ConsumerName, reason: str, commit: str = "HEAD") -> ConsumerCutoverRecord:
+        """Triggers instantaneous fail-safe rollback to V1 for a consumer."""
+        return self.state_machine.rollback(consumer=consumer, reason=reason, commit=commit)
 
     def get_state(self, consumer: ConsumerName) -> CutoverState:
         """Returns the current CutoverState of the consumer."""
@@ -561,7 +567,8 @@ def get_consumer_gateway() -> ConsumerIntelligenceGateway:
     """Returns the singleton shared ConsumerIntelligenceGateway instance."""
     global _shared_gateway
     if _shared_gateway is None:
-        _shared_gateway = ConsumerIntelligenceGateway()
+        store = CutoverPersistenceStore()
+        _shared_gateway = ConsumerIntelligenceGateway(persistence_store=store)
     return _shared_gateway
 
 
