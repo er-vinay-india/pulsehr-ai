@@ -1416,7 +1416,8 @@ def test_p0_database_invariant():
     db_path = Path(__file__).resolve().parent.parent / "data" / "db" / "pulsehr.sqlite3"
     if db_path.exists():
         expected_size = 70385664
-        expected_hash = "9f2b5743cfb9d2579ec77228f5005e991dacb00607659b3ea509077f7bd16ca5"
+        # Remediated clean P0 baseline after surgical removal of non-hermetic test rows 557, 558
+        expected_hash = "1561d64eeae26f4d30926371740d6ca9dc41eb6ea7c537281763b7d5aabd9496"
         actual_size = db_path.stat().st_size
         actual_hash = hashlib.sha256(db_path.read_bytes()).hexdigest()
         assert actual_size == expected_size, (
