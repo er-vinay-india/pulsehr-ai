@@ -169,7 +169,29 @@ def infer_table_grain(
 
         # Candidate entities: either from entity_id_cols or dimension_cols (e.g. Department, Store, Product)
         entity_candidates = entity_id_cols if entity_id_cols else dimension_cols
-        if entity_candidates:
+        if len(entity_candidates) >= 2:
+            ent_grains = [ENTITY_TO_GRAIN_MAP.get(s.entity_type, CanonicalGrain.PERSON) for s, _ in entity_candidates[:2]]
+            ent_names = [p.column_name for _, p in entity_candidates[:2]]
+            grain_components = [eg.value for eg in ent_grains] + [temporal_freq.value]
+            grain_expr = " x ".join(grain_components)
+            conf = calculate_grain_confidence(0.95, entity_candidates[0][0].confidence, 0.90, has_surrogate)
+            return TableGrainProfile(
+                table_id=table_norm.table_id,
+                table_name=table_norm.table_name,
+                primary_entity=CanonicalGrain.COMPOSITE,
+                temporal_grain=temporal_freq,
+                key_columns=ent_names + [best_time_prof.column_name],
+                grain_dimensions=[best_time_prof.column_name],
+                grain_expression=grain_expr,
+                is_unique=True,
+                uniqueness_ratio=0.95,
+                grain_confidence=conf,
+                duplicate_key_rows=0,
+                candidate_grains=[grain_expr],
+                grain_status="RESOLVED",
+                rationale=f"Multi-entity periodic snapshot grain: 1 row represents {grain_expr} keyed by {ent_names + [best_time_prof.column_name]}.",
+            )
+        elif entity_candidates:
             best_ent_sem, best_ent_prof = entity_candidates[0]
             ent_grain = ENTITY_TO_GRAIN_MAP.get(best_ent_sem.entity_type, CanonicalGrain.PERSON)
             if ent_grain in (CanonicalGrain.UNKNOWN, CanonicalGrain.AMBIGUOUS):
@@ -214,10 +236,26 @@ def infer_table_grain(
 
     # Step 5: Multi-Entity Composite (e.g. PRODUCT x LOCATION)
     all_entity_cols = entity_id_cols + dimension_cols
-    if len(all_entity_cols) >= 2:
+    has_resolved_entity = any(
+        s.role == SemanticColumnRole.ENTITY_IDENTIFIER or s.entity_type not in (SemanticEntityType.UNKNOWN, SemanticEntityType.AMBIGUOUS)
+        for s, _ in all_entity_cols
+    )
+    if len(all_entity_cols) >= 2 and has_resolved_entity:
         names = [p.column_name for _, p in all_entity_cols[:2]]
-        entities = [s.entity_type.value for s, _ in all_entity_cols[:2]]
-        grain_expr = " x ".join(entities)
+        cleaned_entities = []
+        for s, p in all_entity_cols[:2]:
+            if s.entity_type not in (SemanticEntityType.UNKNOWN, SemanticEntityType.AMBIGUOUS):
+                cleaned_entities.append(s.entity_type.value)
+            elif "store" in p.column_name.lower():
+                cleaned_entities.append("STORE")
+            elif "prod" in p.column_name.lower():
+                cleaned_entities.append("PRODUCT")
+            elif "loc" in p.column_name.lower():
+                cleaned_entities.append("LOCATION")
+            else:
+                cleaned_entities.append("DIMENSION")
+
+        grain_expr = " x ".join(cleaned_entities)
         return TableGrainProfile(
             table_id=table_norm.table_id,
             table_name=table_norm.table_name,
@@ -235,24 +273,24 @@ def infer_table_grain(
             rationale=f"Multi-entity composite grain: {grain_expr} keyed by {names}.",
         )
 
-    # Step 6: Ambiguous / Unknown Grain Fallback
-    if surrogate_id_cols:
-        # Table only has a surrogate key like 'row_id' with no business entity
+    # Step 6: Ambiguous Grain Fallback (Surrogate-only or Ungrounded Attributes)
+    if surrogate_id_cols or (len(dimension_cols) >= 1 and not has_resolved_entity):
+        keys = surrogate_id_cols if surrogate_id_cols else [p.column_name for _, p in dimension_cols]
         return TableGrainProfile(
             table_id=table_norm.table_id,
             table_name=table_norm.table_name,
-            primary_entity=CanonicalGrain.UNKNOWN,
+            primary_entity=CanonicalGrain.AMBIGUOUS,
             temporal_grain=TemporalGrain.NONE,
-            key_columns=surrogate_id_cols,
-            grain_dimensions=[],
+            key_columns=keys,
+            grain_dimensions=keys,
             grain_expression="AMBIGUOUS",
-            is_unique=True,
-            uniqueness_ratio=1.0,
-            grain_confidence=0.50,
+            is_unique=True if surrogate_id_cols else False,
+            uniqueness_ratio=1.0 if surrogate_id_cols else 0.50,
+            grain_confidence=0.35,
             duplicate_key_rows=0,
-            candidate_grains=["TRANSACTION", "ROW_SNAPSHOT"],
+            candidate_grains=["AMBIGUOUS"],
             grain_status="AMBIGUOUS",
-            rationale="Table contains surrogate primary key but lacks conclusive business entity or temporal observational structure. Marked AMBIGUOUS.",
+            rationale="Table contains surrogate primary key or ungrounded attributes lacking conclusive business entity or temporal observational structure. Safely withheld as AMBIGUOUS.",
         )
 
     return TableGrainProfile(

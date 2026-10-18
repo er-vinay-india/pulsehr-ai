@@ -45,9 +45,30 @@ class SemanticEntityType(str, Enum):
     FACILITY = "FACILITY"
     DEVICE = "DEVICE"
     EVENT = "EVENT"
+    UNKNOWN = "UNKNOWN"
+    AMBIGUOUS = "AMBIGUOUS"
+
+
+class MeasureClass(str, Enum):
     FINANCIAL = "FINANCIAL"
-    TEMPORAL = "TEMPORAL"
-    CONCEPT = "CONCEPT"
+    QUANTITY = "QUANTITY"
+    PERCENTAGE = "PERCENTAGE"
+    DURATION = "DURATION"
+    SCORE = "SCORE"
+    HEADCOUNT = "HEADCOUNT"
+    UNKNOWN = "UNKNOWN"
+
+
+class SemanticConcept(str, Enum):
+    IDENTIFIER = "IDENTIFIER"
+    DESCRIPTOR = "DESCRIPTOR"
+    MEASURE = "MEASURE"
+    TIME_SPAN = "TIME_SPAN"
+    STATUS = "STATUS"
+    CATEGORICAL = "CATEGORICAL"
+    LOCATION_ATTRIBUTE = "LOCATION_ATTRIBUTE"
+    FREE_TEXT = "FREE_TEXT"
+    TECHNICAL = "TECHNICAL"
     UNKNOWN = "UNKNOWN"
     AMBIGUOUS = "AMBIGUOUS"
 
@@ -71,7 +92,9 @@ class SemanticColumnAssignment(BaseModel):
     table_id: str
     column_name: str
     role: SemanticColumnRole
-    entity_type: SemanticEntityType
+    entity_type: SemanticEntityType = SemanticEntityType.UNKNOWN
+    semantic_concept: SemanticConcept = SemanticConcept.UNKNOWN
+    measure_class: MeasureClass | None = None
     confidence: float = Field(ge=0.0, le=1.0)
     is_ambiguous: bool = False
     classification_source: ClassificationSource

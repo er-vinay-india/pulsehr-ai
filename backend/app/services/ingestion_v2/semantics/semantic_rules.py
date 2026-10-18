@@ -8,7 +8,9 @@ from __future__ import annotations
 import re
 from typing import Sequence
 from app.services.ingestion_v2.contracts.semantics import (
+    MeasureClass,
     SemanticColumnRole,
+    SemanticConcept,
     SemanticEntityType,
 )
 
@@ -98,25 +100,100 @@ ENTITY_KEYWORD_MAP: dict[str, SemanticEntityType] = {
     "territory": SemanticEntityType.REGION,
     "zone": SemanticEntityType.REGION,
 
-    # Transaction & Financial
+    # Transaction & Account
     "order": SemanticEntityType.TRANSACTION,
     "transaction": SemanticEntityType.TRANSACTION,
     "invoice": SemanticEntityType.TRANSACTION,
     "receipt": SemanticEntityType.TRANSACTION,
     "ticket": SemanticEntityType.TRANSACTION,
     "sale": SemanticEntityType.TRANSACTION,
-    "revenue": SemanticEntityType.FINANCIAL,
-    "budget": SemanticEntityType.FINANCIAL,
-    "cost": SemanticEntityType.FINANCIAL,
-    "expense": SemanticEntityType.FINANCIAL,
     "account": SemanticEntityType.ACCOUNT,
 
-    # Device
+    # Event & Audit
+    "event": SemanticEntityType.EVENT,
+    "incident": SemanticEntityType.EVENT,
+    "log": SemanticEntityType.EVENT,
+
+    # Device & Asset
     "device": SemanticEntityType.DEVICE,
     "sensor": SemanticEntityType.DEVICE,
     "machine": SemanticEntityType.DEVICE,
     "asset": SemanticEntityType.DEVICE,
 }
+
+MEASURE_KEYWORD_MAP: dict[str, MeasureClass] = {
+    "revenue": MeasureClass.FINANCIAL,
+    "budget": MeasureClass.FINANCIAL,
+    "cost": MeasureClass.FINANCIAL,
+    "expense": MeasureClass.FINANCIAL,
+    "price": MeasureClass.FINANCIAL,
+    "salary": MeasureClass.FINANCIAL,
+    "sales": MeasureClass.FINANCIAL,
+    "spend": MeasureClass.FINANCIAL,
+    "profit": MeasureClass.FINANCIAL,
+    "margin": MeasureClass.FINANCIAL,
+    "count": MeasureClass.QUANTITY,
+    "units": MeasureClass.QUANTITY,
+    "quantity": MeasureClass.QUANTITY,
+    "volume": MeasureClass.QUANTITY,
+    "rate": MeasureClass.PERCENTAGE,
+    "pct": MeasureClass.PERCENTAGE,
+    "percent": MeasureClass.PERCENTAGE,
+    "ratio": MeasureClass.PERCENTAGE,
+    "duration": MeasureClass.DURATION,
+    "tenure": MeasureClass.DURATION,
+    "hours": MeasureClass.DURATION,
+    "days": MeasureClass.DURATION,
+    "seconds": MeasureClass.DURATION,
+    "score": MeasureClass.SCORE,
+    "rating": MeasureClass.SCORE,
+    "index": MeasureClass.SCORE,
+    "headcount": MeasureClass.HEADCOUNT,
+    "fte": MeasureClass.HEADCOUNT,
+}
+
+
+def infer_measure_class(tokens: Sequence[str], unit: str | None = None) -> MeasureClass | None:
+    """Infers measure class from lexical tokens and unit."""
+    if unit:
+        u = unit.lower()
+        if u in ("$", "usd", "eur", "gbp", "jpy", "inr"):
+            return MeasureClass.FINANCIAL
+        if u in ("%", "pct", "percent"):
+            return MeasureClass.PERCENTAGE
+        if u in ("hrs", "hours", "days", "months", "years", "s", "sec", "seconds"):
+            return MeasureClass.DURATION
+
+    for t in tokens:
+        if t in MEASURE_KEYWORD_MAP:
+            return MEASURE_KEYWORD_MAP[t]
+
+    return None
+
+
+def infer_semantic_concept(role: SemanticColumnRole) -> SemanticConcept:
+    """Maps semantic column role to its broad semantic concept."""
+    if role == SemanticColumnRole.ENTITY_IDENTIFIER:
+        return SemanticConcept.IDENTIFIER
+    if role == SemanticColumnRole.ENTITY_LABEL:
+        return SemanticConcept.DESCRIPTOR
+    if role == SemanticColumnRole.MEASURE:
+        return SemanticConcept.MEASURE
+    if role == SemanticColumnRole.TIME:
+        return SemanticConcept.TIME_SPAN
+    if role in (SemanticColumnRole.STATUS, SemanticColumnRole.BOOLEAN):
+        return SemanticConcept.STATUS
+    if role in (SemanticColumnRole.DIMENSION, SemanticColumnRole.CATEGORY):
+        return SemanticConcept.CATEGORICAL
+    if role == SemanticColumnRole.LOCATION:
+        return SemanticConcept.LOCATION_ATTRIBUTE
+    if role == SemanticColumnRole.FREE_TEXT:
+        return SemanticConcept.FREE_TEXT
+    if role == SemanticColumnRole.TECHNICAL_METADATA:
+        return SemanticConcept.TECHNICAL
+    if role == SemanticColumnRole.AMBIGUOUS:
+        return SemanticConcept.AMBIGUOUS
+    return SemanticConcept.UNKNOWN
 
 
 def normalize_tokens(name: str) -> list[str]:

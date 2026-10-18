@@ -31,8 +31,10 @@ from app.services.ingestion_v2.contracts.profiling import (
 )
 from app.services.ingestion_v2.contracts.semantics import (
     ClassificationSource,
+    MeasureClass,
     SemanticColumnAssignment,
     SemanticColumnRole,
+    SemanticConcept,
     SemanticEntityType,
     SemanticModel,
     TableSemanticModel,
@@ -44,6 +46,8 @@ from app.services.ingestion_v2.semantics.semantic_rules import (
     detect_adversarial_contradiction,
     infer_lexical_entity,
     infer_lexical_role,
+    infer_measure_class,
+    infer_semantic_concept,
     normalize_tokens,
 )
 
@@ -99,6 +103,8 @@ def classify_column_deterministic(
             column_name=col_name,
             role=SemanticColumnRole.AMBIGUOUS,
             entity_type=SemanticEntityType.UNKNOWN,
+            semantic_concept=SemanticConcept.AMBIGUOUS,
+            measure_class=None,
             confidence=0.20,
             is_ambiguous=True,
             classification_source=ClassificationSource.HEURISTIC,
@@ -113,6 +119,8 @@ def classify_column_deterministic(
             column_name=col_name,
             role=SemanticColumnRole.UNKNOWN,
             entity_type=SemanticEntityType.UNKNOWN,
+            semantic_concept=SemanticConcept.UNKNOWN,
+            measure_class=None,
             confidence=1.0,
             is_ambiguous=False,
             classification_source=ClassificationSource.STATISTICAL,
@@ -127,7 +135,9 @@ def classify_column_deterministic(
             table_id=col_norm.table_id,
             column_name=col_name,
             role=SemanticColumnRole.TECHNICAL_METADATA,
-            entity_type=SemanticEntityType.CONCEPT,
+            entity_type=SemanticEntityType.UNKNOWN,
+            semantic_concept=SemanticConcept.TECHNICAL,
+            measure_class=None,
             confidence=conf,
             is_ambiguous=False,
             classification_source=ClassificationSource.DICTIONARY,
@@ -143,7 +153,9 @@ def classify_column_deterministic(
             table_id=col_norm.table_id,
             column_name=col_name,
             role=SemanticColumnRole.TIME,
-            entity_type=SemanticEntityType.TEMPORAL,
+            entity_type=SemanticEntityType.UNKNOWN,
+            semantic_concept=SemanticConcept.TIME_SPAN,
+            measure_class=None,
             confidence=conf,
             is_ambiguous=False,
             classification_source=ClassificationSource.STATISTICAL,
@@ -160,6 +172,8 @@ def classify_column_deterministic(
             column_name=col_name,
             role=SemanticColumnRole.ENTITY_LABEL,
             entity_type=ent,
+            semantic_concept=SemanticConcept.DESCRIPTOR,
+            measure_class=None,
             confidence=conf,
             is_ambiguous=False,
             classification_source=ClassificationSource.DICTIONARY,
@@ -173,7 +187,9 @@ def classify_column_deterministic(
             table_id=col_norm.table_id,
             column_name=col_name,
             role=SemanticColumnRole.FREE_TEXT,
-            entity_type=SemanticEntityType.CONCEPT,
+            entity_type=SemanticEntityType.UNKNOWN,
+            semantic_concept=SemanticConcept.FREE_TEXT,
+            measure_class=None,
             confidence=0.85,
             is_ambiguous=False,
             classification_source=ClassificationSource.DICTIONARY,
@@ -190,18 +206,20 @@ def classify_column_deterministic(
         has_id_name = any(t in tokens for t in ("id", "code", "key", "uuid", "sku", "badge"))
         if is_measure_lexical or has_unit or (not has_id_name and col_prof.leading_zero_ratio == 0.0):
             struct_score = 0.90 if (has_unit or col_prof.quantiles or is_measure_lexical) else 0.80
-            ent = SemanticEntityType.FINANCIAL if (has_unit and col_norm.inferred_unit in ("$", "USD", "EUR")) or any(t in tokens for t in ("salary", "revenue", "budget", "cost", "price")) else SemanticEntityType.CONCEPT
+            m_class = infer_measure_class(tokens, col_norm.inferred_unit) or MeasureClass.QUANTITY
             conf = calculate_semantic_confidence(struct_score, max(0.70, lex_score if is_measure_lexical else 0.60), 0.80)
             return SemanticColumnAssignment(
                 column_id=col_norm.column_id,
                 table_id=col_norm.table_id,
                 column_name=col_name,
                 role=SemanticColumnRole.MEASURE,
-                entity_type=ent,
+                entity_type=SemanticEntityType.UNKNOWN,
+                semantic_concept=SemanticConcept.MEASURE,
+                measure_class=m_class,
                 confidence=conf,
                 is_ambiguous=False,
                 classification_source=ClassificationSource.HEURISTIC,
-                rationale=f"Numeric measure structure (unit: {col_norm.inferred_unit or 'numeric'}, quantiles: {list(col_prof.quantiles.keys())}).",
+                rationale=f"Numeric measure structure (class: {m_class.value}, unit: {col_norm.inferred_unit or 'numeric'}, quantiles: {list(col_prof.quantiles.keys())}).",
             )
 
     # 6. Entity Identifier Rule
@@ -215,7 +233,7 @@ def classify_column_deterministic(
 
     if is_valid_id_candidate:
         struct_score = col_prof.candidate_identifier_score
-        ent = lex_entity if lex_entity != SemanticEntityType.UNKNOWN else SemanticEntityType.CONCEPT
+        ent = lex_entity if lex_entity != SemanticEntityType.UNKNOWN else SemanticEntityType.UNKNOWN
         conf = calculate_semantic_confidence(struct_score, max(0.60, lex_score), 0.80)
         evidence = f"Candidate identifier score: {col_prof.candidate_identifier_score:.2f}, uniqueness: {col_prof.uniqueness_ratio:.2f}"
         if col_prof.leading_zero_ratio > 0.0:
@@ -226,13 +244,15 @@ def classify_column_deterministic(
             column_name=col_name,
             role=SemanticColumnRole.ENTITY_IDENTIFIER,
             entity_type=ent,
+            semantic_concept=SemanticConcept.IDENTIFIER,
+            measure_class=None,
             confidence=conf,
             is_ambiguous=False,
             classification_source=ClassificationSource.HEURISTIC,
             rationale=f"High structural identifier likelihood. {evidence}.",
         )
 
-    # 6. Boolean / Status Rule
+    # 7. Boolean / Status Rule
     if col_prof.logical_type_candidate == "BOOLEAN" or (col_prof.distinct_count == 2 and col_prof.row_count >= 10):
         conf = calculate_semantic_confidence(0.90, max(0.50, lex_score), 0.80)
         return SemanticColumnAssignment(
@@ -240,7 +260,9 @@ def classify_column_deterministic(
             table_id=col_norm.table_id,
             column_name=col_name,
             role=SemanticColumnRole.BOOLEAN,
-            entity_type=SemanticEntityType.CONCEPT,
+            entity_type=SemanticEntityType.UNKNOWN,
+            semantic_concept=SemanticConcept.STATUS,
+            measure_class=None,
             confidence=conf,
             is_ambiguous=False,
             classification_source=ClassificationSource.STATISTICAL,
@@ -254,14 +276,16 @@ def classify_column_deterministic(
             table_id=col_norm.table_id,
             column_name=col_name,
             role=SemanticColumnRole.STATUS,
-            entity_type=SemanticEntityType.CONCEPT,
+            entity_type=SemanticEntityType.UNKNOWN,
+            semantic_concept=SemanticConcept.STATUS,
+            measure_class=None,
             confidence=conf,
             is_ambiguous=False,
             classification_source=ClassificationSource.DICTIONARY,
             rationale="Status code structure with discrete workflow states.",
         )
 
-    # 7. Entity Label Rule (e.g. employee_name, store_name)
+    # 8. Entity Label Rule (fallback)
     if lex_role == SemanticColumnRole.ENTITY_LABEL:
         ent = lex_entity if lex_entity != SemanticEntityType.UNKNOWN else SemanticEntityType.PERSON
         conf = calculate_semantic_confidence(0.80, 0.85, 0.80)
@@ -271,15 +295,17 @@ def classify_column_deterministic(
             column_name=col_name,
             role=SemanticColumnRole.ENTITY_LABEL,
             entity_type=ent,
+            semantic_concept=SemanticConcept.DESCRIPTOR,
+            measure_class=None,
             confidence=conf,
             is_ambiguous=False,
             classification_source=ClassificationSource.DICTIONARY,
             rationale=f"Entity descriptive label associated with {ent.value}.",
         )
 
-    # 8. Dimension / Category Rule
+    # 9. Dimension / Category Rule
     if col_prof.candidate_dimension_score >= 0.40 or col_prof.distinct_count <= 50:
-        ent = lex_entity if lex_entity != SemanticEntityType.UNKNOWN else SemanticEntityType.CONCEPT
+        ent = lex_entity if lex_entity != SemanticEntityType.UNKNOWN else SemanticEntityType.UNKNOWN
         conf = calculate_semantic_confidence(col_prof.candidate_dimension_score, max(0.50, lex_score), 0.70)
         return SemanticColumnAssignment(
             column_id=col_norm.column_id,
@@ -287,19 +313,23 @@ def classify_column_deterministic(
             column_name=col_name,
             role=SemanticColumnRole.DIMENSION,
             entity_type=ent,
+            semantic_concept=SemanticConcept.CATEGORICAL,
+            measure_class=None,
             confidence=conf,
             is_ambiguous=False,
             classification_source=ClassificationSource.STATISTICAL,
             rationale=f"Discrete categorical dimension (distinct count: {col_prof.distinct_count}, normalized entropy: {col_prof.normalized_entropy}).",
         )
 
-    # 9. Fallback: If confidence is low, assign AMBIGUOUS
+    # 10. Fallback: If confidence is low, assign AMBIGUOUS
     return SemanticColumnAssignment(
         column_id=col_norm.column_id,
         table_id=col_norm.table_id,
         column_name=col_name,
         role=SemanticColumnRole.AMBIGUOUS,
         entity_type=SemanticEntityType.UNKNOWN,
+        semantic_concept=SemanticConcept.AMBIGUOUS,
+        measure_class=None,
         confidence=0.45,
         is_ambiguous=True,
         classification_source=ClassificationSource.STATISTICAL,
@@ -348,7 +378,7 @@ def build_table_semantic_model(
                         cand_conf = float(res.get("confidence", 0.75))
 
                         # Arbitration: Model cannot override structural contradiction
-                        if col_prof.null_ratio == 1.0 or cand_role == SemanticColumnRole.ENTITY_IDENTIFIER and col_prof.uniqueness_ratio < 0.20:
+                        if col_prof.null_ratio == 1.0 or (cand_role == SemanticColumnRole.ENTITY_IDENTIFIER and col_prof.uniqueness_ratio < 0.75):
                             assignment = assignment.model_copy(
                                 update={"rationale": f"{assignment.rationale} (Model escalation contradicted structural truth; rejected)."}
                             )
@@ -359,6 +389,8 @@ def build_table_semantic_model(
                                 column_name=col_name,
                                 role=cand_role,
                                 entity_type=cand_ent,
+                                semantic_concept=infer_semantic_concept(cand_role),
+                                measure_class=infer_measure_class(normalize_tokens(col_name), col_norm.inferred_unit) if cand_role == SemanticColumnRole.MEASURE else None,
                                 confidence=cand_conf,
                                 is_ambiguous=cand_conf < AMBIGUOUS_CONFIDENCE_THRESHOLD,
                                 classification_source=ClassificationSource.MODEL_ASSISTED,
@@ -391,9 +423,9 @@ def build_table_semantic_model(
         SemanticEntityType.DEVICE,
     ]
 
-    assigned_entities = {a.entity_type for a in assignments if a.role == SemanticColumnRole.ENTITY_IDENTIFIER}
+    assigned_entities = {a.entity_type for a in assignments if a.role == SemanticColumnRole.ENTITY_IDENTIFIER and a.entity_type not in (SemanticEntityType.UNKNOWN, SemanticEntityType.AMBIGUOUS)}
     if not assigned_entities:
-        assigned_entities = {a.entity_type for a in assignments if a.entity_type not in (SemanticEntityType.UNKNOWN, SemanticEntityType.CONCEPT, SemanticEntityType.TEMPORAL)}
+        assigned_entities = {a.entity_type for a in assignments if a.entity_type not in (SemanticEntityType.UNKNOWN, SemanticEntityType.AMBIGUOUS)}
 
     for ep in entity_priority:
         if ep in assigned_entities:

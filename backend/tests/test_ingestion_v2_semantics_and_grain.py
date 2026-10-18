@@ -41,8 +41,10 @@ from app.services.ingestion_v2.contracts.profiling import (
 )
 from app.services.ingestion_v2.contracts.semantics import (
     ClassificationSource,
+    MeasureClass,
     SemanticColumnAssignment,
     SemanticColumnRole,
+    SemanticConcept,
     SemanticEntityType,
     SemanticModel,
     TableSemanticModel,
@@ -119,7 +121,9 @@ def test_semantic_role_identifier_and_label_person():
 
     # Measure
     assert col_map["salary"].role == SemanticColumnRole.MEASURE
-    assert col_map["salary"].entity_type == SemanticEntityType.FINANCIAL
+    assert col_map["salary"].entity_type == SemanticEntityType.UNKNOWN
+    assert col_map["salary"].semantic_concept == SemanticConcept.MEASURE
+    assert col_map["salary"].measure_class == MeasureClass.FINANCIAL
     assert col_map["salary"].confidence >= 0.80
 
 
@@ -231,7 +235,8 @@ def test_time_role_and_yyyy_mm_pattern():
 
     col_map = {c.column_name: c for c in sem_model.tables[0].columns}
     assert col_map["attendance_date"].role == SemanticColumnRole.TIME
-    assert col_map["attendance_date"].entity_type == SemanticEntityType.TEMPORAL
+    assert col_map["attendance_date"].entity_type == SemanticEntityType.UNKNOWN
+    assert col_map["attendance_date"].semantic_concept == SemanticConcept.TIME_SPAN
     assert col_map["year_month"].role == SemanticColumnRole.TIME
 
 
@@ -279,7 +284,7 @@ class MockModelGateway:
         for key, res in self.responses.items():
             if key in prompt:
                 return res
-        return {"role": "DIMENSION", "entity_type": "CONCEPT", "confidence": 0.80, "rationale": "Mock classification"}
+        return {"role": "DIMENSION", "entity_type": "DEPARTMENT", "confidence": 0.80, "rationale": "Mock classification"}
 
 
 def test_model_escalation_cached_and_offline_fail_soft():
