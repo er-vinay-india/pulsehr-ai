@@ -9,6 +9,8 @@ from app.services.ingestion_v2.gateway.circuit_breaker import CircuitBreakerMana
 from app.services.ingestion_v2.gateway.gateway import (
     ConsumerIntelligenceGateway,
     RoutingFallbackDisallowedError,
+    get_consumer_gateway,
+    set_consumer_gateway,
 )
 from app.services.ingestion_v2.gateway.persistence import (
     CutoverPersistenceStore,
@@ -26,6 +28,8 @@ from app.services.ingestion_v2.gateway.state_machine import (
 __all__ = [
     "ConsumerIntelligenceGateway",
     "RoutingFallbackDisallowedError",
+    "get_consumer_gateway",
+    "set_consumer_gateway",
     "ConsumerCutoverStateMachine",
     "CircuitBreakerManager",
     "ConsumerReadinessEvaluator",

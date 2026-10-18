@@ -426,7 +426,6 @@ class ConsumerIntelligenceGateway:
         # ---------------------------------------------------------------------
         # Success: V2 Route Authorized
         # ---------------------------------------------------------------------
-        self.circuit_breaker.record_success(consumer)
         decision = ConsumerRouteDecision(
             decision_id=decision_id,
             decision_timestamp=now_iso,
@@ -505,6 +504,45 @@ class ConsumerIntelligenceGateway:
         """Returns all global telemetry counters."""
         return self.provenance_ledger.get_telemetry()
 
+    def transition_state(
+        self,
+        consumer: ConsumerName,
+        target_state: CutoverState,
+        rationale: str = "",
+        run_id: str | None = None,
+    ) -> ConsumerCutoverRecord:
+        """Transitions consumer state via authoritative internal state machine."""
+        return self.state_machine.transition(
+            consumer=consumer,
+            target_state=target_state,
+            reason=rationale or f"Transition to {target_state.value}",
+            certification_evidence=run_id or "",
+        )
+
+    def get_state(self, consumer: ConsumerName) -> CutoverState:
+        """Returns the current CutoverState of the consumer."""
+        return self.state_machine.get_state(consumer)
+
+    def get_record(self, consumer: ConsumerName) -> ConsumerCutoverRecord:
+        """Returns the full cutover record for a consumer."""
+        return self.state_machine.get_record(consumer)
+
+    def record_success(self, consumer: ConsumerName) -> None:
+        """Records a successful V2 execution on the consumer's circuit breaker."""
+        self.circuit_breaker.record_success(consumer)
+
+    def record_failure(self, consumer: ConsumerName, reason: FallbackReason) -> bool:
+        """Records a failure on the consumer's circuit breaker and updates ledger."""
+        self._record_governed_fallback(
+            consumer=consumer,
+            dataset_id=None,
+            dataset_version=None,
+            request_id=f"REQ-{uuid.uuid4().hex[:8].upper()}",
+            reason=reason,
+            manifest_fp=None,
+        )
+        return self.circuit_breaker.record_failure(consumer, reason)
+
     def reset(self) -> None:
         """Resets dynamic overrides, consumer states to SHADOW, circuit breakers, and telemetry."""
         self._override_global_enabled = None
@@ -514,3 +552,20 @@ class ConsumerIntelligenceGateway:
             self.state_machine.reset_to_shadow(c)
             self.circuit_breaker.reset(c)
         self.provenance_ledger.reset_telemetry()
+
+
+_shared_gateway: ConsumerIntelligenceGateway | None = None
+
+
+def get_consumer_gateway() -> ConsumerIntelligenceGateway:
+    """Returns the singleton shared ConsumerIntelligenceGateway instance."""
+    global _shared_gateway
+    if _shared_gateway is None:
+        _shared_gateway = ConsumerIntelligenceGateway()
+    return _shared_gateway
+
+
+def set_consumer_gateway(gateway: ConsumerIntelligenceGateway | None) -> None:
+    """Sets or resets the singleton shared ConsumerIntelligenceGateway instance (for testing)."""
+    global _shared_gateway
+    _shared_gateway = gateway

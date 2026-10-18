@@ -41,7 +41,38 @@ class CouncilEvidenceService:
         request: RetrievalRequest,
         conn=None
     ) -> list[RetrievedEvidence]:
-        """Performs dataset-scoped, grain-enforced hybrid semantic search."""
+        """Performs dataset-scoped, grain-enforced hybrid semantic search via Governed Gateway."""
+        from ..ingestion_v2.gateway.adapters.hriday_adapter import get_hriday_adapter
+
+        hriday_adapter = get_hriday_adapter()
+        normalized_ctx = hriday_adapter.acquire_context(
+            query=request.query,
+            dataset_id=request.dataset_id,
+            sheet_id=request.sheet_id,
+        )
+
+        if normalized_ctx.is_v2:
+            results: list[RetrievedEvidence] = []
+            for item in normalized_ctx.evidence_items[:request.max_results]:
+                c_grain = request.entity_grain or (EntityGrain.EMPLOYEE if ("id:" in item.content.lower() or "employee" in item.content.lower()) else EntityGrain.DEPARTMENT)
+                if request.entity_grain and request.entity_grain == EntityGrain.EMPLOYEE and c_grain != EntityGrain.EMPLOYEE:
+                    continue
+                results.append(
+                    RetrievedEvidence(
+                        evidence_id=item.evidence_id,
+                        content=item.content,
+                        source_type="tabular_chunk",
+                        dataset_id=request.dataset_id,
+                        sheet_id=request.sheet_id,
+                        entity_grain=c_grain,
+                        relevance_score=item.relevance_score,
+                        confidence=1.0,
+                        source_reference=f"IngestionV2 / {item.namespace} ({item.title})",
+                        is_stale=False,
+                    )
+                )
+            return results
+
         grain_str = request.entity_grain.value if request.entity_grain else None
         chunks = hybrid_search(
             query=request.query,

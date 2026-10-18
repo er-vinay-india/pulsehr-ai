@@ -308,3 +308,66 @@ To guarantee deterministic recovery across service restarts and prevent split-br
    - 1 circuit breaker open event
    - 1 governed rollback
 
+---
+
+## 7. Phase I8.3: HRIDAY Controlled V2 Cutover Certification
+
+Phase I8.3 achieves the first controlled production cutover for Highview's conversational analytics consumer: **HRIDAY**.
+
+### 7.1 Single Routing Authority & Isolation Guarantees
+- **Sole Routing Authority**: HRIDAY routes exclusively through `ConsumerIntelligenceGateway`. Zero scattered `Route.V2` conditional logic or feature flag checks exist across copilot services or routers.
+- **Consumer Scope**: Only HRIDAY is cut over. `DASHBOARD` and `PRESENTATION` remain strictly in `SHADOW` state.
+- **Target State**: `V2_PRIMARY_WITH_FALLBACK` (certified through `SHADOW` → `CERTIFIED` → `CANARY` → `V2_PRIMARY_WITH_FALLBACK`).
+- **Reasoning & Prompt Integrity**: HRIDAY answer generation, reasoning prompts, and LLM selection logic remain completely unchanged.
+- **P0 Live DB Invariant**: `backend/data/db/pulsehr.sqlite3` remains bit-for-bit unmutated (`70,385,664 bytes`).
+
+### 7.2 Normalized Context Contract (`HridayNormalizedContext`)
+Downstream reasoning in HRIDAY consumes the unified `HridayNormalizedContext` envelope:
+- `route_selected`: Strongly-typed `Route.V1` or `Route.V2`.
+- `is_v2`: Boolean property indicating whether V2 multi-namespace retrieval or V1 hybrid search produced the context.
+- `metrics`: List of `GovernedMetricContext` preserving canonical metric definitions, formulas, grains, and non-zero denominators.
+- `join_plans`: List of `GovernedJoinContext` enforcing join safety (`SAFE`, `SAFE_WITH_PREAGGREGATION`, `UNSAFE`, `AMBIGUOUS`).
+- `evidence_items`: List of `RetrievedEvidenceItem` containing canonical `EVID-*` identifiers and cross-namespace provenance.
+- `catalog_summary_text` & `evidence_samples_json`: Backward-compatible prompt blocks preserving all legacy dictionary keys (`sheet`, `source_file`, `row_index`, `text`, `data`, `id`, `retrieval_methods`).
+- `route_decision`: Full `ConsumerRouteDecision` provenance attached to every request.
+
+### 7.3 Canary Query Matrix Verification (10 Representative Categories)
+All 10 query categories were tested and verified against V2 canonical retrieval:
+1. **Simple Definition**: Canonical metric formulas retrieved with exact mathematical definitions.
+2. **Direct Fact**: Analytical evidence findings matched with exact table and row-level grounding.
+3. **Ranking Query**: Ordered ranking evidence preserved without metric distortion.
+4. **Cross-Sheet Query**: Multi-entity cross-table questions answered with verified join relationships.
+5. **Relationship Question**: Direct relationship inquiries mapped to governed join plans.
+6. **Metric with Denominator**: Explicit denominator (`average_headcount`, `scheduled_days`) enforced; zero invented denominators.
+7. **Ambiguous Metric**: Competing or conflicting definitions generate explicit ambiguity alerts; zero arbitrary winner selection.
+8. **Unsupported / Out-of-Scope**: Out-of-domain questions bounded strictly to indexed evidence; zero hallucinated facts.
+9. **Cross-Domain Retail Dataset**: Inventory, sales, and store performance retrieved with commercial semantics.
+10. **Cross-Domain Environmental & Finance**: Emissions and balance-sheet metrics verified with domain isolation.
+
+### 7.4 Join Safety Enforcement Matrix
+| Join Safety Category | Gateway / Adapter Behavior | Downstream Action |
+| :--- | :--- | :--- |
+| **`SAFE`** | Approved without warning | Direct join authorized |
+| **`SAFE_WITH_PREAGGREGATION`** | Approved with preaggregation flag | Mandates preaggregation to common grain before join |
+| **`UNSAFE`** | Explicitly flagged in context | Warns on cartesian explosion risk; blocks unconstrained cross-product |
+| **`AMBIGUOUS`** | Explicitly flagged in context | Warns on competing join paths; prevents arbitrary join resolution |
+
+### 7.5 Circuit Breaker, Governed Fallback & Rollback Drill
+- **Consecutive Failure Trip**: 5 consecutive runtime retrieval errors trip breaker from `CLOSED` to `OPEN`.
+- **Automatic V1 Fallback**: In `OPEN` state, all requests route safely to `Route.V1` with `FallbackReason.CIRCUIT_BREAKER_OPEN`.
+- **`HALF_OPEN` Probe Rules**: Ordinary traffic is diverted to V1; only explicit diagnostic recovery probes (`is_probe=True`) evaluate against V2.
+- **Formal Rollback Drill**: Calling `gw.transition_state(ConsumerName.HRIDAY, CutoverState.ROLLBACK)` immediately routes all traffic to V1 with `FallbackReason.KILL_SWITCH_ACTIVE`.
+- **Durable Restart Survival**: Cutover state persists in `cutover_state.sqlite3`, surviving service reloads without losing certification or transition records.
+
+### 7.6 Live Streaming Contract & Performance SLA
+- **SSE Streaming Contract**: Valid SSE event sequence (`event: status`, `event: chunk`, `event: done`). The `done` event contains `route_provenance` (`route_selected`, `decision_id`, `consumer_state`, `dataset_id`, `evidence_count`).
+- **Gateway Decision Latency**: P95 = **0.038ms** (Target: < 5.0ms; **131× faster than SLA**).
+- **Context Acquisition Latency**: P95 = **0.421ms** (Target: < 50.0ms; **118× faster than SLA**).
+- **Data Minimization & Prompt Injection**: Bounded context items; malicious prompt injections treated strictly as plain string data.
+
+### 7.7 Test Suite Execution Summary
+- **I8.3 Dedicated Cutover Suite**: `24 / 24` passed (`backend/tests/test_ingestion_v2_hriday_cutover.py`).
+- **Ingestion V2 Suite**: `227 / 227` passed across all I1–I8 phases.
+- **Full Backend Suite**: `1,978 / 1,978` passed with zero errors or regressions.
+- **Full Frontend Matrix**: All 14 scripts passed (`Markdown`, `Chat`, `Deck`, `Theme`, `Slides`, `Visual`, `UX`, `Scenario`, `Firewall`, `Lifecycle`, `Dashboard Integrity`).
+

@@ -131,6 +131,12 @@ from app.services.ingestion_v2.contracts.cutover import (
     ConfigurationSource,
     CURRENT_CUTOVER_STATE_SCHEMA_VERSION,
 )
+from app.services.ingestion_v2.contracts.hriday_context import (
+    RetrievedEvidenceItem,
+    GovernedMetricContext,
+    GovernedJoinContext,
+    HridayNormalizedContext,
+)
 
 __all__ = [
     # Provenance & Base
@@ -242,4 +248,9 @@ __all__ = [
     "ConsumerRoutingSnapshot",
     "ConfigurationSource",
     "CURRENT_CUTOVER_STATE_SCHEMA_VERSION",
+    # Stage 13: HRIDAY Normalized Context
+    "RetrievedEvidenceItem",
+    "GovernedMetricContext",
+    "GovernedJoinContext",
+    "HridayNormalizedContext",
 ]

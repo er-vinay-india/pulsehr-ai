@@ -255,19 +255,27 @@ def query_copilot(
         }
         return finalize_identity_response(tool_res, user_query)
 
-    # 2. Retrieval
+    # 2. Retrieval via Governed HridayIntelligenceAdapter
     t_ret0 = time.perf_counter()
-    evidence = hybrid_search(user_query, top_k=8, dataset_id=dataset_id, sheet_id=sheet_id)
-    related = linked_evidence(evidence, limit=12)
-    evidence.extend(related)
+    from .ingestion_v2.gateway.adapters.hriday_adapter import get_hriday_adapter
+    hriday_adapter = get_hriday_adapter()
+    canary_cohort = (prior_context or {}).get("canary_cohort")
+    canary_auth = bool((prior_context or {}).get("canary_authorized"))
+
+    normalized_ctx = hriday_adapter.acquire_context(
+        query=user_query,
+        dataset_id=dataset_id,
+        sheet_id=sheet_id,
+        canary_cohort=canary_cohort,
+        canary_authorized=canary_auth,
+    )
+    evidence = normalized_ctx.evidence_samples_json
+    context = normalized_ctx.catalog_summary_text
     retrieval_ms = (time.perf_counter() - t_ret0) * 1000
+    related = []
 
     # 3. Context & Domain Guidelines
     t_ctx0 = time.perf_counter()
-    try:
-        context = get_aggregate_context(sheet_id=sheet_id, dataset_id=dataset_id)
-    except TypeError:
-        context = get_aggregate_context()
     domain_guideline = ""
     active_sheet_name = ""
     column_mapping = {}
@@ -362,6 +370,15 @@ def query_copilot(
         'exact_matches': [],
         'suggested_questions': [],
         'related_rows': len(related),
+        'route_provenance': {
+            'route_selected': normalized_ctx.route_selected.value,
+            'decision_id': normalized_ctx.route_decision.decision_id,
+            'consumer_state': normalized_ctx.route_decision.consumer_state.value,
+            'fallback_reason': normalized_ctx.route_decision.fallback_reason.value if normalized_ctx.route_decision.fallback_reason else None,
+            'dataset_id': normalized_ctx.dataset_id,
+            'dataset_version': normalized_ctx.dataset_version,
+            'evidence_count': len(normalized_ctx.evidence_items),
+        },
         'timings': {
             'retrieval_ms': round(retrieval_ms, 1),
             'context_ms': round(context_ms, 1),
@@ -434,20 +451,28 @@ def stream_copilot_generator(
         yield f"event: done\ndata: {json.dumps(finalize_identity_response(tool_res, user_query))}\n\n"
         return
 
-    # Stage 2: Search & Retrieval
+    # Stage 2: Search & Retrieval via Governed HridayIntelligenceAdapter
     yield f"event: status\ndata: {json.dumps({'phase': 'retrieval', 'message': 'Searching uploaded sheets & related records…'})}\n\n"
     t_ret0 = time.perf_counter()
-    evidence = hybrid_search(user_query, top_k=8, dataset_id=dataset_id, sheet_id=sheet_id)
-    related = linked_evidence(evidence, limit=12)
-    evidence.extend(related)
+    from .ingestion_v2.gateway.adapters.hriday_adapter import get_hriday_adapter
+    hriday_adapter = get_hriday_adapter()
+    canary_cohort = (prior_context or {}).get("canary_cohort")
+    canary_auth = bool((prior_context or {}).get("canary_authorized"))
+
+    normalized_ctx = hriday_adapter.acquire_context(
+        query=user_query,
+        dataset_id=dataset_id,
+        sheet_id=sheet_id,
+        canary_cohort=canary_cohort,
+        canary_authorized=canary_auth,
+    )
+    evidence = normalized_ctx.evidence_samples_json
+    context = normalized_ctx.catalog_summary_text
     retrieval_ms = (time.perf_counter() - t_ret0) * 1000
+    related = []
 
     # Stage 3: Context Preparation
     t_ctx0 = time.perf_counter()
-    try:
-        context = get_aggregate_context(sheet_id=sheet_id, dataset_id=dataset_id)
-    except TypeError:
-        context = get_aggregate_context()
     domain_guideline = ""
     active_sheet_name = ""
     column_mapping = {}
@@ -595,6 +620,15 @@ def stream_copilot_generator(
         'exact_matches': [],
         'suggested_questions': [],
         'related_rows': len(related),
+        'route_provenance': {
+            'route_selected': normalized_ctx.route_selected.value,
+            'decision_id': normalized_ctx.route_decision.decision_id,
+            'consumer_state': normalized_ctx.route_decision.consumer_state.value,
+            'fallback_reason': normalized_ctx.route_decision.fallback_reason.value if normalized_ctx.route_decision.fallback_reason else None,
+            'dataset_id': normalized_ctx.dataset_id,
+            'dataset_version': normalized_ctx.dataset_version,
+            'evidence_count': len(normalized_ctx.evidence_items),
+        },
         'timings': {
             'retrieval_ms': round(retrieval_ms, 1),
             'context_ms': round(context_ms, 1),
