@@ -41,6 +41,7 @@ class ColumnStructuralProfile(BaseModel):
     row_count: int
     null_count: int
     null_ratio: float = Field(ge=0.0, le=1.0)
+    non_null_count: int = 0
 
     distinct_count: int
     uniqueness_ratio: float = Field(ge=0.0, le=1.0)
@@ -48,6 +49,26 @@ class ColumnStructuralProfile(BaseModel):
     is_constant: bool = False
     is_quasi_constant: bool = False
     is_unique_candidate: bool = False
+
+    constant_ratio: float = Field(default=0.0, ge=0.0, le=1.0)
+    near_constant_ratio: float = Field(default=0.0, ge=0.0, le=1.0)
+    categorical_entropy: float | None = None
+    normalized_entropy: float | None = None
+
+    pattern_signature: str | None = None
+    dominant_pattern: str | None = None
+    pattern_coverage: float = Field(default=0.0, ge=0.0, le=1.0)
+    pattern_variants: int = 0
+    fixed_length_ratio: float = Field(default=0.0, ge=0.0, le=1.0)
+    leading_zero_ratio: float = Field(default=0.0, ge=0.0, le=1.0)
+    all_digit_ratio: float = Field(default=0.0, ge=0.0, le=1.0)
+
+    date_min: str | None = None
+    date_max: str | None = None
+    date_span_days: int | None = None
+
+    candidate_identifier_score: float = Field(default=0.0, ge=0.0, le=1.0)
+    candidate_dimension_score: float = Field(default=0.0, ge=0.0, le=1.0)
 
     min_value: Any | None = None
     max_value: Any | None = None
@@ -69,6 +90,11 @@ class TableStructuralProfile(BaseModel):
     table_name: str
     row_count: int
     column_count: int
+    duplicate_row_count: int = 0
+    duplicate_row_ratio: float = Field(default=0.0, ge=0.0, le=1.0)
+    all_null_row_count: int = 0
+    structural_warnings: list[str] = Field(default_factory=list)
+    candidate_composite_keys: list[dict[str, Any]] = Field(default_factory=list)
     columns: list[ColumnStructuralProfile] = Field(default_factory=list)
     quality: StructuralDataQuality
 
