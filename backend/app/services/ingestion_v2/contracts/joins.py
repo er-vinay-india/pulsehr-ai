@@ -15,7 +15,10 @@ class JoinSafetyStatus(str, Enum):
     SAFE = "SAFE"
     FORBIDDEN_CARTESIAN = "FORBIDDEN_CARTESIAN"
     REQUIRES_PRE_AGGREGATION = "REQUIRES_PRE_AGGREGATION"
+    SAFE_WITH_PREAGGREGATION = "SAFE_WITH_PREAGGREGATION"
     LOSS_OF_GRAIN = "LOSS_OF_GRAIN"
+    UNSAFE = "UNSAFE"
+    AMBIGUOUS = "AMBIGUOUS"
 
 
 class MeasureAdditivity(str, Enum):
@@ -24,6 +27,7 @@ class MeasureAdditivity(str, Enum):
     NON_ADDITIVE = "NON_ADDITIVE"
     RATIO = "RATIO"
     DISTINCT_COUNT = "DISTINCT_COUNT"
+    UNKNOWN = "UNKNOWN"
 
 
 class PreAggregationSpec(BaseModel):
@@ -37,6 +41,30 @@ class PreAggregationSpec(BaseModel):
     group_by_columns: list[str] = Field(default_factory=list)
     aggregations: dict[str, str] = Field(default_factory=dict)  # column_id -> AGG_FUNC (SUM, AVG, etc.)
     target_grain: str
+
+
+class JoinSafetyAssessment(BaseModel):
+    """
+    Stage: Join Safety Assessment.
+    Evaluates referential, grain, and fanout risks before a join plan is formulated.
+    """
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    assessment_id: str
+    edge_id: str
+    left_table_id: str
+    right_table_id: str
+    safety_status: JoinSafetyStatus
+    is_grain_compatible: bool
+    fact_duplication_risk: bool
+    dimension_propagation_safe: bool
+    measure_duplication_risk: bool
+    temporal_mismatch: bool
+    many_to_many_risk: bool
+    estimated_row_multiplier: float
+    required_pre_aggregation: bool
+    rationale: str
+    recommended_target_grain: str | None = None
 
 
 class JoinPlan(BaseModel):
@@ -61,6 +89,13 @@ class JoinPlan(BaseModel):
     forbidden_reason: str | None = None
     safe_operations: list[str] = Field(default_factory=list)
     forbidden_operations: list[str] = Field(default_factory=list)
+
+    join_keys: list[tuple[str, str]] = Field(default_factory=list)
+    max_expected_multiplier: float = 1.0
+    expected_input_rows: int = 0
+    expected_output_rows: int = 0
+    dimension_propagation: list[str] = Field(default_factory=list)
+    post_aggregations: list[str] = Field(default_factory=list)
 
 
 class GovernedJoinPlanSet(IngestionContractBase):

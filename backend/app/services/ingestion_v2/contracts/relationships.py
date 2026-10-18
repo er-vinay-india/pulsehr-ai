@@ -24,6 +24,7 @@ class RelationshipCardinality(str, Enum):
 
 class RelationshipStatus(str, Enum):
     VALIDATED = "VALIDATED"
+    ACCEPTED = "ACCEPTED"
     PROVISIONAL = "PROVISIONAL"
     REJECTED = "REJECTED"
     AMBIGUOUS = "AMBIGUOUS"
@@ -74,6 +75,9 @@ class ValidatedRelationshipEdge(BaseModel):
     referential_coverage: float = Field(ge=0.0, le=1.0)
     source_overlap_ratio: float = Field(ge=0.0, le=1.0)
     target_overlap_ratio: float = Field(ge=0.0, le=1.0)
+
+    confidence: float = Field(default=1.0, ge=0.0, le=1.0)
+    estimated_row_multiplier: float = Field(default=1.0, ge=0.0)
 
     is_grain_preserving: bool
     duplication_risk_flag: bool = False

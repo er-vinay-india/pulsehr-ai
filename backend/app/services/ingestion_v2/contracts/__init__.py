@@ -60,6 +60,7 @@ from app.services.ingestion_v2.contracts.joins import (
     JoinSafetyStatus,
     MeasureAdditivity,
     PreAggregationSpec,
+    JoinSafetyAssessment,
     JoinPlan,
     GovernedJoinPlanSet,
 )
@@ -159,6 +160,7 @@ __all__ = [
     "JoinSafetyStatus",
     "MeasureAdditivity",
     "PreAggregationSpec",
+    "JoinSafetyAssessment",
     "JoinPlan",
     "GovernedJoinPlanSet",
     # Stage 8: Analytics (EDA-B)
