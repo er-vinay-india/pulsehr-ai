@@ -916,6 +916,212 @@ def test_copilot_stream_endpoint_sse_contract(isolated_gateway: ConsumerIntellig
                 assert "route_selected" in payload["route_provenance"]
 
 
+def test_hriday_exact_sse_streaming_protocol_metrics(isolated_gateway: ConsumerIntelligenceGateway):
+    """
+    Verifies exact SSE streaming metrics across 20 hermetic query streams:
+    - Streams tested: 20
+    - Duplicate tokens: 0
+    - Missing done: 0
+    - Duplicate done: 0
+    - Exceptions: 0
+    - Fallback interruptions: 0
+    - Ordering issues: 0
+    - Routing leakage: 0
+    """
+    set_consumer_gateway(isolated_gateway)
+    adapter = HridayIntelligenceAdapter(gateway=isolated_gateway, retriever=make_mock_retriever("1"))
+    manifest = make_sample_manifest("1")
+    adapter.register_v2_manifest("1", manifest)
+    set_hriday_adapter(adapter)
+
+    client = TestClient(app)
+
+    queries = [
+        "What is the overall attendance rate?",
+        "Which department has highest attendance?",
+        "Compare attendance and overtime across departments",
+        "What is the performance score?",
+        "What is the headcount distribution?",
+        "Which location has highest gross sales?",
+        "Summarize monthly departures",
+        "Explain attendance anomalies",
+        "List top performing business units",
+        "Evaluate department leave balance",
+        "Check scheduled workday compliance",
+        "Show overtime patterns by team",
+        "Analyze turnover rate formula",
+        "Inspect cross-sheet department records",
+        "Review attrition risk factors",
+        "Show employee distribution by band",
+        "Assess leave utilization rate",
+        "Verify recorded attendance days",
+        "Compare engineering vs sales presence",
+        "Audit data governance limitations",
+    ]
+
+    metrics = {
+        "streams_tested": 0,
+        "duplicate_tokens": 0,
+        "missing_done": 0,
+        "duplicate_done": 0,
+        "exceptions": 0,
+        "fallback_interruptions": 0,
+        "ordering_issues": 0,
+        "leakage_events": 0,
+    }
+
+    forbidden_leakage_terms = [
+        "route_selected",
+        "decision_id",
+        "consumer_state",
+        "circuit_breaker",
+        "fallback_reason",
+        "V2_PRIMARY_WITH_FALLBACK",
+        "KILL_SWITCH_ACTIVE",
+    ]
+
+    for q in queries:
+        metrics["streams_tested"] += 1
+        resp = client.post(
+            "/api/copilot/query/stream",
+            json={"query": q, "dataset_id": 1, "engine": "generic"},
+        )
+        if resp.status_code != 200:
+            metrics["exceptions"] += 1
+            continue
+
+        raw_text = resp.text
+        if "Internal Server Error" in raw_text or "Traceback" in raw_text:
+            metrics["exceptions"] += 1
+
+        lines = raw_text.split("\n")
+        done_count = 0
+        tokens: list[str] = []
+        done_seen = False
+
+        for i, line in enumerate(lines):
+            if line.startswith("event: token"):
+                if done_seen:
+                    metrics["ordering_issues"] += 1
+                if i + 1 < len(lines) and lines[i + 1].startswith("data: "):
+                    try:
+                        d = json.loads(lines[i + 1][6:])
+                        tok = d.get("token", "")
+                        if tok and len(tokens) > 0 and tok.strip() and tok == tokens[-1]:
+                            metrics["duplicate_tokens"] += 1
+                        tokens.append(tok)
+                    except Exception:
+                        metrics["exceptions"] += 1
+            elif line.startswith("event: done"):
+                done_count += 1
+                done_seen = True
+                if i + 1 < len(lines) and lines[i + 1].startswith("data: "):
+                    try:
+                        d = json.loads(lines[i + 1][6:])
+                        for term in forbidden_leakage_terms:
+                            if term in d:
+                                metrics["leakage_events"] += 1
+                            if term in str(d.get("answer", "")):
+                                metrics["leakage_events"] += 1
+                    except Exception:
+                        metrics["exceptions"] += 1
+
+        if done_count == 0:
+            metrics["missing_done"] += 1
+            metrics["fallback_interruptions"] += 1
+        elif done_count > 1:
+            metrics["duplicate_done"] += 1
+
+    assert metrics["streams_tested"] == 20
+    assert metrics["duplicate_tokens"] == 0
+    assert metrics["missing_done"] == 0
+    assert metrics["duplicate_done"] == 0
+    assert metrics["exceptions"] == 0
+    assert metrics["fallback_interruptions"] == 0
+    assert metrics["ordering_issues"] == 0
+    assert metrics["leakage_events"] == 0
+
+    print(f"\n[SSE PROTOCOL METRICS] 20 Hermetic Streams Evaluated:")
+    print(f"  Streams Tested:         {metrics['streams_tested']}")
+    print(f"  Duplicate Tokens:       {metrics['duplicate_tokens']}")
+    print(f"  Missing Done:           {metrics['missing_done']}")
+    print(f"  Duplicate Done:         {metrics['duplicate_done']}")
+    print(f"  Exceptions:             {metrics['exceptions']}")
+    print(f"  Fallback Interruptions: {metrics['fallback_interruptions']}")
+    print(f"  Ordering Issues:        {metrics['ordering_issues']}")
+    print(f"  Routing Leakage:        {metrics['leakage_events']}")
+
+
+def test_hriday_full_pipeline_response_latencies_v1_v2_fallback(isolated_gateway: ConsumerIntelligenceGateway):
+    """
+    Measures full request pipeline end-to-end response latency across:
+    - HRIDAY V1 (SHADOW / legacy route)
+    - HRIDAY V2 (V2_PRIMARY_WITH_FALLBACK + fresh manifest)
+    - Fallback (V2_PRIMARY_WITH_FALLBACK + stale manifest -> V1 fallback)
+    Reports P50 and P95 for each path.
+    """
+    gw = isolated_gateway
+    adapter = HridayIntelligenceAdapter(gateway=gw, retriever=make_mock_retriever("1"))
+    set_hriday_adapter(adapter)
+    set_consumer_gateway(gw)
+    client = TestClient(app)
+
+    # 1. HRIDAY V1 Path (SHADOW state)
+    v1_latencies: list[float] = []
+    gw.transition_state(ConsumerName.HRIDAY, CutoverState.SHADOW)
+    for _ in range(30):
+        t0 = time.perf_counter()
+        resp = client.post("/api/copilot/query", json={"query": "Attendance summary", "dataset_id": 1, "engine": "generic"})
+        assert resp.status_code == 200
+        v1_latencies.append((time.perf_counter() - t0) * 1000)
+    v1_latencies.sort()
+    v1_p50 = v1_latencies[15]
+    v1_p95 = v1_latencies[28]
+
+    # 2. HRIDAY V2 Path (V2_PRIMARY_WITH_FALLBACK + fresh manifest)
+    gw.transition_state(ConsumerName.HRIDAY, CutoverState.CERTIFIED, run_id="CERT-PERF-01")
+    gw.transition_state(ConsumerName.HRIDAY, CutoverState.CANARY)
+    gw.transition_state(ConsumerName.HRIDAY, CutoverState.V2_PRIMARY_WITH_FALLBACK)
+    manifest = make_sample_manifest("1")
+    adapter.register_v2_manifest("1", manifest)
+
+    v2_latencies: list[float] = []
+    for _ in range(30):
+        t0 = time.perf_counter()
+        resp = client.post("/api/copilot/query", json={"query": "Attendance summary", "dataset_id": 1, "engine": "generic"})
+        assert resp.status_code == 200
+        v2_latencies.append((time.perf_counter() - t0) * 1000)
+    v2_latencies.sort()
+    v2_p50 = v2_latencies[15]
+    v2_p95 = v2_latencies[28]
+
+    # 3. Fallback Path (V2_PRIMARY_WITH_FALLBACK + stale manifest -> V1 fallback)
+    stale_manifest = {**manifest, "is_fresh": False}
+    adapter.register_v2_manifest("1", stale_manifest)
+    fb_latencies: list[float] = []
+    for _ in range(30):
+        t0 = time.perf_counter()
+        resp = client.post("/api/copilot/query", json={"query": "Attendance summary", "dataset_id": 1, "engine": "generic"})
+        assert resp.status_code == 200
+        fb_latencies.append((time.perf_counter() - t0) * 1000)
+    fb_latencies.sort()
+    fb_p50 = fb_latencies[15]
+    fb_p95 = fb_latencies[28]
+
+    # Hermetic full-pipeline thresholds
+    assert v1_p50 < 30.0, f"V1 full pipeline P50 {v1_p50:.2f}ms >= 30ms"
+    assert v1_p95 < 60.0, f"V1 full pipeline P95 {v1_p95:.2f}ms >= 60ms"
+    assert v2_p50 < 30.0, f"V2 full pipeline P50 {v2_p50:.2f}ms >= 30ms"
+    assert v2_p95 < 60.0, f"V2 full pipeline P95 {v2_p95:.2f}ms >= 60ms"
+    assert fb_p50 < 35.0, f"Fallback full pipeline P50 {fb_p50:.2f}ms >= 35ms"
+    assert fb_p95 < 70.0, f"Fallback full pipeline P95 {fb_p95:.2f}ms >= 70ms"
+
+    print(f"\n[LATENCY BENCHMARK] HRIDAY Full Pipeline Response Latency (30 iterations each):")
+    print(f"  V1 Full Pipeline:       P50={v1_p50:.2f}ms, P95={v1_p95:.2f}ms")
+    print(f"  V2 Full Pipeline:       P50={v2_p50:.2f}ms, P95={v2_p95:.2f}ms")
+    print(f"  Fallback Full Pipeline: P50={fb_p50:.2f}ms, P95={fb_p95:.2f}ms")
+
+
 # =============================================================================
 # 8. PERFORMANCE BENCHMARKS & DATA MINIMIZATION
 # =============================================================================
@@ -1210,7 +1416,12 @@ def test_p0_database_invariant():
     db_path = Path(__file__).resolve().parent.parent / "data" / "db" / "pulsehr.sqlite3"
     if db_path.exists():
         expected_size = 70385664
+        expected_hash = "9f2b5743cfb9d2579ec77228f5005e991dacb00607659b3ea509077f7bd16ca5"
         actual_size = db_path.stat().st_size
+        actual_hash = hashlib.sha256(db_path.read_bytes()).hexdigest()
         assert actual_size == expected_size, (
             f"P0 LIVE DATABASE MUTATION DETECTED! Expected size {expected_size}, got {actual_size} bytes."
+        )
+        assert actual_hash == expected_hash, (
+            f"P0 LIVE DATABASE HASH MISMATCH! Expected SHA {expected_hash}, got {actual_hash}."
         )

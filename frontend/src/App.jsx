@@ -43,7 +43,20 @@ export default function App() {
   // Presentation Pipeline Job & Deck State
   const [activePresentationJob, setActivePresentationJob] = useState(null);
   const [activeDeck, setActiveDeck] = useState(null);
-  const [activeScope, setActiveScope] = useState({ datasetId: null, sheetId: null, snapshotId: null });
+  const [activeScope, setActiveScope] = useState(() => {
+    try {
+      const p = new URLSearchParams(window.location.search);
+      const d = Number(p.get("dataset_id"));
+      const s = Number(p.get("sheet_id"));
+      return {
+        datasetId: Number.isSafeInteger(d) && d > 0 ? d : null,
+        sheetId: Number.isSafeInteger(s) && s > 0 ? s : null,
+        snapshotId: null,
+      };
+    } catch {
+      return { datasetId: null, sheetId: null, snapshotId: null };
+    }
+  });
 
   // Key to force refresh DataExplorerPage when an upload finishes
   const [explorerRefreshKey, setExplorerRefreshKey] = useState(0);
@@ -59,6 +72,18 @@ export default function App() {
 
   useEffect(() => {
     const handleHashChange = () => {
+      try {
+        const p = new URLSearchParams(window.location.search);
+        const d = Number(p.get("dataset_id"));
+        const s = Number(p.get("sheet_id"));
+        if (Number.isSafeInteger(d) && d > 0) {
+          setActiveScope(prev => ({ ...prev, datasetId: d }));
+        }
+        if (Number.isSafeInteger(s) && s > 0) {
+          setActiveScope(prev => ({ ...prev, sheetId: s }));
+        }
+      } catch {}
+
       const h = window.location.hash.replace(/^#\/?/, "").split("?")[0].trim();
       if (h === "copilot") {
         setCopilotOpen(true);

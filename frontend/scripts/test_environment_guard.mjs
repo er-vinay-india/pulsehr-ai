@@ -146,6 +146,9 @@ export async function spawnIsolatedTestBackend(options = {}) {
     HIGHVIEW_DATA_DIR: dataDir,
     EXPORTS_DIR: exportsDir,
     HIGHVIEW_EXPORTS_DIR: exportsDir,
+    HIGHVIEW_CUTOVER_DB_PATH: options.cutoverDbPath || path.join(tmpDir, 'cutover_state.sqlite3'),
+    OLLAMA_BASE_URL: 'http://127.0.0.1:59999',
+    HIGHVIEW_OLLAMA_BASE_URL: 'http://127.0.0.1:59999',
   };
 
   const proc = spawn(
@@ -208,6 +211,7 @@ export async function spawnIsolatedTestBackend(options = {}) {
     baseUrl,
     tmpDir,
     testDb,
+    cutoverDbPath: options.cutoverDbPath || path.join(tmpDir, 'cutover_state.sqlite3'),
     runId,
     teardown,
   };

@@ -26,9 +26,11 @@ export function useChatViewport() {
 }
 
 export function hiddenChatScope({ activeDatasetId, activeSheetId, activeSnapshotId, activePage }) {
-  const sheetId = Number(new URLSearchParams(window.location.search).get('sheet_id'));
+  const searchP = new URLSearchParams(window.location.search);
+  const urlDatasetId = Number(searchP.get('dataset_id'));
+  const sheetId = Number(searchP.get('sheet_id'));
   return {
-    datasetId: activeDatasetId ?? null,
+    datasetId: activeDatasetId ?? (Number.isSafeInteger(urlDatasetId) && urlDatasetId > 0 ? urlDatasetId : null),
     sheetId: activeSheetId ?? (Number.isSafeInteger(sheetId) && sheetId > 0 ? sheetId : null),
     snapshotId: activeSnapshotId ?? null,
     page: activePage ?? null,
