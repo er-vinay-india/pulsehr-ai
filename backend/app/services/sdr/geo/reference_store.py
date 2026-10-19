@@ -22,6 +22,7 @@ from app.services.sdr.geo.contracts import (
 
 
 DEFAULT_REFERENCE_PATH = Path(__file__).parent / "reference" / "geo_reference_data.json"
+DEFAULT_MANIFEST_PATH = Path(__file__).parent / "reference" / "geo_reference_manifest.json"
 
 
 class GeoReferenceStore:
@@ -169,3 +170,11 @@ class GeoReferenceStore:
     def find_entities_by_alias(self, normalized_name: str) -> list[CanonicalGeoEntity]:
         """Looks up entities matching a normalized name or alias."""
         return self.entities_by_alias.get(normalized_name.strip().lower(), [])
+
+    def get_manifest(self, manifest_path: Path | None = None) -> dict[str, Any]:
+        """Returns the audited provenance, licensing, and traceability manifest."""
+        target_path = manifest_path or DEFAULT_MANIFEST_PATH
+        if target_path.exists():
+            with open(target_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        return {"error": "Manifest file not found", "path": str(target_path)}

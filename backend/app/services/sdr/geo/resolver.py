@@ -49,12 +49,14 @@ class GeoResolutionEngine:
         reference_store: GeoReferenceStore | None = None,
         provider_version: str = "1.0.0",
         min_confidence: float = 0.85,
+        policy_fingerprint: str = "",
     ):
         self.store = reference_store or GeoReferenceStore()
         self.hierarchy_validator = GeoHierarchyValidator(self.store)
         self.provider_version = provider_version
         self.reference_data_version = self.store.reference_version
         self.min_confidence = min_confidence
+        self.policy_fingerprint = policy_fingerprint
 
         # Bounded deterministic resolution cache: key -> GeoResolutionCandidate
         self._cache: dict[str, GeoResolutionCandidate] = {}
@@ -67,11 +69,15 @@ class GeoResolutionEngine:
         country_context: str | None,
         state_context: str | None,
         column_role: SemanticColumnRole | None,
+        expected_level: GeoLevel | None = None,
+        policy_fingerprint: str = "",
     ) -> str:
         c_code = country_context.upper() if country_context else ""
         s_code = state_context.upper() if state_context else ""
         role_str = column_role.value if column_role else ""
-        return f"{norm_val}::{c_code}::{s_code}::{role_str}::{self.provider_version}::{self.reference_data_version}"
+        lvl_str = expected_level.value if expected_level else ""
+        ref_ver = self.store.reference_version or self.reference_data_version
+        return f"{norm_val}::{c_code}::{s_code}::{role_str}::{lvl_str}::{self.provider_version}::{ref_ver}::{policy_fingerprint}"
 
     def resolve_token(
         self,
@@ -81,17 +87,21 @@ class GeoResolutionEngine:
         state_context: str | None = None,
         phone_hint: str | None = None,
         expected_level: GeoLevel | None = None,
+        policy_fingerprint: str | None = None,
     ) -> GeoResolutionCandidate:
         """
         Resolves a single geographic string token against local reference evidence.
         """
+        active_policy_fp = self.policy_fingerprint if policy_fingerprint is None else policy_fingerprint
+        active_ref_ver = self.store.reference_version or self.reference_data_version
+
         if raw_value is None:
             return GeoResolutionCandidate(
                 source_value="",
                 normalized_input="",
                 resolution_status=GeoResolutionStatus.UNRESOLVED,
                 provider_version=self.provider_version,
-                reference_data_version=self.reference_data_version,
+                reference_data_version=active_ref_ver,
             )
 
         str_val = str(raw_value).strip()
@@ -101,7 +111,7 @@ class GeoResolutionEngine:
                 normalized_input="",
                 resolution_status=GeoResolutionStatus.UNRESOLVED,
                 provider_version=self.provider_version,
-                reference_data_version=self.reference_data_version,
+                reference_data_version=active_ref_ver,
             )
 
         norm_input = normalize_for_lookup(str_val)
@@ -127,11 +137,13 @@ class GeoResolutionEngine:
                 disambiguation_evidence=["Non-geographic false positive guard: Column is not identified as geographic context."],
                 source_column_id=col_id,
                 provider_version=self.provider_version,
-                reference_data_version=self.reference_data_version,
+                reference_data_version=active_ref_ver,
             )
 
         # 2. Check Bounded Cache
-        cache_key = self._make_cache_key(norm_input, country_context, state_context, col_role)
+        cache_key = self._make_cache_key(
+            norm_input, country_context, state_context, col_role, expected_level, active_policy_fp
+        )
         if cache_key in self._cache:
             self._cache_hits += 1
             cached = self._cache[cache_key]
@@ -248,7 +260,8 @@ class GeoResolutionEngine:
                 resolved_entity_id=target.geo_entity_id,
                 candidate_ids=[target.geo_entity_id],
                 provider_version=self.provider_version,
-                reference_data_version=self.reference_data_version,
+                reference_data_version=active_ref_ver,
+                policy_fingerprint=active_policy_fp,
             )
 
             res = GeoResolutionCandidate(
@@ -263,7 +276,7 @@ class GeoResolutionEngine:
                 disambiguation_evidence=disambiguation_notes or ["Deterministic exact reference match."],
                 source_column_id=col_id,
                 provider_version=self.provider_version,
-                reference_data_version=self.reference_data_version,
+                reference_data_version=active_ref_ver,
                 artifact_fingerprint=fp,
             )
             self._cache[cache_key] = res
@@ -277,7 +290,8 @@ class GeoResolutionEngine:
             resolved_entity_id=None,
             candidate_ids=[e.geo_entity_id for e in filtered_entities],
             provider_version=self.provider_version,
-            reference_data_version=self.reference_data_version,
+            reference_data_version=active_ref_ver,
+            policy_fingerprint=active_policy_fp,
         )
         res = GeoResolutionCandidate(
             source_value=str_val,
@@ -293,7 +307,7 @@ class GeoResolutionEngine:
             ],
             source_column_id=col_id,
             provider_version=self.provider_version,
-            reference_data_version=self.reference_data_version,
+            reference_data_version=active_ref_ver,
             artifact_fingerprint=fp,
         )
         self._cache[cache_key] = res
@@ -371,6 +385,7 @@ class GeoResolutionEngine:
         state_context: str | None = None,
         country_context: str | None = None,
         column_profile: SemanticColumnProfile | None = None,
+        policy_fingerprint: str | None = None,
     ) -> GeoResolutionCandidate:
         """Dedicated city resolver with level filtering to GeoLevel.CITY."""
         return self.resolve_token(
@@ -379,6 +394,7 @@ class GeoResolutionEngine:
             country_context=country_context,
             state_context=state_context,
             expected_level=GeoLevel.CITY,
+            policy_fingerprint=policy_fingerprint,
         )
 
     def resolve_composite_hierarchy(

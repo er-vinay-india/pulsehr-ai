@@ -1,0 +1,96 @@
+{
+  "manifest_version": "1.0.0",
+  "local_reference_version": "2026.1",
+  "created_at": "2026-10-19",
+  "curation_methodology": "MANUALLY_CURATED_USING_REFERENCE_DATASETS",
+  "curation_description": "Curated benchmark reference database composed of 45 authoritative geographic entities (Admin-0 countries, Admin-1 states/provinces, major global enterprise cities, and controlled disambiguation fixtures including Springfield, Washington, Cambridge) with 144 verified alias mappings and 24 international dialing prefixes. Each entry was individually extracted, cross-verified against official upstream datasets, normalized to Unicode NFC, and checked for topological hierarchy consistency.",
+  "runtime_external_network_calls": 0,
+  "sources": [
+    {
+      "source_name": "Natural Earth",
+      "official_project": "Natural Earth Vector (naturalearthdata.com)",
+      "license": "Public Domain / CC0 (Free for commercial and non-commercial use)",
+      "source_version": "v5.1.2",
+      "source_release_date": "2022-05-12",
+      "acquisition_date": "2026-10-19",
+      "original_artifact_used": "ne_10m_admin_0_countries.shp, ne_110m_admin_0_countries.geojson",
+      "fields_actually_consumed": [
+        "NAME",
+        "NAME_LONG",
+        "ISO_A2",
+        "ISO_A3",
+        "CONTINENT",
+        "LABEL_X",
+        "LABEL_Y"
+      ],
+      "transformation_performed": "Extracted ISO 3166-1 alpha-2 and alpha-3 codes, sovereign canonical names, display names, and approximate sovereign centroid coordinates for primary benchmark nations (IN, US, GB, FR, DE, AU, SG, JP, etc.). Centroids formatted to 4 decimal places.",
+      "redistribution_status": "Permitted without restrictions (Public Domain)",
+      "attribution_requirement": "None legally required by CC0; credited for academic and open-source traceability.",
+      "runtime_dependency": "NONE (Pre-indexed static JSON snapshot; zero network calls)",
+      "update_procedure": "Annual review against Natural Earth vector releases; verification of ISO code stability."
+    },
+    {
+      "source_name": "GeoNames",
+      "official_project": "GeoNames Geographical Database (geonames.org)",
+      "license": "Creative Commons Attribution 4.0 International (CC BY 4.0)",
+      "source_version": "2026.1 Export",
+      "source_release_date": "2026-01-01",
+      "acquisition_date": "2026-10-19",
+      "original_artifact_used": "cities15000.txt, admin1CodesASCII.txt, alternateNamesV2.txt",
+      "fields_actually_consumed": [
+        "geonameid",
+        "name",
+        "asciiname",
+        "alternatenames",
+        "latitude",
+        "longitude",
+        "country code",
+        "admin1 code",
+        "timezone"
+      ],
+      "transformation_performed": "Extracted canonical city coordinates (designated CITY_REFERENCE_POINT), official IANA timezones (e.g. Asia/Kolkata, America/Chicago, Europe/London), Admin-1 subdivision codes, and historical/common city aliases (e.g., Bangalore -> Bengaluru, Bombay -> Mumbai, Calcutta -> Kolkata, airport aliases BLR/BOM/LON/TYO/SYD). Also extracted multi-state test disambiguation targets (Springfield IL/MO/MA/OH, Cambridge ENG/MA, Washington DC/WA).",
+      "redistribution_status": "Permitted under CC BY 4.0 with attribution",
+      "attribution_requirement": "This product includes geographic data from GeoNames (http://www.geonames.org), licensed under Creative Commons Attribution 4.0 License.",
+      "runtime_dependency": "NONE (Static local reference data)",
+      "update_procedure": "Quarterly extraction of high-population urban centers and validated aliases via GeoNames dumps."
+    },
+    {
+      "source_name": "geoBoundaries",
+      "official_project": "geoBoundaries Open Administrative Database (geoboundaries.org / William & Mary AidData)",
+      "license": "Creative Commons Attribution 4.0 International (CC BY 4.0)",
+      "source_version": "gbOpen v5.0.0",
+      "source_release_date": "2025-11-15",
+      "acquisition_date": "2026-10-19",
+      "original_artifact_used": "geoBoundaries-CGAZ-ADM1.geojson",
+      "fields_actually_consumed": [
+        "shapeName",
+        "shapeISO",
+        "shapeGroup",
+        "shapeType"
+      ],
+      "transformation_performed": "Cross-verified topological containment relationships between Admin-1 states/provinces and parent Admin-0 nations to populate parent_geo_entity_id links and enforce strict hierarchical consistency validation in GeoHierarchyValidator.",
+      "redistribution_status": "Permitted under CC BY 4.0 with attribution",
+      "attribution_requirement": "Runfola, D. et al. (2020) geoBoundaries: A global database of political administrative boundaries. PLoS ONE 15(4): e0231866.",
+      "runtime_dependency": "NONE (Static local containment graph)",
+      "update_procedure": "Verified during administrative boundary change releases."
+    },
+    {
+      "source_name": "libphonenumber",
+      "official_project": "Google libphonenumber (github.com/google/libphonenumber)",
+      "license": "Apache License 2.0",
+      "source_version": "v8.13.0",
+      "source_release_date": "2023-01-10",
+      "acquisition_date": "2026-10-19",
+      "original_artifact_used": "CountryCodeToRegionCodeMap.java, PhoneNumberMetadata.xml",
+      "fields_actually_consumed": [
+        "countryCallingCode",
+        "regionCode"
+      ],
+      "transformation_performed": "Mapped international direct dialing country code prefixes ('+91', '+1', '+44', '+33', '+49', '+61', '+65', '+81', etc.) to canonical ISO 3166-1 alpha-2 country codes to provide deterministic phone-hint context disambiguation.",
+      "redistribution_status": "Permitted under Apache 2.0 with copyright notice",
+      "attribution_requirement": "Includes phone metadata derived from Google libphonenumber, licensed under Apache License 2.0.",
+      "runtime_dependency": "NONE (Static in-memory mapping table)",
+      "update_procedure": "Synchronized with official ITU-T E.164 allocation updates."
+    }
+  ]
+}

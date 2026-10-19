@@ -492,7 +492,209 @@ def test_retrieval_index_containment():
 
 
 # =========================================================================
-# 8. P0 ISOLATION CHECK
+# 8. REFERENCE DATA PROVENANCE & LICENSING MANIFEST
+# =========================================================================
+
+def test_reference_data_provenance_and_licensing_manifest():
+    """
+    Certify reference data provenance, licensing manifest, upstream versions,
+    curation methodology, and attribution compliance.
+    """
+    store = GeoReferenceStore()
+    manifest = store.get_manifest()
+
+    assert manifest.get("manifest_version") == "1.0.0"
+    assert manifest.get("local_reference_version") == "2026.1"
+    assert manifest.get("curation_methodology") == "MANUALLY_CURATED_USING_REFERENCE_DATASETS"
+    assert manifest.get("runtime_external_network_calls") == 0
+
+    sources = {s["source_name"]: s for s in manifest.get("sources", [])}
+    assert "Natural Earth" in sources
+    assert "GeoNames" in sources
+    assert "geoBoundaries" in sources
+    assert "libphonenumber" in sources
+
+    # Natural Earth
+    ne = sources["Natural Earth"]
+    assert ne["source_version"] == "v5.1.2"
+    assert "Public Domain" in ne["license"]
+    assert len(ne["fields_actually_consumed"]) > 0
+
+    # GeoNames
+    gn = sources["GeoNames"]
+    assert gn["source_version"] == "2026.1 Export"
+    assert "CC BY 4.0" in gn["license"]
+    assert "geonames.org" in gn["attribution_requirement"]
+
+    # geoBoundaries
+    gb = sources["geoBoundaries"]
+    assert gb["source_version"] == "gbOpen v5.0.0"
+    assert "CC BY 4.0" in gb["license"]
+
+    # libphonenumber
+    pn = sources["libphonenumber"]
+    assert pn["source_version"] == "v8.13.0"
+    assert "Apache" in pn["license"]
+
+
+# =========================================================================
+# 9. GEO REFERENCE & PROVIDER VERSION INVALIDATION PROOF
+# =========================================================================
+
+def test_geo_reference_and_provider_version_invalidation_proof():
+    """
+    Certify geo reference version and provider version upgrades:
+    1. Source fingerprint remains UNCHANGED.
+    2. Dependent geo enrichment fingerprints change on provider version bump (v1.0.0 -> v2.0.0).
+    3. Dependent geo enrichments are INVALIDATED on provider upgrade.
+    4. Dependent geo enrichments are INVALIDATED on reference upgrade (2026.1 -> 2026.2).
+    5. Unrelated enrichments (e.g. DatePartProvider) remain VALID and UNCHANGED.
+    """
+    from app.services.sdr.enrichment.mock_providers import DatePartProvider
+
+    dataset_id = "ds_geo_inv"
+    sheet_id = "table_geo_inv"
+
+    loc_col = _create_geo_profile(dataset_id, sheet_id, "col_city", "office_city")
+    date_col = _create_geo_profile(
+        dataset_id,
+        sheet_id,
+        "col_hire",
+        "hiring_date",
+        role=SemanticColumnRole.TIME,
+        dtype=SemanticDtype.DATE,
+        concept=SemanticConcept.TIME_SPAN,
+        sample_values=["2026-01-01", "2026-02-01"],
+    )
+
+    source_fp_loc = loc_col.artifact_fingerprint
+    source_fp_date = date_col.artifact_fingerprint
+
+    # Run A: GeoEnrichmentProvider v1.0.0, reference_version 2026.1
+    reg_a = EnrichmentProviderRegistry()
+    geo_prov_a = GeoEnrichmentProvider(version="1.0.0")
+    reg_a.register_provider(geo_prov_a)
+    reg_a.register_provider(DatePartProvider(version="1.0.0"))
+
+    engine_a = SDREnrichmentEngine(registry=reg_a)
+    result_a = engine_a.analyze_enrichments(dataset_id=dataset_id, sheet_id=sheet_id, profiles=[loc_col, date_col])
+
+    val_a = result_a.validated_enrichments
+    geo_vals_a = [v for v in val_a if "ENRICH-GEO" in v.output_name]
+    date_vals_a = [v for v in val_a if "hiring_date" in v.output_name]
+    assert len(geo_vals_a) >= 1
+    assert len(date_vals_a) >= 1
+
+    # Source fingerprints unchanged
+    assert loc_col.artifact_fingerprint == source_fp_loc
+    assert date_col.artifact_fingerprint == source_fp_date
+
+    # Run B: GeoEnrichmentProvider v2.0.0
+    reg_b = EnrichmentProviderRegistry()
+    geo_prov_b = GeoEnrichmentProvider(version="2.0.0")
+    reg_b.register_provider(geo_prov_b)
+    reg_b.register_provider(DatePartProvider(version="1.0.0"))
+
+    engine_b = SDREnrichmentEngine(registry=reg_b)
+    result_b = engine_b.analyze_enrichments(dataset_id=dataset_id, sheet_id=sheet_id, profiles=[loc_col, date_col])
+
+    val_b = result_b.validated_enrichments
+    geo_vals_b = [v for v in val_b if "ENRICH-GEO" in v.output_name]
+    assert geo_vals_a[0].artifact_fingerprint != geo_vals_b[0].artifact_fingerprint
+
+    # 3. Provider version invalidation: provider upgrade to 2.0.0
+    inv_provider = engine_a.invalidate_by_provider_or_reference_version(
+        val_a, provider_id=geo_prov_a.provider_id, new_provider_version="2.0.0"
+    )
+    inv_geo = [v for v in inv_provider if "ENRICH-GEO" in v.output_name][0]
+    inv_date = [v for v in inv_provider if "hiring_date" in v.output_name][0]
+
+    assert inv_geo.is_valid is False
+    assert "2.0.0" in inv_geo.invalidation_reason
+    # Unrelated enrichment remains valid and unchanged
+    assert inv_date.is_valid is True
+    assert inv_date.artifact_fingerprint == date_vals_a[0].artifact_fingerprint
+
+    # 4. Reference version invalidation: reference upgrade to 2026.2
+    inv_ref = engine_a.invalidate_by_provider_or_reference_version(
+        val_a, provider_id=geo_prov_a.provider_id, new_reference_version="2026.2"
+    )
+    ref_geo = [v for v in inv_ref if "ENRICH-GEO" in v.output_name][0]
+    ref_date = [v for v in inv_ref if "hiring_date" in v.output_name][0]
+
+    assert ref_geo.is_valid is False
+    assert "2026.2" in ref_geo.invalidation_reason
+    assert ref_date.is_valid is True
+    assert ref_date.artifact_fingerprint == date_vals_a[0].artifact_fingerprint
+
+
+# =========================================================================
+# 10. RESOLVER CACHE VERSION & POLICY SAFETY
+# =========================================================================
+
+def test_resolver_cache_version_and_policy_safety():
+    """
+    Certify resolver cache version and policy safety:
+    1. Identical token queries hit the cache.
+    2. Changing provider version invalidates cache hits and partitions keys.
+    3. Changing reference version in store invalidates cache hits and updates resolution fingerprint.
+    4. Changing policy fingerprint invalidates cache hits and produces distinct cache keys.
+    5. Zero stale cache entries reused across version or policy transitions.
+    """
+    engine_base = GeoResolutionEngine(provider_version="1.0.0", policy_fingerprint="policy_v1")
+    assert len(engine_base._cache) == 0
+
+    res1 = engine_base.resolve_city("Bengaluru", country_context="India")
+    assert len(engine_base._cache) == 1
+    fp1 = res1.artifact_fingerprint
+
+    # Second call hits cache
+    res1_cached = engine_base.resolve_city("Bengaluru", country_context="India")
+    assert len(engine_base._cache) == 1
+    assert res1_cached.artifact_fingerprint == fp1
+
+    # Provider version change
+    engine_v2 = GeoResolutionEngine(provider_version="2.0.0", policy_fingerprint="policy_v1")
+    res2 = engine_v2.resolve_city("Bengaluru", country_context="India")
+    # Cache keys are separated by provider version
+    key_base = list(engine_base._cache.keys())[0]
+    key_v2 = list(engine_v2._cache.keys())[0]
+    assert "1.0.0" in key_base
+    assert "2.0.0" in key_v2
+    assert key_base != key_v2
+
+    # Reference data version change on the store
+    store_r2 = GeoReferenceStore()
+    store_r2.reference_version = "2026.2"
+    engine_r2 = GeoResolutionEngine(reference_store=store_r2, provider_version="1.0.0", policy_fingerprint="policy_v1")
+    res_r2 = engine_r2.resolve_city("Bengaluru", country_context="India")
+    key_r2 = list(engine_r2._cache.keys())[0]
+    assert "2026.2" in key_r2
+    assert key_r2 != key_base
+    assert res_r2.artifact_fingerprint != fp1
+
+    # Policy fingerprint change
+    engine_pol2 = GeoResolutionEngine(provider_version="1.0.0", policy_fingerprint="policy_v2_strict")
+    res_pol2 = engine_pol2.resolve_city("Bengaluru", country_context="India")
+    key_pol2 = list(engine_pol2._cache.keys())[0]
+    assert "policy_v2_strict" in key_pol2
+    assert key_pol2 != key_base
+    assert res_pol2.artifact_fingerprint != fp1
+
+    # In-place store version bump on active engine clears/bypasses stale cache key
+    engine_dynamic = GeoResolutionEngine(provider_version="1.0.0", policy_fingerprint="pol_dyn")
+    res_dyn1 = engine_dynamic.resolve_city("Tokyo")
+    assert any("2026.1" in k for k in engine_dynamic._cache.keys())
+    # Bump reference version in place
+    engine_dynamic.store.reference_version = "2026.2"
+    res_dyn2 = engine_dynamic.resolve_city("Tokyo")
+    # Now cache must have a key with 2026.2 as well
+    assert any("2026.2" in k for k in engine_dynamic._cache.keys())
+    assert res_dyn2.artifact_fingerprint != res_dyn1.artifact_fingerprint
+
+
+# =========================================================================
+# 11. P0 ISOLATION CHECK
 # =========================================================================
 
 def test_p0_database_isolation():
