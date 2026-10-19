@@ -27,6 +27,11 @@ from app.services.sdr.contracts.relationships import (
     SDRRelationshipCandidate,
     SDRValidatedRelationshipEdge,
 )
+from app.services.sdr.contracts.views import (
+    SDRAnalyticalExecutionResult,
+    SDRAnalyticalFact,
+    SDRAnalyticalViewSpec,
+)
 from app.services.sdr.geo.contracts import CanonicalGeoEntity, GeoResolutionCandidate
 
 
@@ -473,6 +478,93 @@ class SDRArtifactWriter:
             "sdr5_manifest": str(manifest_path),
             "manifest_fingerprint": manifest_hash,
         }
+
+    def write_sdr6_artifacts(
+        self,
+        dataset_id: str,
+        views: Sequence[SDRAnalyticalViewSpec],
+        facts: Sequence[SDRAnalyticalFact],
+        execution_results: Sequence[SDRAnalyticalExecutionResult] | None = None,
+        policy_suite: SDRPolicySuite | None = None,
+        stats: dict[str, Any] | None = None,
+    ) -> dict[str, str]:
+        """
+        Writes canonical SDR-6 artifacts:
+        - analytical_views.json
+        - analytical_facts.json
+        - analytical_execution_manifest.json
+        - sdr6_manifest.json
+        Returns a dict of file paths to their deterministic SHA-256 hashes.
+        """
+        sdr_dir = self.get_dataset_sdr_dir(dataset_id)
+        policy = policy_suite or SDRPolicySuite()
+        policy_fp = policy.compute_policy_fingerprint()
+
+        # 1. Analytical Views
+        sorted_views = sorted(views, key=lambda v: v.analytical_view_id)
+        view_data = [v.model_dump() for v in sorted_views]
+        view_json = json.dumps(view_data, indent=2, sort_keys=True)
+        view_path = sdr_dir / "analytical_views.json"
+        view_path.write_text(view_json, encoding="utf-8")
+        view_hash = hashlib.sha256(view_json.encode("utf-8")).hexdigest()
+
+        # 2. Analytical Facts
+        sorted_facts = sorted(facts, key=lambda f: f.fact_id)
+        fact_data = [f.model_dump() for f in sorted_facts]
+        fact_json = json.dumps(fact_data, indent=2, sort_keys=True)
+        fact_path = sdr_dir / "analytical_facts.json"
+        fact_path.write_text(fact_json, encoding="utf-8")
+        fact_hash = hashlib.sha256(fact_json.encode("utf-8")).hexdigest()
+
+        # 3. Execution Results
+        exec_list = list(execution_results or [])
+        sorted_execs = sorted(exec_list, key=lambda r: r.view_id)
+        exec_data = [r.model_dump() for r in sorted_execs]
+        exec_json = json.dumps(exec_data, indent=2, sort_keys=True)
+        exec_path = sdr_dir / "analytical_execution_manifest.json"
+        exec_path.write_text(exec_json, encoding="utf-8")
+        exec_hash = hashlib.sha256(exec_json.encode("utf-8")).hexdigest()
+
+        # 4. SDR-6 Manifest
+        valid_views_count = sum(1 for v in sorted_views if v.status == "VALID")
+        preagg_views_count = sum(1 for v in sorted_views if v.status == "VALID_WITH_PREAGGREGATION")
+        ambiguous_views_count = sum(1 for v in sorted_views if v.status == "AMBIGUOUS")
+        unsafe_views_count = sum(1 for v in sorted_views if v.status == "UNSAFE")
+        stale_views_count = sum(1 for v in sorted_views if v.status == "STALE")
+
+        manifest = {
+            "dataset_id": dataset_id,
+            "policy_fingerprint": policy_fp,
+            "views_count": len(sorted_views),
+            "facts_count": len(sorted_facts),
+            "executions_count": len(sorted_execs),
+            "view_status_summary": {
+                "valid": valid_views_count,
+                "valid_with_preaggregation": preagg_views_count,
+                "ambiguous": ambiguous_views_count,
+                "unsafe": unsafe_views_count,
+                "stale": stale_views_count,
+            },
+            "analytical_views_hash": view_hash,
+            "analytical_facts_hash": fact_hash,
+            "analytical_execution_manifest_hash": exec_hash,
+        }
+        if stats:
+            manifest["stats"] = stats
+
+        manifest_json = json.dumps(manifest, indent=2, sort_keys=True)
+        manifest_path = sdr_dir / "sdr6_manifest.json"
+        manifest_path.write_text(manifest_json, encoding="utf-8")
+        manifest_hash = hashlib.sha256(manifest_json.encode("utf-8")).hexdigest()
+
+        return {
+            "analytical_views": str(view_path),
+            "analytical_facts": str(fact_path),
+            "analytical_execution_manifest": str(exec_path),
+            "sdr6_manifest": str(manifest_path),
+            "manifest_fingerprint": manifest_hash,
+        }
+
 
 
 

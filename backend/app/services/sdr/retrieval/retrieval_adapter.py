@@ -27,6 +27,10 @@ from app.services.sdr.contracts.relationships import (
     SDRRelationshipCandidate,
     SDRValidatedRelationshipEdge,
 )
+from app.services.sdr.contracts.views import (
+    SDRAnalyticalFact,
+    SDRAnalyticalViewSpec,
+)
 from app.services.sdr.geo.contracts import CanonicalGeoEntity, GeoResolutionCandidate
 
 
@@ -721,4 +725,91 @@ class SDRRetrievalAdapter:
             text_for_retrieval=text,
             structured_metadata=metadata,
         )
+
+    @staticmethod
+    def build_analytical_view_document(
+        view: SDRAnalyticalViewSpec,
+        dataset_version: str = "v1",
+        source_fingerprint: str = "source_hash",
+    ) -> RetrievalDocument:
+        """Emits an analytical view metadata document strictly to ANALYTICAL_INDEX."""
+        doc_id = f"analytical_view_{view.dataset_id}_{view.analytical_view_id}"
+        dims = ", ".join(view.dimension_columns)
+        measures = ", ".join(view.measure_columns + [d.measure_name for d in view.derived_measure_specs])
+        text = (
+            f"AnalyticalView {view.analytical_view_id} ({view.name}) over sheets [{', '.join(view.source_sheet_ids)}]. "
+            f"Result grain: {view.result_grain}. Dimensions: [{dims}]. Measures: [{measures}]. "
+            f"Materialization: {view.materialization_mode.value}. Status: {view.status.value}."
+        )
+        metadata = {
+            "analytical_view_id": view.analytical_view_id,
+            "dataset_id": view.dataset_id,
+            "name": view.name,
+            "source_sheet_ids": view.source_sheet_ids,
+            "join_plan_ids": view.join_plan_ids,
+            "base_grain": view.base_grain,
+            "result_grain": view.result_grain,
+            "dimension_columns": view.dimension_columns,
+            "measure_columns": view.measure_columns,
+            "materialization_mode": view.materialization_mode.value,
+            "status": view.status.value,
+            "artifact_fingerprint": view.artifact_fingerprint,
+            "target_index": "ANALYTICAL_INDEX",
+        }
+
+        return RetrievalDocument.create(
+            document_id=doc_id,
+            namespace=RetrievalNamespace.ANALYTICAL,
+            authority_class=AuthorityClass.ANALYTICAL_EVIDENCE,
+            dataset_id=view.dataset_id,
+            dataset_version=dataset_version,
+            source_fingerprint=source_fingerprint,
+            artifact_type="AnalyticalViewDoc",
+            artifact_id=view.analytical_view_id,
+            text_for_retrieval=text,
+            structured_metadata=metadata,
+        )
+
+    @staticmethod
+    def build_analytical_fact_document(
+        fact: SDRAnalyticalFact,
+        dataset_version: str = "v1",
+        source_fingerprint: str = "source_hash",
+    ) -> RetrievalDocument:
+        """Emits an analytical fact document strictly to ANALYTICAL_INDEX."""
+        doc_id = f"analytical_fact_{fact.dataset_id}_{fact.fact_id}"
+        text = (
+            f"AnalyticalFact {fact.fact_id}: metric '{fact.metric}' = {fact.formatted_value} "
+            f"at grain '{fact.grain}'. Provenance: {fact.provenance_type}. "
+            f"View: {fact.analytical_view_id}."
+        )
+        metadata = {
+            "fact_id": fact.fact_id,
+            "metric": fact.metric,
+            "value": fact.value,
+            "formatted_value": fact.formatted_value,
+            "unit": fact.unit,
+            "grain": fact.grain,
+            "denominator_value": fact.denominator_value,
+            "dataset_id": fact.dataset_id,
+            "analytical_view_id": fact.analytical_view_id,
+            "join_plan_ids": fact.join_plan_ids,
+            "provenance_type": fact.provenance_type,
+            "artifact_fingerprint": fact.artifact_fingerprint,
+            "target_index": "ANALYTICAL_INDEX",
+        }
+
+        return RetrievalDocument.create(
+            document_id=doc_id,
+            namespace=RetrievalNamespace.ANALYTICAL,
+            authority_class=AuthorityClass.ANALYTICAL_EVIDENCE,
+            dataset_id=fact.dataset_id,
+            dataset_version=dataset_version,
+            source_fingerprint=source_fingerprint,
+            artifact_type="AnalyticalFactDoc",
+            artifact_id=fact.fact_id,
+            text_for_retrieval=text,
+            structured_metadata=metadata,
+        )
+
 

@@ -84,6 +84,21 @@ from app.services.sdr.contracts.relationships import (
     compute_relationship_candidate_fingerprint,
     compute_validated_edge_fingerprint,
 )
+from app.services.sdr.contracts.views import (
+    ControlledExpression,
+    ExpressionOp,
+    MaterializationMode,
+    MissingValuePolicy,
+    SDRAnalyticalExecutionResult,
+    SDRAnalyticalFact,
+    SDRAnalyticalViewSpec,
+    SDRAnalyticalViewStatus,
+    SDRDerivedMeasureSpec,
+    SDRFilterConstraint,
+    check_analytical_view_invalidation,
+    compute_analytical_fact_fingerprint,
+    compute_analytical_view_fingerprint,
+)
 
 __all__ = [
     "EnrichmentMaterializationPolicy",
@@ -150,5 +165,19 @@ __all__ = [
     "compute_join_plan_fingerprint",
     "compute_relationship_candidate_fingerprint",
     "compute_validated_edge_fingerprint",
+    "ControlledExpression",
+    "ExpressionOp",
+    "MaterializationMode",
+    "MissingValuePolicy",
+    "SDRAnalyticalExecutionResult",
+    "SDRAnalyticalFact",
+    "SDRAnalyticalViewSpec",
+    "SDRAnalyticalViewStatus",
+    "SDRDerivedMeasureSpec",
+    "SDRFilterConstraint",
+    "check_analytical_view_invalidation",
+    "compute_analytical_fact_fingerprint",
+    "compute_analytical_view_fingerprint",
 ]
+
 
