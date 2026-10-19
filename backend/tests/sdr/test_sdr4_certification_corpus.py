@@ -171,7 +171,13 @@ def test_corpus_10_core_enrichment_cases():
     for d in ambig_dec:
         assert d.decision == EnrichmentDecisionType.AMBIGUOUS
 
-    # Case 5: Sensitive inferred attribute blocked (0 accepted!)
+    # Case 5A: Direct Identifier Safe Internal Use -> ACCEPTED
+    emp_val = [v for v in validated if "emp_id" in v.output_name]
+    assert len(emp_val) == 1
+    assert emp_val[0].output_name == "emp_id_name"
+    assert emp_val[0].materialization == EnrichmentMaterialization.VIRTUAL_ENRICHMENT
+
+    # Case 5B: Direct Identifier Sensitive Inferred Attribute -> HARD BLOCKED
     sens_dec = [d for d in decisions if "health" in d.candidate_id]
     assert len(sens_dec) >= 1
     for d in sens_dec:
@@ -250,6 +256,79 @@ def test_corpus_artifact_persistence_and_determinism(tmp_path):
         sha1 = file_sha256(paths1[key])
         sha2 = file_sha256(paths2[key])
         assert sha1 == sha2, f"Artifact {key} SHA mismatch: {sha1} != {sha2}"
+
+
+def test_corpus_provider_and_reference_version_invalidation_proof():
+    """
+    Prove that provider version (v1 -> v2) and reference version (r1 -> r2) upgrades:
+    1. Keep source data fingerprint UNCHANGED.
+    2. Change candidate and validated enrichment fingerprints.
+    3. Invalidate dependent enrichments.
+    4. Keep unrelated enrichments completely valid and unchanged.
+    """
+    dataset_id = "ds_inv_corpus"
+    sheet_id = "table_inv"
+
+    dept_col = _create_profile(dataset_id, sheet_id, "col_dept", "dept_code", SemanticColumnRole.DIMENSION, SemanticDtype.CATEGORICAL_CODE)
+    hire_col = _create_profile(dataset_id, sheet_id, "col_hire", "hire_date", SemanticColumnRole.TIME, SemanticDtype.DATE)
+
+    # Initial Run A: provider v1.0.0, reference r2026.1
+    reg_a = EnrichmentProviderRegistry()
+    reg_a.register_provider(CodeLabelProvider(version="1.0.0", reference_version="2026.1"))
+    reg_a.register_provider(DatePartProvider(version="1.0.0"))
+
+    engine_a = SDREnrichmentEngine(registry=reg_a)
+    result_a = engine_a.analyze_enrichments(dataset_id=dataset_id, sheet_id=sheet_id, profiles=[dept_col, hire_col])
+
+    val_a = result_a.validated_enrichments
+    dept_val_a = [v for v in val_a if "dept_code" in v.output_name][0]
+    hire_val_a = [v for v in val_a if "hire_date" in v.output_name][0]
+
+    # Source fingerprint check
+    source_fp_dept = dept_col.artifact_fingerprint
+
+    # Upgraded Run B: Provider Version v2.0.0
+    reg_b = EnrichmentProviderRegistry()
+    reg_b.register_provider(CodeLabelProvider(version="2.0.0", reference_version="2026.1"))
+    reg_b.register_provider(DatePartProvider(version="1.0.0"))
+
+    engine_b = SDREnrichmentEngine(registry=reg_b)
+    result_b = engine_b.analyze_enrichments(dataset_id=dataset_id, sheet_id=sheet_id, profiles=[dept_col, hire_col])
+
+    val_b = result_b.validated_enrichments
+    dept_val_b = [v for v in val_b if "dept_code" in v.output_name][0]
+
+    # Verification:
+    # 1. Source fingerprint: UNCHANGED
+    assert dept_col.artifact_fingerprint == source_fp_dept
+
+    # 2. Candidate / Validated enrichment fingerprint: CHANGED
+    assert dept_val_a.artifact_fingerprint != dept_val_b.artifact_fingerprint
+
+    # 3. Dependent enrichment: INVALIDATED when provider upgrades
+    inv_provider = engine_a.invalidate_by_provider_or_reference_version(
+        val_a, provider_id="provider_code_label", new_provider_version="2.0.0"
+    )
+    inv_dept = [v for v in inv_provider if "dept_code" in v.output_name][0]
+    inv_hire = [v for v in inv_provider if "hire_date" in v.output_name][0]
+
+    assert inv_dept.is_valid is False
+    assert "2.0.0" in inv_dept.invalidation_reason
+
+    # 4. Unrelated enrichment: UNCHANGED and VALID
+    assert inv_hire.is_valid is True
+    assert inv_hire.artifact_fingerprint == hire_val_a.artifact_fingerprint
+
+    # 5. Reference Version r2026.2 Upgrade: INVALIDATED
+    inv_ref = engine_a.invalidate_by_provider_or_reference_version(
+        val_a, provider_id="provider_code_label", new_reference_version="2026.2"
+    )
+    ref_dept = [v for v in inv_ref if "dept_code" in v.output_name][0]
+    ref_hire = [v for v in inv_ref if "hire_date" in v.output_name][0]
+
+    assert ref_dept.is_valid is False
+    assert "2026.2" in ref_dept.invalidation_reason
+    assert ref_hire.is_valid is True
 
 
 def test_final_p0_integrity_check():

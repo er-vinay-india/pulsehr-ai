@@ -374,3 +374,152 @@ def test_governance_invariants_unviolated():
     assert "relationship_edges" not in result
     assert "join_plans" not in result
     assert "gold_metrics" not in result
+
+
+def test_direct_identifier_governance_internal_use_vs_unauthorized_exposure():
+    """
+    Direct identifiers may participate internally in governed deterministic processing.
+    Unauthorized exposure and sensitive inferences are strictly BLOCKED.
+    """
+    emp_id = _make_profile(
+        "col_emp", "emp_id",
+        SemanticColumnRole.IDENTIFIER, SemanticDtype.IDENTIFIER_CODE,
+        privacy=PrivacyClassification.DIRECT_IDENTIFIER,
+    )
+
+    reg = EnrichmentProviderRegistry()
+    reg.register_provider(CodeLabelProvider())
+    reg.register_provider(MockSensitiveInferenceProvider())
+
+    engine = SDREnrichmentEngine(registry=reg)
+    result = engine.analyze_enrichments(
+        dataset_id="ds_test",
+        sheet_id="sheet1",
+        profiles=[emp_id],
+        column_data={"col_emp": ["E101", "E102"]},
+    )
+
+    decisions = result.decisions
+    validated = result.validated_enrichments
+
+    # 1. Safe Internal Use: CodeLabelProvider looking up authorized label -> PASS
+    safe_dec = [d for d in decisions if "code" in d.candidate_id]
+    assert len(safe_dec) >= 1
+    assert safe_dec[0].hard_gate_passed is True
+    assert safe_dec[0].decision == EnrichmentDecisionType.ACCEPT
+    assert any(v.output_name == "emp_id_name" for v in validated)
+
+    # 2. Inferred Sensitive Attribute: MockSensitiveInferenceProvider -> HARD BLOCKED
+    sens_dec = [d for d in decisions if "health" in d.candidate_id]
+    assert len(sens_dec) >= 1
+    assert sens_dec[0].hard_gate_passed is False
+    assert sens_dec[0].decision == EnrichmentDecisionType.REJECT
+    assert not any("health" in v.output_name.lower() for v in validated)
+
+
+def test_materialization_policy_separation_from_utility():
+    """
+    Utility score determines ACCEPTANCE; Materialization policy determines PERSISTENCE.
+    High utility score alone NEVER authorizes physical materialization.
+    """
+    hire_date = _make_profile("col_hire", "hire_date", SemanticColumnRole.TIME, SemanticDtype.DATE)
+
+    # Case A: Default policy (default_mode=VIRTUAL)
+    engine = SDREnrichmentEngine()
+    result = engine.analyze_enrichments(
+        dataset_id="ds_test",
+        sheet_id="sheet1",
+        profiles=[hire_date],
+        materialize_all=False,
+    )
+    for v in result.validated_enrichments:
+        # Despite high utility (>= 0.85), default is VIRTUAL!
+        assert v.materialization == EnrichmentMaterialization.VIRTUAL_ENRICHMENT
+        assert v.output_values_reference is None
+        assert v.deterministic_projection_expression is not None
+
+    # Case B: Explicit request triggers materialization
+    result_explicit = engine.analyze_enrichments(
+        dataset_id="ds_test",
+        sheet_id="sheet1",
+        profiles=[hire_date],
+        materialize_all=True,
+    )
+    for v in result_explicit.validated_enrichments:
+        assert v.materialization == EnrichmentMaterialization.MATERIALIZED_ENRICHMENT
+        assert v.output_values_reference is not None
+
+
+def test_provider_and_reference_version_invalidation_proof():
+    """
+    Proves that provider version v1 -> v2 and reference data r1 -> r2:
+    - Leaves source fingerprint UNCHANGED
+    - Changes candidate and enrichment fingerprint
+    - Invalidates dependent enrichment (marked invalid)
+    - Preserves unrelated enrichment (remains valid)
+    """
+    dept_col = _make_profile("col_dept", "dept_code", SemanticColumnRole.DIMENSION, SemanticDtype.CATEGORICAL_CODE)
+    hire_col = _make_profile("col_hire", "hire_date", SemanticColumnRole.TIME, SemanticDtype.DATE)
+
+    # Initial Run: provider v1.0.0, reference 2026.1
+    reg1 = EnrichmentProviderRegistry()
+    reg1.register_provider(CodeLabelProvider(version="1.0.0", reference_version="2026.1"))
+    reg1.register_provider(DatePartProvider(version="1.0.0"))
+
+    engine1 = SDREnrichmentEngine(registry=reg1)
+    res1 = engine1.analyze_enrichments(
+        dataset_id="ds_test",
+        sheet_id="sheet1",
+        profiles=[dept_col, hire_col],
+    )
+
+    val1 = res1.validated_enrichments
+    dept_val1 = [v for v in val1 if "dept_code" in v.output_name][0]
+    hire_val1 = [v for v in val1 if "hire_date" in v.output_name][0]
+
+    # Source fingerprint of dept_col
+    src_fp1 = dept_col.artifact_fingerprint
+
+    # Upgraded Run: provider v2.0.0
+    reg2 = EnrichmentProviderRegistry()
+    reg2.register_provider(CodeLabelProvider(version="2.0.0", reference_version="2026.1"))
+    reg2.register_provider(DatePartProvider(version="1.0.0"))
+
+    engine2 = SDREnrichmentEngine(registry=reg2)
+    res2 = engine2.analyze_enrichments(
+        dataset_id="ds_test",
+        sheet_id="sheet1",
+        profiles=[dept_col, hire_col],
+    )
+
+    dept_val2 = [v for v in res2.validated_enrichments if "dept_code" in v.output_name][0]
+
+    # Proof:
+    # 1. Source fingerprint remains UNCHANGED
+    assert dept_col.artifact_fingerprint == src_fp1
+
+    # 2. Candidate / Validated enrichment fingerprint CHANGED
+    assert dept_val1.artifact_fingerprint != dept_val2.artifact_fingerprint
+
+    # 3. Dependent enrichment invalidated when checking version upgrade
+    invalidated_set = engine1.invalidate_by_provider_or_reference_version(
+        val1, provider_id="provider_code_label", new_provider_version="2.0.0"
+    )
+    inv_dept = [v for v in invalidated_set if "dept_code" in v.output_name][0]
+    inv_hire = [v for v in invalidated_set if "hire_date" in v.output_name][0]
+
+    assert inv_dept.is_valid is False
+    assert "2.0.0" in inv_dept.invalidation_reason
+
+    # 4. Unrelated enrichment remains UNCHANGED and VALID!
+    assert inv_hire.is_valid is True
+    assert inv_hire.artifact_fingerprint == hire_val1.artifact_fingerprint
+
+    # 5. Reference version upgrade invalidation
+    ref_invalidated = engine1.invalidate_by_provider_or_reference_version(
+        val1, provider_id="provider_code_label", new_reference_version="2026.2"
+    )
+    ref_dept = [v for v in ref_invalidated if "dept_code" in v.output_name][0]
+    assert ref_dept.is_valid is False
+    assert "2026.2" in ref_dept.invalidation_reason
+

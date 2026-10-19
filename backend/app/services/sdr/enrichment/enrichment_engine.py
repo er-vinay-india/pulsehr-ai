@@ -125,6 +125,7 @@ class SDREnrichmentEngine:
 
         enrichment_counts_per_col: dict[str, int] = {p.column_id: 0 for p in profiles}
         total_enrichments = 0
+        materialized_count = 0
 
         # 1. Candidate Opportunity Discovery
         for profile in profiles:
@@ -173,8 +174,19 @@ class SDREnrichmentEngine:
                 provider = self.registry.get_provider(cand.provider_id)
 
                 # Determine materialization policy
-                # Default is virtual projection; materialized when requested or justified
-                is_materialized = materialize_all
+                # Information gain evaluated whether enrichment was accepted.
+                # Materialization policy evaluates whether accepted enrichment is physically persisted.
+                # Utility score alone NEVER authorises physical materialization.
+                is_materialized = self.policy.materialization.should_materialize(
+                    explicit_request=materialize_all,
+                    expected_reuse_count=cand.information_gain_record.get("expected_reuse", 1),
+                    compute_cost=decision.compute_cost,
+                    current_materialized_count=materialized_count,
+                    dataset_size_bytes=0,
+                )
+                if is_materialized:
+                    materialized_count += 1
+
                 mat_type = (
                     EnrichmentMaterialization.MATERIALIZED_ENRICHMENT
                     if is_materialized
@@ -288,6 +300,44 @@ class SDREnrichmentEngine:
                 updated.append(e)
         return updated
 
+    def invalidate_by_provider_or_reference_version(
+        self,
+        enrichments: list[ValidatedEnrichment],
+        provider_id: str,
+        new_provider_version: str | None = None,
+        new_reference_version: str | None = None,
+    ) -> list[ValidatedEnrichment]:
+        """
+        Invalidates enrichments when provider version or reference data is upgraded.
+        Preserves unrelated enrichments.
+        """
+        updated: list[ValidatedEnrichment] = []
+        for e in enrichments:
+            if e.provider_id == provider_id:
+                invalidated = False
+                reason = ""
+                if new_provider_version and e.provider_version != new_provider_version:
+                    invalidated = True
+                    reason = f"Provider version upgraded to {new_provider_version}; derivation invalidated."
+                elif new_reference_version and e.reference_data_version != new_reference_version:
+                    invalidated = True
+                    reason = f"Reference data upgraded to {new_reference_version}; derivation invalidated."
+
+                if invalidated:
+                    updated.append(
+                        e.model_copy(
+                            update={
+                                "is_valid": False,
+                                "invalidation_reason": reason,
+                            }
+                        )
+                    )
+                else:
+                    updated.append(e)
+            else:
+                updated.append(e)
+        return updated
+
     def invalidate_by_provider_version(
         self,
         enrichments: list[ValidatedEnrichment],
@@ -295,19 +345,8 @@ class SDREnrichmentEngine:
         new_version: str,
     ) -> list[ValidatedEnrichment]:
         """
-        Invalidates enrichments when provider version or reference data is upgraded.
+        Invalidates enrichments when provider version is upgraded.
         """
-        updated: list[ValidatedEnrichment] = []
-        for e in enrichments:
-            if e.provider_id == provider_id and e.provider_version != new_version:
-                updated.append(
-                    e.model_copy(
-                        update={
-                            "is_valid": False,
-                            "invalidation_reason": f"Provider version upgraded to {new_version}; derivation invalidated.",
-                        }
-                    )
-                )
-            else:
-                updated.append(e)
-        return updated
+        return self.invalidate_by_provider_or_reference_version(
+            enrichments, provider_id, new_provider_version=new_version
+        )

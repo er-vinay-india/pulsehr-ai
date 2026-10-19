@@ -13,6 +13,7 @@ from typing import Tuple
 
 from app.services.sdr.contracts.enrichment import (
     EnrichmentCandidate,
+    EnrichmentProviderType,
     EnrichmentStatus,
 )
 from app.services.sdr.contracts.policies import EnrichmentPolicy
@@ -20,6 +21,7 @@ from app.services.sdr.contracts.profiles import (
     PrivacyClassification,
     ProfilingAmbiguityState,
     SemanticColumnProfile,
+    SemanticDtype,
 )
 from app.services.sdr.enrichment.provider import EnrichmentProviderRegistry
 
@@ -88,20 +90,46 @@ class HardGovernanceGateEvaluator:
             )
             return False, failures, EnrichmentStatus.AMBIGUOUS
 
-        # Gate 5: Direct Identifier Protection
+        # Gate 5: Direct Identifier Governance
         if source_profile and source_profile.privacy_classification == PrivacyClassification.DIRECT_IDENTIFIER:
-            # Direct identifiers cannot be casually enriched into general public attributes
-            if candidate.proposed_output_semantic_type != candidate.source_semantic_type:
-                # Allowed only if provider is deterministic code label or standard lookup
-                if provider.metadata.provider_type not in (
-                    provider.metadata.provider_type.LOCAL_REFERENCE,
-                    provider.metadata.provider_type.DETERMINISTIC_RULE,
-                ):
-                    failures.append(
-                        f"Direct identifier protection: Direct identifier '{source_profile.source_name}' "
-                        f"cannot be enriched via non-deterministic provider."
-                    )
-                    return False, failures, EnrichmentStatus.BLOCKED
+            # DIRECT IDENTIFIERS may participate internally in governed deterministic processing
+            # (e.g. employee_id used internally to lookup an authorized deterministic internal label).
+            # BLOCK only when enrichment would cause:
+            # 1. Unauthorized exposure / external leakage (non-deterministic or external provider)
+            # 2. Sensitive personal inference (predicted health, political, etc.)
+            # 3. Unsupported propagation or unnecessary identifier surfacing
+
+            # Check 1: Inferred sensitivity is blocked
+            if (
+                candidate.privacy_classification == PrivacyClassification.INFERRED_SENSITIVE_ATTRIBUTE
+                or any(term in candidate.proposed_output_name.lower() for term in PROHIBITED_SENSITIVE_TERMS)
+                or any(term in candidate.proposed_enrichment_type.lower() for term in PROHIBITED_SENSITIVE_TERMS)
+            ):
+                failures.append(
+                    f"Direct identifier unauthorized exposure: Attempting sensitive personal inference from identifier '{source_profile.source_name}'."
+                )
+                return False, failures, EnrichmentStatus.BLOCKED
+
+            # Check 2: Unauthorized exposure / external leakage: Direct identifiers cannot be routed to non-deterministic or external providers
+            if provider.metadata.provider_type not in (
+                EnrichmentProviderType.LOCAL_REFERENCE,
+                EnrichmentProviderType.DETERMINISTIC_RULE,
+            ):
+                failures.append(
+                    f"Direct identifier unauthorized exposure: Direct identifier '{source_profile.source_name}' "
+                    f"cannot be propagated to non-deterministic or external provider '{provider.provider_id}'."
+                )
+                return False, failures, EnrichmentStatus.BLOCKED
+
+            # Check 3: Unsupported propagation / unnecessary identifier surfacing
+            if (
+                candidate.proposed_output_semantic_type == SemanticDtype.IDENTIFIER_CODE
+                and candidate.proposed_output_name.lower() != source_profile.source_name.lower()
+            ):
+                failures.append(
+                    f"Direct identifier unauthorized propagation: Unnecessary identifier surfacing for '{candidate.proposed_output_name}'."
+                )
+                return False, failures, EnrichmentStatus.BLOCKED
 
         # Gate 6: Maximum Enrichment Depth Limit
         if candidate.depth > self.policy.max_enrichment_depth:

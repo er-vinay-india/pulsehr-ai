@@ -85,10 +85,51 @@ class KeyConfidencePolicy(BaseModel):
     fd_sample_size: int = Field(default=5000, ge=100)
 
 
+class EnrichmentMaterializationPolicy(BaseModel):
+    """
+    SDR-4 Governed Materialization Policy.
+    Decides physical materialization vs logical virtual projection.
+    Utility score determines ACCEPTANCE; this policy determines PERSISTENCE.
+    """
+    model_config = ConfigDict(frozen=True)
+
+    default_mode: str = "VIRTUAL"  # "VIRTUAL" or "MATERIALIZED"
+    allow_explicit_materialization: bool = True
+    min_expected_reuse_count: int = Field(default=3, ge=1)
+    compute_cost_threshold: float = Field(default=0.70, ge=0.0, le=1.0)
+    storage_budget_bytes: int = Field(default=100 * 1024 * 1024, ge=0)  # 100MB
+    max_materialized_enrichments: int = Field(default=20, ge=0)
+
+    def should_materialize(
+        self,
+        explicit_request: bool = False,
+        expected_reuse_count: int = 1,
+        compute_cost: float = 0.0,
+        current_materialized_count: int = 0,
+        dataset_size_bytes: int = 0,
+    ) -> bool:
+        """
+        Evaluates whether an accepted enrichment should be physically materialized.
+        Utility score alone NEVER justifies materialization.
+        """
+        if current_materialized_count >= self.max_materialized_enrichments:
+            return False
+
+        if explicit_request and self.allow_explicit_materialization:
+            return True
+
+        # Physical materialization justified only by high reuse, expensive compute/lookup, within storage budget
+        is_high_reuse = expected_reuse_count >= self.min_expected_reuse_count
+        is_expensive_compute = compute_cost >= self.compute_cost_threshold
+        within_storage = dataset_size_bytes <= self.storage_budget_bytes
+
+        return (is_high_reuse or is_expensive_compute) and within_storage
+
+
 class EnrichmentPolicy(BaseModel):
     """
     SDR-4 Governed Enrichment Policy.
-    Defines budgets, utility thresholds, and depth limits.
+    Defines budgets, utility thresholds, depth limits, and materialization rules.
     """
     model_config = ConfigDict(frozen=True)
 
@@ -99,6 +140,7 @@ class EnrichmentPolicy(BaseModel):
     max_materialized_enrichments: int = Field(default=20, ge=0)
     min_utility_score: float = Field(default=0.60, ge=0.0, le=1.0)
     min_confidence: float = Field(default=0.80, ge=0.0, le=1.0)
+    materialization: EnrichmentMaterializationPolicy = EnrichmentMaterializationPolicy()
 
 
 class SDRPolicySuite(BaseModel):

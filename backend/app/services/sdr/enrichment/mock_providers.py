@@ -182,6 +182,8 @@ class CodeLabelProvider(EnrichmentProvider):
         "FIN": "Finance",
         "MKT": "Marketing",
         "OPS": "Operations",
+        "E101": "Engineering Staff",
+        "E102": "Operations Specialist",
     }
 
     def __init__(self, version: str = "1.0.0", reference_version: str = "2026.1"):
@@ -207,7 +209,7 @@ class CodeLabelProvider(EnrichmentProvider):
     def can_handle(self, profile: SemanticColumnProfile) -> bool:
         if profile.semantic_dtype in (SemanticDtype.CATEGORICAL_CODE, SemanticDtype.IDENTIFIER_CODE):
             name_lower = profile.source_name.lower()
-            return "dept" in name_lower or "code" in name_lower or "department" in name_lower
+            return any(k in name_lower for k in ("dept", "code", "department", "emp", "id"))
         return False
 
     def generate_candidates(

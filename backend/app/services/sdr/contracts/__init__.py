@@ -4,6 +4,8 @@ Contracts Package
 """
 
 from app.services.sdr.contracts.policies import (
+    EnrichmentMaterializationPolicy,
+    EnrichmentPolicy,
     GrainConfidencePolicy,
     KeyConfidencePolicy,
     SDRPolicySuite,
@@ -60,6 +62,7 @@ from app.services.sdr.contracts.enrichment import (
 )
 
 __all__ = [
+    "EnrichmentMaterializationPolicy",
     "EnrichmentPolicy",
     "GrainConfidencePolicy",
     "KeyConfidencePolicy",
