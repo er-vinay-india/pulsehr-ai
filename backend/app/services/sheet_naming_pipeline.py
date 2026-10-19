@@ -228,18 +228,14 @@ def infer_from_columns_and_sample(
     rec_matches = sum(any(k in c for k in rec_kw) for c in cols_clean)
 
     # 7. Retail & Store Sales
-    sales_kw = ("weeklysales", "weekly_sales", "sales", "store", "cpi", "fuelprice", "unemployment", "holidayflag")
+    sales_kw = ("weeklysales", "sales", "store", "revenue", "cpi", "fuelprice", "unemployment", "holidayflag")
     sales_matches = sum(any(k in c for k in sales_kw) for c in cols_clean)
 
-    # 8. Finance & Enterprise Valuation
-    fin_kw = ("revenue", "ebitda", "pnl", "margin", "valuation", "asset", "expense", "budget", "finance", "fiscal")
-    fin_matches = sum(any(k in c for k in fin_kw) for c in cols_clean)
-
-    # 9. Training & Learning
+    # 8. Training & Learning
     train_kw = ("training", "course", "certification", "completion", "skill", "learning", "module")
     train_matches = sum(any(k in c for k in train_kw) for c in cols_clean)
 
-    # 10. Supply Chain & Logistics
+    # 9. Supply Chain & Logistics
     log_kw = ("shipment", "warehouse", "freight", "carrier", "transit", "fleet", "delivery", "dispatch")
     log_matches = sum(any(k in c for k in log_kw) for c in cols_clean)
 
@@ -251,7 +247,6 @@ def infer_from_columns_and_sample(
         ("Workforce Retention & Attrition Analysis", "Workforce Retention & Attrition", "Employee tenure progression, flight risk factors, and exit patterns."): attr_matches,
         ("Recruitment & Talent Pipeline", "Recruitment & Hiring Pipeline", "Job candidates, hiring stages, interview scores, and offer metrics."): rec_matches,
         ("Retail Sales & Store Operations", "Retail & Commercial Sales", "Multi-store weekly sales metrics, economic indicators, and holiday volume."): sales_matches,
-        ("Enterprise Performance & Valuation Benchmarks", "Finance & Corporate Performance", "Corporate revenue streams, financial metrics, and asset valuations."): fin_matches,
         ("Employee Training & Skills Development", "Training & Skills Development", "Curriculum progress, technical certification status, and skill mastery."): train_matches,
         ("Supply Chain & Logistics Tracking", "Supply Chain & Logistics", "Shipment lifecycle tracking, warehouse logistics, and fleet metrics."): log_matches,
     }

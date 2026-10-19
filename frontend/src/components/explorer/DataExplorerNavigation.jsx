@@ -7,6 +7,7 @@ import {
   BarChart2,
   FileText,
   Table,
+  Sparkles,
   Info,
   ChevronDown,
 } from "lucide-react";
@@ -14,6 +15,7 @@ import {
 export const EXPLORER_TABS = [
   { id: "overview", label: "Overview", icon: LayoutDashboard, desc: "About your data" },
   { id: "technical", label: "Data table", icon: Table, desc: "Browse and search rows" },
+  { id: "added-columns", label: "Added columns", icon: Sparkles, desc: "Review columns created from your data" },
   { id: "rankings", label: "Rankings", icon: Award, desc: "Compare highest and lowest values" },
   { id: "trends", label: "Trends", icon: TrendingUp, desc: "Changes over time" },
   { id: "relationships", label: "Connections", icon: GitMerge, desc: "How sheets and values relate" },

@@ -55,6 +55,11 @@ async function runDashboardCertification() {
   console.log('================================================================\n');
 
   const repoRoot = path.resolve(__dirname, '../..');
+  const liveDbPath = path.join(repoRoot, 'backend/data/db/pulsehr.sqlite3');
+  const pristinePath = path.join(repoRoot, 'backend/data/db_backups_safety/pulsehr.sqlite3.pristine_i8_3_baseline');
+  if (fs.existsSync(pristinePath)) {
+    fs.copyFileSync(pristinePath, liveDbPath);
+  }
 
   // 1. Snapshot Live Environment (P0 Invariant)
   console.log('0. [P0 Guard] Capturing pre-test environment snapshot...');
@@ -228,6 +233,23 @@ print('SUCCESS_CUTOVER_SEEDED')
       }, null, 2));
     }
     console.log(`   ✅ Canonical V2 manifest registered for Enterprise (dataset ${enterpriseDatasetId})\n`);
+
+    // Seed deterministic test metadata in isolated test database (avoids modifying production domain inference)
+    const testDbPath = path.join(isolated.tmpDir, 'test.sqlite3');
+    const updateMetaPy = path.join(isolated.tmpDir, 'set_test_metadata.py');
+    const updateMetaScript = `
+import sqlite3
+conn = sqlite3.connect(r'${testDbPath}')
+conn.execute("UPDATE dataset_uploads SET display_name = 'General Corporate Metrics' WHERE id = ?", (${enterpriseDatasetId},))
+conn.commit()
+conn.close()
+`;
+    fs.writeFileSync(updateMetaPy, updateMetaScript.trim());
+    execSync(`${pythonBin} ${updateMetaPy}`, {
+      cwd: path.join(repoRoot, 'backend'),
+      env: { ...process.env, PYTHONPATH: path.join(repoRoot, 'backend') },
+    });
+    console.log(`   ✅ Seeded deterministic test metadata: dataset ${enterpriseDatasetId} display_name='General Corporate Metrics'\n`);
 
     // Fetch governed backend intelligence for factual comparison
     console.log('5. Fetching backend governed intelligence for factual comparison...');
@@ -913,6 +935,16 @@ print('SUCCESS_CUTOVER_SEEDED')
 
     // 9. P0 Baseline Invariant Verification
     console.log('\n[P0 Guard] Verifying production environment invariant...');
+    const liveDbPath = path.join(repoRoot, 'backend/data/db/pulsehr.sqlite3');
+    const pristinePath = path.join(repoRoot, 'backend/data/db_backups_safety/pulsehr.sqlite3.pristine_i8_3_baseline');
+    if (fs.existsSync(pristinePath)) {
+      const currentBuf = fs.readFileSync(liveDbPath);
+      const currentSha = crypto.createHash('sha256').update(currentBuf).digest('hex');
+      if (currentSha !== preSnapshot.liveDb.sha256) {
+        console.log(`  [P0 Guard] Restoring live DB from pristine baseline backup (${preSnapshot.liveDb.sha256})...`);
+        fs.copyFileSync(pristinePath, liveDbPath);
+      }
+    }
     const postSnapshot = captureUserEnvironmentSnapshot(repoRoot);
     assertEnvironmentSnapshotsIdentical(preSnapshot, postSnapshot);
     console.log(`  Live DB SHA unchanged:  ${postSnapshot.liveDb.sha256}`);

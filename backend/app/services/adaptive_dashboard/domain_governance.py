@@ -78,15 +78,13 @@ class DomainCapabilityGate:
 
         # 1. Retail / Sales Evidence
         retail_keys = [
-            "weekly_sales", "sales", "store", "holiday_flag",
+            "weekly_sales", "sales", "revenue", "store", "holiday_flag",
             "temperature", "fuel_price", "cpi", "unemployment", "markdown",
             "units_sold", "price", "retail", "product_id", "pos", "orders"
         ]
         retail_matches = [k for k in retail_keys if any(k in c for c in cols_lower)]
-        if len(retail_matches) >= 2:
+        if retail_matches:
             scores[DatasetDomain.RETAIL_SALES] += len(retail_matches) * 2.0
-        elif len(retail_matches) == 1 and any(w in name_lower for w in ["sales", "retail", "walmart", "store", "commerce", "pos"]):
-            scores[DatasetDomain.RETAIL_SALES] += 2.0
         if any(w in name_lower for w in ["sales", "retail", "walmart", "store", "commerce", "pos"]):
             scores[DatasetDomain.RETAIL_SALES] += 3.0
 

@@ -24,9 +24,7 @@ import {
   Trash2,
   GitMerge,
   Layers,
-  ChevronDown,
-  ChevronUp,
-  Sparkles
+  ChevronDown
 } from 'lucide-react';
 import Select from '../components/common/Select';
 import Popover from '../components/common/Popover';
@@ -58,7 +56,6 @@ export default function DataExplorerPage() {
   const themeTokens = getThemeTokens(isDark);
 
   const [catalog, setCatalog] = useState({ sheets: [], relationships: [] });
-  const [showEnrichmentReview, setShowEnrichmentReview] = useState(false);
   const [selected, setSelected] = useState(() => {
     return getCombinedUrlParam('sheet_id') || '';
   });
@@ -69,10 +66,10 @@ export default function DataExplorerPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Secondary Navigation Subpage State: 'overview' | 'rankings' | 'trends' | 'relationships' | 'distributions' | 'evidence' | 'technical'
+  // Secondary Navigation Subpage State: 'overview' | 'technical' | 'added-columns' | 'rankings' | 'trends' | 'relationships' | 'distributions' | 'evidence'
   const [activeTab, setActiveTab] = useState(() => {
     const tabParam = getCombinedUrlParam('tab');
-    if (tabParam && ['overview', 'rankings', 'trends', 'relationships', 'distributions', 'evidence', 'technical'].includes(tabParam)) {
+    if (tabParam && ['overview', 'technical', 'added-columns', 'rankings', 'trends', 'relationships', 'distributions', 'evidence'].includes(tabParam)) {
       return tabParam;
     }
     // Backward compatibility for view=eda or view=table
@@ -194,7 +191,7 @@ export default function DataExplorerPage() {
       setSelected(''); setSelectedDerivedId(''); setRelation('');
       setData(null); setEdaReport(null); setCrossCorrelations([]);
       setSearch(''); setPage(1); setLoading(false); setLoadingEda(false);
-      setShowEnrichmentReview(false); setError('');
+      setError('');
       window.dispatchEvent(new CustomEvent('workbooks-deleted', { detail: result }));
       if (result.cleanup_pending) {
         setDatasetToDelete(current => ({ ...current, cleanupPending: true }));
@@ -443,32 +440,6 @@ export default function DataExplorerPage() {
                   }}
                 />
               )}
-
-              {enrichment && derivedFeatCount > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setShowEnrichmentReview((prev) => !prev)}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    background: showEnrichmentReview ? 'var(--color-bg-soft-gold)' : 'var(--color-bg-subtle)',
-                    border: '1px solid var(--color-border-strong)',
-                    borderRadius: '8px',
-                    padding: '0 10px',
-                    minHeight: '38px',
-                    color: 'var(--color-gold)',
-                    fontSize: '0.82rem',
-                    fontWeight: 600,
-                    cursor: 'pointer'
-                  }}
-                  title="Review added columns and how they were calculated"
-                >
-                  <Sparkles size={14} />
-                  <span>+{derivedFeatCount} added columns</span>
-                  {showEnrichmentReview ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                </button>
-              )}
             </div>
 
             {/* Right Actions: Manage Workbooks, Download, Delete */}
@@ -650,13 +621,6 @@ export default function DataExplorerPage() {
         </section>
       )}
 
-      {/* Collapsible Scientific Enrichment Review Panel */}
-      {showEnrichmentReview && enrichment && (
-        <div style={{ marginBottom: '1.25rem' }}>
-          <EnrichmentReviewCard enrichment={enrichment} />
-        </div>
-      )}
-
       {error && (
         <div className="alert-box alert-error" style={{ marginBottom: '1rem' }}>
           <span>{error}</span>
@@ -701,6 +665,14 @@ export default function DataExplorerPage() {
 
           {/* SUBPAGE VIEW ROUTING */}
           <div className="explorer-subpage-content" id={`explorer-panel-${activeTab}`} role="tabpanel" aria-labelledby={`explorer-tab-${activeTab}`}>
+            {activeTab === 'added-columns' && (
+              enrichment && derivedFeatCount > 0
+                ? <EnrichmentReviewCard enrichment={enrichment} />
+                : <section className="explorer-empty-state explorer-empty-state--compact">
+                    <h2>No added columns for this workbook</h2>
+                    <p>There are no generated columns to review here.</p>
+                  </section>
+            )}
             {activeTab === 'overview' && (
               <OverviewExplorer
                 activeDataset={activeDataset}
