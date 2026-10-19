@@ -847,3 +847,76 @@ export async function getAssistantIdentity(signal) {
   if (!res.ok) throw new Error("Assistant configuration unavailable");
   return res.json();
 }
+
+// =============================================================================
+// SDR-7 DATA EXPLORER REFINERY APIS
+// =============================================================================
+
+export async function getExplorerSummary(datasetId) {
+  const res = await fetch(`${API_BASE}/datasets/${datasetId}/explorer/summary`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Failed to fetch dataset semantic summary");
+  }
+  return res.json();
+}
+
+export async function getExplorerSourceRows(datasetId, sheetId, page = 1, pageSize = 50, search = null) {
+  const params = new URLSearchParams({
+    sheet_id: sheetId,
+    page: String(page),
+    page_size: String(pageSize),
+  });
+  if (search && search.trim()) {
+    params.set("search", search.trim());
+  }
+  const res = await fetch(`${API_BASE}/datasets/${datasetId}/explorer/source-rows?${params.toString()}`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Failed to fetch source rows");
+  }
+  return res.json();
+}
+
+export async function getExplorerSemantics(datasetId, sheetId = null) {
+  const params = new URLSearchParams();
+  if (sheetId) params.set("sheet_id", sheetId);
+  const qs = params.toString() ? `?${params.toString()}` : "";
+  const res = await fetch(`${API_BASE}/datasets/${datasetId}/explorer/semantics${qs}`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Failed to fetch semantic profiles");
+  }
+  return res.json();
+}
+
+export async function getExplorerRelationships(datasetId) {
+  const res = await fetch(`${API_BASE}/datasets/${datasetId}/explorer/relationships`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Failed to fetch relationship intelligence");
+  }
+  return res.json();
+}
+
+export async function getExplorerAnalyticalViews(datasetId) {
+  const res = await fetch(`${API_BASE}/datasets/${datasetId}/explorer/analytical-views`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Failed to fetch analytical views");
+  }
+  return res.json();
+}
+
+export async function getExplorerAnalyticalFacts(datasetId, viewId = null) {
+  const params = new URLSearchParams();
+  if (viewId) params.set("view_id", viewId);
+  const qs = params.toString() ? `?${params.toString()}` : "";
+  const res = await fetch(`${API_BASE}/datasets/${datasetId}/explorer/analytical-facts${qs}`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Failed to fetch analytical facts");
+  }
+  return res.json();
+}
+

@@ -13,12 +13,15 @@ import {
 } from "lucide-react";
 
 export const EXPLORER_TABS = [
-  { id: "overview", label: "Overview", icon: LayoutDashboard, desc: "About your data" },
+  { id: "source", label: "Source Data", icon: Table, desc: "Exact raw records (no derived columns)" },
+  { id: "semantics", label: "Semantic Models", icon: Sparkles, desc: "Roles, entities, grain, keys, and enrichments" },
+  { id: "relationships", label: "Relationships & Joins", icon: GitMerge, desc: "Governed relationships, join safety, and preaggregation" },
+  { id: "analytical-views", label: "Analytical Views & Facts", icon: LayoutDashboard, desc: "Reconstructed Gold metrics, facts, and lineage" },
+  { id: "overview", label: "Overview", icon: Info, desc: "About your data" },
   { id: "technical", label: "Data table", icon: Table, desc: "Browse and search rows" },
   { id: "added-columns", label: "Added columns", icon: Sparkles, desc: "Review columns created from your data" },
   { id: "rankings", label: "Rankings", icon: Award, desc: "Compare highest and lowest values" },
   { id: "trends", label: "Trends", icon: TrendingUp, desc: "Changes over time" },
-  { id: "relationships", label: "Connections", icon: GitMerge, desc: "How sheets and values relate" },
   { id: "distributions", label: "Value ranges", icon: BarChart2, desc: "Typical values and unusual results" },
   { id: "evidence", label: "Sources & calculations", icon: FileText, desc: "Check how findings were produced" },
 ];

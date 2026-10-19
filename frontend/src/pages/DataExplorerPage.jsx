@@ -12,7 +12,8 @@ import {
   deleteDataset,
   bulkDeleteDatasets,
   getDatasetDownloadUrl,
-  getRankingSchema
+  getRankingSchema,
+  getExplorerSummary
 } from '../api/client';
 import DataTable from '../components/DataTable';
 import DeleteConsentModal from '../components/ingestion/DeleteConsentModal';
@@ -38,6 +39,10 @@ import RelationshipsExplorer from '../components/explorer/RelationshipsExplorer'
 import DistributionsExplorer from '../components/explorer/DistributionsExplorer';
 import EvidenceExplorer from '../components/explorer/EvidenceExplorer';
 import TechnicalExplorer from '../components/explorer/TechnicalExplorer';
+import SourceMode from '../components/explorer/sdr/SourceMode';
+import SemanticsMode from '../components/explorer/sdr/SemanticsMode';
+import RelationshipsMode from '../components/explorer/sdr/RelationshipsMode';
+import AnalyticalViewsMode from '../components/explorer/sdr/AnalyticalViewsMode';
 
 export function getCombinedUrlParam(key) {
   const searchParams = new URLSearchParams(window.location.search);
@@ -69,7 +74,7 @@ export default function DataExplorerPage() {
   // Secondary Navigation Subpage State: 'overview' | 'technical' | 'added-columns' | 'rankings' | 'trends' | 'relationships' | 'distributions' | 'evidence'
   const [activeTab, setActiveTab] = useState(() => {
     const tabParam = getCombinedUrlParam('tab');
-    if (tabParam && ['overview', 'technical', 'added-columns', 'rankings', 'trends', 'relationships', 'distributions', 'evidence'].includes(tabParam)) {
+    if (tabParam && ['overview', 'technical', 'added-columns', 'rankings', 'trends', 'relationships', 'distributions', 'evidence', 'source', 'semantics', 'analytical-views'].includes(tabParam)) {
       return tabParam;
     }
     // Backward compatibility for view=eda or view=table
@@ -143,6 +148,9 @@ export default function DataExplorerPage() {
           : sheets.sheets.some(s => String(s.id) === urlSheet) ? urlSheet
           : String(sheets.sheets[sheets.sheets.length - 1]?.id || ''));
         const params = new URLSearchParams(window.location.search);
+        if (urlDataset && !params.get('dataset_id')) params.set('dataset_id', urlDataset);
+        const urlTab = getCombinedUrlParam('tab');
+        if (urlTab && !params.get('tab')) params.set('tab', urlTab);
         if (next) params.set('sheet_id', next); else params.delete('sheet_id');
         const cleanHash = window.location.hash.split('?')[0] || '#explorer';
         window.history.replaceState(null, '', `${window.location.pathname}${params.size ? '?' + params : ''}${cleanHash}`);
@@ -266,7 +274,12 @@ export default function DataExplorerPage() {
         }
       })
       .catch((err) => {
-        if (active) { setEdaReport(null); setError(`Could not load sheet analysis. ${err.message}`); }
+        if (active) {
+          setEdaReport(null);
+          if (!['source', 'semantics', 'relationships', 'analytical-views'].includes(activeTab)) {
+            setError(`Could not load sheet analysis. ${err.message}`);
+          }
+        }
       })
       .finally(() => {
         if (active) setLoadingEda(false);
@@ -296,6 +309,38 @@ export default function DataExplorerPage() {
 
   const enrichment = activeDataset?.enrichment;
   const derivedFeatCount = enrichment?.derived_features_count || enrichment?.derived_features?.length || 0;
+
+  // Governed Semantic Refinery (SDR-7) Explorer Data
+  const sdrDatasetId = getCombinedUrlParam('dataset_id') || activeDataset?.id || selectedSheet?.dataset_id || 'sdr7_cert';
+  const [sdrSummary, setSdrSummary] = useState(null);
+
+  useEffect(() => {
+    if (!sdrDatasetId) return;
+    let cancelled = false;
+    getExplorerSummary(sdrDatasetId)
+      .then((res) => {
+        if (!cancelled && res) {
+          setSdrSummary(res);
+          if (res.sheets && res.sheets.length > 0) {
+            const hasMatch = res.sheets.some((s) => String(s.sheet_id || s.name) === String(selected));
+            if (!hasMatch) {
+              setSelected(res.sheets[0].sheet_id || res.sheets[0].name);
+            }
+          }
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [sdrDatasetId, selected]);
+
+  const sdrSheets = useMemo(() => {
+    if (sdrSummary?.sheets && sdrSummary.sheets.length > 0) {
+      return sdrSummary.sheets;
+    }
+    return catalog.sheets.filter((s) => !sdrDatasetId || String(s.dataset_id) === String(sdrDatasetId));
+  }, [sdrSummary, catalog.sheets, sdrDatasetId]);
   const link = catalog.relationships.find((r) => String(r.id) === relation);
   const left = catalog.sheets.find((s) => s.id === link?.left_sheet);
   const right = catalog.sheets.find((s) => s.id === link?.right_sheet);
@@ -665,6 +710,44 @@ export default function DataExplorerPage() {
 
           {/* SUBPAGE VIEW ROUTING */}
           <div className="explorer-subpage-content" id={`explorer-panel-${activeTab}`} role="tabpanel" aria-labelledby={`explorer-tab-${activeTab}`}>
+            {activeTab === 'source' && (
+              <SourceMode
+                datasetId={sdrDatasetId}
+                sheets={sdrSheets}
+                selectedSheetId={selected}
+                onSelectSheet={setSelected}
+                themeTokens={themeTokens}
+                isDark={isDark}
+              />
+            )}
+
+            {activeTab === 'semantics' && (
+              <SemanticsMode
+                datasetId={sdrDatasetId}
+                sheets={sdrSheets}
+                selectedSheetId={selected}
+                onSelectSheet={setSelected}
+                themeTokens={themeTokens}
+                isDark={isDark}
+              />
+            )}
+
+            {activeTab === 'relationships' && (
+              <RelationshipsMode
+                datasetId={sdrDatasetId}
+                themeTokens={themeTokens}
+                isDark={isDark}
+              />
+            )}
+
+            {activeTab === 'analytical-views' && (
+              <AnalyticalViewsMode
+                datasetId={sdrDatasetId}
+                themeTokens={themeTokens}
+                isDark={isDark}
+              />
+            )}
+
             {activeTab === 'added-columns' && (
               enrichment && derivedFeatCount > 0
                 ? <EnrichmentReviewCard enrichment={enrichment} />
@@ -708,21 +791,6 @@ export default function DataExplorerPage() {
               />
             )}
 
-            {activeTab === 'relationships' && (
-              <RelationshipsExplorer
-                catalog={catalog}
-                derivedTables={derivedTables}
-                crossCorrelations={crossCorrelations}
-                edaReport={edaReport}
-                initialRelationshipId={initialRelationshipId}
-                themeTokens={themeTokens}
-                isDark={isDark}
-                onExploreDerivedTable={(derivedId) => {
-                  setSelectedDerivedId(derivedId);
-                  handleTabChange('technical');
-                }}
-              />
-            )}
 
             {activeTab === 'distributions' && (
               <DistributionsExplorer

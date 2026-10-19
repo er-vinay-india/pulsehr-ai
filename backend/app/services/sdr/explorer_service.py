@@ -1,0 +1,826 @@
+"""
+HighView Semantic Data Refinery — Phase SDR-7
+Data Explorer Semantic Experience Service
+
+Exposes SDR-1 through SDR-6 governed refinery truth for Data Explorer.
+Provides user-friendly translations, exactness-first values, provenance,
+lineage, and complete audit metadata without altering underlying truth.
+"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Any
+
+from app.core import config
+from app.db.database import get_connection
+from app.services.sdr.artifacts.artifact_writer import SDRArtifactWriter
+from app.services.sdr.contracts.policies import SDRPolicySuite
+from app.services.sdr.contracts.profiles import (
+    MeasureClass,
+    PrivacyClassification,
+    SemanticColumnProfile,
+    SemanticColumnRole,
+    SemanticConcept,
+    SemanticDtype,
+    SemanticEntityType,
+)
+from app.services.sdr.contracts.relationships import (
+    JoinSafetyStatus,
+    RelationshipCardinality,
+    RelationshipStatus,
+    SDRJoinPlan,
+    SDRValidatedRelationshipEdge,
+)
+from app.services.sdr.contracts.views import (
+    MaterializationMode,
+    SDRAnalyticalFact,
+    SDRAnalyticalViewSpec,
+    SDRAnalyticalViewStatus,
+    check_analytical_view_invalidation,
+)
+
+
+class SDRExplorerService:
+    """
+    Coordinates Data Explorer inspection of SDR refinery artifacts across:
+    - SOURCE
+    - SEMANTICS
+    - RELATIONSHIPS
+    - ANALYTICAL VIEWS
+    """
+
+    def __init__(self, base_data_dir: Path | str | None = None):
+        self.base_dir = Path(base_data_dir) if base_data_dir else config.DATA_DIR
+        self.writer = SDRArtifactWriter(base_data_dir=self.base_dir)
+
+    def _get_sdr_dir(self, dataset_id: str) -> Path:
+        return self.base_dir / "datasets" / str(dataset_id) / "sdr"
+
+    def _read_json(self, path: Path) -> Any | None:
+        if not path.exists():
+            return None
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            return None
+
+    # =========================================================================
+    # SUMMARY & DATASET NAVIGATION
+    # =========================================================================
+
+    def get_explorer_summary(self, dataset_id: str) -> dict[str, Any]:
+        """Returns high-level summary of the dataset and refinery status."""
+        sdr_dir = self._get_sdr_dir(dataset_id)
+        has_artifacts = sdr_dir.exists()
+
+        # Database lookup for dataset info
+        conn = get_connection()
+        try:
+            row = conn.execute(
+                "SELECT id, original_name, display_name, sheet_count, row_count FROM dataset_uploads WHERE id = ?",
+                (dataset_id,)
+            ).fetchone()
+            sheet_rows = conn.execute(
+                "SELECT id, name, display_name, row_count, columns_json FROM sheets WHERE dataset_id = ?",
+                (dataset_id,)
+            ).fetchall()
+        finally:
+            conn.close()
+
+        sheets_meta = []
+        for s in sheet_rows:
+            cols = json.loads(s["columns_json"]) if s["columns_json"] else []
+            sheets_meta.append({
+                "sheet_id": str(s["id"]),
+                "name": s["name"],
+                "display_name": s["display_name"] or s["name"],
+                "row_count": s["row_count"] or 0,
+                "column_count": len(cols),
+                "columns": cols,
+            })
+
+        # Fallback to raw_source_tables.json if not in SQLite database (e.g. sdr7_cert)
+        raw_tables_file = sdr_dir / "raw_source_tables.json"
+        if not sheets_meta and raw_tables_file.exists():
+            try:
+                raw_tables = json.loads(raw_tables_file.read_text(encoding="utf-8"))
+                for s_name, records in raw_tables.items():
+                    cols = list(records[0].keys()) if records else []
+                    sheets_meta.append({
+                        "sheet_id": s_name,
+                        "name": s_name,
+                        "display_name": s_name,
+                        "row_count": len(records),
+                        "column_count": len(cols),
+                        "columns": cols,
+                    })
+            except Exception:
+                pass
+
+        # Load manifests if available
+        sdr1_m = self._read_json(sdr_dir / "profiling_manifest.json")
+        sdr2_m = self._read_json(sdr_dir / "sdr2_manifest.json")
+        sdr3_m = self._read_json(sdr_dir / "sdr3_manifest.json")
+        sdr4_m = self._read_json(sdr_dir / "sdr4_manifest.json")
+        sdr4g_m = self._read_json(sdr_dir / "sdr4g_manifest.json")
+        sdr5_m = self._read_json(sdr_dir / "sdr5_manifest.json")
+        sdr6_m = self._read_json(sdr_dir / "sdr6_manifest.json")
+
+        stages = {
+            "SDR_1_PROFILING": "AVAILABLE" if sdr1_m else "UNAVAILABLE",
+            "SDR_2_GRAIN": "AVAILABLE" if sdr2_m else "UNAVAILABLE",
+            "SDR_3_KEYS": "AVAILABLE" if sdr3_m else "UNAVAILABLE",
+            "SDR_4_ENRICHMENT": "AVAILABLE" if sdr4_m else "UNAVAILABLE",
+            "SDR_4G_GEO": "AVAILABLE" if sdr4g_m else "UNAVAILABLE",
+            "SDR_5_RELATIONSHIPS": "AVAILABLE" if sdr5_m else "UNAVAILABLE",
+            "SDR_6_ANALYTICAL_VIEWS": "AVAILABLE" if sdr6_m else "UNAVAILABLE",
+        }
+
+        # Counts
+        profiles = self._read_json(sdr_dir / "semantic_column_profiles.json") or []
+        entities = self._read_json(sdr_dir / "entity_hypotheses.json") or []
+        keys = self._read_json(sdr_dir / "key_candidates.json") or self._read_json(sdr_dir / "candidate_keys.json") or []
+        enrichments = self._read_json(sdr_dir / "validated_enrichments.json") or []
+        geo = self._read_json(sdr_dir / "canonical_geo_resolutions.json") or self._read_json(sdr_dir / "canonical_geo_entities.json") or []
+        edges = self._read_json(sdr_dir / "validated_relationships.json") or []
+        plans = self._read_json(sdr_dir / "join_plans.json") or []
+        views = self._read_json(sdr_dir / "analytical_views.json") or []
+        facts = self._read_json(sdr_dir / "analytical_facts.json") or []
+
+        return {
+            "dataset_id": str(dataset_id),
+            "original_name": row["original_name"] if row else f"Dataset {dataset_id}",
+            "display_name": (row["display_name"] if row else None) or (row["original_name"] if row else f"Dataset {dataset_id}"),
+            "total_sheets": row["sheet_count"] if row else len(sheets_meta),
+            "total_rows": row["row_count"] if row else sum(s["row_count"] for s in sheets_meta),
+            "sheets": sheets_meta,
+            "refinery_status": "CURRENT" if has_artifacts else "INITIAL",
+            "stages": stages,
+            "counts": {
+                "columns": len(profiles),
+                "entities": len(entities),
+                "candidate_keys": len(keys),
+                "enrichments": len(enrichments),
+                "geo_resolutions": len(geo),
+                "validated_relationships": len(edges),
+                "join_plans": len(plans),
+                "analytical_views": len(views),
+                "analytical_facts": len(facts),
+            },
+        }
+
+    # =========================================================================
+    # SOURCE MODE
+    # =========================================================================
+
+    def get_source_rows(
+        self,
+        dataset_id: str,
+        sheet_id: str,
+        page: int = 1,
+        page_size: int = 50,
+        search: str | None = None,
+    ) -> dict[str, Any]:
+        """Returns exact source rows with zero derived columns and no altered types."""
+        sdr_dir = self._get_sdr_dir(dataset_id)
+        raw_tables_file = sdr_dir / "raw_source_tables.json"
+
+        records: list[dict[str, Any]] = []
+        columns: list[str] = []
+        sheet_name = str(sheet_id)
+
+        # 1. Check raw_source_tables.json first (used in cert fixture and file-based datasets)
+        if raw_tables_file.exists():
+            try:
+                raw_tables = json.loads(raw_tables_file.read_text(encoding="utf-8"))
+                for s_key, s_recs in raw_tables.items():
+                    if str(s_key).lower() == str(sheet_id).lower():
+                        sheet_name = s_key
+                        records = s_recs
+                        if records:
+                            columns = list(records[0].keys())
+                        break
+            except Exception:
+                pass
+
+        # 2. If not found in raw_source_tables, query SQLite
+        if not records:
+            conn = get_connection()
+            try:
+                sheet = conn.execute(
+                    "SELECT id, name, display_name, columns_json FROM sheets WHERE dataset_id = ? AND (id = ? OR name = ? OR display_name = ?)",
+                    (dataset_id, sheet_id, sheet_id, sheet_id)
+                ).fetchone()
+                if sheet:
+                    sheet_name = sheet["name"]
+                    sid = sheet["id"]
+                    if sheet["columns_json"]:
+                        try:
+                            columns = json.loads(sheet["columns_json"])
+                        except Exception:
+                            columns = []
+                    db_rows = conn.execute(
+                        "SELECT row_index, data_json FROM sheet_rows WHERE sheet_id = ? ORDER BY row_index ASC",
+                        (sid,)
+                    ).fetchall()
+                    for r in db_rows:
+                        try:
+                            rec = json.loads(r["data_json"])
+                            records.append(rec)
+                        except Exception:
+                            continue
+            finally:
+                conn.close()
+
+        # If columns empty but records exist
+        if not columns and records:
+            columns = list(records[0].keys())
+
+        # Filter by search string if provided
+        filtered_records = records
+        if search and search.strip():
+            query = search.strip().lower()
+            filtered_records = [
+                r for r in records
+                if any(query in str(v).lower() for v in r.values() if v is not None)
+            ]
+
+        total_rows = len(filtered_records)
+        start_idx = max(0, (page - 1) * page_size)
+        end_idx = start_idx + page_size
+        paged_records = filtered_records[start_idx:end_idx]
+
+        # Add 1-based exact row index
+        rows_with_idx = []
+        for idx, rec in enumerate(paged_records, start=start_idx + 1):
+            row_dict = {"__row_index": idx}
+            row_dict.update(rec)
+            rows_with_idx.append(row_dict)
+
+        return {
+            "dataset_id": str(dataset_id),
+            "sheet_id": str(sheet_id),
+            "sheet_name": sheet_name,
+            "total_rows": total_rows,
+            "page": page,
+            "page_size": page_size,
+            "columns": columns,
+            "rows": rows_with_idx,
+            "is_source_truth": True,
+            "derived_columns_count": 0,
+        }
+
+    # =========================================================================
+    # SEMANTICS MODE
+    # =========================================================================
+
+    def get_semantics_data(self, dataset_id: str, sheet_id: str | None = None) -> dict[str, Any]:
+        """Returns semantic columns, entity hypotheses, grain, candidate keys, and enrichments."""
+        sdr_dir = self._get_sdr_dir(dataset_id)
+
+        raw_profiles = self._read_json(sdr_dir / "semantic_column_profiles.json") or []
+        raw_entities = self._read_json(sdr_dir / "entity_hypotheses.json") or []
+        raw_grains = self._read_json(sdr_dir / "grain_profiles.json") or []
+        raw_keys = self._read_json(sdr_dir / "key_candidates.json") or self._read_json(sdr_dir / "candidate_keys.json") or []
+        raw_enrichments = self._read_json(sdr_dir / "validated_enrichments.json") or []
+        raw_geo = self._read_json(sdr_dir / "geo_resolution_candidates.json") or []
+
+        # Filter by sheet_id if provided
+        if sheet_id is not None:
+            raw_profiles = [p for p in raw_profiles if str(p.get("sheet_id")) == str(sheet_id)]
+            raw_entities = [e for e in raw_entities if str(e.get("sheet_id")) == str(sheet_id)]
+            raw_grains = [g for g in raw_grains if str(g.get("sheet_id")) == str(sheet_id)]
+            raw_keys = [k for k in raw_keys if str(k.get("sheet_id")) == str(sheet_id)]
+            raw_enrichments = [en for en in raw_enrichments if str(en.get("target_sheet_id", en.get("sheet_id"))) == str(sheet_id)]
+
+        # Translate column profiles to human-readable form
+        columns_out = []
+        for p in raw_profiles:
+            conf_score = float(p.get("confidence", 1.0))
+            conf_label = "High" if conf_score >= 0.85 else "Medium" if conf_score >= 0.65 else "Low"
+            is_derived = p.get("is_derived", False)
+            provenance_label = "Derived / Enriched" if is_derived else "Source / Observed"
+
+            role_raw = p.get("role", "DIMENSION")
+            role_label = _translate_role(role_raw)
+
+            dtype_raw = p.get("semantic_dtype", "TEXT")
+            dtype_label = _translate_dtype(dtype_raw)
+
+            concept_raw = p.get("concept", "UNKNOWN")
+            concept_label = _translate_concept(concept_raw)
+
+            entity_raw = p.get("entity_type")
+            entity_label = _translate_entity(entity_raw) if entity_raw else "None"
+
+            measure_raw = p.get("measure_class")
+            measure_label = _translate_measure_class(measure_raw) if measure_raw else "Not applicable"
+
+            privacy_raw = p.get("privacy", "INTERNAL")
+            privacy_label = _translate_privacy(privacy_raw)
+
+            is_ambiguous = bool(p.get("ambiguity_flag", False))
+            ambiguity_label = "Needs review" if is_ambiguous else "Clear"
+
+            columns_out.append({
+                "sheet_id": p.get("sheet_id"),
+                "column_id": p.get("column_id"),
+                "display_name": p.get("display_name", p.get("column_id")),
+                "role": role_label,
+                "role_raw": role_raw,
+                "data_type": dtype_label,
+                "data_type_raw": dtype_raw,
+                "concept": concept_label,
+                "concept_raw": concept_raw,
+                "entity": entity_label,
+                "entity_raw": entity_raw,
+                "measure_class": measure_label,
+                "measure_class_raw": measure_raw,
+                "privacy": privacy_label,
+                "privacy_raw": privacy_raw,
+                "confidence": conf_label,
+                "confidence_score": round(conf_score, 2),
+                "ambiguity": ambiguity_label,
+                "is_ambiguous": is_ambiguous,
+                "provenance": provenance_label,
+                "is_derived": is_derived,
+                "technical_details": {
+                    "raw_profile": p,
+                    "unit": p.get("unit"),
+                    "cardinality": p.get("cardinality"),
+                    "null_percentage": p.get("null_percentage"),
+                }
+            })
+
+        # Entity + Grain experience
+        entities_out = []
+        for e in raw_entities:
+            ent_type = e.get("entity_type", "ENTITY")
+            canonical = e.get("canonical_name", ent_type)
+            entities_out.append({
+                "sheet_id": e.get("sheet_id"),
+                "entity_type": _translate_entity(ent_type),
+                "canonical_name": canonical,
+                "confidence": "High" if float(e.get("confidence", 1.0)) >= 0.85 else "Medium",
+                "supporting_columns": e.get("supporting_columns", []),
+                "explanation": f"Detected business entity: {canonical}.",
+            })
+
+        grain_out = []
+        for g in raw_grains:
+            g_name = g.get("grain_name", "RECORD")
+            sh_id = g.get("sheet_id")
+            # Deterministic template sentence
+            explanation = _generate_grain_explanation(g_name, raw_entities, sh_id)
+            grain_out.append({
+                "sheet_id": sh_id,
+                "grain_name": g_name,
+                "grain_level": g.get("grain_level", "PRIMARY"),
+                "key_columns": g.get("key_columns", []),
+                "explanation": explanation,
+                "is_composite": len(g.get("key_columns", [])) > 1,
+            })
+
+        # Candidate keys
+        keys_out = []
+        for k in raw_keys:
+            cols = k.get("column_names") or k.get("column_ids") or k.get("key_columns", [])
+            conf_val = float(k.get("key_confidence", k.get("confidence", 1.0)))
+            is_high = conf_val >= 0.85 or k.get("status") == "HIGH_CONFIDENCE_CANDIDATE_KEY"
+            status_label = "High-confidence candidate key" if is_high else "Candidate key"
+            keys_out.append({
+                "sheet_id": k.get("sheet_id"),
+                "key_columns": cols,
+                "status": status_label,
+                "status_raw": k.get("status", "CANDIDATE_KEY"),
+                "confidence": "High" if is_high else "Medium",
+                "is_composite": len(cols) > 1,
+                "explanation": f"Candidate identity: {' + '.join(cols)}",
+            })
+
+        # Enrichments
+        enrich_out = []
+        for en in raw_enrichments:
+            target_col = en.get("target_column_id", en.get("column_id", "enriched_col"))
+            source_col = en.get("source_column_id", en.get("input_column", "source_col"))
+            prov = en.get("provider_name", "governed_reference")
+            enrich_out.append({
+                "sheet_id": en.get("target_sheet_id", en.get("sheet_id")),
+                "target_column": target_col,
+                "source_column": source_col,
+                "enrichment_type": en.get("enrichment_type", "REFERENCE_LOOKUP"),
+                "provider": prov,
+                "reference": en.get("reference_version", "2026.1"),
+                "confidence": "High",
+                "provenance": "Derived from reference data",
+                "is_derived": True,
+            })
+
+        # GEO Resolutions
+        geo_out = []
+        for cand in raw_geo:
+            input_term = cand.get("input_term", "")
+            resolved_entity = cand.get("resolved_entity", {}) or {}
+            is_ambig = cand.get("ambiguity_flag", False)
+            match_type = cand.get("match_type", "EXACT")
+            match_label = "Alias match" if match_type == "ALIAS" else "Canonical match" if match_type == "CANONICAL" else "Hierarchical match"
+
+            if is_ambig or not resolved_entity:
+                status_text = "Needs clarification"
+                resolved_text = "Ambiguous location"
+            else:
+                status_text = "Resolved"
+                resolved_text = f"{resolved_entity.get('canonical_name', input_term)}, {resolved_entity.get('parent_admin1', '')}, {resolved_entity.get('parent_country', '')}".strip(", ")
+
+            geo_out.append({
+                "input_term": input_term,
+                "resolved_name": resolved_text,
+                "country": resolved_entity.get("parent_country", ""),
+                "state_province": resolved_entity.get("parent_admin1", ""),
+                "match_type": match_label,
+                "confidence": "High" if float(cand.get("confidence", 0.0)) >= 0.85 else "Needs clarification" if is_ambig else "Medium",
+                "status": status_text,
+                "reference": "Governed local reference (GeoNames curated)",
+                "ambiguity_reason": cand.get("rejection_reason") if is_ambig else None,
+            })
+
+        return {
+            "columns": columns_out,
+            "entities": entities_out,
+            "grains": grain_out,
+            "candidate_keys": keys_out,
+            "has_candidate_keys": len(keys_out) > 0,
+            "no_key_message": "No reliable business key was identified." if len(keys_out) == 0 else None,
+            "enrichments": enrich_out,
+            "geo_resolutions": geo_out,
+        }
+
+    # =========================================================================
+    # RELATIONSHIPS MODE
+    # =========================================================================
+
+    def get_relationships_data(self, dataset_id: str) -> dict[str, Any]:
+        """Returns SDR-5 validated relationships, candidates, join safety, and join plans."""
+        sdr_dir = self._get_sdr_dir(dataset_id)
+
+        raw_edges = self._read_json(sdr_dir / "validated_relationships.json") or []
+        raw_candidates = self._read_json(sdr_dir / "relationship_candidates.json") or []
+        raw_plans = self._read_json(sdr_dir / "join_plans.json") or []
+
+        plans_by_edge = {
+            p.get("relationship_edge_id") or p.get("edge_id") or p.get("relationship_id"): p
+            for p in raw_plans
+        }
+
+        relationships_out = []
+        for e in raw_edges:
+            edge_id = e.get("edge_id") or e.get("relationship_id") or e.get("candidate_id")
+            plan = plans_by_edge.get(edge_id, {})
+            safety_raw = plan.get("safety_status", "SAFE" if e.get("status") == "VALIDATED" else "AMBIGUOUS")
+            safety_label = _translate_safety_status(safety_raw)
+
+            card_raw = e.get("cardinality", "MANY_TO_ONE")
+            card_label = _translate_cardinality(card_raw)
+
+            left_cov = round(float(e.get("left_coverage", e.get("referential_coverage", 1.0))) * 100, 1)
+            right_cov = round(float(e.get("right_coverage", 1.0)) * 100, 1)
+
+            # Preaggregation & Unsafe explanations
+            preagg_steps = plan.get("preaggregation_steps", [])
+            risk_flags = plan.get("risk_flags", e.get("risk_flags", []))
+            preagg_expl = _generate_preagg_explanation(plan, e) if "PREAGGREGATION" in safety_raw or len(preagg_steps) > 0 else None
+            unsafe_expl = _generate_unsafe_explanation(plan, e) if safety_raw == "UNSAFE" or "RISK" in str(risk_flags) else None
+
+            relationships_out.append({
+                "relationship_id": edge_id,
+                "left_sheet": e.get("left_sheet_id"),
+                "left_columns": e.get("left_column_ids", []),
+                "right_sheet": e.get("right_sheet_id"),
+                "right_columns": e.get("right_column_ids", []),
+                "relationship_type": e.get("relationship_type", "FOREIGN_KEY_LOOKUP"),
+                "cardinality": card_label,
+                "cardinality_raw": card_raw,
+                "coverage_left_pct": left_cov,
+                "coverage_right_pct": right_cov,
+                "coverage_summary": f"Left {left_cov}% · Right {right_cov}%",
+                "safety_status": safety_label,
+                "safety_status_raw": safety_raw,
+                "result_grain": plan.get("target_grain", e.get("target_grain", "PRESERVED")),
+                "risk_flags": risk_flags,
+                "join_plan_id": plan.get("join_plan_id", f"JP-{edge_id}"),
+                "preaggregation_explanation": preagg_expl,
+                "unsafe_join_explanation": unsafe_expl,
+                "is_validated": e.get("status") == "VALIDATED",
+                "technical_details": {
+                    "edge": e,
+                    "join_plan": plan,
+                }
+            })
+
+        # Bounded nodes & edges for topology visualization
+        nodes = []
+        seen_sheets = set()
+        for r in relationships_out:
+            for sh in [r["left_sheet"], r["right_sheet"]]:
+                if sh and sh not in seen_sheets:
+                    seen_sheets.add(sh)
+                    nodes.append({"id": sh, "name": sh, "label": sh})
+
+        return {
+            "relationships": relationships_out,
+            "total_validated": len([r for r in relationships_out if r["is_validated"]]),
+            "total_candidates": len(raw_candidates),
+            "graph": {
+                "nodes": nodes,
+                "edges": [
+                    {
+                        "source": r["left_sheet"],
+                        "target": r["right_sheet"],
+                        "label": f"{r['cardinality']} ({r['safety_status']})",
+                        "safety": r["safety_status_raw"],
+                    }
+                    for r in relationships_out
+                ]
+            }
+        }
+
+    # =========================================================================
+    # ANALYTICAL VIEWS & FACTS MODE
+    # =========================================================================
+
+    def get_analytical_views_data(self, dataset_id: str) -> dict[str, Any]:
+        """Returns SDR-6 views, freshness status, facts, and lineage paths."""
+        sdr_dir = self._get_sdr_dir(dataset_id)
+
+        raw_views = self._read_json(sdr_dir / "analytical_views.json") or []
+        raw_facts = self._read_json(sdr_dir / "analytical_facts.json") or []
+        raw_execs = self._read_json(sdr_dir / "analytical_execution_manifest.json") or []
+        raw_manifest = self._read_json(sdr_dir / "sdr6_manifest.json") or {}
+
+        views_out = []
+        for v in raw_views:
+            v_id = v.get("analytical_view_id")
+            status_raw = v.get("status", "VALID")
+            status_label = _translate_view_status(status_raw)
+
+            mat_mode_raw = v.get("materialization_mode", "VIRTUAL")
+            mat_mode_label = "Materialized" if mat_mode_raw == "MATERIALIZED" else "Virtual"
+
+            # Check staleness
+            is_stale = status_raw == "STALE"
+            freshness_label = "Stale (Blocked)" if is_stale else "Current"
+
+            # Find matching facts
+            v_facts = [f for f in raw_facts if f.get("analytical_view_id") == v_id]
+
+            views_out.append({
+                "view_id": v_id,
+                "name": v.get("name", v_id),
+                "meaning": f"Analytical View: {v.get('name', v_id)} at grain {v.get('result_grain', 'RECORD')}",
+                "status": status_label,
+                "status_raw": status_raw,
+                "freshness": freshness_label,
+                "is_stale": is_stale,
+                "result_grain": v.get("result_grain", "RECORD"),
+                "source_sheets": v.get("source_sheet_ids", []),
+                "join_plan_ids": v.get("join_plan_ids", []),
+                "dimension_columns": v.get("dimension_columns", []),
+                "measure_columns": v.get("measure_columns", []),
+                "derived_measures": [
+                    {
+                        "name": dm.get("measure_name"),
+                        "unit": dm.get("unit"),
+                        "formula": dm.get("formula_repr") or "Governed expression",
+                    }
+                    for dm in v.get("derived_measure_specs", [])
+                ],
+                "materialization_mode": mat_mode_label,
+                "materialization_mode_raw": mat_mode_raw,
+                "units": v.get("unit_metadata", {}),
+                "denominators": v.get("denominator_metadata", {}),
+                "missing_value_policy": v.get("missing_value_policy", "PRESERVE_NULL"),
+                "facts_count": len(v_facts),
+            })
+
+        # Facts with lineage
+        facts_out = []
+        for f in raw_facts:
+            v_id = f.get("analytical_view_id")
+            metric = f.get("metric")
+            raw_val = f.get("value")
+            # Build compact step-by-step lineage
+            lineage_steps = _generate_lineage_steps(f, raw_views)
+
+            prov_raw = f.get("provenance_type", "OBSERVED")
+            prov_label = _translate_provenance(prov_raw)
+
+            facts_out.append({
+                "fact_id": f.get("fact_id"),
+                "analytical_view_id": v_id,
+                "metric": metric,
+                "value": raw_val,
+                "formatted_value": f.get("formatted_value") or str(raw_val),
+                "unit": f.get("unit"),
+                "grain": f.get("grain"),
+                "denominator_value": f.get("denominator_value"),
+                "dataset_version": f.get("dataset_version", "v1"),
+                "provenance": prov_label,
+                "provenance_raw": prov_raw,
+                "source_evidence_ids": f.get("source_evidence_ids", []),
+                "lineage_path": lineage_steps,
+            })
+
+        return {
+            "views": views_out,
+            "facts": facts_out,
+            "total_views": len(views_out),
+            "total_facts": len(facts_out),
+            "manifest_summary": raw_manifest.get("view_status_summary", {}),
+        }
+
+
+# =========================================================================
+# HELPER TRANSLATORS (USER-FACING LANGUAGE WITHOUT INTERNAL ENUMS)
+# =========================================================================
+
+def _translate_role(raw: str) -> str:
+    mapping = {
+        "DIMENSION": "Category / Dimension",
+        "MEASURE": "Numeric Measure",
+        "ENTITY_IDENTIFIER": "Entity Identifier",
+        "ENTITY_LABEL": "Entity Name / Label",
+        "TIME": "Time / Date",
+        "STATUS": "Status / State",
+        "METADATA": "System Metadata",
+        "ORDINAL": "Sequence / Ordinal",
+    }
+    return mapping.get(raw, raw.replace("_", " ").title())
+
+
+def _translate_dtype(raw: str) -> str:
+    mapping = {
+        "INTEGER": "Whole Number (Integer)",
+        "DECIMAL": "Decimal Number",
+        "CURRENCY_AMOUNT": "Currency Amount ($)",
+        "PERCENTAGE": "Percentage (%)",
+        "DATE": "Calendar Date",
+        "DATETIME": "Date & Time",
+        "TEXT": "Text / String",
+        "BOOLEAN": "Yes / No (Boolean)",
+    }
+    return mapping.get(raw, raw.replace("_", " ").title())
+
+
+def _translate_concept(raw: str) -> str:
+    mapping = {
+        "IDENTIFIER": "Unique Identifier",
+        "DESCRIPTOR": "Descriptive Label",
+        "MEASURE": "Quantifiable Value",
+        "FINANCIAL_METRIC": "Financial Measure",
+        "TIME_SPAN": "Time Dimension",
+        "LOCATION_ATTRIBUTE": "Geographic Location",
+    }
+    return mapping.get(raw, raw.replace("_", " ").title())
+
+
+def _translate_entity(raw: str) -> str:
+    mapping = {
+        "PERSON": "Employee / Person",
+        "ORGANIZATION": "Organization / Company",
+        "STORE": "Store / Facility",
+        "PRODUCT": "Product / Item",
+        "TRANSACTION": "Transaction / Order",
+        "EVENT": "Activity / Event",
+    }
+    return mapping.get(raw, raw.replace("_", " ").title())
+
+
+def _translate_measure_class(raw: str) -> str:
+    mapping = {
+        "ADDITIVE": "Additive (Summable)",
+        "SEMI_ADDITIVE": "Semi-Additive (Snapshot)",
+        "NON_ADDITIVE_RATIO": "Non-Additive Ratio (Weighted Average only)",
+        "NON_ADDITIVE_ENVIRONMENTAL": "Non-Additive Environmental Concentration",
+    }
+    return mapping.get(raw, raw.replace("_", " ").title())
+
+
+def _translate_privacy(raw: str) -> str:
+    mapping = {
+        "PUBLIC": "Public",
+        "INTERNAL": "Internal / Governed",
+        "DIRECT_IDENTIFIER": "Direct Identifier (Protected)",
+        "SENSITIVE": "Sensitive (Restricted)",
+    }
+    return mapping.get(raw, raw.replace("_", " ").title())
+
+
+def _translate_safety_status(raw: str) -> str:
+    mapping = {
+        "SAFE": "Safe to join",
+        "SAFE_WITH_PREAGGREGATION": "Safe after aggregation",
+        "AMBIGUOUS": "Needs review",
+        "UNSAFE": "Unsafe to join directly",
+    }
+    return mapping.get(raw, raw.replace("_", " ").title())
+
+
+def _translate_cardinality(raw: str) -> str:
+    mapping = {
+        "MANY_TO_ONE": "Many-to-one (N:1)",
+        "ONE_TO_ONE": "One-to-one (1:1)",
+        "ONE_TO_MANY": "One-to-many (1:N)",
+        "MANY_TO_MANY": "Many-to-many (N:N)",
+    }
+    return mapping.get(raw, raw.replace("_", " ").title())
+
+
+def _translate_view_status(raw: str) -> str:
+    mapping = {
+        "VALID": "Valid",
+        "VALID_WITH_PREAGGREGATION": "Safe after aggregation",
+        "AMBIGUOUS": "Needs review",
+        "UNSAFE": "Unsafe",
+        "STALE": "Stale (Blocked)",
+    }
+    return mapping.get(raw, raw.replace("_", " ").title())
+
+
+def _translate_provenance(raw: str) -> str:
+    mapping = {
+        "OBSERVED": "Source / Observed",
+        "DERIVED_ENRICHMENT": "Derived from reference data",
+        "DERIVED_RELATIONAL": "Relational derivation",
+        "DERIVED_LOCAL": "Local derivation",
+    }
+    return mapping.get(raw, raw.replace("_", " ").title())
+
+
+def _generate_grain_explanation(grain_name: str, entities: list[dict[str, Any]], sheet_id: str) -> str:
+    """Deterministic template explanation for row grain."""
+    parts = [p.strip().title() for p in grain_name.split("×")]
+    if len(parts) == 1:
+        return f"Each row appears to represent one {parts[0].lower()}."
+    elif len(parts) == 2:
+        return f"Each row appears to represent one {parts[0].lower()} per {parts[1].lower()}."
+    else:
+        return f"Each row represents unique combinations of {' and '.join(p.lower() for p in parts)}."
+
+
+def _generate_preagg_explanation(plan: dict[str, Any], edge: dict[str, Any]) -> str:
+    """Plain-English preaggregation explanation without SQL."""
+    left = edge.get("left_sheet_id", "Source")
+    right = edge.get("right_sheet_id", "Target")
+    target_grain = plan.get("target_grain", "target grain")
+    return f"Aggregate {left} to {target_grain} before joining with {right} to prevent row multiplication."
+
+
+def _generate_unsafe_explanation(plan: dict[str, Any], edge: dict[str, Any]) -> str:
+    """Plain-English unsafe join explanation without DB jargon."""
+    left = edge.get("left_sheet_id", "Source")
+    right = edge.get("right_sheet_id", "Target")
+    risks = plan.get("risk_flags", edge.get("risk_flags", []))
+    if any("MULTIPLICATION" in str(r) for r in risks):
+        return f"Joining {left} with {right} would repeat parent-level metrics across multiple child records."
+    if any("MANY_TO_MANY" in str(r) for r in risks):
+        return f"Joining {left} with {right} creates a many-to-many relationship that produces inflated Cartesian totals."
+    return f"Direct join between {left} and {right} is unsafe because key matching violates row grain consistency."
+
+
+def _generate_lineage_steps(fact: dict[str, Any], views: list[dict[str, Any]]) -> list[dict[str, str]]:
+    """Builds a compact step-by-step lineage path."""
+    v_id = fact.get("analytical_view_id")
+    metric = fact.get("metric", "Metric")
+    view = next((v for v in views if v.get("analytical_view_id") == v_id), None)
+    sheets = view.get("source_sheet_ids", ["Source"]) if view else ["Source"]
+    join_plans = view.get("join_plan_ids", []) if view else []
+
+    steps = [
+        {"step": 1, "type": "SOURCE", "label": f"Source Sheet: {', '.join(sheets)}", "detail": f"Raw observed evidence for {metric}"}
+    ]
+
+    if join_plans:
+        steps.append({
+            "step": 2,
+            "type": "JOIN_PLAN",
+            "label": f"Governed Join: {', '.join(join_plans)}",
+            "detail": f"Safe join path across {len(sheets)} sheets"
+        })
+
+    steps.append({
+        "step": len(steps) + 1,
+        "type": "ANALYTICAL_VIEW",
+        "label": f"Analytical View: {view.get('name', v_id) if view else v_id}",
+        "detail": f"Reconstructed at grain {fact.get('grain', 'RECORD')}"
+    })
+
+    steps.append({
+        "step": len(steps) + 1,
+        "type": "FACT",
+        "label": f"Gold Fact: {metric} = {fact.get('formatted_value') or fact.get('value')} {fact.get('unit') or ''}".strip(),
+        "detail": f"Epistemic authority: {fact.get('provenance_type', 'OBSERVED')}"
+    })
+
+    return steps
