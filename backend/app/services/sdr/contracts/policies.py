@@ -85,6 +85,22 @@ class KeyConfidencePolicy(BaseModel):
     fd_sample_size: int = Field(default=5000, ge=100)
 
 
+class EnrichmentPolicy(BaseModel):
+    """
+    SDR-4 Governed Enrichment Policy.
+    Defines budgets, utility thresholds, and depth limits.
+    """
+    model_config = ConfigDict(frozen=True)
+
+    max_candidates_per_column: int = Field(default=5, ge=1, le=20)
+    max_enrichments_per_column: int = Field(default=3, ge=1, le=10)
+    max_enrichment_depth: int = Field(default=2, ge=1, le=5)
+    max_total_enrichments_per_dataset: int = Field(default=50, ge=1)
+    max_materialized_enrichments: int = Field(default=20, ge=0)
+    min_utility_score: float = Field(default=0.60, ge=0.0, le=1.0)
+    min_confidence: float = Field(default=0.80, ge=0.0, le=1.0)
+
+
 class SDRPolicySuite(BaseModel):
     """
     Unified SDR Policy Suite capturing semantic and analytical execution configuration.
@@ -96,6 +112,7 @@ class SDRPolicySuite(BaseModel):
     semantic: SemanticConfidencePolicy = SemanticConfidencePolicy()
     grain: GrainConfidencePolicy = GrainConfidencePolicy()
     key: KeyConfidencePolicy = KeyConfidencePolicy()
+    enrichment: EnrichmentPolicy = EnrichmentPolicy()
 
     def compute_policy_fingerprint(self) -> str:
         """Deterministic fingerprint of active policy configuration."""
@@ -105,6 +122,7 @@ class SDRPolicySuite(BaseModel):
             "semantic": self.semantic.model_dump(),
             "grain": self.grain.model_dump(),
             "key": self.key.model_dump(),
+            "enrichment": self.enrichment.model_dump(),
         }
         canonical_json = json.dumps(payload, sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()

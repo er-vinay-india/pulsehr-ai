@@ -57,10 +57,11 @@ class PrivacyClassification(str, Enum):
     SDR Privacy and Identifier Governance taxonomy.
     Differentiates direct keys from sensitive attributes and strictly prohibits inferred sensitivity.
     """
-    DIRECT_IDENTIFIER = "DIRECT_IDENTIFIER"       # Authorized for deterministic joins; masked from display
-    SENSITIVE_ATTRIBUTE = "SENSITIVE_ATTRIBUTE"   # Restricted per governance; aggregations allowed
-    GENERAL_ATTRIBUTE = "GENERAL_ATTRIBUTE"       # Non-sensitive dimension/measure
-    PUBLIC = "GENERAL_ATTRIBUTE"                  # Convenience alias
+    DIRECT_IDENTIFIER = "DIRECT_IDENTIFIER"                   # Authorized for deterministic joins; masked from display
+    SENSITIVE_ATTRIBUTE = "SENSITIVE_ATTRIBUTE"               # Restricted per governance; aggregations allowed
+    INFERRED_SENSITIVE_ATTRIBUTE = "INFERRED_SENSITIVE_ATTRIBUTE" # Prohibited: probabilistic derivation forbidden
+    GENERAL_ATTRIBUTE = "GENERAL_ATTRIBUTE"                   # Non-sensitive dimension/measure
+    PUBLIC = "GENERAL_ATTRIBUTE"                              # Convenience alias
     UNKNOWN = "UNKNOWN"
 
 

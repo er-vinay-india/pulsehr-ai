@@ -11,6 +11,11 @@ from pathlib import Path
 from typing import Any, Sequence
 
 from app.services.sdr.contracts.decomposition import SemanticDecompositionCandidate
+from app.services.sdr.contracts.enrichment import (
+    EnrichmentCandidate,
+    EnrichmentDecisionRecord,
+    ValidatedEnrichment,
+)
 from app.services.sdr.contracts.keys import (
     ObservedFunctionalDependency,
     SDRKeyCandidate,
@@ -221,4 +226,81 @@ class SDRArtifactWriter:
             "sdr3_manifest": str(manifest_path),
             "manifest_fingerprint": manifest_hash,
         }
+
+    def write_sdr4_artifacts(
+        self,
+        dataset_id: str,
+        candidates: Sequence[EnrichmentCandidate] | None = None,
+        validated_enrichments: Sequence[ValidatedEnrichment] | None = None,
+        decisions: Sequence[EnrichmentDecisionRecord] | None = None,
+        policy_suite: SDRPolicySuite | None = None,
+        sheet_id: str | None = None,
+        manifest: dict[str, Any] | None = None,
+    ) -> dict[str, str]:
+        """
+        Writes canonical SDR-4 artifacts:
+        - enrichment_candidates.json
+        - validated_enrichments.json
+        - enrichment_decisions.json
+        - sdr4_manifest.json
+        """
+        sdr_dir = self.get_dataset_sdr_dir(dataset_id)
+        policy = policy_suite or SDRPolicySuite()
+        policy_fp = policy.compute_policy_fingerprint()
+
+        actual_candidates = list(candidates or [])
+        actual_validated = list(validated_enrichments or [])
+        actual_decisions = list(decisions or [])
+
+        # 1. Enrichment Candidates
+        sorted_candidates = sorted(actual_candidates, key=lambda c: (c.sheet_id, c.candidate_id))
+        cand_data = [c.model_dump() for c in sorted_candidates]
+        cand_json = json.dumps(cand_data, indent=2, sort_keys=True)
+        cand_path = sdr_dir / "enrichment_candidates.json"
+        cand_path.write_text(cand_json, encoding="utf-8")
+        cand_hash = hashlib.sha256(cand_json.encode("utf-8")).hexdigest()
+
+        # 2. Validated Enrichments
+        sorted_val = sorted(actual_validated, key=lambda v: (v.sheet_id, v.enrichment_id))
+        val_data = [v.model_dump() for v in sorted_val]
+        val_json = json.dumps(val_data, indent=2, sort_keys=True)
+        val_path = sdr_dir / "validated_enrichments.json"
+        val_path.write_text(val_json, encoding="utf-8")
+        val_hash = hashlib.sha256(val_json.encode("utf-8")).hexdigest()
+
+        # 3. Enrichment Decisions
+        sorted_dec = sorted(actual_decisions, key=lambda d: (d.sheet_id, d.decision_id))
+        dec_data = [d.model_dump() for d in sorted_dec]
+        dec_json = json.dumps(dec_data, indent=2, sort_keys=True)
+        dec_path = sdr_dir / "enrichment_decisions.json"
+        dec_path.write_text(dec_json, encoding="utf-8")
+        dec_hash = hashlib.sha256(dec_json.encode("utf-8")).hexdigest()
+
+        # 4. SDR-4 Manifest
+        sdr4_manifest = {
+            "dataset_id": dataset_id,
+            "policy_fingerprint": policy_fp,
+            "candidates_count": len(sorted_candidates),
+            "validated_enrichments_count": len(sorted_val),
+            "decisions_count": len(sorted_dec),
+            "candidates_hash": cand_hash,
+            "validated_enrichments_hash": val_hash,
+            "decisions_hash": dec_hash,
+        }
+        if manifest:
+            sdr4_manifest["engine_manifest"] = manifest
+
+        manifest_json = json.dumps(sdr4_manifest, indent=2, sort_keys=True)
+        manifest_path = sdr_dir / "sdr4_manifest.json"
+        manifest_path.write_text(manifest_json, encoding="utf-8")
+        manifest_hash = hashlib.sha256(manifest_json.encode("utf-8")).hexdigest()
+
+        return {
+            "enrichment_candidates": str(cand_path),
+            "validated_enrichments": str(val_path),
+            "enrichment_decisions": str(dec_path),
+            "sdr4_manifest": str(manifest_path),
+            "manifest_fingerprint": manifest_hash,
+        }
+
 

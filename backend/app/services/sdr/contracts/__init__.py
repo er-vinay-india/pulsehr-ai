@@ -45,7 +45,22 @@ from app.services.sdr.contracts.keys import (
     compute_key_candidate_fingerprint,
 )
 
+from app.services.sdr.contracts.enrichment import (
+    EnrichmentCandidate,
+    EnrichmentDecisionRecord,
+    EnrichmentDecisionType,
+    EnrichmentMaterialization,
+    EnrichmentProviderMetadata,
+    EnrichmentProviderType,
+    EnrichmentStatus,
+    ValidatedEnrichment,
+    compute_enrichment_candidate_fingerprint,
+    compute_enrichment_decision_fingerprint,
+    compute_validated_enrichment_fingerprint,
+)
+
 __all__ = [
+    "EnrichmentPolicy",
     "GrainConfidencePolicy",
     "KeyConfidencePolicy",
     "SDRPolicySuite",
@@ -75,5 +90,16 @@ __all__ = [
     "SDRKeyCandidate",
     "compute_fd_fingerprint",
     "compute_key_candidate_fingerprint",
+    "EnrichmentCandidate",
+    "EnrichmentDecisionRecord",
+    "EnrichmentDecisionType",
+    "EnrichmentMaterialization",
+    "EnrichmentProviderMetadata",
+    "EnrichmentProviderType",
+    "EnrichmentStatus",
+    "ValidatedEnrichment",
+    "compute_enrichment_candidate_fingerprint",
+    "compute_enrichment_decision_fingerprint",
+    "compute_validated_enrichment_fingerprint",
 ]
 

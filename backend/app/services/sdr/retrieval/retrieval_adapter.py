@@ -13,6 +13,10 @@ from app.services.ingestion_v2.retrieval.namespaces import (
     RetrievalNamespace,
 )
 from app.services.sdr.contracts.decomposition import SemanticDecompositionCandidate
+from app.services.sdr.contracts.enrichment import (
+    EnrichmentCandidate,
+    ValidatedEnrichment,
+)
 from app.services.sdr.contracts.keys import (
     ObservedFunctionalDependency,
     SDRKeyCandidate,
@@ -393,3 +397,90 @@ class SDRRetrievalAdapter:
             text_for_retrieval=text,
             structured_metadata=metadata,
         )
+
+    @staticmethod
+    def build_enrichment_candidate_document(
+        candidate: EnrichmentCandidate,
+        dataset_version: str = "v1",
+        source_fingerprint: str = "source_hash",
+    ) -> RetrievalDocument:
+        """Emits an enrichment candidate opportunity to SEMANTIC_INDEX."""
+        doc_id = f"enrich_cand_{candidate.dataset_id}_{candidate.sheet_id}_{candidate.candidate_id}"
+        text = (
+            f"Table {candidate.sheet_id} Column {', '.join(candidate.source_column_names)} "
+            f"EnrichmentOpportunity {candidate.proposed_enrichment_type} "
+            f"Output {candidate.proposed_output_name} Type {candidate.proposed_output_semantic_type.value} "
+            f"Provider {candidate.provider_id} Confidence {candidate.confidence}"
+        )
+        metadata = {
+            "candidate_id": candidate.candidate_id,
+            "dataset_id": candidate.dataset_id,
+            "sheet_id": candidate.sheet_id,
+            "source_columns": list(candidate.source_column_names),
+            "enrichment_type": candidate.proposed_enrichment_type,
+            "output_name": candidate.proposed_output_name,
+            "output_type": candidate.proposed_output_semantic_type.value,
+            "provider_id": candidate.provider_id,
+            "confidence": candidate.confidence,
+            "validation_status": candidate.validation_status.value,
+            "candidate_fingerprint": candidate.artifact_fingerprint,
+        }
+
+        return RetrievalDocument.create(
+            document_id=doc_id,
+            namespace=RetrievalNamespace.SEMANTIC,
+            authority_class=AuthorityClass.SEMANTIC,
+            dataset_id=candidate.dataset_id,
+            dataset_version=dataset_version,
+            source_fingerprint=source_fingerprint,
+            artifact_type="EnrichmentCandidateDoc",
+            artifact_id=candidate.candidate_id,
+            text_for_retrieval=text,
+            structured_metadata=metadata,
+        )
+
+    @staticmethod
+    def build_validated_enrichment_document(
+        enrichment: ValidatedEnrichment,
+        dataset_version: str = "v1",
+        source_fingerprint: str = "source_hash",
+    ) -> RetrievalDocument:
+        """Emits an authorized validated enrichment definition to SEMANTIC_INDEX."""
+        doc_id = f"val_enrich_{enrichment.dataset_id}_{enrichment.sheet_id}_{enrichment.enrichment_id}"
+        text = (
+            f"Table {enrichment.sheet_id} DerivedEnrichment {enrichment.output_name} "
+            f"SourceColumns {', '.join(enrichment.source_column_names)} "
+            f"Type {enrichment.output_semantic_type.value} Authority {enrichment.authority} "
+            f"Materialization {enrichment.materialization.value} Confidence {enrichment.confidence} "
+            f"Provider {enrichment.provider_id} v{enrichment.provider_version}"
+        )
+        metadata = {
+            "enrichment_id": enrichment.enrichment_id,
+            "dataset_id": enrichment.dataset_id,
+            "sheet_id": enrichment.sheet_id,
+            "source_columns": list(enrichment.source_column_names),
+            "output_name": enrichment.output_name,
+            "output_type": enrichment.output_semantic_type.value,
+            "materialization": enrichment.materialization.value,
+            "authority": enrichment.authority,
+            "confidence": enrichment.confidence,
+            "provider_id": enrichment.provider_id,
+            "provider_version": enrichment.provider_version,
+            "reference_version": enrichment.reference_data_version,
+            "is_valid": enrichment.is_valid,
+            "enrichment_fingerprint": enrichment.artifact_fingerprint,
+        }
+
+        return RetrievalDocument.create(
+            document_id=doc_id,
+            namespace=RetrievalNamespace.SEMANTIC,
+            authority_class=AuthorityClass.SEMANTIC,
+            dataset_id=enrichment.dataset_id,
+            dataset_version=dataset_version,
+            source_fingerprint=source_fingerprint,
+            artifact_type="ValidatedEnrichmentDoc",
+            artifact_id=enrichment.enrichment_id,
+            text_for_retrieval=text,
+            structured_metadata=metadata,
+        )
+
