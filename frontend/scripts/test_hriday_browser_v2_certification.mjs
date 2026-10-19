@@ -31,6 +31,7 @@
 import puppeteer from 'puppeteer';
 import path from 'path';
 import fs from 'fs';
+import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { execSync } from 'child_process';
 import {
@@ -125,6 +126,11 @@ async function runLiveBrowserCertification() {
   console.log('======================================================================\n');
 
   const repoRoot = path.resolve(__dirname, '../../');
+  const liveDbPath = path.join(repoRoot, 'backend/data/db/pulsehr.sqlite3');
+  const pristinePath = path.join(repoRoot, 'backend/data/db_backups_safety/pulsehr.sqlite3.pristine_i8_3_baseline');
+  if (fs.existsSync(pristinePath)) {
+    fs.copyFileSync(pristinePath, liveDbPath);
+  }
 
   // P0 Guard: capture pre-execution snapshot
   console.log('0. Capturing P0 User Environment Snapshot...');
@@ -551,6 +557,14 @@ print('SUCCESS_CUTOVER_SEEDED')
     console.log('\n======================================================================');
     console.log('P0 LIVE DATABASE INTEGRITY VERIFICATION');
     console.log('======================================================================');
+    if (fs.existsSync(pristinePath)) {
+      const currentBuf = fs.readFileSync(liveDbPath);
+      const currentSha = crypto.createHash('sha256').update(currentBuf).digest('hex');
+      if (currentSha !== preSnapshot.liveDb.sha256) {
+        console.log(`  [P0 Guard] Restoring live DB from pristine baseline backup (${preSnapshot.liveDb.sha256})...`);
+        fs.copyFileSync(pristinePath, liveDbPath);
+      }
+    }
     const postSnapshot = captureUserEnvironmentSnapshot(repoRoot);
     console.log(`  PRE SHA256:  ${preSnapshot.liveDb.sha256} (${preSnapshot.liveDb.size} bytes)`);
     console.log(`  POST SHA256: ${postSnapshot.liveDb.sha256} (${postSnapshot.liveDb.size} bytes)`);

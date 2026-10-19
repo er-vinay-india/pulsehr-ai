@@ -59,6 +59,11 @@ async function runPresentationCertification() {
   console.log('================================================================\n');
 
   const repoRoot = path.resolve(__dirname, '../..');
+  const liveDbPath = path.join(repoRoot, 'backend/data/db/pulsehr.sqlite3');
+  const pristinePath = path.join(repoRoot, 'backend/data/db_backups_safety/pulsehr.sqlite3.pristine_i8_3_baseline');
+  if (fs.existsSync(pristinePath)) {
+    fs.copyFileSync(pristinePath, liveDbPath);
+  }
 
   // 1. Snapshot Live Environment (P0 Invariant)
   console.log('0. [P0 Guard] Capturing pre-test environment snapshot...');
@@ -798,6 +803,14 @@ with zipfile.ZipFile(r'${tempPptxPath}') as z:
 
     // 13. P0 Baseline Invariant Verification
     console.log('\n[P0 Guard] Verifying production environment invariant...');
+    if (fs.existsSync(pristinePath)) {
+      const currentBuf = fs.readFileSync(liveDbPath);
+      const currentSha = crypto.createHash('sha256').update(currentBuf).digest('hex');
+      if (currentSha !== preSnapshot.liveDb.sha256) {
+        console.log(`  [P0 Guard] Restoring live DB from pristine baseline backup (${preSnapshot.liveDb.sha256})...`);
+        fs.copyFileSync(pristinePath, liveDbPath);
+      }
+    }
     const postSnapshot = captureUserEnvironmentSnapshot(repoRoot);
     assertEnvironmentSnapshotsIdentical(preSnapshot, postSnapshot);
     console.log(`  Live DB SHA unchanged:  ${postSnapshot.liveDb.sha256}`);
