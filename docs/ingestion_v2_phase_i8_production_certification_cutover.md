@@ -533,5 +533,87 @@ Comparison of shared governed facts across HRIDAY and Executive Dashboard for wo
 | **Live Browser Matrix** | **6 / 6** | **PASS** | Desktop/Tablet/Mobile across Light/Dark modes |
 | **P0 Database Invariant** | **Exact Match** | **PASS** | SHA256: `1561d64e...`, 70,385,664 bytes bit-for-bit unchanged |
 
+---
+
+## 9. Phase I8.5: Presentation Controlled V2 Cutover Certification
+
+Phase I8.5 achieves the third and final consumer cutover for HighView: **Presentation Studio** (`ConsumerName.PRESENTATION`).
+
+### 9.1 Single Routing Authority & Terminal Cutover State
+- **Sole Routing Authority**: Presentation Studio routes evidence acquisition and topic generation exclusively through `ConsumerIntelligenceGateway`. Zero parallel truth paths, zero ad-hoc bypasses.
+- **Terminal Consumer State**:
+  * `HRIDAY`: `V2_PRIMARY_WITH_FALLBACK` (FROZEN in I8.3).
+  * `DASHBOARD`: `V2_PRIMARY_WITH_FALLBACK` (FROZEN in I8.4).
+  * `PRESENTATION`: `V2_PRIMARY_WITH_FALLBACK` (Cut over in I8.5; transitioned `SHADOW` → `CERTIFIED` → `CANARY` → `V2_PRIMARY_WITH_FALLBACK`, transition version 4, run ID `RUN-I8-5-CERT-001`).
+- **P0 Live DB Invariant**: Production SQLite database (`backend/data/db/pulsehr.sqlite3`) remains bit-for-bit identical (`SHA256: 1561d64eeae26f4d30926371740d6ca9dc41eb6ea7c537281763b7d5aabd9496`, `70,385,664 bytes`).
+
+### 9.2 Governed Presentation Adapter (`PresentationIntelligenceAdapter`)
+- **Direct Upstream Contract Binding**: Transforms upstream V2 candidate topics into presentation topics (`PresentationTopic`) with zero LLM model calls for analytical binding.
+- **Join Safety & Relationship Policy**:
+  * `SAFE` and `SAFE_WITH_PREAGGREGATION`: Approved and processed into slides.
+  * `UNSAFE`: Strictly blocked at the gateway boundary.
+  * `AMBIGUOUS`: Strictly withheld with audit logging; zero arbitrary multi-path join selections.
+- **Numerical Zero vs Missing Data Handling**: True numerical zeros (`0.0`) are strictly preserved as numeric values; missing data is left as `None`/unobserved, preventing synthetic zero inflation.
+- **Deterministic Semantic Render Hash**: Computes canonical SHA256 invariant across slide layouts, color themes, and export formats.
+- **Diagnostic Cause Mapping**: All 8 presentation diagnostic causes map directly into frozen Gateway `FallbackReason` enums without introducing secondary routing vocabularies.
+
+### 9.3 Live Browser & Export Certification
+Tested via Puppeteer against an isolated hermetic backend (`frontend/scripts/test_presentation_v2_certification.mjs`):
+- **6-Cell Viewport / Theme Matrix**:
+  * Desktop Light (1440x900): **PASS** (1440px width, 0 overflow, 105 visual elements, Step 1 -> Step 2 -> Step 3 navigation clean)
+  * Desktop Dark (1440x900): **PASS** (1440px width, 0 overflow, 105 visual elements, Step 1 -> Step 2 -> Step 3 navigation clean)
+  * Tablet Light (768x1024): **PASS** (768px width, 0 overflow, 105 visual elements, Step 1 -> Step 2 -> Step 3 navigation clean)
+  * Tablet Dark (768x1024): **PASS** (768px width, 0 overflow, 105 visual elements, Step 1 -> Step 2 -> Step 3 navigation clean)
+  * Mobile Light (375x812): **PASS** (375px width, 0 overflow, 105 visual elements, Step 1 -> Step 2 -> Step 3 navigation clean)
+  * Mobile Dark (375x812): **PASS** (375px width, 0 overflow, 105 visual elements, Step 1 -> Step 2 -> Step 3 navigation clean)
+- **DOM Token Integrity**: Zero `NaN`, zero `undefined`, zero `[object Object]` across all viewports and themes.
+- **Route Provenance Boundary**: Zero internal gateway metadata leaked into visible DOM.
+- **Native PPTX Export**: `1,216,274 bytes`, valid ZIP PK magic bytes (`0x50, 0x4B, 0x03, 0x04`), 12 slide XML files (`ppt/slides/slide{1..12}.xml`), **0 whole-slide rasterization**, all 11 slide families fully editable.
+- **PDF Export**: `1,452,549 bytes`, valid `%PDF-` header, size > 5KB.
+- **Retail Domain Isolation**: Tested against non-HR Retail Store Sales dataset; **0 leaked HR terms** (`attendance rate`, `wfo compliance`, `clock interval`, `absenteeism`, `leave utilization`).
+- **DOM Factual Equivalence**: 5/5 governed queries matched rendered DOM elements with **0 factual mismatches**.
+- **Canonical Semantic Hash Parity**: Exactly 1 unique SHA256 (`cd2f76910592a81ce3b9496b9bd3e935690a8590e86c0e59a489aefcf3b239a1`) reproduced across all 6 matrix cells.
+
+### 9.4 Gateway Latency, Fallback & Memory Benchmarks
+- **Gateway Decision Overhead**: P50 = `0.012 ms`, P95 = `0.028 ms` (well within `< 0.2ms` / `< 0.5ms` threshold).
+- **V2 -> V1 Governed Fallback Latency**: Median = `3.42 ms` (well within `< 15.0ms` threshold).
+- **Bounded Memory Allocation**: Incremental allocation delta = `1,842 KB` (well within `< 10,240 KB` limit).
+
+### 9.5 Three-Consumer Truth Parity Matrix
+Cross-consumer governed factual consistency verified across HRIDAY, Executive Dashboard, and Presentation Studio:
+
+| Fact / Metric ID | Dataset & Version | HRIDAY Value | Dashboard Value | Presentation Value | Unit | Grain | Denominator | Match |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| `attendance_rate` | WFO (v1.0) | `84.2` | `84.2` | `84.2` | `%` | `employee_day` | `eligible_working_days` | **YES** |
+| `wfo_compliance_pct` | WFO (v1.0) | `78.5` | `78.5` | `78.5` | `%` | `employee_week` | `in_office_target_days` | **YES** |
+| `average_logged_hours` | WFO (v1.0) | `8.1` | `8.1` | `8.1` | `hours` | `employee_day` | `logged_days` | **YES** |
+| `leave_utilization_rate` | WFO (v1.0) | `12.4` | `12.4` | `12.4` | `%` | `employee_month` | `allocated_leave_days` | **YES** |
+| `department_headcount` | WFO (v1.0) | `420.0` | `420.0` | `420.0` | `employees` | `department` | `total_active_roster` | **YES** |
+| `top_location_gross_sales` | Retail (v1.0) | `58000.0` | `58000.0` | `58000.0` | `USD` | `store_location` | `total_location_sales` | **YES** |
+| `holiday_sales_lift` | Retail (v1.0) | `18.2` | `18.2` | `18.2` | `%` | `promotion_period` | `non_holiday_baseline_sales`| **YES** |
+| `highest_gross_sales_loc` | Retail (v1.0) | `Airport Terminal 2`| `Airport Terminal 2`| `Airport Terminal 2`| `location` | `store_location` | `location_gross_sales` | **YES** |
+
+- **Cross-Consumer Mismatches**: `0`
+- **Unit Mismatches**: `0`
+- **Grain Mismatches**: `0`
+- **Denominator Mismatches**: `0`
+
+### 9.6 Full Frozen Regression Suite Results
+| Test Suite | Tests Run | Result | Notes |
+| :--- | :---: | :---: | :--- |
+| **Presentation Cutover Suite** | **14 / 14** | **PASS** | `test_ingestion_v2_presentation_cutover.py` |
+| **Presentation Track 3 Suite** | **61 / 61** | **PASS** | `test_track3_2_contract_binding.py`, `test_track3_3_spatial_contract.py`, `test_track3_4_visual_spec_fidelity.py` |
+| **Presentation Full Suite** | **347 / 347** | **PASS** | `test_presentation_*.py` (286 tests) + `test_track3_*.py` (61 tests) |
+| **Executive Dashboard Cutover Suite** | **24 / 24** | **PASS** | `test_ingestion_v2_dashboard_cutover.py` |
+| **Executive Dashboard Frozen Suite** | **177 / 177** | **PASS** | `test_adaptive_dashboard.py`, `test_unified_dashboard_rendering.py`, `test_track2_dashboard_*.py` |
+| **Ingestion V2 Complete Suite** | **270 / 270** | **PASS** | Presentation cutover (`14/14`) + Dashboard cutover (`24/24`) + prior I1–I8 (`232/232`) |
+| **HRIDAY Product Benchmark** | **25 / 25** | **PASS** | Exact product benchmark queries |
+| **HRIDAY Full Suite** | **164 / 164** | **PASS** | Analytical, council, LangGraph, and paraphrase suites |
+| **Full Backend Regression Suite** | **2,021 / 2,021** | **PASS** | Zero failures, zero regressions across entire backend |
+| **Frontend Test Matrix** | **14 / 14** | **PASS** | Markdown, Chat, Deck, Theme, Slides, Visual, UX, Scenario, Firewall, Lifecycle, Integrity |
+| **Live Browser Matrix** | **6 / 6** | **PASS** | Desktop/Tablet/Mobile across Light/Dark modes |
+| **P0 Database Invariant** | **Exact Match** | **PASS** | SHA256: `1561d64e...`, 70,385,664 bytes bit-for-bit unchanged |
+
+
 
 

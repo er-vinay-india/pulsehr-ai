@@ -118,11 +118,15 @@ def generate_presentation_deck_spec(
                 hr_deck["slides"] = materialize_slide_visuals(hr_deck["slides"], hr_deck["metadata"]["theme_id"])
             return hr_deck
 
-    # Governed Presentation Builder: Direct Upstream Contract Binding (Track 3.2)
+    # Governed Presentation Builder: Direct Upstream Contract Binding (Track 3.2 & Phase I8.5)
     is_wide_attendance = any(str(c).startswith("Person_") for c in dataset_context.get("columns", []))
     is_workspace_findings = scope.get("scope_type") == "workspace" and bool(workspace_evidence and workspace_evidence.get("candidate_findings"))
+    is_v2_active = bool(
+        (workspace_evidence and workspace_evidence.get("governed_v2_active"))
+        or dataset_context.get("governed_v2_active")
+    )
 
-    if has_governed_topics and not is_wide_attendance and not is_workspace_findings and not scope.get("force_legacy_builders", False) and not scope.get("force_ai_planner", False):
+    if has_governed_topics and not is_wide_attendance and (is_v2_active or not is_workspace_findings) and not scope.get("force_legacy_builders", False) and not scope.get("force_ai_planner", False):
         from .governed_presentation_builder import build_governed_presentation_deck
         gov_deck = build_governed_presentation_deck(
             scope=scope,
@@ -131,6 +135,8 @@ def generate_presentation_deck_spec(
             on_slide_start=on_slide_start,
             on_slide_progress=on_slide_progress
         )
+        if is_v2_active and workspace_evidence and "metadata" in workspace_evidence and "route_provenance" in workspace_evidence["metadata"]:
+            gov_deck.setdefault("metadata", {})["route_provenance"] = workspace_evidence["metadata"]["route_provenance"]
         if materialize_visuals_now:
             gov_deck["slides"] = materialize_slide_visuals(gov_deck["slides"], theme_id)
         return gov_deck

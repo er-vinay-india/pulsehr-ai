@@ -496,7 +496,13 @@ def capture_dataset_context(conn, sheet_id: int | None = None, dataset_id: int |
 
 def collect_workspace_evidence(conn, scope: dict[str, Any]) -> dict[str, Any]:
     """Freezes a reproducible evidence snapshot, collects ground-truth profiles,
-    and builds an audit ledger with stable evidence IDs (EVID-xxx) using the shared package."""
+    and builds an audit ledger with stable evidence IDs (EVID-xxx) using the governed gateway adapter."""
+    from app.services.ingestion_v2.gateway.adapters.presentation_adapter import get_presentation_adapter
+    return get_presentation_adapter().acquire_presentation_evidence(conn, scope)
+
+
+def _legacy_collect_workspace_evidence(conn, scope: dict[str, Any]) -> dict[str, Any]:
+    """Legacy V1 evidence collection implementation."""
     if scope.get("deck_style") == "decision_brief":
         from ..decision_intelligence import build_decision_brief
         preflight = preview_presentation_scope(conn, scope)

@@ -70,7 +70,7 @@ async function runNegativeVerification() {
     );
     console.log('   ✅ PASS: Live server rejected test mutation with 403 Forbidden (FORBIDDEN_TEST_MUTATION_ON_LIVE_INSTANCE).');
   } catch (err) {
-    if (err.code === 'ECONNREFUSED') {
+    if (err.code === 'ECONNREFUSED' || err.cause?.code === 'ECONNREFUSED') {
       console.log('   ℹ️  (Live server port 8000 not currently running; skipping live HTTP probe)');
     } else {
       throw err;

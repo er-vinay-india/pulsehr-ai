@@ -232,20 +232,18 @@ class PresentationTopic(BaseModel):
             or visual_spec.get("leader_entity")
             or visual_spec.get("leader")
         )
-        leader_value = (
-            inspect_payload.get("leader_value")
-            or visual_spec.get("leader_value")
-        )
+        leader_value = inspect_payload.get("leader_value")
+        if leader_value is None:
+            leader_value = visual_spec.get("leader_value")
 
         # 6. Ranking Direction: exact match
         ranking_metadata = inspect_payload.get("ranking_metadata") or visual_spec.get("ranking_metadata") or {}
         ranking_direction = ranking_metadata.get("ranking_direction")
 
         # 7. Reference Line / Benchmark: exact match
-        reference_line = (
-            visual_spec.get("benchmark")
-            or ranking_metadata.get("benchmark")
-        )
+        reference_line = visual_spec.get("benchmark")
+        if reference_line is None:
+            reference_line = ranking_metadata.get("benchmark")
         if reference_line is None and "reference_lines" in visual_spec:
             ref_lines = visual_spec.get("reference_lines") or []
             if ref_lines and isinstance(ref_lines[0], dict):

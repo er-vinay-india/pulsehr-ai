@@ -15,6 +15,12 @@ from app.services.ingestion_v2.gateway.adapters.dashboard_adapter import (
     get_dashboard_adapter,
     set_dashboard_adapter,
 )
+from app.services.ingestion_v2.gateway.adapters.presentation_adapter import (
+    PresentationIntelligenceAdapter,
+    get_presentation_adapter,
+    set_presentation_adapter,
+    map_presentation_diagnostic_to_fallback_reason,
+)
 
 __all__ = [
     "HridayIntelligenceAdapter",
@@ -24,4 +30,8 @@ __all__ = [
     "get_dashboard_adapter",
     "set_dashboard_adapter",
     "compute_semantic_render_hash",
+    "PresentationIntelligenceAdapter",
+    "get_presentation_adapter",
+    "set_presentation_adapter",
+    "map_presentation_diagnostic_to_fallback_reason",
 ]
