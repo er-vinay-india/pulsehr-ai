@@ -49,7 +49,10 @@ test('chart payload and calculation context survive completion into the next tur
   calls[0].cb.onDone({ answer: 'Cohort average: 66.09', prior_context: prior });
   calls[0].resolve(); await first;
   const next = c.send('show me in chart format');
-  assert.deepEqual(calls[1].args[7], prior);
+  assert.deepEqual(calls[1].args[7], { ...prior, conversation_history: [
+    { role: 'user', content: 'display me Cohort Average: Math Score' },
+    { role: 'assistant', content: 'Cohort average: 66.09' },
+  ] });
   const chart = { chart_id: 'math', chart_type: 'column', categories: ['Cohort'], series: [{ name: 'Math Score', values: [66.09] }] };
   calls[1].cb.onDone({ answer: 'Here is the chart.', visual_charts: [chart], prior_context: prior });
   calls[1].resolve(); await next;
@@ -102,9 +105,41 @@ test('retry keeps one question, original scope, draft; follow-up context resets 
   c.setDraft('Keep draft'); const retry = c.retry(c.state.messages[1]); assert.equal(c.state.messages.length, 2);
   assert.equal(calls[1].args[4], 99); assert.equal(c.state.draft, 'Keep draft');
   calls[1].cb.onDone({ answer: 'Recovered', prior_context: { scope: 'internal' } }); calls[1].resolve(); await retry;
-  const next = c.send('Follow up'); assert.deepEqual(calls[2].args[7], { scope: 'internal' });
+  const next = c.send('Follow up', { scope: { sheetId: 99 } });
+  assert.deepEqual(calls[2].args[7], { scope: 'internal', conversation_history: [
+    { role: 'user', content: 'Question' }, { role: 'assistant', content: 'Recovered' },
+  ] });
   c.newChat(); calls[2].cb.onDone({ answer: 'Late old answer' }); calls[2].resolve(); await next;
   assert.deepEqual(c.state.messages, []); assert.equal(c.priorContext, null);
+});
+test('short follow-ups retain the visible discussion, including a stopped answer', async () => {
+  const { c, calls } = harness();
+  const first = c.send('do you remember binomial theorem', { scope: { datasetId: 1, sheetId: 7 } });
+  calls[0].cb.onToken('The binomial theorem expands (x+y)^n. Apply it to your states?');
+  c.stop(); calls[0].resolve(); await first;
+  const next = c.send('yes for states', { scope: { datasetId: 1, sheetId: 7 } });
+  assert.deepEqual(calls[1].args[7].conversation_history, [
+    { role: 'user', content: 'do you remember binomial theorem' },
+    { role: 'assistant', content: 'The binomial theorem expands (x+y)^n. Apply it to your states?', incomplete: true },
+  ]);
+  calls[1].cb.onError(new Error('Disconnected')); calls[1].resolve(); await next;
+  const retry = c.retry(c.state.messages.at(-1));
+  assert.deepEqual(calls[2].args[7].conversation_history, calls[1].args[7].conversation_history);
+  calls[2].cb.onDone({ answer: 'For states, first define the sampled outcome.' }); calls[2].resolve(); await retry;
+  const changed = c.send('What is in this sheet?', { scope: { datasetId: 2, sheetId: 8 } });
+  assert.equal(calls[3].args[7], null, 'Another dataset must not inherit old discussion as context');
+  c.stop(); calls[3].resolve(); await changed;
+});
+test('API downtime has a safe, actionable retry message', async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response('Proxy unavailable', { status: 503 });
+  try {
+    const c = new HRIDAYConversation(streamCopilotQuery, { delivery: instantDelivery });
+    await c.send('yes for states');
+    assert.equal(c.state.messages.at(-1).phase, 'error');
+    assert.match(c.state.messages.at(-1).recoveryMessage, /temporarily unavailable.*retry/i);
+    assert(!JSON.stringify(c.state).includes('Proxy unavailable'));
+  } finally { globalThis.fetch = originalFetch; }
 });
 test('unexpected EOF exposes recoverable incomplete state', async () => {
   const c = new HRIDAYConversation(async (...args) => args[5].onToken('Incomplete'), { delivery: instantDelivery });

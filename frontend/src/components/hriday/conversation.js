@@ -12,6 +12,8 @@ export class HRIDAYConversation {
     this.sequence = 0;
     this.request = null;
     this.priorContext = null;
+    this.historyStart = 0;
+    this.contextScope = null;
     this.state = { identity: DEFAULT_ASSISTANT_IDENTITY, messages: [], draft: '', loading: false, status: '', activity: null, announcement: '' };
   }
   subscribe = listener => { this.listeners.add(listener); return () => this.listeners.delete(listener); };
@@ -30,9 +32,28 @@ export class HRIDAYConversation {
   }
   getDiagnostics = id => this.diagnostics.get(id);
 
+  requestContext(scope, retryId) {
+    const binding = JSON.stringify([scope.datasetId ?? null, scope.sheetId ?? null, scope.snapshotId ?? null]);
+    if (this.contextScope !== null && this.contextScope !== binding) {
+      this.priorContext = null;
+      this.historyStart = this.state.messages.length;
+    }
+    this.contextScope = binding;
+    const retryIndex = retryId ? this.state.messages.findIndex(message => message.id === `${retryId}-user`) : -1;
+    const messages = this.state.messages.slice(this.historyStart, retryIndex < 0 ? undefined : retryIndex);
+    const history = messages.filter(message => message.content && ['user', 'assistant'].includes(message.role))
+      .slice(-8).map(message => ({
+        role: message.role,
+        content: message.content.slice(0, 2000),
+        ...(message.role === 'assistant' && message.phase !== 'complete' ? { incomplete: true } : {}),
+      }));
+    return history.length ? { ...this.priorContext, conversation_history: history } : this.priorContext;
+  }
+
   async send(query = this.state.draft, { scope = {}, tool = inferHRIDAYTool(query), retryId = null } = {}) {
     const text = query.trim();
     if (!text || this.request) return;
+    const priorContext = this.requestContext(scope, retryId);
     const controller = new AbortController();
     const id = retryId || `hriday-${++this.sequence}`;
     const request = { id, controller, rawAnswer: '', delegates: [], terminal: false, resultReceived: false, activity: initialHRIDAYActivity(this.state.identity.name) };
@@ -72,7 +93,10 @@ export class HRIDAYConversation {
       request.terminal = true;
       this.request = null;
       request.resolveDelivery();
-      this.updateMessage(id, { phase: 'error' }, { loading: false, activity: null, announcement: `${this.state.identity.name} couldn’t finish. Your question is saved.` });
+      const recoveryMessage = error?.code === 'SERVICE_UNAVAILABLE'
+        ? 'HRIDAY is temporarily unavailable. Please retry in a moment. Your question is saved.'
+        : null;
+      this.updateMessage(id, { phase: 'error', recoveryMessage }, { loading: false, activity: null, announcement: recoveryMessage || `${this.state.identity.name} couldn’t finish. Your question is saved.` });
     };
     try {
       await this.transport(text, null, tool, scope.datasetId ?? null, scope.sheetId ?? null, {
@@ -129,7 +153,7 @@ export class HRIDAYConversation {
           });
         },
         onError: finishError,
-      }, controller.signal, this.priorContext, scope.snapshotId ?? null, scope.page ?? null, 60.0);
+      }, controller.signal, priorContext, scope.snapshotId ?? null, scope.page ?? null, 60.0);
       if (current()) finishError(new Error('Response ended without a completion event.'));
       await deliveryDone;
     } catch (error) { finishError(error); }
@@ -149,10 +173,14 @@ export class HRIDAYConversation {
   invalidateDatasetContext = () => {
     this.stop();
     this.priorContext = null;
+    this.historyStart = this.state.messages.length;
+    this.contextScope = null;
   };
   newChat = () => {
     this.stop();
     this.priorContext = null;
+    this.historyStart = 0;
+    this.contextScope = null;
     this.diagnostics.clear();
     this.publish({ messages: [], draft: '', loading: false, activity: null, status: '', announcement: `New conversation with ${this.state.identity.name}.` });
   };

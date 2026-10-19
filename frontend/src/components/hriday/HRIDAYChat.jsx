@@ -118,7 +118,7 @@ export default function HRIDAYChat({ scope = {}, onClose, expanded = false, onEx
           {message.phase === 'loading' && <HRIDAYActivity activity={activity} />}
           {message.phase === 'stopped' && <p className="hriday-recovery">{message.content ? 'Response stopped. This answer is incomplete.' : 'Stopped. You can ask again or change your question.'}</p>}
           {message.phase === 'error' && <div className="hriday-recovery">
-            <p>{message.content ? 'This answer is incomplete. I couldn’t finish it. Your question is saved.' : 'I couldn’t finish that. Your question is saved.'}</p>
+            <p>{message.recoveryMessage || (message.content ? 'This answer is incomplete. I couldn’t finish it. Your question is saved.' : 'I couldn’t finish that. Your question is saved.')}</p>
             <IconButton label="Try again" onClick={() => conversation.retry(message)} disabled={loading}><RefreshCw size={18} aria-hidden="true" /></IconButton>
           </div>}
           {message.phase === 'complete' && <>

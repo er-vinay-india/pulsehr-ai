@@ -30,11 +30,19 @@ function normalizeMath(text, streaming) {
     let end = text.indexOf(delimiter, start);
     while (end !== -1 && escapedAt(text, end)) end = text.indexOf(delimiter, end + delimiter.length);
     const body = text.slice(start, end === -1 ? text.length : end);
-    const isMath = delimiter === '$$' || /\\[A-Za-z]+/.test(body);
+    const formula = body.trim();
+    // Plain algebra such as $n$, $(a+b)^n$ and $a^{n-k}$ is also
+    // legitimate math. Require a variable and reject prose between currency
+    // amounts (for example, "$5 and $10") before treating it as a formula.
+    const plainMath = /^[A-Za-z]$/.test(formula) || (
+      /[A-Za-z]/.test(formula) && /[+*/^_=(){}-]/.test(formula)
+      && /^[A-Za-z0-9\s+*/^_=(){}.,-]+$/.test(formula) && !/[A-Za-z]{3,}/.test(formula)
+    );
+    const isMath = delimiter === '$$' || /\\[A-Za-z]+/.test(body) || plainMath;
     if (end !== -1 && isMath) {
       output += `$$${body}$$`;
       index = end + delimiter.length;
-    } else if (end === -1 && streaming && (delimiter === '$$' || /^\s*\\/.test(body))) {
+    } else if (end === -1 && streaming && (delimiter === '$$' || /^\s*\\/.test(body) || plainMath)) {
       break;
     } else {
       output += text[index++];

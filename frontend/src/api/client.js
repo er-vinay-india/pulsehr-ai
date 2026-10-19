@@ -154,7 +154,9 @@ export async function streamCopilotQuery(
 
     if (!res.ok) {
       const errData = await res.json().catch(() => ({}));
-      throw new Error(errData.detail || "Failed to start copilot stream");
+      const error = new Error(errData.detail || "Failed to start copilot stream");
+      if (res.status >= 500) error.code = 'SERVICE_UNAVAILABLE';
+      throw error;
     }
 
     const reader = res.body.getReader();
@@ -199,6 +201,7 @@ export async function streamCopilotQuery(
     if (err.name === "AbortError") {
       return;
     }
+    if (err instanceof TypeError && /fetch|network|load failed/i.test(err.message)) err.code = 'SERVICE_UNAVAILABLE';
     onError?.(err);
   }
 }

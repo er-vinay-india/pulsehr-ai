@@ -12,6 +12,14 @@ function assert(condition, message) {
 
 console.log("=== RUNNING MARKDOWN & MATH RENDERING REGRESSION TESTS ===\n");
 
+{
+  const input = 'For $n$ trials, expand $(a+b)^n$ using terms $a^{n-k}$ and $b^k$. There are $n+1$ terms. Budget: $5 and $10.';
+  const html = renderToStaticMarkup(React.createElement(MarkdownView, { content: input }));
+  assert((html.match(/class="katex"/g) || []).length === 5, 'Binomial variables and algebra render as inline math');
+  assert(!html.includes('katex-error'), 'Binomial notation renders without formula errors');
+  assert(html.includes('Budget: $5 and $10.'), 'Currency stays literal alongside plain algebra');
+}
+
 // 1. User reported regression case
 {
   const input = "**💡Strategic Observation**\n**Revenue Trajectory**: Total weekly sales across all locations peaked on **2010-12-24** at **$80.93M**, with lowest volume on **2011-01-28** ($39.60M). Overall network volume stabilized around an average of **$48.61M** per week across 143 observation dates.";
