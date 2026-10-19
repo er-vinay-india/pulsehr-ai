@@ -601,6 +601,7 @@ class SDRRetrievalAdapter:
             "left_coverage": candidate.left_coverage,
             "right_coverage": candidate.right_coverage,
             "artifact_fingerprint": candidate.artifact_fingerprint,
+            "target_index": "RELATIONSHIP_INDEX",
         }
 
         return RetrievalDocument.create(
@@ -651,6 +652,7 @@ class SDRRetrievalAdapter:
             "is_grain_preserving": edge.is_grain_preserving,
             "duplication_risk_flag": edge.duplication_risk_flag,
             "artifact_fingerprint": edge.artifact_fingerprint,
+            "target_index": "RELATIONSHIP_INDEX",
         }
 
         return RetrievalDocument.create(
@@ -704,6 +706,7 @@ class SDRRetrievalAdapter:
             "safe_operations": plan.safe_operations,
             "forbidden_operations": plan.forbidden_operations,
             "artifact_fingerprint": plan.artifact_fingerprint,
+            "target_index": "RELATIONSHIP_INDEX",
         }
 
         return RetrievalDocument.create(

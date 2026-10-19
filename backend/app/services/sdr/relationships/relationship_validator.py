@@ -114,6 +114,19 @@ class RelationshipValidatorEngine:
             max_freq_l = int(freqs_l.max()) if len(freqs_l) > 0 else 1
             max_freq_r = int(freqs_r.max()) if len(freqs_r) > 0 else 1
 
+            # Exact matched pairs: For each matched key k: pairs(k) = count_left(k) * count_right(k)
+            matched_pairs = sum(int(freqs_l.get(k, 0)) * int(freqs_r.get(k, 0)) for k in matched_keys)
+            left_total_rows = len(df_left) if df_left is not None else len(keys_l)
+            right_total_rows = len(df_right) if df_right is not None else len(keys_r)
+
+            unmatched_left_rows = sum(int(freqs_l.get(k, 0)) for k in (keys_l - matched_keys)) + left_null_count
+            unmatched_right_rows = sum(int(freqs_r.get(k, 0)) for k in (keys_r - matched_keys)) + right_null_count
+
+            # Estimated result rows for standard LEFT join: matched pairs + unmatched left rows
+            estimated_result_rows = matched_pairs + unmatched_left_rows
+            expansion_ratio = round(estimated_result_rows / max(left_total_rows, 1), 4)
+            max_freq_bound = max_freq_l * max_freq_r
+
             # Deterministic observed cardinality
             if max_freq_l == 1 and max_freq_r == 1:
                 cardinality = RelationshipCardinality.ONE_TO_ONE
@@ -129,6 +142,15 @@ class RelationshipValidatorEngine:
                 multiplier = float(max(max_freq_l, max_freq_r))
 
             evidence: dict[str, Any] = {
+                "left_rows": left_total_rows,
+                "right_rows": right_total_rows,
+                "matched_distinct_keys": len(matched_keys),
+                "matched_pairs": matched_pairs,
+                "unmatched_left_rows": unmatched_left_rows,
+                "unmatched_right_rows": unmatched_right_rows,
+                "estimated_result_rows": estimated_result_rows,
+                "expansion_ratio": expansion_ratio,
+                "max_frequency_bound": max_freq_bound,
                 "matched_keys_count": len(matched_keys),
                 "unmatched_left": unmatched_l,
                 "unmatched_right": unmatched_r,
@@ -150,7 +172,26 @@ class RelationshipValidatorEngine:
             unmatched_r = int((1.0 - right_cov) * 100)
             left_null_count = 0
             right_null_count = 0
+            left_total_rows = 100
+            right_total_rows = 100
+            matched_pairs = int(left_cov * 100)
+            unmatched_left_rows = int((1.0 - left_cov) * 100)
+            unmatched_right_rows = int((1.0 - right_cov) * 100)
+            estimated_result_rows = matched_pairs + unmatched_left_rows
+            expansion_ratio = round(estimated_result_rows / max(left_total_rows, 1), 4)
+            max_freq_bound = 1 if cardinality == RelationshipCardinality.ONE_TO_ONE else 2
             evidence = dict(candidate.evidence)
+            evidence.update({
+                "left_rows": left_total_rows,
+                "right_rows": right_total_rows,
+                "matched_distinct_keys": int(left_cov * 100),
+                "matched_pairs": matched_pairs,
+                "unmatched_left_rows": unmatched_left_rows,
+                "unmatched_right_rows": unmatched_right_rows,
+                "estimated_result_rows": estimated_result_rows,
+                "expansion_ratio": expansion_ratio,
+                "max_frequency_bound": max_freq_bound,
+            })
 
         # 3. Coverage and Ambiguity Hard Gates
         # If referential overlap is exceptionally low (< 0.20), it is REJECTED or AMBIGUOUS
@@ -264,6 +305,13 @@ class RelationshipValidatorEngine:
         evidence: dict[str, Any] | None = None,
     ) -> SDRValidatedRelationshipEdge:
         edge_id = f"edge_{candidate.left_sheet_id}_{'_'.join(candidate.left_column_ids)}_to_{candidate.right_sheet_id}_{'_'.join(candidate.right_column_ids)}"
+        evidence_dict = evidence or {}
+        key_fps: list[str] = []
+        if candidate.left_key_candidate_id:
+            key_fps.append(candidate.left_key_candidate_id)
+        if candidate.right_key_candidate_id:
+            key_fps.append(candidate.right_key_candidate_id)
+        grain_fps: list[str] = [candidate.left_grain, candidate.right_grain]
 
         fp = compute_validated_edge_fingerprint(
             edge_id=edge_id,
@@ -277,6 +325,8 @@ class RelationshipValidatorEngine:
             status=status,
             dataset_version=candidate.dataset_version,
             policy_fingerprint=self.policy_fingerprint,
+            key_fingerprints=key_fps,
+            grain_fingerprints=grain_fps,
         )
 
         return SDRValidatedRelationshipEdge(
@@ -304,8 +354,20 @@ class RelationshipValidatorEngine:
             right_grain=candidate.right_grain,
             is_grain_preserving=is_grain_preserving,
             duplication_risk_flag=duplication_risk_flag,
+            left_rows=evidence_dict.get("left_rows", 0),
+            right_rows=evidence_dict.get("right_rows", 0),
+            matched_distinct_keys=evidence_dict.get("matched_distinct_keys", 0),
+            matched_pairs=evidence_dict.get("matched_pairs", 0),
+            unmatched_left_rows=evidence_dict.get("unmatched_left_rows", 0),
+            unmatched_right_rows=evidence_dict.get("unmatched_right_rows", 0),
+            estimated_result_rows=evidence_dict.get("estimated_result_rows", 0),
+            expansion_ratio=evidence_dict.get("expansion_ratio", 1.0),
+            max_frequency_bound=evidence_dict.get("max_frequency_bound", int(multiplier)),
+            key_fingerprints=key_fps,
+            grain_fingerprints=grain_fps,
+            policy_fingerprint=self.policy_fingerprint,
             rejection_reason=rejection_reason,
-            validation_evidence=evidence or {},
+            validation_evidence=evidence_dict,
             dataset_version=candidate.dataset_version,
             artifact_fingerprint=fp,
         )

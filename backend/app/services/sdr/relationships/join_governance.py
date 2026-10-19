@@ -75,6 +75,28 @@ def infer_column_additivity(profile: SemanticColumnProfile) -> MeasureAdditivity
     return MeasureAdditivity.UNKNOWN
 
 
+def determine_governed_aggregation(
+    profile: SemanticColumnProfile | None,
+    additivity: MeasureAdditivity | None,
+) -> str | None:
+    """
+    Deterministically resolves the aggregation function from governed semantics.
+    A SAFE_WITH_PREAGGREGATION plan must NEVER invent SUM/AVG/etc blindly.
+    - ADDITIVE: SUM is authorized
+    - DISTINCT_COUNT: COUNT_DISTINCT
+    - NON_ADDITIVE, RATIO, PERCENTAGE, SEMI_ADDITIVE, UNKNOWN: None (blind SUM prohibited)
+    """
+    if additivity == MeasureAdditivity.ADDITIVE:
+        if profile and profile.measure_class == MeasureClass.UNKNOWN:
+            return None
+        return "SUM"
+    elif additivity == MeasureAdditivity.DISTINCT_COUNT:
+        return "COUNT_DISTINCT"
+    elif additivity in (MeasureAdditivity.NON_ADDITIVE, MeasureAdditivity.RATIO, MeasureAdditivity.SEMI_ADDITIVE):
+        return None
+    return None
+
+
 class JoinGovernanceEngine:
     """
     Offline deterministic engine that formulates and authorizes governed JoinPlans.
@@ -203,7 +225,44 @@ class JoinGovernanceEngine:
                 agg_sheet = edge.right_sheet_id if preagg_side == "RIGHT" else edge.left_sheet_id
                 agg_keys = edge.right_column_ids if preagg_side == "RIGHT" else edge.left_column_ids
                 agg_measures = right_measures if preagg_side == "RIGHT" else left_measures
-                aggs = {m: "SUM" for m in agg_measures}
+                profs_map = r_profs if preagg_side == "RIGHT" else l_profs
+                aggs = {}
+                can_preaggregate = True
+                unsupported_reasons = []
+                for m in agg_measures:
+                    col_prof = profs_map.get(m)
+                    col_additivity = measure_additivity_rules.get(f"{agg_sheet}.{m}")
+                    agg_fn = determine_governed_aggregation(col_prof, col_additivity)
+                    if agg_fn is None:
+                        can_preaggregate = False
+                        unsupported_reasons.append(
+                            f"measure '{m}' (additivity={col_additivity}) cannot be safely aggregated with blind SUM"
+                        )
+                    else:
+                        aggs[m] = agg_fn
+
+                if not can_preaggregate:
+                    forbidden_reason = (
+                        f"Preaggregation cannot be safely authorized: {'; '.join(unsupported_reasons)}. "
+                        "Blind SUM/AVG is strictly prohibited."
+                    )
+                    risk_flags.append("UNSUPPORTED_PREAGGREGATION_SEMANTICS")
+                    return self._build_plan(
+                        join_plan_id=join_plan_id,
+                        edge=edge,
+                        join_type=join_type,
+                        safety_status=JoinSafetyStatus.UNSAFE,
+                        target_grain=target_grain,
+                        measure_rules=measure_additivity_rules,
+                        pre_agg=None,
+                        required_preagg=False,
+                        preagg_side=None,
+                        risk_flags=risk_flags,
+                        forbidden_reason=forbidden_reason,
+                        safe_ops=[],
+                        forb_ops=["BLIND_AGGREGATION_PROHIBITED", "UNSAFE_MEASURE_SUMMATION"],
+                        dataset_version=dataset_version,
+                    )
 
                 pre_agg_spec = PreAggregationSpec(
                     source_table_id=agg_sheet,
@@ -272,7 +331,44 @@ class JoinGovernanceEngine:
                 if target_grain and target_grain.upper() == l_grain_expr.upper():
                     required_preaggregation = True
                     preagg_side = "RIGHT"
-                    aggs = {m: "SUM" for m in right_measures}
+                    aggs = {}
+                    can_preaggregate = True
+                    unsupported_reasons = []
+                    for m in right_measures:
+                        col_prof = r_profs.get(m)
+                        col_additivity = measure_additivity_rules.get(f"{edge.right_sheet_id}.{m}")
+                        agg_fn = determine_governed_aggregation(col_prof, col_additivity)
+                        if agg_fn is None:
+                            can_preaggregate = False
+                            unsupported_reasons.append(
+                                f"measure '{m}' (additivity={col_additivity}) cannot be safely aggregated with blind SUM"
+                            )
+                        else:
+                            aggs[m] = agg_fn
+
+                    if not can_preaggregate:
+                        forbidden_reason = (
+                            f"Preaggregation cannot be safely authorized: {'; '.join(unsupported_reasons)}. "
+                            "Blind SUM/AVG is strictly prohibited."
+                        )
+                        risk_flags.append("UNSUPPORTED_PREAGGREGATION_SEMANTICS")
+                        return self._build_plan(
+                            join_plan_id=join_plan_id,
+                            edge=edge,
+                            join_type=join_type,
+                            safety_status=JoinSafetyStatus.UNSAFE,
+                            target_grain=l_grain_expr,
+                            measure_rules=measure_additivity_rules,
+                            pre_agg=None,
+                            required_preagg=False,
+                            preagg_side=None,
+                            risk_flags=risk_flags,
+                            forbidden_reason=forbidden_reason,
+                            safe_ops=[],
+                            forb_ops=["BLIND_AGGREGATION_PROHIBITED", "UNSAFE_MEASURE_SUMMATION"],
+                            dataset_version=dataset_version,
+                        )
+
                     pre_agg_spec = PreAggregationSpec(
                         source_table_id=edge.right_sheet_id,
                         group_by_columns=list(edge.right_column_ids),
@@ -482,6 +578,10 @@ class JoinGovernanceEngine:
         forb_ops: list[str],
         dataset_version: str,
     ) -> SDRJoinPlan:
+        left_rows = edge.left_rows if edge.left_rows > 0 else 100
+        output_rows = edge.estimated_result_rows if edge.estimated_result_rows > 0 else int(left_rows * edge.expansion_ratio)
+        max_bound = float(edge.max_frequency_bound if edge.max_frequency_bound > 0 else edge.estimated_row_multiplier)
+
         fp = compute_join_plan_fingerprint(
             join_plan_id=join_plan_id,
             relationship_edge_id=edge.edge_id,
@@ -493,6 +593,8 @@ class JoinGovernanceEngine:
             target_grain=target_grain,
             dataset_version=dataset_version,
             policy_fingerprint=self.policy_fingerprint,
+            edge_artifact_fingerprint=edge.artifact_fingerprint,
+            grain_artifact_fingerprint=target_grain,
         )
 
         return SDRJoinPlan(
@@ -514,15 +616,39 @@ class JoinGovernanceEngine:
             cardinality=edge.cardinality,
             coverage=edge.referential_coverage,
             measure_additivity_rules=measure_rules,
-            expected_input_rows=100,
-            expected_output_rows=int(100 * edge.estimated_row_multiplier),
-            expansion_ratio=edge.estimated_row_multiplier,
-            max_expected_multiplier=edge.estimated_row_multiplier,
+            expected_input_rows=left_rows,
+            expected_output_rows=output_rows,
+            expansion_ratio=edge.expansion_ratio,
+            max_expected_multiplier=max_bound,
+            left_rows=edge.left_rows,
+            right_rows=edge.right_rows,
+            matched_distinct_keys=edge.matched_distinct_keys,
+            matched_pairs=edge.matched_pairs,
+            unmatched_left_rows=edge.unmatched_left_rows,
+            unmatched_right_rows=edge.unmatched_right_rows,
+            estimated_result_rows=edge.estimated_result_rows,
+            max_frequency_bound=edge.max_frequency_bound,
+            edge_artifact_fingerprint=edge.artifact_fingerprint,
+            grain_artifact_fingerprint=target_grain,
+            policy_fingerprint=self.policy_fingerprint,
             risk_flags=risk_flags,
             forbidden_reason=forbidden_reason,
             safe_operations=safe_ops,
             forbidden_operations=forb_ops,
-            evidence={"edge_evidence": edge.validation_evidence},
+            evidence={
+                "edge_evidence": edge.validation_evidence,
+                "row_expansion": {
+                    "left_rows": edge.left_rows,
+                    "right_rows": edge.right_rows,
+                    "matched_distinct_keys": edge.matched_distinct_keys,
+                    "matched_pairs": edge.matched_pairs,
+                    "unmatched_left_rows": edge.unmatched_left_rows,
+                    "unmatched_right_rows": edge.unmatched_right_rows,
+                    "estimated_result_rows": edge.estimated_result_rows,
+                    "expansion_ratio": edge.expansion_ratio,
+                    "max_frequency_bound": edge.max_frequency_bound,
+                },
+            },
             dataset_version=dataset_version,
             artifact_fingerprint=fp,
         )

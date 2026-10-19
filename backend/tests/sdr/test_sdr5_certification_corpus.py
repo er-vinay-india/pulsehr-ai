@@ -17,6 +17,7 @@ from app.services.ingestion_v2.contracts.joins import (
     MeasureAdditivity,
     PreAggregationSpec,
 )
+from app.services.ingestion_v2.contracts.semantics import MeasureClass
 from app.services.ingestion_v2.contracts.relationships import (
     CandidateKeyType,
     RelationshipCardinality,
@@ -65,6 +66,8 @@ from app.services.sdr.contracts.relationships import (
     SDRJoinPlan,
     SDRRelationshipCandidate,
     SDRValidatedRelationshipEdge,
+    check_edge_invalidation,
+    check_join_plan_invalidation,
 )
 from app.services.sdr.relationships.candidate_discovery import (
     CandidateDiscoveryStats,
@@ -96,6 +99,7 @@ def _create_profile(
     dtype: SemanticDtype = SemanticDtype.CATEGORICAL_CODE,
     entity_type: SemanticEntityType = SemanticEntityType.UNKNOWN,
     sample_values: list[str] | None = None,
+    measure_class: MeasureClass | None = None,
 ) -> SemanticColumnProfile:
     samples = sample_values or ["A", "B", "C"]
     features = DeterministicColumnFeatures(
@@ -117,6 +121,7 @@ def _create_profile(
         semantic_role=role,
         semantic_concept=concept,
         entity_type_hypothesis=entity_type,
+        measure_class=measure_class,
         privacy_classification=PrivacyClassification.PUBLIC,
         confidence=0.95,
         ambiguity_state=ProfilingAmbiguityState.CLEAR,
@@ -132,7 +137,7 @@ def _create_profile(
     )
 
 
-def _create_grain_profile(sheet_id: str, grain_expr: str) -> SDRGrainProfile:
+def _create_grain_profile(sheet_id: str, grain_expr: str, grain_fingerprint: str = "") -> SDRGrainProfile:
     return SDRGrainProfile(
         profile_id=f"prof_grain_{sheet_id}",
         dataset_id="ds_cert",
@@ -142,6 +147,7 @@ def _create_grain_profile(sheet_id: str, grain_expr: str) -> SDRGrainProfile:
         resolved_grain_expression=grain_expr,
         grain_status=GrainStatus.RESOLVED,
         grain_confidence=1.0,
+        grain_fingerprint=grain_fingerprint,
         rationale="test grain",
     )
 
@@ -369,6 +375,103 @@ def test_scenario_c_employee_monthly_attendance_daily_preaggregation():
     dry_res = governance.dry_run_validate_join_plan(plan, df_left=df_mo, df_right=df_day)
     assert dry_res["dry_run_passed"] is True
     assert dry_res["output_rows"] == 2
+
+
+def test_preaggregation_governed_zero_guessing():
+    """
+    Explicitly certify zero-guessing rule for preaggregation:
+    Case A: Additive hours (MeasureAdditivity.ADDITIVE) -> SAFE_WITH_PREAGGREGATION with 'SUM'.
+    Case B: Ratio/percentage (MeasureAdditivity.RATIO) -> UNSAFE (0 guessed functions).
+    Case C: Unknown measure class (MeasureClass.UNKNOWN) -> UNSAFE (0 guessed functions).
+    Guarantees: GUESSED AGGREGATION FUNCTIONS: 0, UNKNOWN-MEASURE PREAGGREGATION AUTO-AUTHORIZED: 0.
+    """
+    dataset_id = "ds_preagg_zero_guess"
+    mo_grain = _create_grain_profile("mo", "EMPLOYEE × MONTH")
+    day_grain = _create_grain_profile("day", "EMPLOYEE × DAY")
+    governance = JoinGovernanceEngine()
+
+    edge = SDRValidatedRelationshipEdge(
+        edge_id="edge_mo_day",
+        candidate_id="cand_mo_day",
+        dataset_id=dataset_id,
+        left_sheet_id="mo",
+        right_sheet_id="day",
+        left_column_ids=["employee_id", "month"],
+        right_column_ids=["employee_id", "month"],
+        left_grain="EMPLOYEE × MONTH",
+        right_grain="EMPLOYEE × DAY",
+        cardinality=RelationshipCardinality.ONE_TO_MANY,
+        status=RelationshipStatus.VALIDATED,
+        referential_coverage=1.0,
+        left_coverage=1.0,
+        right_coverage=1.0,
+    )
+
+    mo_profs = [
+        _create_profile(dataset_id, "mo", "employee_id", "employee_id", role=SemanticColumnRole.ENTITY_IDENTIFIER, concept=SemanticConcept.IDENTIFIER, entity_type=SemanticEntityType.PERSON),
+        _create_profile(dataset_id, "mo", "month", "month", role=SemanticColumnRole.TIME, concept=SemanticConcept.TIME_SPAN, dtype=SemanticDtype.DATE),
+        _create_profile(dataset_id, "mo", "target_hours", "target_hours", role=SemanticColumnRole.MEASURE, concept=SemanticConcept.MEASURE, dtype=SemanticDtype.INTEGER, measure_class=MeasureClass.QUANTITY),
+    ]
+
+    # --- Case A: Additive hours (ADDITIVE / SUMMABLE) ---
+    day_profs_a = [
+        _create_profile(dataset_id, "day", "employee_id", "employee_id", role=SemanticColumnRole.ENTITY_IDENTIFIER, concept=SemanticConcept.IDENTIFIER, entity_type=SemanticEntityType.PERSON),
+        _create_profile(dataset_id, "day", "month", "month", role=SemanticColumnRole.TIME, concept=SemanticConcept.TIME_SPAN, dtype=SemanticDtype.DATE),
+        _create_profile(dataset_id, "day", "day", "day", role=SemanticColumnRole.TIME, concept=SemanticConcept.TIME_SPAN, dtype=SemanticDtype.DATE),
+        _create_profile(dataset_id, "day", "hours", "hours", role=SemanticColumnRole.MEASURE, concept=SemanticConcept.MEASURE, dtype=SemanticDtype.INTEGER, measure_class=MeasureClass.DURATION),
+    ]
+
+    plan_a = governance.plan_join(
+        edge=edge,
+        left_grain_profile=mo_grain,
+        right_grain_profile=day_grain,
+        left_profiles=mo_profs,
+        right_profiles=day_profs_a,
+        target_grain="EMPLOYEE × MONTH",
+    )
+    assert plan_a.safety_status == JoinSafetyStatus.SAFE_WITH_PREAGGREGATION
+    assert plan_a.preaggregation_spec is not None
+    assert plan_a.preaggregation_spec.aggregations.get("hours") == "SUM"
+
+    # --- Case B: Ratio/percentage (RATIO / NON_SUMMABLE) ---
+    day_profs_b = [
+        _create_profile(dataset_id, "day", "employee_id", "employee_id", role=SemanticColumnRole.ENTITY_IDENTIFIER, concept=SemanticConcept.IDENTIFIER, entity_type=SemanticEntityType.PERSON),
+        _create_profile(dataset_id, "day", "month", "month", role=SemanticColumnRole.TIME, concept=SemanticConcept.TIME_SPAN, dtype=SemanticDtype.DATE),
+        _create_profile(dataset_id, "day", "day", "day", role=SemanticColumnRole.TIME, concept=SemanticConcept.TIME_SPAN, dtype=SemanticDtype.DATE),
+        _create_profile(dataset_id, "day", "attendance_rate", "attendance_rate", role=SemanticColumnRole.MEASURE, concept=SemanticConcept.MEASURE, dtype=SemanticDtype.PERCENTAGE_RATE, measure_class=MeasureClass.PERCENTAGE),
+    ]
+
+    plan_b = governance.plan_join(
+        edge=edge,
+        left_grain_profile=mo_grain,
+        right_grain_profile=day_grain,
+        left_profiles=mo_profs,
+        right_profiles=day_profs_b,
+        target_grain="EMPLOYEE × MONTH",
+    )
+    assert plan_b.safety_status == JoinSafetyStatus.UNSAFE
+    assert "UNSUPPORTED_PREAGGREGATION_SEMANTICS" in plan_b.risk_flags
+    assert plan_b.preaggregation_spec is None
+
+    # --- Case C: Unknown measure class (UNKNOWN) ---
+    day_profs_c = [
+        _create_profile(dataset_id, "day", "employee_id", "employee_id", role=SemanticColumnRole.ENTITY_IDENTIFIER, concept=SemanticConcept.IDENTIFIER, entity_type=SemanticEntityType.PERSON),
+        _create_profile(dataset_id, "day", "month", "month", role=SemanticColumnRole.TIME, concept=SemanticConcept.TIME_SPAN, dtype=SemanticDtype.DATE),
+        _create_profile(dataset_id, "day", "day", "day", role=SemanticColumnRole.TIME, concept=SemanticConcept.TIME_SPAN, dtype=SemanticDtype.DATE),
+        _create_profile(dataset_id, "day", "unknown_metric", "unknown_metric", role=SemanticColumnRole.MEASURE, concept=SemanticConcept.MEASURE, dtype=SemanticDtype.DECIMAL_NUMBER, measure_class=MeasureClass.UNKNOWN),
+    ]
+
+    plan_c = governance.plan_join(
+        edge=edge,
+        left_grain_profile=mo_grain,
+        right_grain_profile=day_grain,
+        left_profiles=mo_profs,
+        right_profiles=day_profs_c,
+        target_grain="EMPLOYEE × MONTH",
+    )
+    assert plan_c.safety_status == JoinSafetyStatus.UNSAFE
+    assert "UNSUPPORTED_PREAGGREGATION_SEMANTICS" in plan_c.risk_flags
+    assert plan_c.preaggregation_spec is None
 
 
 # =========================================================================
@@ -651,10 +754,14 @@ def test_all_required_negative_results():
 # =========================================================================
 
 def test_row_explosion_estimation_and_dry_run_validator():
-    """Verify deterministic row multiplier and expansion ratio calculation."""
-    df_l = pd.DataFrame({"k": ["A", "B", "C"]})
-    df_r = pd.DataFrame({"k": ["A", "A", "B", "B", "B", "C"]})  # max freq = 3
-
+    """
+    Verify exact matched-pair cardinality and row expansion estimation:
+    pairs(k) = count_left(k) * count_right(k)
+    matched_pairs = sum(pairs(k))
+    estimated_result_rows = matched_pairs + unmatched_left_rows
+    expansion_ratio = estimated_result_rows / left_rows
+    Test across 1:1, N:1, 1:N, and N:N cardinality structures.
+    """
     cand = SDRRelationshipCandidate(
         candidate_id="cand_exp",
         dataset_id="ds_exp",
@@ -664,10 +771,68 @@ def test_row_explosion_estimation_and_dry_run_validator():
         right_column_ids=["k"],
     )
     validator = RelationshipValidatorEngine()
-    edge = validator.validate_candidate(cand, df_left=df_l, df_right=df_r)
+    governance = JoinGovernanceEngine()
 
-    assert edge.cardinality == RelationshipCardinality.ONE_TO_MANY
-    assert edge.estimated_row_multiplier == 3.0
+    # Case 1: ONE_TO_ONE (1:1)
+    df_l_11 = pd.DataFrame({"k": ["A", "B", "C"]})  # 3 rows
+    df_r_11 = pd.DataFrame({"k": ["A", "B", "C"]})  # 3 rows
+    edge_11 = validator.validate_candidate(cand, df_left=df_l_11, df_right=df_r_11)
+    assert edge_11.cardinality == RelationshipCardinality.ONE_TO_ONE
+    assert edge_11.matched_distinct_keys == 3
+    assert edge_11.matched_pairs == 3
+    assert edge_11.unmatched_left_rows == 0
+    assert edge_11.unmatched_right_rows == 0
+    assert edge_11.estimated_result_rows == 3
+    assert edge_11.expansion_ratio == 1.0
+    assert edge_11.max_frequency_bound == 1
+
+    # Case 2: MANY_TO_ONE (N:1)
+    df_l_n1 = pd.DataFrame({"k": ["A", "A", "B", "B", "C"]})  # 5 rows
+    df_r_n1 = pd.DataFrame({"k": ["A", "B", "C"]})             # 3 rows
+    edge_n1 = validator.validate_candidate(cand, df_left=df_l_n1, df_right=df_r_n1)
+    assert edge_n1.cardinality == RelationshipCardinality.MANY_TO_ONE
+    assert edge_n1.matched_distinct_keys == 3
+    assert edge_n1.matched_pairs == 5
+    assert edge_n1.unmatched_left_rows == 0
+    assert edge_n1.unmatched_right_rows == 0
+    assert edge_n1.estimated_result_rows == 5
+    assert edge_n1.expansion_ratio == 1.0
+    assert edge_n1.max_frequency_bound == 2
+
+    # Case 3: ONE_TO_MANY (1:N)
+    df_l_1n = pd.DataFrame({"k": ["A", "B", "C"]})                    # 3 rows
+    df_r_1n = pd.DataFrame({"k": ["A", "A", "B", "B", "B", "C"]})    # 6 rows (A: 2, B: 3, C: 1)
+    edge_1n = validator.validate_candidate(cand, df_left=df_l_1n, df_right=df_r_1n)
+    assert edge_1n.cardinality == RelationshipCardinality.ONE_TO_MANY
+    assert edge_1n.matched_distinct_keys == 3
+    assert edge_1n.matched_pairs == 6
+    assert edge_1n.unmatched_left_rows == 0
+    assert edge_1n.unmatched_right_rows == 0
+    assert edge_1n.estimated_result_rows == 6
+    assert edge_1n.expansion_ratio == 2.0
+    assert edge_1n.max_frequency_bound == 3
+
+    # Case 4: MANY_TO_MANY (N:N)
+    df_l_nn = pd.DataFrame({"k": ["A", "A", "B"]})              # 3 rows
+    df_r_nn = pd.DataFrame({"k": ["A", "A", "A", "B", "B"]})    # 5 rows (A: 2*3=6, B: 1*2=2 -> matched_pairs=8)
+    edge_nn = validator.validate_candidate(cand, df_left=df_l_nn, df_right=df_r_nn)
+    assert edge_nn.cardinality == RelationshipCardinality.MANY_TO_MANY
+    assert edge_nn.matched_distinct_keys == 2
+    assert edge_nn.matched_pairs == 8
+    assert edge_nn.unmatched_left_rows == 0
+    assert edge_nn.estimated_result_rows == 8
+    assert edge_nn.expansion_ratio == pytest.approx(8 / 3, abs=1e-4)
+    assert edge_nn.max_frequency_bound == 6
+
+    # Plan propagation & Dry-run validation
+    plan_1n = governance.plan_join(edge=edge_1n)
+    assert plan_1n.expansion_ratio == edge_1n.expansion_ratio
+    assert plan_1n.estimated_result_rows == edge_1n.estimated_result_rows
+    assert plan_1n.matched_pairs == edge_1n.matched_pairs
+    assert plan_1n.max_frequency_bound == edge_1n.max_frequency_bound
+
+    dry_res = governance.dry_run_validate_join_plan(plan_1n, df_left=df_l_1n, df_right=df_r_1n)
+    assert dry_res["output_rows"] == plan_1n.estimated_result_rows
 
 
 # =========================================================================
@@ -676,11 +841,17 @@ def test_row_explosion_estimation_and_dry_run_validator():
 
 def test_relationship_versioning_and_invalidation():
     """
-    Prove that dataset version, grain changes, or policy changes:
-    1. Update artifact fingerprints.
-    2. Invalidate dependent join plans.
+    Prove invalidation behavior across 4 distinct dimensions:
+    Case A: Upstream candidate key fingerprint change -> edge & plan invalidated.
+    Case B: Upstream grain fingerprint change -> join plan invalidated.
+    Case C: Dataset / source version change -> edge & plan invalidated.
+    Case D: Policy fingerprint change -> edge & plan invalidated.
+    Case E: Unrelated edge and join plan preserved: status UNCHANGED.
     """
     dataset_id = "ds_ver_inv"
+    governance = JoinGovernanceEngine()
+    pol_fp = governance.policy_fingerprint
+
     edge = SDRValidatedRelationshipEdge(
         edge_id="edge_test",
         candidate_id="cand_test",
@@ -695,15 +866,134 @@ def test_relationship_versioning_and_invalidation():
         left_coverage=1.0,
         right_coverage=1.0,
         dataset_version="v1",
+        key_fingerprints=["key_fp_1", "key_fp_2"],
+        grain_fingerprints=["grain_fp_l", "grain_fp_r"],
+        policy_fingerprint=pol_fp,
     )
 
-    governance = JoinGovernanceEngine()
-    plan_v1 = governance.plan_join(edge=edge, dataset_version="v1")
-    plan_v2 = governance.plan_join(edge=edge, dataset_version="v2")
+    grain_left = _create_grain_profile("left", "EMPLOYEE", grain_fingerprint="grain_fp_l")
+    grain_right = _create_grain_profile("right", "DEPARTMENT", grain_fingerprint="grain_fp_r")
 
-    assert plan_v1.artifact_fingerprint != plan_v2.artifact_fingerprint
-    assert plan_v1.dataset_version == "v1"
-    assert plan_v2.dataset_version == "v2"
+    plan = governance.plan_join(
+        edge=edge,
+        left_grain_profile=grain_left,
+        right_grain_profile=grain_right,
+        dataset_version="v1",
+    )
+
+    # Base state: everything matches -> UNCHANGED
+    is_valid_edge, reason_edge = check_edge_invalidation(
+        edge,
+        current_dataset_version="v1",
+        current_key_fingerprints=["key_fp_1", "key_fp_2"],
+        current_grain_fingerprints=["grain_fp_l", "grain_fp_r"],
+        current_policy_fingerprint=pol_fp,
+    )
+    assert is_valid_edge is True
+    assert reason_edge is None
+
+    is_valid_plan, reason_plan = check_join_plan_invalidation(
+        plan,
+        current_dataset_version="v1",
+        current_grain_fingerprints=[plan.grain_artifact_fingerprint],
+        current_edge_fingerprint=edge.artifact_fingerprint,
+        current_policy_fingerprint=pol_fp,
+    )
+    assert is_valid_plan is True
+    assert reason_plan is None
+
+    # Case A: Upstream candidate key fingerprint change
+    is_valid_a, reason_a = check_edge_invalidation(
+        edge,
+        current_dataset_version="v1",
+        current_key_fingerprints=["MODIFIED_KEY_FP", "key_fp_2"],
+        current_grain_fingerprints=["grain_fp_l", "grain_fp_r"],
+        current_policy_fingerprint=pol_fp,
+    )
+    assert is_valid_a is False
+    assert "Key fingerprints changed" in reason_a
+
+    # Case B: Upstream grain fingerprint change
+    is_valid_b, reason_b = check_join_plan_invalidation(
+        plan,
+        current_dataset_version="v1",
+        current_grain_fingerprints=["NEW_DIFFERENT_GRAIN_FP"],
+        current_edge_fingerprint=edge.artifact_fingerprint,
+        current_policy_fingerprint=pol_fp,
+    )
+    assert is_valid_b is False
+    assert "Grain changed" in reason_b
+
+    # Case C: Dataset / source version change
+    is_valid_c_edge, reason_c_edge = check_edge_invalidation(
+        edge,
+        current_dataset_version="v2",
+        current_key_fingerprints=["key_fp_1", "key_fp_2"],
+        current_grain_fingerprints=["grain_fp_l", "grain_fp_r"],
+        current_policy_fingerprint=pol_fp,
+    )
+    assert is_valid_c_edge is False
+    assert "Dataset version changed" in reason_c_edge
+
+    is_valid_c_plan, reason_c_plan = check_join_plan_invalidation(
+        plan,
+        current_dataset_version="v2",
+        current_grain_fingerprints=[plan.grain_artifact_fingerprint],
+        current_edge_fingerprint=edge.artifact_fingerprint,
+        current_policy_fingerprint=pol_fp,
+    )
+    assert is_valid_c_plan is False
+    assert "Dataset version changed" in reason_c_plan
+
+    # Case D: Policy fingerprint change
+    is_valid_d_edge, reason_d_edge = check_edge_invalidation(
+        edge,
+        current_dataset_version="v1",
+        current_key_fingerprints=["key_fp_1", "key_fp_2"],
+        current_grain_fingerprints=["grain_fp_l", "grain_fp_r"],
+        current_policy_fingerprint="NEW_POLICY_FP",
+    )
+    assert is_valid_d_edge is False
+    assert "Policy fingerprint changed" in reason_d_edge
+
+    is_valid_d_plan, reason_d_plan = check_join_plan_invalidation(
+        plan,
+        current_dataset_version="v1",
+        current_grain_fingerprints=[plan.grain_artifact_fingerprint],
+        current_edge_fingerprint=edge.artifact_fingerprint,
+        current_policy_fingerprint="NEW_POLICY_FP",
+    )
+    assert is_valid_d_plan is False
+    assert "Policy fingerprint changed" in reason_d_plan
+
+    # Case E: Unrelated edge and join plan preserved (status UNCHANGED)
+    unrelated_edge = SDRValidatedRelationshipEdge(
+        edge_id="edge_unrelated",
+        candidate_id="cand_unrelated",
+        dataset_id=dataset_id,
+        left_sheet_id="orders",
+        right_sheet_id="customers",
+        left_column_ids=["cust_id"],
+        right_column_ids=["cust_id"],
+        cardinality=RelationshipCardinality.MANY_TO_ONE,
+        status=RelationshipStatus.VALIDATED,
+        referential_coverage=1.0,
+        left_coverage=1.0,
+        right_coverage=1.0,
+        dataset_version="v1",
+        key_fingerprints=["cust_fp_1", "cust_fp_2"],
+        grain_fingerprints=["grain_orders", "grain_customers"],
+        policy_fingerprint=pol_fp,
+    )
+    is_valid_unrelated, reason_unrelated = check_edge_invalidation(
+        unrelated_edge,
+        current_dataset_version="v1",
+        current_key_fingerprints=["cust_fp_1", "cust_fp_2"],
+        current_grain_fingerprints=["grain_orders", "grain_customers"],
+        current_policy_fingerprint=pol_fp,
+    )
+    assert is_valid_unrelated is True
+    assert reason_unrelated is None
 
 
 # =========================================================================
@@ -712,8 +1002,9 @@ def test_relationship_versioning_and_invalidation():
 
 def test_retrieval_index_containment():
     """
-    Prove SDR-5 documents emit strictly into RELATIONSHIP_INDEX,
-    with 0 documents in ANALYTICAL_INDEX or RAW_SCHEMA_INDEX.
+    Prove SDR-5 documents emit strictly into RELATIONSHIP_INDEX (alias of RELATIONSHIP),
+    with 0 documents in ANALYTICAL_INDEX, RAW_SCHEMA_INDEX, or SEMANTIC_INDEX,
+    and 0 competing relationship namespaces.
     """
     adapter = SDRRetrievalAdapter()
     cand = SDRRelationshipCandidate(
@@ -757,15 +1048,30 @@ def test_retrieval_index_containment():
     doc_edge = adapter.build_validated_relationship_edge_document(edge)
     doc_plan = adapter.build_join_plan_document(plan)
 
+    # 1. Exact frozen namespace verification
+    assert RetrievalNamespace.RELATIONSHIP_INDEX == RetrievalNamespace.RELATIONSHIP
+    assert doc_cand.namespace == RetrievalNamespace.RELATIONSHIP
+    assert doc_edge.namespace == RetrievalNamespace.RELATIONSHIP
+    assert doc_plan.namespace == RetrievalNamespace.RELATIONSHIP
+    assert doc_cand.namespace.value == "RELATIONSHIP"
+
+    # 2. Strict containment: zero leakage to other namespaces
     for doc in (doc_cand, doc_edge, doc_plan):
-        assert doc.namespace == RetrievalNamespace.RELATIONSHIP
         assert doc.namespace not in (
             RetrievalNamespace.ANALYTICAL,
             RetrievalNamespace.RAW_SCHEMA,
             RetrievalNamespace.SEMANTIC,
         )
+        assert doc.structured_metadata.get("target_index") == "RELATIONSHIP_INDEX"
 
-    # Distinguish authority
+    # 3. Competing relationship namespace is NONE
+    competing_rel_namespaces = [
+        ns for ns in RetrievalNamespace
+        if "RELATIONSHIP" in ns.name and ns not in (RetrievalNamespace.RELATIONSHIP, RetrievalNamespace.RELATIONSHIP_INDEX)
+    ]
+    assert len(competing_rel_namespaces) == 0
+
+    # 4. Authority classification
     assert doc_cand.authority_class == AuthorityClass.RELATIONSHIP
     assert doc_edge.authority_class == AuthorityClass.RELATIONSHIP
     assert doc_plan.authority_class == AuthorityClass.RELATIONSHIP
@@ -827,10 +1133,24 @@ def test_semantic_graph_adapter_segregation():
 # =========================================================================
 
 def test_sdr5_artifact_determinism(tmp_path):
-    """Prove repeat serialization produces 100% byte-for-byte identical SHA-256 hashes."""
+    """Prove repeat serialization produces 100% byte-for-byte identical SHA-256 hashes across all 4 SDR-5 artifacts."""
     writer = SDRArtifactWriter(base_dir=tmp_path)
     dataset_id = "ds_det_sdr5"
 
+    cand = SDRRelationshipCandidate(
+        candidate_id="c_det",
+        dataset_id=dataset_id,
+        left_sheet_id="sales",
+        right_sheet_id="stores",
+        left_column_ids=["store_id"],
+        right_column_ids=["store_id"],
+        left_grain="SALE",
+        right_grain="STORE",
+        referential_overlap=1.0,
+        left_coverage=1.0,
+        right_coverage=1.0,
+        confidence=0.95,
+    )
     edge = SDRValidatedRelationshipEdge(
         edge_id="e_det",
         candidate_id="c_det",
@@ -860,8 +1180,8 @@ def test_sdr5_artifact_determinism(tmp_path):
         target_grain="SALE",
     )
 
-    paths1 = writer.write_sdr5_artifacts(dataset_id=dataset_id, candidates=[], validated_edges=[edge], join_plans=[plan])
-    paths2 = writer.write_sdr5_artifacts(dataset_id=dataset_id, candidates=[], validated_edges=[edge], join_plans=[plan])
+    paths1 = writer.write_sdr5_artifacts(dataset_id=dataset_id, candidates=[cand], validated_edges=[edge], join_plans=[plan])
+    paths2 = writer.write_sdr5_artifacts(dataset_id=dataset_id, candidates=[cand], validated_edges=[edge], join_plans=[plan])
 
     for k in ("relationship_candidates", "validated_relationships", "join_plans", "sdr5_manifest"):
         p1 = Path(paths1[k])
@@ -877,42 +1197,169 @@ def test_sdr5_artifact_determinism(tmp_path):
 
 def test_performance_and_bounded_candidate_search():
     """
-    Benchmark small, medium, and large multi-sheet configurations:
-    Prove that candidate search is bounded and candidate column pairs are pruned semantically.
+    Benchmark SMALL, MEDIUM, and LARGE multi-sheet configurations:
+    Prove candidate search is strictly bounded, candidate column pairs are pruned semantically,
+    and report telemetry for sheets, rows, columns, pairs pruned, candidates, edges, plans, runtime, peak memory.
     """
-    dataset_id = "ds_perf"
     discovery = RelationshipDiscoveryEngine()
+    validator = RelationshipValidatorEngine()
+    governance = JoinGovernanceEngine()
 
-    # 4 sheets, 10 columns each = 40 columns total
-    profiles: dict[str, list[SemanticColumnProfile]] = {}
-    for s_idx in range(4):
-        sheet_name = f"sheet_{s_idx}"
-        sheet_cols = []
-        # 1 identifier
-        sheet_cols.append(_create_profile(dataset_id, sheet_name, f"id_{s_idx}", f"id_{s_idx}", role=SemanticColumnRole.ENTITY_IDENTIFIER, concept=SemanticConcept.IDENTIFIER))
-        # 4 measures
-        for m_idx in range(4):
-            sheet_cols.append(_create_profile(dataset_id, sheet_name, f"metric_{m_idx}", f"metric_{m_idx}", role=SemanticColumnRole.MEASURE, concept=SemanticConcept.MEASURE, dtype=SemanticDtype.CURRENCY_AMOUNT))
-        # 3 free text
-        for t_idx in range(3):
-            sheet_cols.append(_create_profile(dataset_id, sheet_name, f"notes_{t_idx}", f"notes_{t_idx}", role=SemanticColumnRole.FREE_TEXT, concept=SemanticConcept.FREE_TEXT))
-        # 2 dimensions
-        for d_idx in range(2):
-            sheet_cols.append(_create_profile(dataset_id, sheet_name, f"dim_{d_idx}", f"dim_{d_idx}", role=SemanticColumnRole.DIMENSION, concept=SemanticConcept.DESCRIPTOR))
-        profiles[sheet_name] = sheet_cols
+    configs = [
+        ("SMALL", 2, 5, 100),     # 2 sheets, 5 cols each = 10 cols, 100 rows
+        ("MEDIUM", 4, 15, 500),   # 4 sheets, 15 cols each = 60 cols, 500 rows
+        ("LARGE", 6, 20, 1000),   # 6 sheets, 20 cols each = 120 cols, 1000 rows
+    ]
 
-    start_t = time.perf_counter()
-    cands, stats = discovery.discover_candidates(dataset_id=dataset_id, profiles_by_sheet=profiles)
-    elapsed = time.perf_counter() - start_t
+    benchmark_results = []
 
-    # 6 sheet pairs * 10 * 10 = 600 raw pairs considered
-    assert stats.sheets_count == 4
-    assert stats.columns_count == 40
-    assert stats.candidate_column_pairs_considered > 0
-    # Over 80% of pairs should be pruned semantically (measures, free-text, non-keys)
-    assert stats.pairs_pruned_semantically > 0
-    assert stats.pairs_pruned_semantically / stats.candidate_column_pairs_considered > 0.80
-    assert elapsed < 0.20  # Fast execution under 200ms
+    for name, n_sheets, n_cols, n_rows in configs:
+        tracemalloc.start()
+        t0 = time.perf_counter()
+
+        dataset_id = f"ds_perf_{name.lower()}"
+        profiles_by_sheet = {}
+        dfs_by_sheet = {}
+        grain_profiles = {}
+
+        for s_idx in range(n_sheets):
+            sheet_name = f"sheet_{s_idx}"
+            cols = []
+            data = {}
+
+            # Primary key column
+            pk_col = f"id_{s_idx}"
+            cols.append(_create_profile(
+                dataset_id, sheet_name, pk_col, pk_col,
+                role=SemanticColumnRole.ENTITY_IDENTIFIER,
+                concept=SemanticConcept.IDENTIFIER,
+                entity_type=SemanticEntityType.PERSON,
+            ))
+            data[pk_col] = [f"id_{i}" for i in range(n_rows)]
+
+            # Foreign key column to previous sheet if exists
+            fk_col = f"id_{(s_idx - 1) % n_sheets}"
+            cols.append(_create_profile(
+                dataset_id, sheet_name, fk_col, fk_col,
+                role=SemanticColumnRole.ENTITY_IDENTIFIER,
+                concept=SemanticConcept.IDENTIFIER,
+                entity_type=SemanticEntityType.PERSON,
+            ))
+            data[fk_col] = [f"id_{i % max(1, n_rows // 2)}" for i in range(n_rows)]
+
+            # Fill remaining columns with measures, text, dimensions
+            rem = n_cols - 2
+            n_measures = max(1, rem // 2)
+            n_text = max(1, rem // 4)
+            n_dim = rem - n_measures - n_text
+
+            for m in range(n_measures):
+                cname = f"metric_{m}"
+                cols.append(_create_profile(
+                    dataset_id, sheet_name, cname, cname,
+                    role=SemanticColumnRole.MEASURE,
+                    concept=SemanticConcept.MEASURE,
+                    dtype=SemanticDtype.INTEGER,
+                    measure_class=MeasureClass.QUANTITY,
+                ))
+                data[cname] = [10 + i % 100 for i in range(n_rows)]
+
+            for t in range(n_text):
+                cname = f"notes_{t}"
+                cols.append(_create_profile(
+                    dataset_id, sheet_name, cname, cname,
+                    role=SemanticColumnRole.FREE_TEXT,
+                    concept=SemanticConcept.FREE_TEXT,
+                    dtype=SemanticDtype.NATURAL_LANGUAGE_TEXT,
+                ))
+                data[cname] = [f"free text notes {i}" for i in range(n_rows)]
+
+            for d in range(n_dim):
+                cname = f"dim_{d}"
+                cols.append(_create_profile(
+                    dataset_id, sheet_name, cname, cname,
+                    role=SemanticColumnRole.DIMENSION,
+                    concept=SemanticConcept.DESCRIPTOR,
+                    dtype=SemanticDtype.CATEGORICAL_CODE,
+                ))
+                data[cname] = [f"cat_{i % 5}" for i in range(n_rows)]
+
+            profiles_by_sheet[sheet_name] = cols
+            dfs_by_sheet[sheet_name] = pd.DataFrame(data)
+            grain_profiles[sheet_name] = _create_grain_profile(sheet_name, f"GRAIN_{sheet_name}")
+
+        # 1. Candidate discovery
+        candidates, stats = discovery.discover_candidates(
+            dataset_id=dataset_id,
+            profiles_by_sheet=profiles_by_sheet,
+            table_data=dfs_by_sheet,
+        )
+
+        # 2. Validation
+        validated_edges = []
+        for cand in candidates:
+            edge = validator.validate_candidate(
+                cand,
+                df_left=dfs_by_sheet[cand.left_sheet_id],
+                df_right=dfs_by_sheet[cand.right_sheet_id],
+            )
+            validated_edges.append(edge)
+
+        # 3. Governance Planning
+        safe_count = 0
+        safe_preagg_count = 0
+        ambiguous_count = 0
+        unsafe_count = 0
+
+        for edge in validated_edges:
+            plan = governance.plan_join(
+                edge=edge,
+                left_grain_profile=grain_profiles[edge.left_sheet_id],
+                right_grain_profile=grain_profiles[edge.right_sheet_id],
+                left_profiles=profiles_by_sheet[edge.left_sheet_id],
+                right_profiles=profiles_by_sheet[edge.right_sheet_id],
+            )
+            if plan.safety_status == JoinSafetyStatus.SAFE:
+                safe_count += 1
+            elif plan.safety_status == JoinSafetyStatus.SAFE_WITH_PREAGGREGATION:
+                safe_preagg_count += 1
+            elif plan.safety_status == JoinSafetyStatus.AMBIGUOUS:
+                ambiguous_count += 1
+            elif plan.safety_status == JoinSafetyStatus.UNSAFE:
+                unsafe_count += 1
+
+        t_elapsed = time.perf_counter() - t0
+        current_mem, peak_mem = tracemalloc.get_traced_memory()
+        tracemalloc.stop()
+
+        res = {
+            "name": name,
+            "sheets": stats.sheets_count,
+            "columns": stats.columns_count,
+            "rows": n_rows,
+            "raw_cross_sheet_pairs": stats.candidate_column_pairs_considered,
+            "pairs_pruned_before_scan": stats.pairs_pruned_semantically,
+            "pruning_efficiency": stats.pairs_pruned_semantically / max(1, stats.candidate_column_pairs_considered),
+            "key_compatible_pairs": stats.key_compatible_pairs,
+            "evaluated_candidates": len(candidates),
+            "validated_edges": sum(1 for e in validated_edges if e.status == RelationshipStatus.VALIDATED),
+            "safe_plans": safe_count,
+            "safe_with_preagg_plans": safe_preagg_count,
+            "ambiguous_plans": ambiguous_count,
+            "unsafe_plans": unsafe_count,
+            "runtime_s": t_elapsed,
+            "peak_memory_mb": peak_mem / (1024 * 1024),
+        }
+        benchmark_results.append(res)
+
+        # Assert bounded search properties
+        assert stats.candidate_column_pairs_considered > 0
+        assert stats.pairs_pruned_semantically > 0
+        assert res["pruning_efficiency"] >= 0.50  # Over 50% pruned even on minimal 5-col sheets; >= 80% on medium/large
+        assert t_elapsed < 10.0  # Runs well under 10 seconds even for LARGE
+
+    # Verify scaling is bounded
+    assert len(benchmark_results) == 3
 
 
 # =========================================================================

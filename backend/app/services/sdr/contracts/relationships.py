@@ -159,6 +159,20 @@ class SDRValidatedRelationshipEdge(BaseModel):
     is_grain_preserving: bool = True
     duplication_risk_flag: bool = False
 
+    left_rows: int = 0
+    right_rows: int = 0
+    matched_distinct_keys: int = 0
+    matched_pairs: int = 0
+    unmatched_left_rows: int = 0
+    unmatched_right_rows: int = 0
+    estimated_result_rows: int = 0
+    expansion_ratio: float = 1.0
+    max_frequency_bound: int = 1
+
+    key_fingerprints: list[str] = Field(default_factory=list)
+    grain_fingerprints: list[str] = Field(default_factory=list)
+    policy_fingerprint: str = ""
+
     rejection_reason: str | None = None
     validation_evidence: dict[str, Any] = Field(default_factory=dict)
 
@@ -227,6 +241,19 @@ class SDRJoinPlan(BaseModel):
     expansion_ratio: float = 1.0
     max_expected_multiplier: float = 1.0
 
+    left_rows: int = 0
+    right_rows: int = 0
+    matched_distinct_keys: int = 0
+    matched_pairs: int = 0
+    unmatched_left_rows: int = 0
+    unmatched_right_rows: int = 0
+    estimated_result_rows: int = 0
+    max_frequency_bound: int = 1
+
+    edge_artifact_fingerprint: str = ""
+    grain_artifact_fingerprint: str = ""
+    policy_fingerprint: str = ""
+
     risk_flags: list[str] = Field(default_factory=list)
     forbidden_reason: str | None = None
     safe_operations: list[str] = Field(default_factory=list)
@@ -294,12 +321,15 @@ def compute_validated_edge_fingerprint(
     status: RelationshipStatus,
     dataset_version: str = "v1",
     policy_fingerprint: str = "",
+    key_fingerprints: Sequence[str] = (),
+    grain_fingerprints: Sequence[str] = (),
 ) -> str:
     """Computes deterministic SHA-256 fingerprint for a validated relationship edge."""
     raw = (
         f"{edge_id}:{candidate_id}:{dataset_id}:{left_sheet_id}:{right_sheet_id}:"
         f"{','.join(sorted(left_column_ids))}:{','.join(sorted(right_column_ids))}:"
-        f"{cardinality.value}:{status.value}:{dataset_version}:{policy_fingerprint}"
+        f"{cardinality.value}:{status.value}:{dataset_version}:{policy_fingerprint}:"
+        f"{','.join(sorted(key_fingerprints))}:{','.join(sorted(grain_fingerprints))}"
     )
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
@@ -315,11 +345,61 @@ def compute_join_plan_fingerprint(
     target_grain: str,
     dataset_version: str = "v1",
     policy_fingerprint: str = "",
+    edge_artifact_fingerprint: str = "",
+    grain_artifact_fingerprint: str = "",
 ) -> str:
     """Computes deterministic SHA-256 fingerprint for a governed JoinPlan."""
     raw = (
         f"{join_plan_id}:{relationship_edge_id}:{left_sheet_id}:{right_sheet_id}:"
         f"{','.join(sorted(left_keys))}:{','.join(sorted(right_keys))}:"
-        f"{safety_status.value}:{target_grain}:{dataset_version}:{policy_fingerprint}"
+        f"{safety_status.value}:{target_grain}:{dataset_version}:{policy_fingerprint}:"
+        f"{edge_artifact_fingerprint}:{grain_artifact_fingerprint}"
     )
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def check_edge_invalidation(
+    edge: SDRValidatedRelationshipEdge,
+    current_key_fingerprints: Sequence[str] = (),
+    current_grain_fingerprints: Sequence[str] = (),
+    current_dataset_version: str = "v1",
+    current_policy_fingerprint: str = "",
+) -> tuple[bool, str | None]:
+    """
+    Evaluates whether an existing validated edge is invalidated by upstream changes.
+    Returns (is_valid, invalidation_reason).
+    """
+    if edge.dataset_version != current_dataset_version:
+        return False, f"Dataset version changed: edge has '{edge.dataset_version}', current is '{current_dataset_version}'"
+    if edge.policy_fingerprint and current_policy_fingerprint and edge.policy_fingerprint != current_policy_fingerprint:
+        return False, f"Policy fingerprint changed: edge has '{edge.policy_fingerprint}', current is '{current_policy_fingerprint}'"
+    if edge.key_fingerprints and current_key_fingerprints:
+        if sorted(edge.key_fingerprints) != sorted(current_key_fingerprints):
+            return False, "SDR-3 Key fingerprints changed: candidate key invalidation"
+    if edge.grain_fingerprints and current_grain_fingerprints:
+        if sorted(edge.grain_fingerprints) != sorted(current_grain_fingerprints):
+            return False, "SDR-2 Grain fingerprints changed: table grain invalidation"
+    return True, None
+
+
+def check_join_plan_invalidation(
+    plan: SDRJoinPlan,
+    current_edge_fingerprint: str = "",
+    current_grain_fingerprints: Sequence[str] = (),
+    current_dataset_version: str = "v1",
+    current_policy_fingerprint: str = "",
+) -> tuple[bool, str | None]:
+    """
+    Evaluates whether an existing JoinPlan is invalidated by upstream changes.
+    Returns (is_valid, invalidation_reason).
+    """
+    if plan.dataset_version != current_dataset_version:
+        return False, f"Dataset version changed: plan has '{plan.dataset_version}', current is '{current_dataset_version}'"
+    if plan.policy_fingerprint and current_policy_fingerprint and plan.policy_fingerprint != current_policy_fingerprint:
+        return False, f"Policy fingerprint changed: plan has '{plan.policy_fingerprint}', current is '{current_policy_fingerprint}'"
+    if plan.edge_artifact_fingerprint and current_edge_fingerprint and plan.edge_artifact_fingerprint != current_edge_fingerprint:
+        return False, f"Validated relationship edge changed: plan edge fingerprint '{plan.edge_artifact_fingerprint}' != current '{current_edge_fingerprint}'"
+    if plan.grain_artifact_fingerprint and current_grain_fingerprints:
+        if plan.grain_artifact_fingerprint not in current_grain_fingerprints:
+            return False, "SDR-2 Grain changed: target grain fingerprint invalidation"
+    return True, None

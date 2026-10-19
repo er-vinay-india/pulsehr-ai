@@ -22,6 +22,12 @@ class RetrievalNamespace(str, Enum):
     RELATIONSHIP = "RELATIONSHIP"      # Validated structural relationships and governed JoinPlans
     ANALYTICAL = "ANALYTICAL"          # Observed EDA-B analytical findings, effect sizes, statistical reliability
 
+    # Exact target index aliases
+    RAW_SCHEMA_INDEX = "RAW_SCHEMA"
+    SEMANTIC_INDEX = "SEMANTIC"
+    RELATIONSHIP_INDEX = "RELATIONSHIP"
+    ANALYTICAL_INDEX = "ANALYTICAL"
+
 
 class AuthorityClass(str, Enum):
     """
