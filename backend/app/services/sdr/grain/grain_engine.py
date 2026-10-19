@@ -118,7 +118,22 @@ class SDRGrainDiscoveryEngine:
 
         best_cand = ranked_candidates[0]
 
-        # Step 3: Ambiguity Gate
+        # Step 3: Primary Entity & Temporal Grain Synthesis
+        primary_entity = self._derive_primary_entity(best_cand, prof_map)
+        temporal_grain = self._derive_temporal_grain(best_cand, prof_map)
+
+        is_event_table = (
+            primary_entity == CanonicalGrain.EVENT
+            or any(p.entity_type_hypothesis == SemanticEntityType.EVENT for p in profiles)
+            or any("event" in p.source_name.lower() for p in profiles)
+            or any(p.semantic_dtype == SemanticDtype.DATETIME for p in profiles)
+        )
+        has_natural_key = (
+            best_cand.uniqueness_ratio >= self.policy.min_uniqueness_for_single_grain
+            and best_cand.confidence >= 0.75
+        )
+
+        # Step 4: Ambiguity Gate
         # If top 2 candidates are very close in confidence but express different grains -> AMBIGUOUS
         is_ambiguous = False
         if len(ranked_candidates) >= 2:
@@ -127,18 +142,32 @@ class SDRGrainDiscoveryEngine:
             if conf_diff < self.policy.ambiguity_margin and best_cand.grain_expression != second_cand.grain_expression:
                 is_ambiguous = True
 
-        # Step 4: Status Determination
-        if is_ambiguous:
+        # Step 5: Status Determination
+        if is_event_table and not has_natural_key:
+            primary_entity = CanonicalGrain.EVENT
+            if temporal_grain == TemporalGrain.NONE:
+                temporal_grain = TemporalGrain.DATETIME_EVENT
+            status = GrainStatus.PROVISIONAL
+            conf = max(0.65, best_cand.confidence)
+            resolved_expr = "EVENT_OCCURRENCE"
+            rationale = (
+                "Event table with no natural business key. 1 row represents an individual "
+                f"event occurrence (observed candidate combinations non-unique, max uniqueness {best_cand.uniqueness_ratio:.2%}; "
+                "lineage relies on immutable row coordinates)."
+            )
+        elif is_ambiguous:
             status = GrainStatus.AMBIGUOUS
             conf = min(0.60, best_cand.confidence)
+            resolved_expr = best_cand.grain_expression
             rationale = (
                 f"Competing grain hypotheses detected: '{best_cand.grain_expression}' ({best_cand.confidence:.2f}) "
                 f"vs '{ranked_candidates[1].grain_expression}' ({ranked_candidates[1].confidence:.2f}). "
                 "Withholding confirmed grain promotion."
             )
-        elif best_cand.uniqueness_ratio >= self.policy.min_uniqueness_for_single_grain and best_cand.confidence >= 0.75:
+        elif has_natural_key:
             status = GrainStatus.RESOLVED
             conf = best_cand.confidence
+            resolved_expr = best_cand.grain_expression
             rationale = (
                 f"Resolved dominant grain: 1 row represents '{best_cand.grain_expression}' "
                 f"keyed by ({', '.join(best_cand.determinant_column_names)}) with {best_cand.uniqueness_ratio:.2%} uniqueness."
@@ -146,6 +175,7 @@ class SDRGrainDiscoveryEngine:
         elif best_cand.uniqueness_ratio >= 0.70:
             status = GrainStatus.PROVISIONAL
             conf = best_cand.confidence
+            resolved_expr = best_cand.grain_expression
             rationale = (
                 f"Provisional grain candidate: '{best_cand.grain_expression}' keyed by "
                 f"({', '.join(best_cand.determinant_column_names)}) with {best_cand.uniqueness_ratio:.2%} uniqueness and {best_cand.duplicate_row_count} duplicate rows."
@@ -153,11 +183,8 @@ class SDRGrainDiscoveryEngine:
         else:
             status = GrainStatus.UNKNOWN
             conf = 0.30
+            resolved_expr = "UNKNOWN"
             rationale = "Candidate uniqueness too low to establish confirmed row grain."
-
-        # Step 5: Primary Entity & Temporal Grain Synthesis
-        primary_entity = self._derive_primary_entity(best_cand, prof_map)
-        temporal_grain = self._derive_temporal_grain(best_cand, prof_map)
 
         profile_id = f"grain_{dataset_id}_{sheet_id}"
         source_fps = [prof_map[cid].artifact_fingerprint for cid in best_cand.determinant_column_ids if cid in prof_map]
@@ -167,7 +194,7 @@ class SDRGrainDiscoveryEngine:
             sheet_id=sheet_id,
             primary_entity=primary_entity,
             temporal_grain=temporal_grain,
-            resolved_grain_expression=best_cand.grain_expression if status != GrainStatus.UNKNOWN else "UNKNOWN",
+            resolved_grain_expression=resolved_expr,
             best_candidate_ids=best_cand.determinant_column_ids,
             grain_status=status,
             policy_fingerprint=policy_fingerprint,
@@ -179,7 +206,7 @@ class SDRGrainDiscoveryEngine:
             sheet_id=sheet_id,
             primary_entity=primary_entity,
             temporal_grain=temporal_grain,
-            resolved_grain_expression=best_cand.grain_expression if status != GrainStatus.UNKNOWN else "UNKNOWN",
+            resolved_grain_expression=resolved_expr,
             grain_status=status,
             best_candidate=best_cand,
             ranked_candidates=ranked_candidates[:5],

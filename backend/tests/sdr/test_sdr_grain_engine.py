@@ -3,6 +3,10 @@ HighView Semantic Data Refinery — Phase SDR-2
 Tests: Governed Grain Discovery Engine & Strict Negative Gates
 """
 
+import hashlib
+import json
+from pathlib import Path
+
 import pytest
 
 from app.services.ingestion_v2.contracts.grain import (
@@ -34,6 +38,8 @@ from app.services.sdr.grain.candidate_pruner import (
     is_system_row_identifier,
     prune_grain_candidates,
 )
+from app.services.sdr.artifacts.artifact_writer import SDRArtifactWriter
+from app.services.sdr.entity.entity_hypothesizer import SDREntityHypothesisEngine
 from app.services.sdr.grain.grain_engine import SDRGrainDiscoveryEngine
 
 
@@ -324,3 +330,207 @@ def test_width_cap_and_dual_temporal_pruning():
         has_t1 = "t1" in cand.determinant_column_ids
         has_t2 = "t2" in cand.determinant_column_ids
         assert not (has_t1 and has_t2), f"Candidate {cand.candidate_id} contains dual temporal columns!"
+
+
+def test_event_table_no_natural_key():
+    """
+    Verify event stream with no natural business key.
+    Columns: event_timestamp, event_type, user_agent, event_value.
+    Must establish:
+    - Primary entity: EVENT
+    - Temporal grain: DATETIME_EVENT
+    - Resolved grain expression: EVENT_OCCURRENCE
+    - Status: PROVISIONAL
+    - Natural PK: None (relies on immutable row coordinates)
+    - PK authorization: 0
+    - FK authorization: 0
+    - JoinPlans emitted: 0
+    """
+    p_ts = _make_profile(
+        "c_ts",
+        "event_timestamp",
+        SemanticColumnRole.TIME,
+        SemanticDtype.DATETIME,
+        SemanticConcept.TIME_SPAN,
+        SemanticEntityType.UNKNOWN,
+        distinct_count=4,
+        row_count=5,
+    )
+    p_type = _make_profile(
+        "c_type",
+        "event_type",
+        SemanticColumnRole.DIMENSION,
+        SemanticDtype.CATEGORICAL_CODE,
+        SemanticConcept.DESCRIPTOR,
+        SemanticEntityType.EVENT,
+        distinct_count=3,
+        row_count=5,
+    )
+    p_ua = _make_profile(
+        "c_ua",
+        "user_agent",
+        SemanticColumnRole.DIMENSION,
+        SemanticDtype.NATURAL_LANGUAGE_TEXT,
+        SemanticConcept.DESCRIPTOR,
+        SemanticEntityType.UNKNOWN,
+        distinct_count=2,
+        row_count=5,
+    )
+    p_val = _make_profile(
+        "c_val",
+        "event_value",
+        SemanticColumnRole.MEASURE,
+        SemanticDtype.DECIMAL_NUMBER,
+        SemanticConcept.MEASURE,
+        SemanticEntityType.UNKNOWN,
+        measure_class=MeasureClass.QUANTITY,
+        distinct_count=4,
+        row_count=5,
+    )
+
+    data = {
+        "c_ts": ["2026-10-19T10:00:00", "2026-10-19T10:00:00", "2026-10-19T10:01:00", "2026-10-19T10:02:00", "2026-10-19T10:02:00"],
+        "c_type": ["click", "view", "click", "click", "click"],
+        "c_ua": ["Mozilla/5.0", "Mozilla/5.0", "Chrome/120", "Mozilla/5.0", "Mozilla/5.0"],
+        "c_val": [1.0, 1.0, 2.0, 1.0, 1.0],
+    }
+
+    engine = SDRGrainDiscoveryEngine()
+    profile = engine.discover_grain("ds_test", "sheet_events", [p_ts, p_type, p_ua, p_val], data, 5)
+
+    assert profile.primary_entity == CanonicalGrain.EVENT
+    assert profile.temporal_grain == TemporalGrain.DATETIME_EVENT
+    assert profile.resolved_grain_expression == "EVENT_OCCURRENCE"
+    assert profile.grain_status == GrainStatus.PROVISIONAL
+
+    # Check natural PK is None and no PK/FK/JoinPlans exist
+    profile_dict = profile.model_dump()
+    assert "primary_key" not in profile_dict
+    assert "foreign_key" not in profile_dict
+    assert "join_plan" not in profile_dict
+    if profile.best_candidate:
+        cand_dict = profile.best_candidate.model_dump()
+        assert "is_primary_key" not in cand_dict
+        assert "foreign_key" not in cand_dict
+
+
+def test_aggregated_table_grain_department_month():
+    """
+    Verify pre-computed aggregated table grain discovery:
+    Columns: department, month, attendance_rate.
+    Must establish:
+    - Resolved expression: DEPARTMENT x MONTH
+    - attendance_rate pruned as determinant column
+    - 0 measure-as-grain false positives
+    - 0 employee-level misclassification
+    """
+    p_dept = _make_profile(
+        "c_dept",
+        "department",
+        SemanticColumnRole.DIMENSION,
+        SemanticDtype.CATEGORICAL_CODE,
+        SemanticConcept.DESCRIPTOR,
+        SemanticEntityType.DEPARTMENT,
+        distinct_count=3,
+        row_count=6,
+    )
+    p_mo = _make_profile(
+        "c_mo",
+        "month",
+        SemanticColumnRole.TIME,
+        SemanticDtype.DATE,
+        SemanticConcept.TIME_SPAN,
+        SemanticEntityType.UNKNOWN,
+        distinct_count=2,
+        row_count=6,
+    )
+    p_rate = _make_profile(
+        "c_rate",
+        "attendance_rate",
+        SemanticColumnRole.MEASURE,
+        SemanticDtype.PERCENTAGE_RATE,
+        SemanticConcept.MEASURE,
+        SemanticEntityType.UNKNOWN,
+        measure_class=MeasureClass.PERCENTAGE,
+        distinct_count=6,
+        row_count=6,
+    )
+
+    data = {
+        "c_dept": ["HR", "Eng", "Sales", "HR", "Eng", "Sales"],
+        "c_mo": ["2026-01", "2026-01", "2026-01", "2026-02", "2026-02", "2026-02"],
+        "c_rate": [94.5, 98.2, 91.0, 95.1, 97.8, 89.5],
+    }
+
+    engine = SDRGrainDiscoveryEngine()
+    profile = engine.discover_grain("ds_test", "sheet_agg", [p_dept, p_mo, p_rate], data, 6)
+
+    assert profile.grain_status == GrainStatus.RESOLVED
+    assert profile.resolved_grain_expression == "DEPARTMENT x MONTH"
+    assert profile.best_candidate is not None
+    assert set(profile.best_candidate.determinant_column_ids) == {"c_dept", "c_mo"}
+    assert profile.best_candidate.width == 2
+    assert profile.best_candidate.uniqueness_ratio == 1.0
+
+    # Ensure attendance_rate is pruned from all candidates (0 measure-as-grain false positives)
+    assert "c_rate" not in profile.best_candidate.determinant_column_ids
+    for cand in profile.ranked_candidates:
+        assert "c_rate" not in cand.determinant_column_ids
+
+    # Zero employee-level misclassification: entity is DEPARTMENT, not PERSON
+    assert profile.primary_entity != CanonicalGrain.PERSON
+    assert profile.primary_entity == CanonicalGrain.DEPARTMENT
+
+
+def test_sdr2_repeat_run_determinism(tmp_path: Path):
+    """
+    CRITICAL DETERMINISM ASSERTION:
+    Same input + same policy suite MUST produce identical entity hypotheses,
+    ranked grain candidates, resolved grain status, artifact fingerprints,
+    and manifest hashes across repeat runs.
+    """
+    entity_engine = SDREntityHypothesisEngine()
+    grain_engine = SDRGrainDiscoveryEngine()
+    policy_suite = SDRPolicySuite()
+
+    # Define standard input profiles
+    p1 = _make_profile("c1", "employee_id", SemanticColumnRole.ENTITY_IDENTIFIER, SemanticDtype.IDENTIFIER_CODE, SemanticConcept.IDENTIFIER, SemanticEntityType.PERSON, row_count=5)
+    p2 = _make_profile("c2", "full_name", SemanticColumnRole.ENTITY_LABEL, SemanticDtype.NATURAL_LANGUAGE_TEXT, SemanticConcept.DESCRIPTOR, SemanticEntityType.PERSON, row_count=5)
+    p3 = _make_profile("c3", "reporting_month", SemanticColumnRole.TIME, SemanticDtype.DATE, SemanticConcept.TIME_SPAN, SemanticEntityType.UNKNOWN, distinct_count=2, row_count=5)
+    profiles = [p1, p2, p3]
+    data = {
+        "c1": ["E1", "E2", "E3", "E1", "E2"],
+        "c2": ["Alice", "Bob", "Charlie", "Alice", "Bob"],
+        "c3": ["2026-01", "2026-01", "2026-01", "2026-02", "2026-02"],
+    }
+
+    # Run 1
+    dir1 = tmp_path / "run1"
+    writer1 = SDRArtifactWriter(base_data_dir=dir1)
+    hyps1 = entity_engine.generate_hypotheses("ds_det", "sheet1", profiles)
+    grain1 = grain_engine.discover_grain("ds_det", "sheet1", profiles, data, 5)
+    paths1 = writer1.write_sdr2_artifacts("ds_det", hyps1, [grain1], grain1.ranked_candidates, policy_suite)
+
+    # Run 2
+    dir2 = tmp_path / "run2"
+    writer2 = SDRArtifactWriter(base_data_dir=dir2)
+    hyps2 = entity_engine.generate_hypotheses("ds_det", "sheet1", profiles)
+    grain2 = grain_engine.discover_grain("ds_det", "sheet1", profiles, data, 5)
+    paths2 = writer2.write_sdr2_artifacts("ds_det", hyps2, [grain2], grain2.ranked_candidates, policy_suite)
+
+    # 1. Structural model equality
+    assert [h.model_dump() for h in hyps1] == [h.model_dump() for h in hyps2]
+    assert grain1.model_dump() == grain2.model_dump()
+    assert [c.model_dump() for c in grain1.ranked_candidates] == [c.model_dump() for c in grain2.ranked_candidates]
+
+    # 2. Artifact fingerprints equality
+    assert grain1.artifact_fingerprint == grain2.artifact_fingerprint
+    assert paths1["manifest_fingerprint"] == paths2["manifest_fingerprint"]
+
+    # 3. Exact serialized file content hashes
+    for fname in ["entity_hypotheses.json", "grain_profiles.json", "grain_candidates.json", "sdr2_manifest.json"]:
+        content1 = Path(paths1[fname.replace(".json", "")]).read_bytes()
+        content2 = Path(paths2[fname.replace(".json", "")]).read_bytes()
+        h1 = hashlib.sha256(content1).hexdigest()
+        h2 = hashlib.sha256(content2).hexdigest()
+        assert h1 == h2, f"Determinism failure for {fname}: {h1} != {h2}"
