@@ -5,7 +5,7 @@ Retrieval Adapter for Frozen I7 Namespaces
 
 from __future__ import annotations
 
-from typing import Sequence
+from typing import Any, Sequence
 
 from app.services.ingestion_v2.retrieval.documents import RetrievalDocument
 from app.services.ingestion_v2.retrieval.namespaces import (
@@ -13,6 +13,10 @@ from app.services.ingestion_v2.retrieval.namespaces import (
     RetrievalNamespace,
 )
 from app.services.sdr.contracts.decomposition import SemanticDecompositionCandidate
+from app.services.sdr.contracts.keys import (
+    ObservedFunctionalDependency,
+    SDRKeyCandidate,
+)
 from app.services.sdr.contracts.profiles import SemanticColumnProfile
 
 
@@ -266,6 +270,126 @@ class SDRRetrievalAdapter:
             source_fingerprint=source_fingerprint,
             artifact_type="RawGrainObservationDoc",
             artifact_id=grain_profile.profile_id,
+            text_for_retrieval=text,
+            structured_metadata=metadata,
+        )
+
+    @staticmethod
+    def build_raw_key_candidate_document(
+        candidate: SDRKeyCandidate,
+        dataset_version: str = "v1",
+        source_fingerprint: str = "source_hash",
+    ) -> RetrievalDocument:
+        """Emits physical key candidate observations to RAW_SCHEMA_INDEX."""
+        doc_id = f"raw_key_{candidate.dataset_id}_{candidate.sheet_id}_{'_'.join(candidate.column_names)}"
+        text = (
+            f"Table {candidate.sheet_id} Key Columns {', '.join(candidate.column_names)} "
+            f"Uniqueness {candidate.uniqueness_ratio} NullRatio {candidate.null_ratio} "
+            f"Duplicates {candidate.duplicate_row_count} Minimal {candidate.is_minimal}"
+        )
+        metadata = {
+            "candidate_id": candidate.candidate_id,
+            "dataset_id": candidate.dataset_id,
+            "sheet_id": candidate.sheet_id,
+            "column_names": list(candidate.column_names),
+            "composite_width": candidate.width,
+            "uniqueness_ratio": candidate.uniqueness_ratio,
+            "null_ratio": candidate.null_ratio,
+            "duplicate_count": candidate.duplicate_row_count,
+            "is_minimal": candidate.is_minimal,
+            "status": candidate.status.value,
+        }
+
+        return RetrievalDocument.create(
+            document_id=doc_id,
+            namespace=RetrievalNamespace.RAW_SCHEMA,
+            authority_class=AuthorityClass.STRUCTURAL,
+            dataset_id=candidate.dataset_id,
+            dataset_version=dataset_version,
+            source_fingerprint=source_fingerprint,
+            artifact_type="RawKeyCandidateDoc",
+            artifact_id=candidate.candidate_id,
+            text_for_retrieval=text,
+            structured_metadata=metadata,
+        )
+
+    @staticmethod
+    def build_key_candidate_document(
+        candidate: SDRKeyCandidate,
+        dataset_version: str = "v1",
+        source_fingerprint: str = "source_hash",
+    ) -> RetrievalDocument:
+        """Emits a semantic key candidate document to SEMANTIC_INDEX."""
+        doc_id = f"semantic_key_{candidate.dataset_id}_{candidate.sheet_id}_{'_'.join(candidate.column_names)}"
+        text = (
+            f"Table {candidate.sheet_id} CandidateKey {', '.join(candidate.column_names)} "
+            f"Type {candidate.candidate_type.value} Status {candidate.status.value} "
+            f"Confidence {candidate.key_confidence} Authority {candidate.authority.value} "
+            f"EntityRef {candidate.entity_type.value}"
+        )
+        metadata = {
+            "candidate_id": candidate.candidate_id,
+            "dataset_id": candidate.dataset_id,
+            "sheet_id": candidate.sheet_id,
+            "column_names": list(candidate.column_names),
+            "key_type": candidate.candidate_type.value,
+            "status": candidate.status.value,
+            "authority": candidate.authority.value,
+            "confidence": candidate.key_confidence,
+            "entity_reference": candidate.entity_type.value,
+            "is_minimal": candidate.is_minimal,
+            "quality_notes": candidate.evidence,
+            "candidate_fingerprint": candidate.artifact_fingerprint,
+        }
+
+        return RetrievalDocument.create(
+            document_id=doc_id,
+            namespace=RetrievalNamespace.SEMANTIC,
+            authority_class=AuthorityClass.SEMANTIC,
+            dataset_id=candidate.dataset_id,
+            dataset_version=dataset_version,
+            source_fingerprint=source_fingerprint,
+            artifact_type="SemanticKeyCandidateDoc",
+            artifact_id=candidate.candidate_id,
+            text_for_retrieval=text,
+            structured_metadata=metadata,
+        )
+
+    @staticmethod
+    def build_functional_dependency_document(
+        fd: ObservedFunctionalDependency,
+        dataset_version: str = "v1",
+        source_fingerprint: str = "source_hash",
+    ) -> RetrievalDocument:
+        """Emits an observed functional dependency document to SEMANTIC_INDEX."""
+        doc_id = f"fd_{fd.dataset_id}_{fd.sheet_id}_{'_'.join(fd.determinant_column_names)}_to_{'_'.join(fd.dependent_column_names)}"
+        text = (
+            f"Table {fd.sheet_id} FD {', '.join(fd.determinant_column_names)} -> {', '.join(fd.dependent_column_names)} "
+            f"Support {fd.support_ratio} Confidence {fd.confidence} Scope {fd.scope}"
+        )
+        metadata = {
+            "fd_id": fd.fd_id,
+            "dataset_id": fd.dataset_id,
+            "sheet_id": fd.sheet_id,
+            "determinant_columns": list(fd.determinant_column_names),
+            "dependent_columns": list(fd.dependent_column_names),
+            "support": fd.support_ratio,
+            "confidence": fd.confidence,
+            "exception_count": fd.violation_count,
+            "scope": fd.scope,
+            "rationale": fd.rationale,
+            "fd_fingerprint": fd.artifact_fingerprint,
+        }
+
+        return RetrievalDocument.create(
+            document_id=doc_id,
+            namespace=RetrievalNamespace.SEMANTIC,
+            authority_class=AuthorityClass.SEMANTIC,
+            dataset_id=fd.dataset_id,
+            dataset_version=dataset_version,
+            source_fingerprint=source_fingerprint,
+            artifact_type="FunctionalDependencyDoc",
+            artifact_id=fd.fd_id,
             text_for_retrieval=text,
             structured_metadata=metadata,
         )

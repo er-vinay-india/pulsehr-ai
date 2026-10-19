@@ -21,9 +21,12 @@ from app.services.ingestion_v2.contracts.grain import (
 class GrainStatus(str, Enum):
     """Governed status of grain inference for a sheet."""
     RESOLVED = "RESOLVED"        # Clean dominant candidate with clear semantic support
+    CONFIRMED = "RESOLVED"       # Convenience alias
     PROVISIONAL = "PROVISIONAL"  # Plausible candidate discovered with moderate uniqueness
+    INFERRED = "PROVISIONAL"     # Convenience alias
     AMBIGUOUS = "AMBIGUOUS"      # Multiple competing candidates or conflicting evidence
     UNKNOWN = "UNKNOWN"          # No plausible business grain discovered
+
 
 
 class GrainCandidate(BaseModel):

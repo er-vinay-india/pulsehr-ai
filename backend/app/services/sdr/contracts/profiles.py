@@ -42,6 +42,15 @@ class SemanticDtype(str, Enum):
     COMPOSITE_TEXT = "COMPOSITE_TEXT"
     UNKNOWN = "UNKNOWN"
 
+    # Backward-compatible convenience aliases
+    ID = "IDENTIFIER_CODE"
+    TEXT = "NATURAL_LANGUAGE_TEXT"
+    CATEGORICAL = "CATEGORICAL_CODE"
+    DECIMAL = "DECIMAL_NUMBER"
+    INTEGER = "INTEGER_NUMBER"
+    TIMESTAMP = "DATETIME"
+
+
 
 class PrivacyClassification(str, Enum):
     """
@@ -51,7 +60,9 @@ class PrivacyClassification(str, Enum):
     DIRECT_IDENTIFIER = "DIRECT_IDENTIFIER"       # Authorized for deterministic joins; masked from display
     SENSITIVE_ATTRIBUTE = "SENSITIVE_ATTRIBUTE"   # Restricted per governance; aggregations allowed
     GENERAL_ATTRIBUTE = "GENERAL_ATTRIBUTE"       # Non-sensitive dimension/measure
+    PUBLIC = "GENERAL_ATTRIBUTE"                  # Convenience alias
     UNKNOWN = "UNKNOWN"
+
 
 
 class ProfilingAmbiguityState(str, Enum):

@@ -11,6 +11,10 @@ from pathlib import Path
 from typing import Any, Sequence
 
 from app.services.sdr.contracts.decomposition import SemanticDecompositionCandidate
+from app.services.sdr.contracts.keys import (
+    ObservedFunctionalDependency,
+    SDRKeyCandidate,
+)
 from app.services.sdr.contracts.policies import SDRPolicySuite
 from app.services.sdr.contracts.profiles import SemanticColumnProfile
 
@@ -21,12 +25,13 @@ class SDRArtifactWriter:
     Guarantees deterministic serialization and byte-identical P0 database isolation.
     """
 
-    def __init__(self, base_data_dir: Path | str | None = None):
-        if base_data_dir is None:
+    def __init__(self, base_data_dir: Path | str | None = None, base_dir: Path | str | None = None):
+        chosen = base_dir if base_dir is not None else base_data_dir
+        if chosen is None:
             # Default to backend/data
             self.base_dir = Path(__file__).resolve().parents[4] / "data"
         else:
-            self.base_dir = Path(base_data_dir)
+            self.base_dir = Path(chosen)
 
     def get_dataset_sdr_dir(self, dataset_id: str) -> Path:
         """Returns isolated SDR directory for a dataset."""
@@ -155,3 +160,65 @@ class SDRArtifactWriter:
             "sdr2_manifest": str(manifest_path),
             "manifest_fingerprint": manifest_hash,
         }
+
+    def write_sdr3_artifacts(
+        self,
+        dataset_id: str,
+        key_candidates: Sequence[SDRKeyCandidate] | None = None,
+        functional_dependencies: Sequence[ObservedFunctionalDependency] | None = None,
+        policy_suite: SDRPolicySuite | None = None,
+        sheet_id: str | None = None,
+        candidates: Sequence[SDRKeyCandidate] | None = None,
+        dependencies: Sequence[ObservedFunctionalDependency] | None = None,
+        manifest: dict[str, Any] | None = None,
+    ) -> dict[str, str]:
+        """
+        Writes canonical SDR-3 artifacts:
+        - key_candidates.json
+        - functional_dependencies.json
+        - sdr3_manifest.json
+        """
+        sdr_dir = self.get_dataset_sdr_dir(dataset_id)
+        policy = policy_suite or SDRPolicySuite()
+        policy_fp = policy.compute_policy_fingerprint()
+
+        actual_keys = list(key_candidates if key_candidates is not None else (candidates or []))
+        actual_fds = list(functional_dependencies if functional_dependencies is not None else (dependencies or []))
+
+        # 1. Key Candidates
+        sorted_keys = sorted(actual_keys, key=lambda k: (k.sheet_id, k.candidate_id))
+        key_data = [k.model_dump() for k in sorted_keys]
+        key_json = json.dumps(key_data, indent=2, sort_keys=True)
+        key_path = sdr_dir / "key_candidates.json"
+        key_path.write_text(key_json, encoding="utf-8")
+        key_hash = hashlib.sha256(key_json.encode("utf-8")).hexdigest()
+
+        # 2. Functional Dependencies
+        sorted_fds = sorted(actual_fds, key=lambda f: (f.sheet_id, f.fd_id))
+        fd_data = [f.model_dump() for f in sorted_fds]
+        fd_json = json.dumps(fd_data, indent=2, sort_keys=True)
+        fd_path = sdr_dir / "functional_dependencies.json"
+        fd_path.write_text(fd_json, encoding="utf-8")
+        fd_hash = hashlib.sha256(fd_json.encode("utf-8")).hexdigest()
+
+        # 3. SDR-3 Manifest
+        sdr3_manifest = {
+            "dataset_id": dataset_id,
+            "policy_fingerprint": policy_fp,
+            "key_candidates_count": len(sorted_keys),
+            "functional_dependencies_count": len(sorted_fds),
+            "key_candidates_hash": key_hash,
+            "functional_dependencies_hash": fd_hash,
+        }
+        manifest_json = json.dumps(sdr3_manifest, indent=2, sort_keys=True)
+        manifest_path = sdr_dir / "sdr3_manifest.json"
+        manifest_path.write_text(manifest_json, encoding="utf-8")
+        manifest_hash = hashlib.sha256(manifest_json.encode("utf-8")).hexdigest()
+
+        return {
+            "key_candidates": str(key_path),
+            "functional_dependencies": str(fd_path),
+            "sdr3_manifest": str(manifest_path),
+            "manifest_fingerprint": manifest_hash,
+        }
+

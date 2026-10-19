@@ -5,6 +5,7 @@ Contracts Package
 
 from app.services.sdr.contracts.policies import (
     GrainConfidencePolicy,
+    KeyConfidencePolicy,
     SDRPolicySuite,
     SemanticConfidencePolicy,
 )
@@ -34,9 +35,19 @@ from app.services.sdr.contracts.grain import (
     SDRGrainProfile,
     compute_grain_profile_fingerprint,
 )
+from app.services.sdr.contracts.keys import (
+    KeyAuthority,
+    KeyCandidateStatus,
+    KeyCandidateType,
+    ObservedFunctionalDependency,
+    SDRKeyCandidate,
+    compute_fd_fingerprint,
+    compute_key_candidate_fingerprint,
+)
 
 __all__ = [
     "GrainConfidencePolicy",
+    "KeyConfidencePolicy",
     "SDRPolicySuite",
     "SemanticConfidencePolicy",
     "DeterministicColumnFeatures",
@@ -57,4 +68,12 @@ __all__ = [
     "GrainStatus",
     "SDRGrainProfile",
     "compute_grain_profile_fingerprint",
+    "KeyAuthority",
+    "KeyCandidateStatus",
+    "KeyCandidateType",
+    "ObservedFunctionalDependency",
+    "SDRKeyCandidate",
+    "compute_fd_fingerprint",
+    "compute_key_candidate_fingerprint",
 ]
+
