@@ -22,6 +22,7 @@ from app.services.sdr.contracts.keys import (
     SDRKeyCandidate,
 )
 from app.services.sdr.contracts.profiles import SemanticColumnProfile
+from app.services.sdr.geo.contracts import CanonicalGeoEntity, GeoResolutionCandidate
 
 
 class SDRRetrievalAdapter:
@@ -480,6 +481,88 @@ class SDRRetrievalAdapter:
             source_fingerprint=source_fingerprint,
             artifact_type="ValidatedEnrichmentDoc",
             artifact_id=enrichment.enrichment_id,
+            text_for_retrieval=text,
+            structured_metadata=metadata,
+        )
+
+    @staticmethod
+    def build_geo_resolution_document(
+        candidate: GeoResolutionCandidate,
+        dataset_id: str = "dataset_geo",
+        sheet_id: str = "sheet_geo",
+        dataset_version: str = "v1",
+        source_fingerprint: str = "source_hash",
+    ) -> RetrievalDocument:
+        """Emits a geographic resolution candidate to SEMANTIC_INDEX."""
+        doc_id = f"geo_res_{dataset_id}_{sheet_id}_{candidate.source_column_id}_{candidate.normalized_input}"
+        text = (
+            f"Table {sheet_id} Column {candidate.source_column_id} GeoResolution "
+            f"Observed '{candidate.source_value}' Normalized '{candidate.normalized_input}' "
+            f"Status {candidate.resolution_status.value} ResolvedEntity {candidate.resolved_entity_id or 'NONE'} "
+            f"Method {candidate.match_method.value} Confidence {candidate.confidence}"
+        )
+        metadata = {
+            "source_value": candidate.source_value,
+            "normalized_input": candidate.normalized_input,
+            "resolution_status": candidate.resolution_status.value,
+            "resolved_entity_id": candidate.resolved_entity_id,
+            "candidate_ids": candidate.candidate_geo_entity_ids,
+            "confidence": candidate.confidence,
+            "match_method": candidate.match_method.value,
+            "source_column_id": candidate.source_column_id,
+            "geo_fingerprint": candidate.artifact_fingerprint,
+        }
+
+        return RetrievalDocument.create(
+            document_id=doc_id,
+            namespace=RetrievalNamespace.SEMANTIC,
+            authority_class=AuthorityClass.SEMANTIC,
+            dataset_id=dataset_id,
+            dataset_version=dataset_version,
+            source_fingerprint=source_fingerprint,
+            artifact_type="GeoResolutionDoc",
+            artifact_id=doc_id,
+            text_for_retrieval=text,
+            structured_metadata=metadata,
+        )
+
+    @staticmethod
+    def build_canonical_geo_document(
+        entity: CanonicalGeoEntity,
+        dataset_id: str = "dataset_geo",
+        dataset_version: str = "v1",
+        source_fingerprint: str = "source_hash",
+    ) -> RetrievalDocument:
+        """Emits a canonical reference entity to SEMANTIC_INDEX."""
+        doc_id = f"canon_geo_{entity.geo_entity_id}"
+        text = (
+            f"CanonicalGeoEntity {entity.geo_entity_id} Level {entity.level.value} "
+            f"Name '{entity.canonical_name}' Display '{entity.display_name}' Country {entity.country_code} "
+            f"Parent {entity.parent_geo_entity_id or 'NONE'} Timezone {entity.timezone or 'UNKNOWN'}"
+        )
+        metadata = {
+            "geo_entity_id": entity.geo_entity_id,
+            "level": entity.level.value,
+            "canonical_name": entity.canonical_name,
+            "display_name": entity.display_name,
+            "country_code": entity.country_code,
+            "parent_id": entity.parent_geo_entity_id,
+            "latitude": entity.latitude,
+            "longitude": entity.longitude,
+            "timezone": entity.timezone,
+            "reference_version": entity.reference_version,
+            "entity_fingerprint": entity.artifact_fingerprint,
+        }
+
+        return RetrievalDocument.create(
+            document_id=doc_id,
+            namespace=RetrievalNamespace.SEMANTIC,
+            authority_class=AuthorityClass.SEMANTIC,
+            dataset_id=dataset_id,
+            dataset_version=dataset_version,
+            source_fingerprint=source_fingerprint,
+            artifact_type="CanonicalGeoDoc",
+            artifact_id=entity.geo_entity_id,
             text_for_retrieval=text,
             structured_metadata=metadata,
         )

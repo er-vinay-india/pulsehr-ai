@@ -22,6 +22,7 @@ from app.services.sdr.contracts.keys import (
 )
 from app.services.sdr.contracts.policies import SDRPolicySuite
 from app.services.sdr.contracts.profiles import SemanticColumnProfile
+from app.services.sdr.geo.contracts import CanonicalGeoEntity, GeoResolutionCandidate
 
 
 class SDRArtifactWriter:
@@ -300,6 +301,88 @@ class SDRArtifactWriter:
             "validated_enrichments": str(val_path),
             "enrichment_decisions": str(dec_path),
             "sdr4_manifest": str(manifest_path),
+            "manifest_fingerprint": manifest_hash,
+        }
+
+    def write_sdr4g_artifacts(
+        self,
+        dataset_id: str,
+        geo_resolution_candidates: Sequence[GeoResolutionCandidate] | None = None,
+        canonical_geo_resolutions: Sequence[CanonicalGeoEntity] | None = None,
+        geo_enrichments: Sequence[ValidatedEnrichment] | None = None,
+        resolutions: Sequence[GeoResolutionCandidate] | None = None,
+        canonical_entities: Sequence[CanonicalGeoEntity] | None = None,
+        sheet_id: str | None = None,
+        policy_suite: SDRPolicySuite | None = None,
+        manifest: dict[str, Any] | None = None,
+    ) -> dict[str, str]:
+        """
+        Writes canonical SDR-4G artifacts:
+        - geo_resolution_candidates.json
+        - canonical_geo_resolutions.json
+        - geo_enrichments.json
+        - geo_manifest.json
+        """
+        sdr_dir = self.get_dataset_sdr_dir(dataset_id)
+        policy = policy_suite or SDRPolicySuite()
+        policy_fp = policy.compute_policy_fingerprint()
+
+        actual_cands = list(geo_resolution_candidates or resolutions or [])
+        actual_ents = list(canonical_geo_resolutions or canonical_entities or [])
+        actual_enrich = list(geo_enrichments or [])
+
+        # 1. Geo Resolution Candidates
+        sorted_cands = sorted(actual_cands, key=lambda c: (c.source_column_id, c.source_value))
+        cand_data = [c.model_dump() for c in sorted_cands]
+        cand_json = json.dumps(cand_data, indent=2, sort_keys=True)
+        cand_path = sdr_dir / "geo_resolution_candidates.json"
+        cand_path.write_text(cand_json, encoding="utf-8")
+        cand_hash = hashlib.sha256(cand_json.encode("utf-8")).hexdigest()
+
+        # 2. Canonical Geo Resolutions
+        sorted_ents = sorted(actual_ents, key=lambda e: e.geo_entity_id)
+        ent_data = [e.model_dump() for e in sorted_ents]
+        ent_json = json.dumps(ent_data, indent=2, sort_keys=True)
+        ent_path = sdr_dir / "canonical_geo_resolutions.json"
+        ent_path.write_text(ent_json, encoding="utf-8")
+        ent_hash = hashlib.sha256(ent_json.encode("utf-8")).hexdigest()
+
+        # 3. Geo Enrichments
+        sorted_enrich = sorted(actual_enrich, key=lambda e: (e.sheet_id, e.enrichment_id))
+        enrich_data = [e.model_dump() for e in sorted_enrich]
+        enrich_json = json.dumps(enrich_data, indent=2, sort_keys=True)
+        enrich_path = sdr_dir / "geo_enrichments.json"
+        enrich_path.write_text(enrich_json, encoding="utf-8")
+        enrich_hash = hashlib.sha256(enrich_json.encode("utf-8")).hexdigest()
+
+        # 4. Geo Manifest
+        geo_manifest = {
+            "dataset_id": dataset_id,
+            "policy_fingerprint": policy_fp,
+            "geo_candidates_count": len(sorted_cands),
+            "canonical_resolutions_count": len(sorted_ents),
+            "geo_enrichments_count": len(sorted_enrich),
+            "geo_candidates_hash": cand_hash,
+            "canonical_resolutions_hash": ent_hash,
+            "geo_enrichments_hash": enrich_hash,
+        }
+        if sheet_id:
+            geo_manifest["sheet_id"] = sheet_id
+        if manifest:
+            geo_manifest["engine_manifest"] = manifest
+
+        manifest_json = json.dumps(geo_manifest, indent=2, sort_keys=True)
+        manifest_path = sdr_dir / "geo_manifest.json"
+        manifest_path.write_text(manifest_json, encoding="utf-8")
+        manifest_hash = hashlib.sha256(manifest_json.encode("utf-8")).hexdigest()
+
+        return {
+            "geo_resolution_candidates": str(cand_path),
+            "canonical_geo_resolutions": str(ent_path),
+            "geo_resolutions": str(cand_path),
+            "canonical_geo_entities": str(ent_path),
+            "geo_enrichments": str(enrich_path),
+            "geo_manifest": str(manifest_path),
             "manifest_fingerprint": manifest_hash,
         }
 
