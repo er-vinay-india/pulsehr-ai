@@ -16,6 +16,20 @@ pytestmark = pytest.mark.presentation
 BRUSH_THEMES = ("amber_brush", "teal_brush", "coral_brush")
 
 
+@pytest.mark.parametrize("theme_id", BRUSH_THEMES)
+def test_long_checklist_text_widens_and_paginates_without_losing_content(theme_id):
+    detail = ' '.join(f'Preserved detail {i}.' for i in range(240))
+    slide = {'title': 'Recommended actions', 'layout': 'comparison_split',
+             'bullets': ['Review: '+detail, 'Confirm: Keep the complete source record.',
+                         'Assign: Confirm the owner.', 'Follow up: Record the outcome.']}
+    plan = resolve_slide(slide, theme_id)
+    items = [block for page in plan['pages'] for block in page if block['kind'] == 'checklist']
+    assert len(plan['pages']) > 1
+    assert ' '.join(item['text'] for item in items).split() == (
+        detail+' Keep the complete source record. Confirm the owner. Record the outcome.').split()
+    assert all(item['y']+item['height'] <= 486 for item in items)
+
+
 def checklist_slide(count=8):
     return {'title': 'Best practices for sick leave', 'layout': 'comparison_split',
             'bullets': [f'Practice {i}: Review recorded absences and confirm the reporting policy.' for i in range(count)],

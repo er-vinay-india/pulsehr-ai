@@ -38,6 +38,18 @@ try {
   assert.ok(!failed.includes('Open in Studio'), 'a failed run at 100% must not offer a finished deck');
   assert.ok(!failed.includes('pipeline-stage-row completed'), 'failure must not certify every phase');
   assert.ok(!failed.includes('Download .PPTX'));
+  assert.ok(failed.includes('Generation failed'));
+  assert.ok(!failed.includes('spin-icon'), 'failed jobs must stop all loading animations');
+  assert.ok(!failed.includes('100% Complete'), 'failed jobs must not advertise completion');
+  assert.ok(!failed.includes('role="progressbar"'), 'a failed job is an error state, not an active loader');
+  assert.ok(!failed.includes('pipeline-stages-list'), 'do not show pending phases under a terminal failure');
+  assert.ok(failed.includes('aria-busy="false"'));
+  assert.ok(failed.includes('Back to setup') && failed.includes('Try again'));
+
+  const pending = render({ jobStage: 'export_qa', jobProgress: 100 });
+  assert.ok(pending.includes('99% Complete'), '100 percent is reserved for a ready deck');
+  const lastSlide = render({ jobStage: 'headlines', jobProgress: 45, slideProgressData: { current_slide: 3, total_slides: 3 } });
+  assert.ok(lastSlide.includes('slide-step-pill building'), 'the last slide remains active until its phase finishes');
 
   const ready = render({ jobStage: 'ready', jobProgress: 100 });
   assert.ok(ready.includes('Open in Studio'));

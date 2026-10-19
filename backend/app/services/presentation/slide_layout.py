@@ -93,6 +93,37 @@ def resolve_slide(slide, theme=None):
         # Pagination preserves every item without shrinking text to fit the grid.
         cols = 4 if len(items) >= 4 else max(1, len(items))
         gap, icon, size, title_size = 20, 30, 14, 15
+        available = bottom-start
+
+        def item_height(item, columns):
+            tw = (width-gap*(columns-1))/columns-icon-10
+            heading, detail = plain(item.get('title')), plain(item.get('text'))
+            th = math.ceil(lines(heading, tw, title_size)*title_size*t['line_height'])+2 if heading else 0
+            bh = math.ceil(lines(detail, tw, size)*size*t['line_height'])+2 if detail else 0
+            return max(icon, th+(8 if heading and detail else 0)+bh)
+
+        # Narrow columns can turn an ordinary paragraph into an oversized item.
+        # Widen the grid first; use continuation pages for full-width overflow.
+        while cols > 1 and any(item_height(item, cols) > available for item in items):
+            cols -= 1
+        if any(item_height(item, cols) > available for item in items):
+            if available < icon + size*t['line_height']:
+                raise SlideLayoutError('The checklist needs a separate slide with room for readable text.')
+            expanded = []
+            for item in items:
+                title, detail = plain(item.get('title')), plain(item.get('text'))
+                if item_height({'title': title, 'text': 'Text'}, 1) > available:
+                    detail, title = '\n'.join(v for v in (title, detail) if v), ''
+                chunk = ''
+                for word in detail.split():
+                    candidate = (chunk+' '+word).strip()
+                    if chunk and item_height({'title': title, 'text': candidate}, 1) > available:
+                        expanded.append({'title': title, 'text': chunk})
+                        title, chunk = '', word
+                    else:
+                        chunk = candidate
+                expanded.append({'title': title, 'text': chunk})
+            items, cols = expanded, 1
         cw = (width-gap*(cols-1))/cols
         text_width = cw-icon-10
         yy, page, pages = start, [], []

@@ -64,8 +64,8 @@ function SlideTrain({ totalSlides, currentSlide, isPassed, isCurrent }) {
     <div className="stage-slide-pills-row">
       {Array.from({ length: totalSlides }, (_, i) => {
         const slideNum = i + 1;
-        const isDone = isPassed || slideNum < currentSlide || (currentSlide === totalSlides);
-        const isActive = isCurrent && slideNum === currentSlide && currentSlide < totalSlides;
+        const isDone = isPassed || (isCurrent && slideNum < currentSlide);
+        const isActive = isCurrent && slideNum === currentSlide;
 
         return (
           <span
@@ -100,6 +100,9 @@ export default function DeckGeneratingView({
   onExportPptx,
   onExportHtml,
 }) {
+  const isFailed = Boolean(jobError) || jobStage === "failed";
+  const isReady = !isFailed && jobStage === "ready";
+  const progress = isReady ? 100 : Math.max(0, Math.min(99, Number(jobProgress) || 0));
   const currentStageId = STAGE_ALIASES[jobStage] || jobStage;
   let index = stages.findIndex((s) => s.id === currentStageId);
   if (index === -1) {
@@ -108,43 +111,45 @@ export default function DeckGeneratingView({
   const currentStage = stages[index] || stages[0];
 
   return (
-    <div className="pres-generating-body" aria-busy={!jobError}>
+    <div className="pres-generating-body" aria-busy={!isFailed && !isReady}>
       {/* Top Header Card */}
       <div className="generating-header-card" role="status" aria-live="polite">
         <div className="pipeline-spinner-badge" aria-hidden="true">
-          <RotateCw size={26} className="spin-icon" />
+          {isFailed ? <AlertTriangle size={26} /> : isReady ? <CheckCircle2 size={26} /> : <RotateCw size={26} className="spin-icon" />}
         </div>
 
-        <p className="generating-subtitle">HRIDAY · Building your presentation</p>
+        <p className="generating-subtitle">{isFailed ? "HRIDAY · Presentation generation stopped" : isReady ? "HRIDAY · Presentation ready" : "HRIDAY · Building your presentation"}</p>
 
         <h4 className="generating-phase-title">
-          {jobError
-            ? "Generation paused"
+          {isFailed
+            ? "Generation failed"
             : `Phase ${index + 1} of ${stages.length}: ${currentStage?.label || "Processing"}`}
         </h4>
 
         {/* Unified progress message with zero duplication */}
         <p className="generating-detail-label">
-          {jobStageLabel || "Synthesizing executive briefing from ground-truth data..."}
+          {isFailed ? "Your presentation wasn’t completed. Review the issue below, then return to setup or try again." : (jobStageLabel || "Synthesizing executive briefing from ground-truth data...")}
         </p>
 
         {/* Progress bar */}
+        {!isFailed && <>
         <div
           className="pipeline-progress-track"
           role="progressbar"
-          aria-valuenow={jobProgress}
+          aria-valuenow={progress}
           aria-valuemin={0}
           aria-valuemax={100}
           aria-label="Presentation generation progress"
         >
           <div
             className="pipeline-progress-bar"
-            style={{ width: `${Math.max(5, Math.min(100, jobProgress))}%` }}
+            style={{ width: `${progress}%` }}
           />
         </div>
-        <span className="pipeline-progress-pct">{jobProgress}% Complete</span>
+        <span className="pipeline-progress-pct">{progress}% Complete</span>
+        </>}
 
-        {!jobError && jobStage === "ready" && onOpenInStudio && (
+        {isReady && onOpenInStudio && (
           <div style={{ display: "flex", gap: "10px", marginTop: "16px", justifyContent: "center" }}>
             <button
               type="button"
@@ -179,7 +184,7 @@ export default function DeckGeneratingView({
       </div>
 
       {/* 8-Phase Sequential Stepper List */}
-      <div className="pipeline-stages-list" role="list" aria-label="8-phase generation sequence">
+      {!isFailed && <div className="pipeline-stages-list" role="list" aria-label="Presentation generation phases">
         {stages.map((st, idx) => {
           const isPassed = !jobError && (index > idx || jobStage === "ready");
           const isCurrent = index === idx && !jobError;
@@ -223,15 +228,15 @@ export default function DeckGeneratingView({
             </div>
           );
         })}
-      </div>
+      </div>}
 
       {/* Error Callout */}
-      {jobError && (
+      {isFailed && (
         <div className="pres-error-callout" role="alert" aria-live="assertive">
           <AlertTriangle size={20} />
           <div className="error-callout-content">
-            <strong>Generation Interrupted</strong>
-            <p>{jobError}</p>
+            <strong>Presentation could not be completed</strong>
+            <p>{jobError || jobStageLabel || "Generation failed. Please try again."}</p>
           </div>
         </div>
       )}
@@ -241,15 +246,15 @@ export default function DeckGeneratingView({
         <button
           type="button"
           className="btn-secondary"
-          disabled={!jobError}
+          disabled={!isFailed}
           onClick={() => onGoBackToConfig()}
-          title={!jobError ? "Navigation locked while presentation is generating" : "Return to configuration setup"}
-          aria-disabled={!jobError}
+          title={!isFailed ? "Navigation locked while presentation is generating" : "Return to configuration setup"}
+          aria-disabled={!isFailed}
         >
           Back to setup
         </button>
 
-        {jobError ? (
+        {isFailed ? (
           <button
             type="button"
             className="btn-primary"

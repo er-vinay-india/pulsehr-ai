@@ -31,6 +31,25 @@ def orphan(job_id):
         conn.commit()
 
 
+def test_failure_keeps_last_progress_instead_of_reporting_completion(manager):
+    job_id = manager.create_job({'objective': 'Progress on layout failure'})
+    manager.update_stage(job_id, 'export_qa', 'Checking export', 84)
+    manager.update_stage(job_id, 'failed', 'Checklist layout failed', 100, error='Item too long')
+    failed = manager.get_job(job_id)
+    assert failed['status'] == 'failed'
+    assert failed['progress_pct'] == 84
+    persisted = PresentationJobManager().get_job(job_id)
+    assert persisted['progress_pct'] == 84
+
+
+def test_only_a_ready_job_can_report_one_hundred_percent(manager):
+    job_id = manager.create_job({'objective': 'Final export check'})
+    manager.update_stage(job_id, 'export_qa', 'Still checking export', 100)
+    assert manager.get_job(job_id)['progress_pct'] == 99
+    manager.update_stage(job_id, 'ready', 'Verified and saved', 100)
+    assert manager.get_job(job_id)['progress_pct'] == 100
+
+
 def test_new_manager_does_not_fail_live_generation(manager):
     job_id = manager.create_job({'objective': 'Existing live presentation'})
     other = PresentationJobManager()

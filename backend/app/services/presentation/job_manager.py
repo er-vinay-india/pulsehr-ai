@@ -196,7 +196,13 @@ class PresentationJobManager:
             job = self._jobs[job_id]
             job["stage"] = stage
             job["stage_label"] = stage_label
-            job["progress_pct"] = progress_pct
+            # Failure is terminal, not completed work. Preserve the last known
+            # progress even when a producer reports failure with 100 percent.
+            job["progress_pct"] = (
+                min(99, max(0, job.get("progress_pct", 0))) if error
+                else min(100 if stage == "ready" else 99, max(0, progress_pct))
+            )
+            progress_pct = job["progress_pct"]
             now = datetime.datetime.now(datetime.timezone.utc).isoformat()
             job["updated_at"] = now
             if deck_id:
