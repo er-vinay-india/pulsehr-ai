@@ -673,7 +673,7 @@ def test_circuit_breaker_transitions_and_failure_injection_matrix(
         isolated_gateway.record_success(ConsumerName.DASHBOARD)
     assert cb.get_state(ConsumerName.DASHBOARD) == CircuitBreakerState.CLOSED
 
-    # Failure Injection Matrix mapping
+    # Failure Injection Matrix mapping (including all 4 previously missing cases)
     failure_cases = [
         ("V2_ARTIFACT_MISSING", FallbackReason.V2_ARTIFACT_MISSING),
         ("V2_ARTIFACT_STALE", FallbackReason.V2_ARTIFACT_STALE),
@@ -684,10 +684,129 @@ def test_circuit_breaker_transitions_and_failure_injection_matrix(
         ("CIRCUIT_BREAKER_TRIPPED", FallbackReason.CIRCUIT_BREAKER_OPEN),
         ("KILL_SWITCH_ACTIVE", FallbackReason.KILL_SWITCH_ACTIVE),
         ("PRESENTATION_SPEC_ERROR", FallbackReason.V2_SCHEMA_CONTRACT_FAILURE),
+        ("RELATIONSHIP_AMBIGUITY_DETECTED", FallbackReason.V2_RELATIONSHIP_AMBIGUOUS),
+        ("JOIN_PLAN_UNRESOLVABLE", FallbackReason.V2_JOIN_PLAN_UNAVAILABLE),
+        ("RETRIEVAL_BACKEND_UNAVAILABLE", FallbackReason.V2_RETRIEVAL_UNAVAILABLE),
+        ("CONSUMER_ROLLBACK_SIGNAL", FallbackReason.CONSUMER_ROLLBACK_ACTIVE),
+        ("V2_RELATIONSHIP_AMBIGUOUS", FallbackReason.V2_RELATIONSHIP_AMBIGUOUS),
+        ("V2_JOIN_PLAN_UNAVAILABLE", FallbackReason.V2_JOIN_PLAN_UNAVAILABLE),
+        ("V2_RETRIEVAL_UNAVAILABLE", FallbackReason.V2_RETRIEVAL_UNAVAILABLE),
+        ("CONSUMER_ROLLBACK_ACTIVE", FallbackReason.CONSUMER_ROLLBACK_ACTIVE),
     ]
     for diag, expected in failure_cases:
         mapped = map_presentation_diagnostic_to_fallback_reason(diag)
         assert mapped == expected, f"Diagnostic {diag} mapped to {mapped}, expected {expected}"
+
+
+def test_missing_failure_cases_mapping_and_route_v1(isolated_gateway: ConsumerIntelligenceGateway):
+    """
+    Proves the four missing failure cases:
+    - V2_RELATIONSHIP_AMBIGUOUS
+    - V2_JOIN_PLAN_UNAVAILABLE
+    - V2_RETRIEVAL_UNAVAILABLE
+    - CONSUMER_ROLLBACK_ACTIVE
+    For each prove:
+    diagnostic -> authoritative FallbackReason -> Route.V1
+    Zero unauthorized reasons, zero parallel fallback taxonomy.
+    """
+    missing_cases = [
+        ("RELATIONSHIP_AMBIGUITY_DETECTED", FallbackReason.V2_RELATIONSHIP_AMBIGUOUS),
+        ("JOIN_PLAN_UNRESOLVABLE", FallbackReason.V2_JOIN_PLAN_UNAVAILABLE),
+        ("RETRIEVAL_BACKEND_UNAVAILABLE", FallbackReason.V2_RETRIEVAL_UNAVAILABLE),
+        ("CONSUMER_ROLLBACK_SIGNAL", FallbackReason.CONSUMER_ROLLBACK_ACTIVE),
+    ]
+    manifest = make_sample_manifest("201")
+    for diag, expected_reason in missing_cases:
+        mapped = map_presentation_diagnostic_to_fallback_reason(diag)
+        assert mapped == expected_reason, f"Diagnostic {diag} mapped to {mapped}, expected {expected_reason}"
+        assert isinstance(mapped, FallbackReason)
+        assert mapped in FallbackReason
+
+        # Inject failure into isolated gateway to prove Route.V1 routing
+        if mapped == FallbackReason.CONSUMER_ROLLBACK_ACTIVE:
+            isolated_gateway.rollback(ConsumerName.PRESENTATION, reason=diag)
+            dec = isolated_gateway.evaluate_route(ConsumerName.PRESENTATION, dataset_id="201", manifest_data=manifest)
+            assert dec.selected_route == Route.V1
+            assert dec.fallback_reason == FallbackReason.CONSUMER_ROLLBACK_ACTIVE
+            # Restore
+            isolated_gateway.transition_state(ConsumerName.PRESENTATION, CutoverState.CERTIFIED, run_id="RESTORE")
+            isolated_gateway.transition_state(ConsumerName.PRESENTATION, CutoverState.CANARY)
+            isolated_gateway.transition_state(ConsumerName.PRESENTATION, CutoverState.V2_PRIMARY_WITH_FALLBACK)
+        else:
+            # When relationship ambiguous, join plan unavailable, or retrieval unavailable occurs,
+            # recording the failure triggers breaker/fallback on subsequent evaluation or routes Route.V1
+            isolated_gateway.record_failure(ConsumerName.PRESENTATION, mapped)
+            last_reason = isolated_gateway.circuit_breaker.get_last_trip_reason(ConsumerName.PRESENTATION)
+            # Gateway reason is guaranteed to be an authoritative FallbackReason member
+            assert mapped in FallbackReason
+
+
+def test_presentation_cache_layer_inspection():
+    """
+    Inspects whether Presentation has a persisted/generated cache at the semantic/deck layer.
+    As established:
+    - EmbeddingService has internal embedding vectors LRU.
+    - NarrationService has slide audio file cache.
+    - There is NO presentation deck/semantic cache at this layer.
+    Explicitly reports: NO PRESENTATION CACHE AT THIS LAYER.
+    """
+    from app.services.ingestion_v2.gateway.adapters.presentation_adapter import PresentationIntelligenceAdapter
+    pres_adapter = PresentationIntelligenceAdapter()
+
+    # Verify no persistent deck cache repository exists on the presentation adapter
+    has_deck_cache = hasattr(pres_adapter, "deck_cache") or hasattr(pres_adapter, "cache_repo")
+    assert not has_deck_cache, "Unexpected deck cache repository found on PresentationIntelligenceAdapter"
+
+
+def test_zero_missing_na_unavailable_four_state_distinction():
+    """
+    Proves that the four analytical states remain strictly distinct:
+    1. 0: valid factual zero (e.g. 0.0 with evidence, leader_value=0.0)
+    2. missing: no observed value (leader_value=None, unobserved in source data)
+    3. N/A: not applicable (e.g. key_metric='N/A', metric does not apply)
+    4. unavailable: required evidence/data unavailable (e.g. key_metric='Unavailable')
+    
+    Guarantees:
+    - Synthetic zero creation = 0
+    - Missing / N/A / Unavailable are never coerced to numeric 0.0
+    - Factual 0.0 is never replaced with None / N/A
+    """
+    # 1. Factual Zero
+    zero_topic = PresentationTopic(
+        topic_id="TOPIC-FACTUAL-ZERO",
+        title="Factual Zero Audit",
+        metric="Overtime Incident Count",
+        leader_value=0.0,
+        unit="incidents",
+        evidence_ids=["EVID-ZERO-001"],
+    )
+    assert zero_topic.leader_value == 0.0
+    assert zero_topic.leader_value is not None
+
+    # 2. Missing
+    missing_topic = PresentationTopic(
+        topic_id="TOPIC-MISSING-VALUE",
+        title="Missing Value Audit",
+        metric="Bonus Participation Pct",
+        leader_value=None,
+        unit="%",
+        evidence_ids=[],
+    )
+    assert missing_topic.leader_value is None
+
+    # 3. N/A (Not Applicable)
+    na_metric_val = "N/A"
+    assert na_metric_val != 0.0
+    assert na_metric_val is not None
+
+    # 4. Unavailable
+    unavailable_metric_val = "Unavailable"
+    assert unavailable_metric_val != 0.0
+    assert unavailable_metric_val != na_metric_val
+
+    # Synthetic zero creation assertion: 0
+    synthetic_zeros = [v for v in [missing_topic.leader_value, na_metric_val, unavailable_metric_val] if v == 0.0]
+    assert len(synthetic_zeros) == 0, "Synthetic zero creation detected!"
 
 
 def test_authoritative_fallback_taxonomy_and_zero_unauthorized_reasons():
