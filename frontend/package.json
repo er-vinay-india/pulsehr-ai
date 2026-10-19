@@ -23,6 +23,7 @@
     "pretest:slides": "node scripts/generate_slide_tokens.mjs",
     "test:firewall-negative": "node scripts/test_test_environment_firewall_negative.mjs",
     "test:lifecycle": "node scripts/test_product_lifecycle_same_session.mjs",
+    "test:formatter": "node scripts/test_compact_number_formatter.mjs",
     "test:dashboard-integrity": "node scripts/lint_dashboard_anti_bypass.mjs && node scripts/test_anti_bypass_linter_negative.mjs && npm run test:theme && npm run test:theme-integrity && node scripts/test_rendered_dashboard_integrity.mjs",
     "test:hriday-browser": "node scripts/test_hriday_browser_v2_certification.mjs"
   },

@@ -3,7 +3,31 @@
 from pptx.util import Inches, Pt
 from pptx.enum.shapes import MSO_SHAPE
 
+from app.services.display_formatting import format_governed_number
 from .pptx_styles import add_styled_text_runs
+
+
+def _format_metric_display_value(m: dict) -> str:
+    """Formats metric card values into compact notation while respecting exclusions and text."""
+    display_val = m.get("display_value")
+    if display_val is not None and str(display_val).strip() != "":
+        return str(display_val)
+    raw_val = m.get("value", "")
+    unit = str(m.get("unit", "") or "")
+    currency = str(m.get("currency", "") or "")
+    label = str(m.get("label", "") or "")
+    measure_class = str(m.get("measure_class", "") or "")
+    formatted = format_governed_number(
+        raw_val,
+        unit=unit,
+        currency=currency,
+        label=label,
+        measure_class=measure_class,
+        unavailable_label="—",
+    )
+    if formatted != "—" or raw_val in (None, "", "—", "null", "None"):
+        return formatted
+    return str(raw_val)
 
 
 def _render_title_cover_slide(slide, slide_data, colors):
@@ -139,7 +163,7 @@ def _render_title_hero_slide(slide, slide_data, colors):
             mtf.margin_top = Inches(0.15)
 
             p_val = mtf.paragraphs[0]
-            p_val.text = str(m.get("value", ""))
+            p_val.text = _format_metric_display_value(m)
             p_val.font.size = Pt(20)
             p_val.font.bold = True
             p_val.font.color.rgb = colors["brand"]
@@ -193,7 +217,7 @@ def _render_kpi_summary_slide(slide, slide_data, colors):
             p_lbl.space_after = Pt(6)
 
             p_val = ctf.add_paragraph()
-            p_val.text = str(m.get("value", ""))
+            p_val.text = _format_metric_display_value(m)
             p_val.font.size = Pt(22)
             p_val.font.bold = True
             p_val.font.color.rgb = colors["primary"]
@@ -296,7 +320,7 @@ def _render_comparison_split_slide(slide, slide_data, colors):
         pl.space_after = Pt(4)
 
         pv = ctf.add_paragraph()
-        pv.text = str(m.get("value", ""))
+        pv.text = _format_metric_display_value(m)
         pv.font.size = Pt(16)
         pv.font.bold = True
         pv.font.color.rgb = colors["brand"]

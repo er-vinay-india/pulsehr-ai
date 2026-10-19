@@ -265,3 +265,13 @@ export function isDecimalNumber(val) {
   return Number.isFinite(num) && !Number.isInteger(num);
 }
 
+export {
+  formatGovernedNumber,
+  formatExactMeasure,
+  formatCompactNumber,
+  formatFullNumber,
+  isCompactAllowed,
+  parseGovernedNumber,
+} from './numericDisplayFormatter.js';
+
+

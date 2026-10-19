@@ -1,5 +1,6 @@
 import React from "react";
 import ActionIconButton from "../../design-system/components/ActionIconButton";
+import { formatGovernedNumber, formatExactMeasure } from "../../utils/numericDisplayFormatter";
 
 /**
  * Governed Executive KPI Grid using semantic definition-list `<dl>`, `<dt>`, `<dd>` markup.
@@ -96,18 +97,50 @@ export default function ExecutiveKPIGrid({
               gap: "6px",
             }}
           >
-            <dd
-              className="kpi-value"
-              style={{
-                fontSize: "1.45rem",
-                fontWeight: 800,
-                color: themeTokens?.colors?.textPrimary,
-                letterSpacing: "-0.02em",
-                margin: 0,
-              }}
-            >
-              {kpi.formatted_value || `${kpi.value}${kpi.unit || ""}`}
-            </dd>
+            {(() => {
+              const displayVal = kpi.formatted_value || (
+                (kpi.value != null && kpi.value !== "")
+                  ? formatGovernedNumber(kpi.value, {
+                      unit: kpi.unit,
+                      metric_id: kpi.kpi_id,
+                      label: kpi.label,
+                      measure_class: kpi.measure_class,
+                      currency: kpi.currency,
+                      unavailable_label: "—",
+                    })
+                  : "—"
+              );
+
+              const exactVal = kpi.exact_value_text || (
+                (kpi.value != null && kpi.value !== "")
+                  ? formatExactMeasure(kpi.value, {
+                      unit: kpi.unit,
+                      metric_id: kpi.kpi_id,
+                      label: kpi.label,
+                      measure_class: kpi.measure_class,
+                      currency: kpi.currency,
+                      unavailable_label: displayVal,
+                    })
+                  : displayVal
+              );
+
+              return (
+                <dd
+                  className="kpi-value"
+                  title={exactVal}
+                  data-raw-value={kpi.value != null ? String(kpi.value) : ""}
+                  style={{
+                    fontSize: "1.45rem",
+                    fontWeight: 800,
+                    color: themeTokens?.colors?.textPrimary,
+                    letterSpacing: "-0.02em",
+                    margin: 0,
+                  }}
+                >
+                  {displayVal}
+                </dd>
+              );
+            })()}
             {kpi.variance && (
               <span
                 className={`kpi-variance ${

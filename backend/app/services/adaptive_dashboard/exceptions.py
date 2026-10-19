@@ -42,33 +42,9 @@ ENGINE_VERSION = "4.0.0"
 # -----------------------------------------------------------------------------
 
 def format_compact_metric(val: float, unit: str = "") -> str:
-    """Format numbers into compact notation ($1.80M, $903.3K, 12.5%, 45.2K)."""
-    if val is None or math.isnan(val):
-        return "—"
-    is_curr = unit == "$" or (isinstance(unit, str) and unit.lower() == "usd")
-    prefix = "$" if is_curr else ""
-    suffix = f" {unit}" if (not is_curr and unit and unit != "%") else ("%" if unit == "%" else "")
-    abs_v = abs(val)
-    sign = "-" if val < 0 else ""
-
-    if abs_v >= 1_000_000_000:
-        return f"{sign}{prefix}{abs_v / 1e9:.2f}B{suffix}"
-    elif abs_v >= 1_000_000:
-        v_m = abs_v / 1e6
-        formatted = f"{v_m:.2f}".rstrip("0").rstrip(".") if f"{v_m:.2f}".endswith(".00") else f"{v_m:.2f}"
-        return f"{sign}{prefix}{formatted}M{suffix}"
-    elif abs_v >= 1_000:
-        v_k = abs_v / 1e3
-        formatted = f"{v_k:.1f}".rstrip("0").rstrip(".") if f"{v_k:.1f}".endswith(".0") else f"{v_k:.1f}"
-        return f"{sign}{prefix}{formatted}K{suffix}"
-    elif abs_v >= 100:
-        return f"{sign}{prefix}{abs_v:,.0f}{suffix}"
-    elif is_curr:
-        return f"{sign}{prefix}{abs_v:,.2f}"
-    elif abs_v >= 1:
-        return f"{sign}{prefix}{abs_v:.1f}{suffix}"
-    else:
-        return f"{sign}{prefix}{abs_v:.2f}{suffix}"
+    """Format numbers into unified executive compact notation ($58M, $1.25K, 72.4%)."""
+    from app.services.display_formatting import format_governed_number
+    return format_governed_number(val, unit=unit)
 
 
 def format_range_compact(lower: float, upper: float, unit: str = "") -> str:

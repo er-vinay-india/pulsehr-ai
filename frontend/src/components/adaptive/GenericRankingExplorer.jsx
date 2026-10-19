@@ -16,6 +16,7 @@ import {
 import VisualSpecRenderer from "./VisualSpecRenderer";
 import Button from "../../design-system/components/Button";
 import { getRankingSchema, fetchRanking as apiFetchRanking } from "../../api/client";
+import { formatGovernedNumber, formatExactMeasure } from "../../utils/numericDisplayFormatter";
 
 /**
  * Generic Top/Bottom Ranking Explorer Component.
@@ -387,7 +388,12 @@ export default function GenericRankingExplorer({
                         </span>
                       )}
                     </td>
-                    <td style={{ padding: "4px 8px", textAlign: "right", fontWeight: 700 }}>{r.formatted_value}</td>
+                    <td
+                      style={{ padding: "4px 8px", textAlign: "right", fontWeight: 700 }}
+                      title={formatExactMeasure(r.value, { unit })}
+                    >
+                      {r.formatted_value || formatGovernedNumber(r.value, { unit })}
+                    </td>
                     <td style={{ padding: "4px 8px", textAlign: "right", color: themeTokens?.colors?.textMuted }}>{r.percentile_label}</td>
                     <td style={{ padding: "4px 8px", textAlign: "right", color: r.delta_benchmark >= 0 ? (themeTokens?.colors?.statusSuccess || "var(--color-success)") : (themeTokens?.colors?.statusError || "var(--color-danger)") }}>
                       {r.delta_benchmark >= 0 ? `+${r.delta_benchmark}` : r.delta_benchmark}

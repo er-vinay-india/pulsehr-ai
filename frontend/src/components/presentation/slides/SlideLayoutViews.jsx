@@ -6,6 +6,18 @@ import SlideChart from "./SlideChart.jsx";
 import { SlideTalent9BoxMatrix, SlideBurnoutStrainPanel } from "./SlidePanels.jsx";
 import { getTitleSuggestions } from "../../../utils/dashboardToPresentation.js";
 import { DEFAULT_FALLBACK_IMAGE_URL } from "../../../config/env.js";
+import { formatGovernedNumber, formatExactMeasure, parseGovernedNumber } from "../../../utils/numericDisplayFormatter.js";
+
+function renderMetricDisplay(m) {
+  if (!m) return { display: "", exact: "", raw: "" };
+  const rawVal = m.raw_value !== undefined ? m.raw_value : m.value;
+  if (parseGovernedNumber(rawVal) !== null) {
+    const display = formatGovernedNumber(rawVal, m);
+    const exact = formatExactMeasure(rawVal, m);
+    return { display, exact, raw: rawVal };
+  }
+  return { display: String(m.value ?? ""), exact: String(m.value ?? ""), raw: rawVal };
+}
 
 export default function SlideLayoutViews({
   layout,
@@ -204,13 +216,16 @@ export default function SlideLayoutViews({
           </div>
 
           <div className="hero-metrics-column">
-            {(slide.metrics || []).map((m, i) => (
-              <div key={i} className="hero-metric-tile" style={{ backgroundColor: theme.card_bg, borderColor: theme.card_border }}>
-                <div className="metric-tile-val" style={{ color: theme.brand_color }}>{m.value}</div>
-                <div className="metric-tile-lbl" style={{ color: theme.primary_text }}>{m.label}</div>
-                <div className="metric-tile-sub" style={{ color: theme.secondary_text }}>{m.subtext}</div>
-              </div>
-            ))}
+            {(slide.metrics || []).map((m, i) => {
+              const { display, exact, raw } = renderMetricDisplay(m);
+              return (
+                <div key={i} className="hero-metric-tile" style={{ backgroundColor: theme.card_bg, borderColor: theme.card_border }}>
+                  <div className="metric-tile-val" style={{ color: theme.brand_color }} title={exact} data-raw-value={raw}>{display}</div>
+                  <div className="metric-tile-lbl" style={{ color: theme.primary_text }}>{m.label}</div>
+                  <div className="metric-tile-sub" style={{ color: theme.secondary_text }}>{m.subtext}</div>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
@@ -225,16 +240,19 @@ export default function SlideLayoutViews({
           )}
 
           <div className="kpi-cards-row">
-            {(slide.metrics || []).map((m, i) => (
-              <div key={i} className="kpi-score-card" style={{ backgroundColor: theme.card_bg, borderColor: theme.card_border }}>
-                <div className="kpi-card-header">
-                  <span className="kpi-card-label" style={{ color: theme.brand_color }}>{m.label}</span>
-                  <TrendingUp size={15} style={{ color: theme.accent_color }} />
+            {(slide.metrics || []).map((m, i) => {
+              const { display, exact, raw } = renderMetricDisplay(m);
+              return (
+                <div key={i} className="kpi-score-card" style={{ backgroundColor: theme.card_bg, borderColor: theme.card_border }}>
+                  <div className="kpi-card-header">
+                    <span className="kpi-card-label" style={{ color: theme.brand_color }}>{m.label}</span>
+                    <TrendingUp size={15} style={{ color: theme.accent_color }} />
+                  </div>
+                  <div className="kpi-card-value" style={{ color: theme.primary_text }} title={exact} data-raw-value={raw}>{display}</div>
+                  <div className="kpi-card-sub" style={{ color: theme.secondary_text }}>{m.subtext}</div>
                 </div>
-                <div className="kpi-card-value" style={{ color: theme.primary_text }}>{m.value}</div>
-                <div className="kpi-card-sub" style={{ color: theme.secondary_text }}>{m.subtext}</div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {slide.bullets && slide.bullets.length > 0 && (
@@ -303,12 +321,15 @@ export default function SlideLayoutViews({
 
             {slide.metrics && slide.metrics.length > 0 && (
               <div className="callout-metrics-row">
-                {slide.metrics.map((m, i) => (
-                  <div key={i} className="mini-callout-pill" style={{ borderColor: theme.card_border }}>
-                    <span className="pill-val" style={{ color: theme.brand_color }}>{m.value}</span>
-                    <span className="pill-lbl" style={{ color: theme.secondary_text }}>{m.label}</span>
-                  </div>
-                ))}
+                {slide.metrics.map((m, i) => {
+                  const { display, exact, raw } = renderMetricDisplay(m);
+                  return (
+                    <div key={i} className="mini-callout-pill" style={{ borderColor: theme.card_border }}>
+                      <span className="pill-val" style={{ color: theme.brand_color }} title={exact} data-raw-value={raw}>{display}</span>
+                      <span className="pill-lbl" style={{ color: theme.secondary_text }}>{m.label}</span>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -461,13 +482,16 @@ export default function SlideLayoutViews({
             </div>
           ) : (
             <div className="priorities-card-stack">
-              {(slide.metrics || []).map((m, i) => (
-                <div key={i} className="priority-tier-card" style={{ backgroundColor: theme.card_bg, borderColor: theme.card_border }}>
-                  <div className="priority-step" style={{ color: theme.accent_color }}>{m.label}</div>
-                  <div className="priority-title" style={{ color: theme.brand_color }}>{m.value}</div>
-                  <div className="priority-sub" style={{ color: theme.secondary_text }}>{m.subtext}</div>
-                </div>
-              ))}
+              {(slide.metrics || []).map((m, i) => {
+                const { display, exact, raw } = renderMetricDisplay(m);
+                return (
+                  <div key={i} className="priority-tier-card" style={{ backgroundColor: theme.card_bg, borderColor: theme.card_border }}>
+                    <div className="priority-step" style={{ color: theme.accent_color }}>{m.label}</div>
+                    <div className="priority-title" style={{ color: theme.brand_color }} title={exact} data-raw-value={raw}>{display}</div>
+                    <div className="priority-sub" style={{ color: theme.secondary_text }}>{m.subtext}</div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>

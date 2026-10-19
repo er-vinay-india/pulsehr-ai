@@ -3,77 +3,23 @@
  * Compact notation (1.2M, 45K) prevents axis tick collisions and label truncation.
  */
 
-/**
- * Formats a numerical value into compact, readable notation curated up to 2 decimal places.
- * @param {number|string} val 
- * @param {string} [unit=''] 
- * @param {number} [maxDecimals=2] 
- * @returns {string}
- */
-export function formatCompactNumber(val, unit = '', maxDecimals = 2) {
-  if (val == null || val === '') return '—';
-  const num = Number(val);
-  if (Number.isNaN(num)) return String(val);
+import {
+  formatGovernedNumber,
+  formatExactMeasure,
+  formatCompactNumber,
+  formatFullNumber,
+  isCompactAllowed,
+  parseGovernedNumber,
+} from '../../../utils/numericDisplayFormatter.js';
 
-  const abs = Math.abs(num);
-  let formatted = '';
-
-  if (abs >= 1e9) {
-    formatted = (num / 1e9).toFixed(maxDecimals).replace(/\.00$/, '').replace(/(\.\d)0$/, '$1') + 'B';
-  } else if (abs >= 1e6) {
-    formatted = (num / 1e6).toFixed(maxDecimals).replace(/\.00$/, '').replace(/(\.\d)0$/, '$1') + 'M';
-  } else if (abs >= 1e3) {
-    formatted = (num / 1e3).toFixed(maxDecimals).replace(/\.00$/, '').replace(/(\.\d)0$/, '$1') + 'K';
-  } else if (abs % 1 !== 0) {
-    formatted = num.toLocaleString('en-US', {
-      minimumFractionDigits: 0,
-      maximumFractionDigits: maxDecimals
-    });
-  } else {
-    formatted = num.toLocaleString('en-US');
-  }
-
-  if (!unit) return formatted;
-  if (unit === '$' || unit === '£' || unit === '€' || unit === '₹') {
-    return `${unit}${formatted}`;
-  }
-  if (unit === '%') {
-    return `${formatted}%`;
-  }
-  return `${formatted} ${unit}`;
-}
-
-/**
- * Formats a numerical value displaying its complete, unrounded decimal precision.
- * Used for tooltips and hover inspections when the user places their mouse on a number.
- * @param {number|string} val 
- * @param {string} [unit=''] 
- * @returns {string}
- */
-export function formatFullNumber(val, unit = '') {
-  if (val == null || val === '') return '—';
-  const num = Number(val);
-  if (Number.isNaN(num)) return String(val);
-
-  const str = String(val).trim();
-  let formatted = '';
-  if (str.includes('.')) {
-    const [intPart, decPart] = str.split('.');
-    const intNum = Number(intPart);
-    formatted = Number.isFinite(intNum) ? `${intNum.toLocaleString('en-US')}.${decPart}` : str;
-  } else {
-    formatted = num.toLocaleString('en-US');
-  }
-
-  if (!unit) return formatted;
-  if (unit === '$' || unit === '£' || unit === '€' || unit === '₹') {
-    return `${unit}${formatted}`;
-  }
-  if (unit === '%') {
-    return `${formatted}%`;
-  }
-  return `${formatted} ${unit}`;
-}
+export {
+  formatGovernedNumber,
+  formatExactMeasure,
+  formatCompactNumber,
+  formatFullNumber,
+  isCompactAllowed,
+  parseGovernedNumber,
+};
 
 /**
  * Clamps text to a max character length with an ellipsis.

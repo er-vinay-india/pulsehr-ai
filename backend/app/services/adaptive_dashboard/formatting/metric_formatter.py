@@ -91,18 +91,9 @@ def parse_date_range(rows: list[dict[str, Any]], date_col: str | None) -> dict[s
 
 
 def format_currency_short(val: float) -> str:
-    """Format large currency values into $X.XXB, $X.XXM, $X.XK or $X."""
-    abs_v = abs(val)
-    prefix = "-" if val < 0 else ""
-    if abs_v >= 1_000_000_000:
-        return f"{prefix}${abs_v / 1_000_000_000:.2f}B"
-    elif abs_v >= 1_000_000:
-        val_m = abs_v / 1_000_000
-        return f"{prefix}${val_m:.2f}M" if (val_m * 10) % 1 != 0 else f"{prefix}${val_m:.1f}M"
-    elif abs_v >= 1_000:
-        return f"{prefix}${abs_v / 1_000:.0f}K"
-    else:
-        return f"{prefix}${abs_v:,.0f}"
+    """Format currency values into unified executive compact representation ($58M, $1.25K, $450)."""
+    from app.services.display_formatting import format_governed_number
+    return format_governed_number(val, unit="$")
 
 
 def format_percentage(val: float, decimals: int = 1) -> str:
@@ -111,16 +102,9 @@ def format_percentage(val: float, decimals: int = 1) -> str:
 
 
 def format_compact_number(val: float | int) -> str:
-    """Format numbers into K, M, B compact representation."""
-    abs_v = abs(val)
-    prefix = "-" if val < 0 else ""
-    if abs_v >= 1_000_000_000:
-        return f"{prefix}{abs_v / 1_000_000_000:.1f}B"
-    elif abs_v >= 1_000_000:
-        return f"{prefix}{abs_v / 1_000_000:.1f}M"
-    elif abs_v >= 1_000:
-        return f"{prefix}{abs_v / 1_000:.1f}K"
-    return f"{prefix}{val:,.0f}" if isinstance(val, int) or val.is_integer() else f"{prefix}{val:,.1f}"
+    """Format numbers into unified executive compact K, M, B, T representation."""
+    from app.services.display_formatting import format_governed_number
+    return format_governed_number(val)
 
 
 def format_duration_short(val: float) -> str:
