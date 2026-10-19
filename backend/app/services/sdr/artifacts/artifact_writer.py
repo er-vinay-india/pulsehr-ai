@@ -22,6 +22,11 @@ from app.services.sdr.contracts.keys import (
 )
 from app.services.sdr.contracts.policies import SDRPolicySuite
 from app.services.sdr.contracts.profiles import SemanticColumnProfile
+from app.services.sdr.contracts.relationships import (
+    SDRJoinPlan,
+    SDRRelationshipCandidate,
+    SDRValidatedRelationshipEdge,
+)
 from app.services.sdr.geo.contracts import CanonicalGeoEntity, GeoResolutionCandidate
 
 
@@ -385,5 +390,89 @@ class SDRArtifactWriter:
             "geo_manifest": str(manifest_path),
             "manifest_fingerprint": manifest_hash,
         }
+
+    def write_sdr5_artifacts(
+        self,
+        dataset_id: str,
+        candidates: Sequence[SDRRelationshipCandidate],
+        validated_edges: Sequence[SDRValidatedRelationshipEdge],
+        join_plans: Sequence[SDRJoinPlan],
+        policy_suite: SDRPolicySuite | None = None,
+        discovery_stats: dict[str, Any] | None = None,
+    ) -> dict[str, str]:
+        """
+        Writes canonical SDR-5 artifacts:
+        - relationship_candidates.json
+        - validated_relationships.json
+        - join_plans.json
+        - sdr5_manifest.json
+        Returns a dict of file paths to their deterministic SHA-256 hashes.
+        """
+        sdr_dir = self.get_dataset_sdr_dir(dataset_id)
+        policy = policy_suite or SDRPolicySuite()
+        policy_fp = policy.compute_policy_fingerprint()
+
+        # 1. Relationship Candidates
+        sorted_cands = sorted(candidates, key=lambda c: c.candidate_id)
+        cand_data = [c.model_dump() for c in sorted_cands]
+        cand_json = json.dumps(cand_data, indent=2, sort_keys=True)
+        cand_path = sdr_dir / "relationship_candidates.json"
+        cand_path.write_text(cand_json, encoding="utf-8")
+        cand_hash = hashlib.sha256(cand_json.encode("utf-8")).hexdigest()
+
+        # 2. Validated Relationships
+        sorted_edges = sorted(validated_edges, key=lambda e: e.edge_id)
+        edge_data = [e.model_dump() for e in sorted_edges]
+        edge_json = json.dumps(edge_data, indent=2, sort_keys=True)
+        edge_path = sdr_dir / "validated_relationships.json"
+        edge_path.write_text(edge_json, encoding="utf-8")
+        edge_hash = hashlib.sha256(edge_json.encode("utf-8")).hexdigest()
+
+        # 3. Governed JoinPlans
+        sorted_plans = sorted(join_plans, key=lambda p: p.join_plan_id)
+        plan_data = [p.model_dump() for p in sorted_plans]
+        plan_json = json.dumps(plan_data, indent=2, sort_keys=True)
+        plan_path = sdr_dir / "join_plans.json"
+        plan_path.write_text(plan_json, encoding="utf-8")
+        plan_hash = hashlib.sha256(plan_json.encode("utf-8")).hexdigest()
+
+        # 4. SDR-5 Manifest
+        safe_joins_count = sum(1 for p in sorted_plans if p.safety_status == "SAFE")
+        preagg_joins_count = sum(1 for p in sorted_plans if p.safety_status == "SAFE_WITH_PREAGGREGATION")
+        ambiguous_joins_count = sum(1 for p in sorted_plans if p.safety_status == "AMBIGUOUS")
+        unsafe_joins_count = sum(1 for p in sorted_plans if p.safety_status == "UNSAFE")
+
+        manifest = {
+            "dataset_id": dataset_id,
+            "policy_fingerprint": policy_fp,
+            "candidates_count": len(sorted_cands),
+            "validated_edges_count": len(sorted_edges),
+            "join_plans_count": len(sorted_plans),
+            "join_safety_summary": {
+                "safe": safe_joins_count,
+                "safe_with_preaggregation": preagg_joins_count,
+                "ambiguous": ambiguous_joins_count,
+                "unsafe": unsafe_joins_count,
+            },
+            "candidates_hash": cand_hash,
+            "validated_relationships_hash": edge_hash,
+            "join_plans_hash": plan_hash,
+        }
+        if discovery_stats:
+            manifest["discovery_stats"] = discovery_stats
+
+        manifest_json = json.dumps(manifest, indent=2, sort_keys=True)
+        manifest_path = sdr_dir / "sdr5_manifest.json"
+        manifest_path.write_text(manifest_json, encoding="utf-8")
+        manifest_hash = hashlib.sha256(manifest_json.encode("utf-8")).hexdigest()
+
+        return {
+            "relationship_candidates": str(cand_path),
+            "validated_relationships": str(edge_path),
+            "join_plans": str(plan_path),
+            "sdr5_manifest": str(manifest_path),
+            "manifest_fingerprint": manifest_hash,
+        }
+
 
 

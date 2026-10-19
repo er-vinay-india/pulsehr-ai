@@ -22,6 +22,11 @@ from app.services.sdr.contracts.keys import (
     SDRKeyCandidate,
 )
 from app.services.sdr.contracts.profiles import SemanticColumnProfile
+from app.services.sdr.contracts.relationships import (
+    SDRJoinPlan,
+    SDRRelationshipCandidate,
+    SDRValidatedRelationshipEdge,
+)
 from app.services.sdr.geo.contracts import CanonicalGeoEntity, GeoResolutionCandidate
 
 
@@ -563,6 +568,153 @@ class SDRRetrievalAdapter:
             source_fingerprint=source_fingerprint,
             artifact_type="CanonicalGeoDoc",
             artifact_id=entity.geo_entity_id,
+            text_for_retrieval=text,
+            structured_metadata=metadata,
+        )
+
+    @staticmethod
+    def build_relationship_candidate_document(
+        candidate: SDRRelationshipCandidate,
+        dataset_version: str = "v1",
+        source_fingerprint: str = "source_hash",
+    ) -> RetrievalDocument:
+        """Emits a candidate relationship document to RELATIONSHIP_INDEX (provisional authority)."""
+        doc_id = f"rel_cand_{candidate.dataset_id}_{candidate.candidate_id}"
+        l_cols = ",".join(candidate.left_column_ids)
+        r_cols = ",".join(candidate.right_column_ids)
+        text = (
+            f"Candidate relationship between {candidate.left_sheet_id}.{l_cols} and {candidate.right_sheet_id}.{r_cols}. "
+            f"Class: {candidate.relationship_class.value}. Candidate cardinality: {candidate.candidate_cardinality.value}. "
+            f"Confidence: {candidate.confidence}. Referential overlap: {candidate.referential_overlap}."
+        )
+        metadata = {
+            "candidate_id": candidate.candidate_id,
+            "dataset_id": candidate.dataset_id,
+            "left_sheet_id": candidate.left_sheet_id,
+            "right_sheet_id": candidate.right_sheet_id,
+            "left_column_ids": candidate.left_column_ids,
+            "right_column_ids": candidate.right_column_ids,
+            "relationship_class": candidate.relationship_class.value,
+            "candidate_cardinality": candidate.candidate_cardinality.value,
+            "confidence": candidate.confidence,
+            "referential_overlap": candidate.referential_overlap,
+            "left_coverage": candidate.left_coverage,
+            "right_coverage": candidate.right_coverage,
+            "artifact_fingerprint": candidate.artifact_fingerprint,
+        }
+
+        return RetrievalDocument.create(
+            document_id=doc_id,
+            namespace=RetrievalNamespace.RELATIONSHIP,
+            authority_class=AuthorityClass.RELATIONSHIP,
+            dataset_id=candidate.dataset_id,
+            dataset_version=dataset_version,
+            source_fingerprint=source_fingerprint,
+            artifact_type="RelationshipCandidateDoc",
+            artifact_id=candidate.candidate_id,
+            text_for_retrieval=text,
+            structured_metadata=metadata,
+        )
+
+    @staticmethod
+    def build_validated_relationship_edge_document(
+        edge: SDRValidatedRelationshipEdge,
+        dataset_version: str = "v1",
+        source_fingerprint: str = "source_hash",
+    ) -> RetrievalDocument:
+        """Emits a validated relationship edge document to RELATIONSHIP_INDEX (governed relationship authority)."""
+        doc_id = f"rel_edge_{edge.dataset_id}_{edge.edge_id}"
+        l_cols = ",".join(edge.left_column_ids)
+        r_cols = ",".join(edge.right_column_ids)
+        text = (
+            f"Validated relationship between {edge.left_sheet_id}.{l_cols} and {edge.right_sheet_id}.{r_cols}. "
+            f"Cardinality: {edge.cardinality.value}. Status: {edge.status.value}. Class: {edge.relationship_class.value}. "
+            f"Coverage: {edge.referential_coverage}. Grain preserving: {edge.is_grain_preserving}."
+        )
+        metadata = {
+            "edge_id": edge.edge_id,
+            "candidate_id": edge.candidate_id,
+            "dataset_id": edge.dataset_id,
+            "left_sheet_id": edge.left_sheet_id,
+            "right_sheet_id": edge.right_sheet_id,
+            "left_column_ids": edge.left_column_ids,
+            "right_column_ids": edge.right_column_ids,
+            "cardinality": edge.cardinality.value,
+            "status": edge.status.value,
+            "relationship_class": edge.relationship_class.value,
+            "referential_coverage": edge.referential_coverage,
+            "left_coverage": edge.left_coverage,
+            "right_coverage": edge.right_coverage,
+            "unmatched_left": edge.unmatched_left_count,
+            "unmatched_right": edge.unmatched_right_count,
+            "confidence": edge.confidence,
+            "is_grain_preserving": edge.is_grain_preserving,
+            "duplication_risk_flag": edge.duplication_risk_flag,
+            "artifact_fingerprint": edge.artifact_fingerprint,
+        }
+
+        return RetrievalDocument.create(
+            document_id=doc_id,
+            namespace=RetrievalNamespace.RELATIONSHIP,
+            authority_class=AuthorityClass.RELATIONSHIP,
+            dataset_id=edge.dataset_id,
+            dataset_version=dataset_version,
+            source_fingerprint=source_fingerprint,
+            artifact_type="ValidatedRelationshipDoc",
+            artifact_id=edge.edge_id,
+            text_for_retrieval=text,
+            structured_metadata=metadata,
+        )
+
+    @staticmethod
+    def build_join_plan_document(
+        plan: SDRJoinPlan,
+        dataset_version: str = "v1",
+        source_fingerprint: str = "source_hash",
+    ) -> RetrievalDocument:
+        """Emits a governed JoinPlan document to RELATIONSHIP_INDEX (governed executable metadata)."""
+        doc_id = f"join_plan_{plan.dataset_id}_{plan.join_plan_id}"
+        l_keys = ",".join(plan.left_keys)
+        r_keys = ",".join(plan.right_keys)
+        safe_ops = ", ".join(plan.safe_operations)
+        forb_ops = ", ".join(plan.forbidden_operations)
+        text = (
+            f"JoinPlan {plan.join_plan_id} joining {plan.left_sheet_id}.{l_keys} and {plan.right_sheet_id}.{r_keys}. "
+            f"JoinType: {plan.join_type}. Safety: {plan.safety_status.value}. Target grain: {plan.target_grain}. "
+            f"Preaggregation required: {plan.required_preaggregation}. "
+            f"Safe operations: [{safe_ops}]. Forbidden operations: [{forb_ops}]."
+        )
+        metadata = {
+            "join_plan_id": plan.join_plan_id,
+            "relationship_edge_id": plan.relationship_edge_id,
+            "dataset_id": plan.dataset_id,
+            "left_sheet_id": plan.left_sheet_id,
+            "right_sheet_id": plan.right_sheet_id,
+            "left_keys": plan.left_keys,
+            "right_keys": plan.right_keys,
+            "join_type": plan.join_type,
+            "safety_status": plan.safety_status.value,
+            "left_grain": plan.left_grain,
+            "right_grain": plan.right_grain,
+            "target_grain": plan.target_grain,
+            "required_preaggregation": plan.required_preaggregation,
+            "preaggregation_side": plan.preaggregation_side,
+            "expansion_ratio": plan.expansion_ratio,
+            "risk_flags": plan.risk_flags,
+            "safe_operations": plan.safe_operations,
+            "forbidden_operations": plan.forbidden_operations,
+            "artifact_fingerprint": plan.artifact_fingerprint,
+        }
+
+        return RetrievalDocument.create(
+            document_id=doc_id,
+            namespace=RetrievalNamespace.RELATIONSHIP,
+            authority_class=AuthorityClass.RELATIONSHIP,
+            dataset_id=plan.dataset_id,
+            dataset_version=dataset_version,
+            source_fingerprint=source_fingerprint,
+            artifact_type="JoinPlanDoc",
+            artifact_id=plan.join_plan_id,
             text_for_retrieval=text,
             structured_metadata=metadata,
         )
