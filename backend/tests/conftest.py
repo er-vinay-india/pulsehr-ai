@@ -15,7 +15,7 @@ _LIVE_DB_SESSION_START_STATE = None
 def get_live_db_state():
     if not LIVE_DB_PATH.exists():
         return None
-    conn = sqlite3.connect(LIVE_DB_PATH)
+    conn = sqlite3.connect(f"file:{LIVE_DB_PATH}?mode=ro", uri=True)
     try:
         try:
             import sqlite_vec
