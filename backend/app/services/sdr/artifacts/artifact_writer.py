@@ -88,3 +88,70 @@ class SDRArtifactWriter:
             "profiling_manifest": str(manifest_path),
             "manifest_fingerprint": manifest_hash,
         }
+
+    def write_sdr2_artifacts(
+        self,
+        dataset_id: str,
+        entity_hypotheses: Sequence[Any],
+        grain_profiles: Sequence[Any],
+        grain_candidates: Sequence[Any],
+        policy_suite: SDRPolicySuite | None = None,
+    ) -> dict[str, str]:
+        """
+        Writes canonical SDR-2 artifacts:
+        - entity_hypotheses.json
+        - grain_profiles.json
+        - grain_candidates.json
+        - sdr2_manifest.json
+        """
+        sdr_dir = self.get_dataset_sdr_dir(dataset_id)
+        policy = policy_suite or SDRPolicySuite()
+        policy_fp = policy.compute_policy_fingerprint()
+
+        # 1. Entity Hypotheses
+        sorted_hypotheses = sorted(entity_hypotheses, key=lambda h: (h.sheet_id, h.canonical_name))
+        hyp_data = [h.model_dump() for h in sorted_hypotheses]
+        hyp_json = json.dumps(hyp_data, indent=2, sort_keys=True)
+        hyp_path = sdr_dir / "entity_hypotheses.json"
+        hyp_path.write_text(hyp_json, encoding="utf-8")
+        hyp_hash = hashlib.sha256(hyp_json.encode("utf-8")).hexdigest()
+
+        # 2. Grain Profiles
+        sorted_grain_profiles = sorted(grain_profiles, key=lambda g: g.sheet_id)
+        grain_data = [g.model_dump() for g in sorted_grain_profiles]
+        grain_json = json.dumps(grain_data, indent=2, sort_keys=True)
+        grain_path = sdr_dir / "grain_profiles.json"
+        grain_path.write_text(grain_json, encoding="utf-8")
+        grain_hash = hashlib.sha256(grain_json.encode("utf-8")).hexdigest()
+
+        # 3. Grain Candidates
+        sorted_candidates = sorted(grain_candidates, key=lambda c: (c.candidate_id, c.confidence))
+        cand_data = [c.model_dump() for c in sorted_candidates]
+        cand_json = json.dumps(cand_data, indent=2, sort_keys=True)
+        cand_path = sdr_dir / "grain_candidates.json"
+        cand_path.write_text(cand_json, encoding="utf-8")
+        cand_hash = hashlib.sha256(cand_json.encode("utf-8")).hexdigest()
+
+        # 4. SDR-2 Manifest
+        sdr2_manifest = {
+            "dataset_id": dataset_id,
+            "policy_fingerprint": policy_fp,
+            "entity_hypotheses_count": len(sorted_hypotheses),
+            "grain_profiles_count": len(sorted_grain_profiles),
+            "grain_candidates_count": len(sorted_candidates),
+            "entity_hypotheses_hash": hyp_hash,
+            "grain_profiles_hash": grain_hash,
+            "grain_candidates_hash": cand_hash,
+        }
+        manifest_json = json.dumps(sdr2_manifest, indent=2, sort_keys=True)
+        manifest_path = sdr_dir / "sdr2_manifest.json"
+        manifest_path.write_text(manifest_json, encoding="utf-8")
+        manifest_hash = hashlib.sha256(manifest_json.encode("utf-8")).hexdigest()
+
+        return {
+            "entity_hypotheses": str(hyp_path),
+            "grain_profiles": str(grain_path),
+            "grain_candidates": str(cand_path),
+            "sdr2_manifest": str(manifest_path),
+            "manifest_fingerprint": manifest_hash,
+        }
