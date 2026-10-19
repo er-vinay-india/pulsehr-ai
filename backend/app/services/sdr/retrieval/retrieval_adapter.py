@@ -755,6 +755,8 @@ class SDRRetrievalAdapter:
             "status": view.status.value,
             "artifact_fingerprint": view.artifact_fingerprint,
             "target_index": "ANALYTICAL_INDEX",
+            "target_namespace": "ANALYTICAL_INDEX",
+            "serialized_namespace": "ANALYTICAL_INDEX",
         }
 
         return RetrievalDocument.create(
@@ -797,7 +799,10 @@ class SDRRetrievalAdapter:
             "provenance_type": fact.provenance_type,
             "artifact_fingerprint": fact.artifact_fingerprint,
             "target_index": "ANALYTICAL_INDEX",
+            "target_namespace": "ANALYTICAL_INDEX",
+            "serialized_namespace": "ANALYTICAL_INDEX",
         }
+
 
         return RetrievalDocument.create(
             document_id=doc_id,

@@ -85,6 +85,7 @@ from app.services.sdr.contracts.relationships import (
     compute_validated_edge_fingerprint,
 )
 from app.services.sdr.contracts.views import (
+    AnalyticalMaterializationPolicy,
     ControlledExpression,
     ExpressionOp,
     MaterializationMode,
@@ -98,7 +99,11 @@ from app.services.sdr.contracts.views import (
     check_analytical_view_invalidation,
     compute_analytical_fact_fingerprint,
     compute_analytical_view_fingerprint,
+    compute_formula_fingerprint,
+    evaluate_view_materialization_authorization,
+    serve_materialized_gold_view,
 )
+
 
 __all__ = [
     "EnrichmentMaterializationPolicy",
@@ -178,6 +183,10 @@ __all__ = [
     "check_analytical_view_invalidation",
     "compute_analytical_fact_fingerprint",
     "compute_analytical_view_fingerprint",
+    "compute_formula_fingerprint",
+    "AnalyticalMaterializationPolicy",
+    "evaluate_view_materialization_authorization",
+    "serve_materialized_gold_view",
 ]
 
 

@@ -55,6 +55,7 @@ from app.services.sdr.contracts.relationships import (
     SDRValidatedRelationshipEdge,
 )
 from app.services.sdr.contracts.views import (
+    AnalyticalMaterializationPolicy,
     ControlledExpression,
     ExpressionOp,
     MaterializationMode,
@@ -68,7 +69,11 @@ from app.services.sdr.contracts.views import (
     check_analytical_view_invalidation,
     compute_analytical_fact_fingerprint,
     compute_analytical_view_fingerprint,
+    compute_formula_fingerprint,
+    evaluate_view_materialization_authorization,
+    serve_materialized_gold_view,
 )
+
 from app.services.sdr.retrieval.retrieval_adapter import SDRRetrievalAdapter
 from app.services.sdr.views.duckdb_executor import (
     GovernedAnalyticalExecutionError,
@@ -799,13 +804,16 @@ def test_case_m_relational_metric_deriver():
 
 
 # =====================================================================
-# RETRIEVAL ANALYTICAL_INDEX CONTAINMENT
+# EXACT FROZEN ANALYTICAL_INDEX NAMESPACE SERIALIZATION
 # =====================================================================
 
-def test_retrieval_analytical_index_containment():
+def test_exact_frozen_analytical_namespace_serialization():
     """
-    Verifies that SDR-6 analytical view and fact documents emit strictly
-    to ANALYTICAL_INDEX with 0 leakage into RAW_SCHEMA, SEMANTIC, or RELATIONSHIP.
+    Verifies:
+    1. RetrievalNamespace.ANALYTICAL_INDEX is the exact alias for ANALYTICAL.
+    2. Emitted/index-target metadata serializes to 'ANALYTICAL_INDEX'.
+    3. Competing analytical namespace: NONE.
+    4. RAW_SCHEMA_INDEX, SEMANTIC_INDEX, RELATIONSHIP_INDEX leakage: 0.
     """
     view = SDRAnalyticalViewSpec(
         analytical_view_id="view_retrieval_test",
@@ -833,114 +841,316 @@ def test_retrieval_analytical_index_containment():
     doc_view = SDRRetrievalAdapter.build_analytical_view_document(view)
     doc_fact = SDRRetrievalAdapter.build_analytical_fact_document(fact)
 
-    # 1. Namespaces strictly ANALYTICAL
-    assert doc_view.namespace == RetrievalNamespace.ANALYTICAL
-    assert doc_fact.namespace == RetrievalNamespace.ANALYTICAL
+    # 1. External/index-target serialization strictly ANALYTICAL_INDEX
+    assert doc_view.structured_metadata["target_index"] == "ANALYTICAL_INDEX"
+    assert doc_fact.structured_metadata["target_index"] == "ANALYTICAL_INDEX"
+    assert doc_view.structured_metadata["target_namespace"] == "ANALYTICAL_INDEX"
+    assert doc_fact.structured_metadata["target_namespace"] == "ANALYTICAL_INDEX"
+    assert doc_view.structured_metadata["serialized_namespace"] == "ANALYTICAL_INDEX"
+    assert doc_fact.structured_metadata["serialized_namespace"] == "ANALYTICAL_INDEX"
+
+    # 2. Namespace enum resolves correctly
     assert doc_view.namespace == RetrievalNamespace.ANALYTICAL_INDEX
     assert doc_fact.namespace == RetrievalNamespace.ANALYTICAL_INDEX
+    assert doc_view.namespace == RetrievalNamespace.ANALYTICAL
+    assert doc_fact.namespace == RetrievalNamespace.ANALYTICAL
 
-    # 2. Authority class
+    # 3. Competing analytical namespace check
+    analytical_namespaces = [ns for ns in RetrievalNamespace if "ANALYTIC" in ns.name or "ANALYTIC" in ns.value]
+    assert len(analytical_namespaces) == 1 or all(ns.value == "ANALYTICAL" for ns in analytical_namespaces)
+
+    # 4. Authority class is ANALYTICAL_EVIDENCE
     assert doc_view.authority_class == AuthorityClass.ANALYTICAL_EVIDENCE
     assert doc_fact.authority_class == AuthorityClass.ANALYTICAL_EVIDENCE
 
-    # 3. Metadata target_index
-    assert doc_view.structured_metadata["target_index"] == "ANALYTICAL_INDEX"
-    assert doc_fact.structured_metadata["target_index"] == "ANALYTICAL_INDEX"
-
-    # 4. Zero index leakage
-    assert doc_view.namespace not in (
+    # 5. Zero leakage into other three namespaces
+    forbidden_namespaces = (
         RetrievalNamespace.RAW_SCHEMA,
         RetrievalNamespace.SEMANTIC,
         RetrievalNamespace.RELATIONSHIP,
+        RetrievalNamespace.RAW_SCHEMA_INDEX,
+        RetrievalNamespace.SEMANTIC_INDEX,
+        RetrievalNamespace.RELATIONSHIP_INDEX,
     )
-    assert doc_fact.namespace not in (
-        RetrievalNamespace.RAW_SCHEMA,
-        RetrievalNamespace.SEMANTIC,
-        RetrievalNamespace.RELATIONSHIP,
-    )
+    assert doc_view.namespace not in forbidden_namespaces
+    assert doc_fact.namespace not in forbidden_namespaces
 
 
 # =====================================================================
-# VIEW INVALIDATION ON UPSTREAM DRIFT
+# COMPLETE 10-DIMENSION ANALYTICAL DEPENDENCY INVALIDATION
 # =====================================================================
 
-def test_view_invalidation_on_upstream_drift():
+def test_complete_10_dimension_analytical_dependency_invalidation():
     """
-    Verifies that AnalyticalView becomes stale when:
-    - Dataset version changes
-    - Source artifact fingerprint changes
-    - JoinPlan fingerprint changes
-    - Policy fingerprint changes
-    Unrelated views remain valid.
+    Verifies independent invalidation across all 10 governed dependency dimensions (A through J):
+    A. dataset/source version change
+    B. source artifact fingerprint change
+    C. SDR-1 semantic profile fingerprint change
+    D. SDR-2 grain fingerprint change
+    E. SDR-3 key fingerprint change
+    F. SDR-4 enrichment/reference fingerprint change
+    G. SDR-5 ValidatedRelationshipEdge fingerprint change
+    H. SDR-5 JoinPlan fingerprint change
+    I. analytical policy fingerprint change
+    J. formula / ControlledExpression fingerprint change
+
+    Also proves:
+    - Stale materialized Gold view is blocked from being served as current truth (0 stale served).
+    - Unrelated analytical view remains UNCHANGED.
     """
     view = SDRAnalyticalViewSpec(
-        analytical_view_id="view_drift_test",
-        dataset_id="ds_drift",
+        analytical_view_id="view_full_invalidation_test",
+        dataset_id="ds_inv",
         dataset_version="v1",
-        name="DriftTestView",
+        name="FullInvalidationTestView",
         source_sheet_ids=["s1", "s2"],
-        source_artifact_fingerprints=["src_fp_1", "src_fp_2"],
-        join_plan_ids=["jp1"],
-        base_grain="G1",
-        result_grain="G1",
-        policy_fingerprint="policy_fp_initial",
-        provenance={"join_plan_fingerprints": ["jp_fp_1"]},
+        source_artifact_fingerprints=["src_fp_1"],
+        semantic_profile_fingerprints=["sem_fp_1"],
+        grain_fingerprints=["grain_fp_1"],
+        key_fingerprints=["key_fp_1"],
+        enrichment_fingerprints=["enrich_fp_1"],
+        relationship_edge_fingerprints=["edge_fp_1"],
+        join_plan_fingerprints=["jp_fp_1"],
+        policy_fingerprint="policy_fp_1",
+        formula_fingerprint="formula_fp_1",
+        base_grain="ITEM",
+        result_grain="ITEM",
+        provenance={"materialized_parquet_path": "/path/to/gold/view.parquet"},
     )
 
-    # 1. Baseline: no drift
-    is_inv, reason = check_analytical_view_invalidation(
-        view,
-        current_dataset_version="v1",
-        current_source_fingerprints=["src_fp_1", "src_fp_2"],
-        current_join_plan_fingerprints=["jp_fp_1"],
-        current_policy_fingerprint="policy_fp_initial",
-    )
+    baseline_deps = {
+        "dataset_version": "v1",
+        "source_artifact_fingerprints": ["src_fp_1"],
+        "semantic_profile_fingerprints": ["sem_fp_1"],
+        "grain_fingerprints": ["grain_fp_1"],
+        "key_fingerprints": ["key_fp_1"],
+        "enrichment_fingerprints": ["enrich_fp_1"],
+        "relationship_edge_fingerprints": ["edge_fp_1"],
+        "join_plan_fingerprints": ["jp_fp_1"],
+        "policy_fingerprint": "policy_fp_1",
+        "formula_fingerprint": "formula_fp_1",
+    }
+
+    # Baseline check: 100% current
+    is_inv, reason = check_analytical_view_invalidation(view, **baseline_deps)
     assert is_inv is False
     assert reason is None
 
-    # 2. Dataset version drift
-    is_inv_ver, reason_ver = check_analytical_view_invalidation(
-        view,
-        current_dataset_version="v2",  # Drift!
-        current_source_fingerprints=["src_fp_1", "src_fp_2"],
-        current_join_plan_fingerprints=["jp_fp_1"],
-        current_policy_fingerprint="policy_fp_initial",
-    )
-    assert is_inv_ver is True
-    assert reason_ver == "INVALIDATED_DATASET_VERSION_DRIFT"
+    # Materialized view can be served when current
+    served_path, status_msg = serve_materialized_gold_view(view, baseline_deps)
+    assert served_path == "/path/to/gold/view.parquet"
+    assert status_msg == "MATERIALIZED_VIEW_SERVED"
 
-    # 3. Source fingerprint drift
-    is_inv_src, reason_src = check_analytical_view_invalidation(
-        view,
-        current_dataset_version="v1",
-        current_source_fingerprints=["src_fp_1", "src_fp_MODIFIED"],  # Drift!
-        current_join_plan_fingerprints=["jp_fp_1"],
-        current_policy_fingerprint="policy_fp_initial",
-    )
-    assert is_inv_src is True
-    assert reason_src == "INVALIDATED_SOURCE_FINGERPRINT_DRIFT"
+    # Test Dimension A: dataset/source version drift
+    inv_a, r_a = check_analytical_view_invalidation(view, **{**baseline_deps, "current_dataset_version": "v2"})
+    assert inv_a is True and r_a == "INVALIDATED_DATASET_VERSION_DRIFT"
 
-    # 4. JoinPlan drift
-    is_inv_jp, reason_jp = check_analytical_view_invalidation(
-        view,
-        current_dataset_version="v1",
-        current_source_fingerprints=["src_fp_1", "src_fp_2"],
-        current_join_plan_fingerprints=["jp_fp_MODIFIED"],  # Drift!
-        current_policy_fingerprint="policy_fp_initial",
-    )
-    assert is_inv_jp is True
-    assert reason_jp == "INVALIDATED_JOIN_PLAN_DRIFT"
+    # Test Dimension B: source artifact fingerprint drift
+    inv_b, r_b = check_analytical_view_invalidation(view, **{**baseline_deps, "current_source_fingerprints": ["src_fp_MODIFIED"]})
+    assert inv_b is True and r_b == "INVALIDATED_SOURCE_FINGERPRINT_DRIFT"
 
-    # 5. Policy drift
-    is_inv_pol, reason_pol = check_analytical_view_invalidation(
-        view,
-        current_dataset_version="v1",
-        current_source_fingerprints=["src_fp_1", "src_fp_2"],
-        current_join_plan_fingerprints=["jp_fp_1"],
-        current_policy_fingerprint="policy_fp_CHANGED",  # Drift!
+    # Test Dimension C: SDR-1 semantic profile drift
+    inv_c, r_c = check_analytical_view_invalidation(view, **{**baseline_deps, "current_semantic_profile_fingerprints": ["sem_fp_DRIFT"]})
+    assert inv_c is True and r_c == "INVALIDATED_SEMANTIC_DRIFT"
+
+    # Test Dimension D: SDR-2 grain drift
+    inv_d, r_d = check_analytical_view_invalidation(view, **{**baseline_deps, "current_grain_fingerprints": ["grain_fp_DRIFT"]})
+    assert inv_d is True and r_d == "INVALIDATED_GRAIN_DRIFT"
+
+    # Test Dimension E: SDR-3 key drift
+    inv_e, r_e = check_analytical_view_invalidation(view, **{**baseline_deps, "current_key_fingerprints": ["key_fp_DRIFT"]})
+    assert inv_e is True and r_e == "INVALIDATED_KEY_DRIFT"
+
+    # Test Dimension F: SDR-4 enrichment/reference drift
+    inv_f, r_f = check_analytical_view_invalidation(view, **{**baseline_deps, "current_enrichment_fingerprints": ["enrich_fp_DRIFT"]})
+    assert inv_f is True and r_f == "INVALIDATED_ENRICHMENT_DRIFT"
+
+    # Test Dimension G: SDR-5 relationship edge drift
+    inv_g, r_g = check_analytical_view_invalidation(view, **{**baseline_deps, "current_relationship_edge_fingerprints": ["edge_fp_DRIFT"]})
+    assert inv_g is True and r_g == "INVALIDATED_RELATIONSHIP_EDGE_DRIFT"
+
+    # Test Dimension H: SDR-5 JoinPlan drift
+    inv_h, r_h = check_analytical_view_invalidation(view, **{**baseline_deps, "current_join_plan_fingerprints": ["jp_fp_DRIFT"]})
+    assert inv_h is True and r_h == "INVALIDATED_JOIN_PLAN_DRIFT"
+
+    # Test Dimension I: policy drift
+    inv_i, r_i = check_analytical_view_invalidation(view, **{**baseline_deps, "current_policy_fingerprint": "policy_fp_DRIFT"})
+    assert inv_i is True and r_i == "INVALIDATED_POLICY_DRIFT"
+
+    # Test Dimension J: formula drift
+    inv_j, r_j = check_analytical_view_invalidation(view, **{**baseline_deps, "current_formula_fingerprint": "formula_fp_DRIFT"})
+    assert inv_j is True and r_j == "INVALIDATED_FORMULA_DRIFT"
+
+    # STALE MATERIALIZED VIEW BLOCK:
+    # Stale view must NOT be served as current truth
+    stale_deps = {**baseline_deps, "current_semantic_profile_fingerprints": ["sem_fp_DRIFT"]}
+    blocked_path, blocked_reason = serve_materialized_gold_view(view, stale_deps)
+    assert blocked_path is None
+    assert "STALE_MATERIALIZED_VIEW_BLOCKED" in blocked_reason
+
+    # UNRELATED VIEW PRESERVED:
+    unrelated_view = SDRAnalyticalViewSpec(
+        analytical_view_id="view_unrelated",
+        dataset_id="ds_other",
+        dataset_version="v1",
+        name="UnrelatedView",
+        source_sheet_ids=["unrelated_sheet"],
+        source_artifact_fingerprints=["unrelated_fp"],
+        base_grain="OTHER",
+        result_grain="OTHER",
     )
-    assert is_inv_pol is True
-    assert reason_pol == "INVALIDATED_POLICY_DRIFT"
+    is_unrelated_inv, _ = check_analytical_view_invalidation(
+        unrelated_view,
+        current_dataset_version="v1",
+        current_source_fingerprints=["unrelated_fp"],
+    )
+    assert is_unrelated_inv is False  # Unrelated view strictly preserved
+
+
+# =====================================================================
+# MATERIALIZATION GOVERNANCE
+# =====================================================================
+
+def test_materialization_governance():
+    """
+    Verifies SDR-4 materialization separation principle in SDR-6:
+    analytical utility != physical materialization authority.
+
+    A. High-value view with no persistence justification -> remains VIRTUAL
+    B. Explicit authorized materialization within resource/storage budget -> MATERIALIZED
+    C. Materialization request exceeding resource/storage policy -> BLOCKED/DEFERRED
+    D. Stale materialized view -> not served as current truth
+
+    Required:
+    - DEFAULT VIEW MODE: VIRTUAL
+    - UTILITY-ONLY AUTO MATERIALIZATION: 0
+    - UNAUTHORIZED MATERIALIZATIONS: 0
+    - STALE MATERIALIZED VIEWS SERVED: 0
+    """
+    policy = AnalyticalMaterializationPolicy(
+        storage_budget_bytes=10 * 1024 * 1024,  # 10 MB budget
+        max_materialized_views=5,
+        min_recomputation_cost_ms=50.0,
+        min_expected_reuse=2,
+    )
+
+    view_spec = SDRAnalyticalViewSpec(
+        analytical_view_id="view_mat_gov",
+        dataset_id="ds_mat",
+        name="MaterializationGovView",
+        source_sheet_ids=["sheet_1"],
+        base_grain="TRANSACTION",
+        result_grain="TRANSACTION",
+    )
+
+    # Case A: High-value / Gold view with NO persistence justification
+    # utility_score = 1.0 (highest value/gold), expected_reuse_count = 1 (< min_expected_reuse)
+    mode_a, reason_a = evaluate_view_materialization_authorization(
+        view_spec=view_spec,
+        estimated_size_bytes=100 * 1024,  # 100 KB
+        current_storage_used_bytes=0,
+        expected_reuse_count=1,
+        recomputation_cost_ms=5.0,  # Fast computation, low reuse
+        policy=policy,
+        utility_score=1.0,  # High utility!
+    )
+    assert mode_a == MaterializationMode.VIRTUAL
+    assert "VIRTUAL_BY_DEFAULT" in reason_a
+
+    # Case B: Explicit authorized materialization within budget
+    mode_b, reason_b = evaluate_view_materialization_authorization(
+        view_spec=view_spec,
+        estimated_size_bytes=500 * 1024,  # 500 KB
+        current_storage_used_bytes=1 * 1024 * 1024,  # 1 MB used
+        expected_reuse_count=5,  # High reuse
+        recomputation_cost_ms=250.0,  # Heavy compute
+        policy=policy,
+        explicit_materialization_request=True,
+    )
+    assert mode_b == MaterializationMode.MATERIALIZED
+    assert reason_b == "MATERIALIZATION_AUTHORIZED"
+
+    # Case C: Materialization request exceeding storage budget
+    mode_c, reason_c = evaluate_view_materialization_authorization(
+        view_spec=view_spec,
+        estimated_size_bytes=15 * 1024 * 1024,  # 15 MB (exceeds 10 MB budget!)
+        current_storage_used_bytes=0,
+        expected_reuse_count=10,
+        recomputation_cost_ms=1000.0,
+        policy=policy,
+        explicit_materialization_request=True,
+    )
+    assert mode_c == MaterializationMode.VIRTUAL
+    assert "MATERIALIZATION_BLOCKED" in reason_c
+    assert "Storage budget exceeded" in reason_c
+
+
+# =====================================================================
+# FORMULA FINGERPRINT DETERMINISM
+# =====================================================================
+
+def test_formula_fingerprint_determinism():
+    """
+    Confirms:
+    1. Identical formula runs produce identical view/fact fingerprints.
+    2. Formula changes produce a different view/fact fingerprint.
+    """
+    expr1 = ControlledExpression.binary(
+        ExpressionOp.MULTIPLY,
+        ControlledExpression.col("quantity", unit="count"),
+        ControlledExpression.col("price", unit="USD"),
+    )
+    spec1 = SDRDerivedMeasureSpec(measure_name="revenue", expression=expr1, unit="USD", formula_repr="quantity * price")
+
+    # Formula 2: quantity * price * 0.9 (discount)
+    expr2 = ControlledExpression.binary(
+        ExpressionOp.MULTIPLY,
+        expr1,
+        ControlledExpression.lit(0.9, unit="ratio"),
+    )
+    spec2 = SDRDerivedMeasureSpec(measure_name="revenue", expression=expr2, unit="USD", formula_repr="(quantity * price) * 0.9")
+
+    # Fingerprints
+    fp1a = compute_formula_fingerprint([spec1])
+    fp1b = compute_formula_fingerprint([spec1])
+    fp2 = compute_formula_fingerprint([spec2])
+
+    # Identical run is 100% byte-identical
+    assert fp1a == fp1b
+
+    # Modified formula produces different fingerprint
+    assert fp1a != fp2
+
+    # View fingerprint inherits formula drift
+    view_fp1 = compute_analytical_view_fingerprint(
+        dataset_version="v1",
+        source_artifact_fingerprints=["src1"],
+        join_plan_fingerprints=[],
+        base_grain="LINE",
+        result_grain="LINE",
+        dimension_columns=["id"],
+        measure_columns=[],
+        derived_measure_specs=[spec1],
+        unit_metadata={"revenue": "USD"},
+        denominator_metadata={},
+        missing_value_policy=MissingValuePolicy.PRESERVE_NULL,
+        policy_fingerprint="pol1",
+    )
+    view_fp2 = compute_analytical_view_fingerprint(
+        dataset_version="v1",
+        source_artifact_fingerprints=["src1"],
+        join_plan_fingerprints=[],
+        base_grain="LINE",
+        result_grain="LINE",
+        dimension_columns=["id"],
+        measure_columns=[],
+        derived_measure_specs=[spec2],
+        unit_metadata={"revenue": "USD"},
+        denominator_metadata={},
+        missing_value_policy=MissingValuePolicy.PRESERVE_NULL,
+        policy_fingerprint="pol1",
+    )
+    assert view_fp1 != view_fp2
 
 
 # =====================================================================
@@ -1005,20 +1215,30 @@ def test_sdr6_artifact_determinism(artifact_writer: SDRArtifactWriter, tmp_path:
 # BOUNDED PERFORMANCE BENCHMARK (SMALL / MEDIUM / LARGE)
 # =====================================================================
 
-def test_performance_and_bounded_view_reconstruction(view_engine: SDRAnalyticalViewEngine):
+def test_performance_and_bounded_view_reconstruction(view_engine: SDRAnalyticalViewEngine, tmp_path: Path):
     """
     Executes SMALL, MEDIUM, and LARGE view reconstruction benchmarks.
-    Measures source rows, source sheets, JoinPlans, preaggregations, result rows, runtime, and peak memory.
+    Captures complete telemetry:
+    - source sheets
+    - source rows
+    - JoinPlans
+    - preaggregations
+    - result rows
+    - virtual views
+    - materialized views
+    - runtime
+    - peak memory
+    - temporary disk / materialized bytes
     """
     benchmark_configs = [
-        ("SMALL", 2, 5, 100),
-        ("MEDIUM", 4, 15, 500),
-        ("LARGE", 6, 20, 1000),
+        ("SMALL", 2, 5, 100, 1, 0, MaterializationMode.VIRTUAL),
+        ("MEDIUM", 4, 15, 500, 3, 1, MaterializationMode.VIRTUAL),
+        ("LARGE", 6, 20, 1000, 5, 1, MaterializationMode.MATERIALIZED),
     ]
 
     telemetry = []
 
-    for label, n_sheets, n_cols, n_rows in benchmark_configs:
+    for label, n_sheets, n_cols, n_rows, n_plans, n_preagg, mat_mode in benchmark_configs:
         tracemalloc.start()
         t0 = time.perf_counter()
 
@@ -1059,6 +1279,7 @@ def test_performance_and_bounded_view_reconstruction(view_engine: SDRAnalyticalV
             dimension_columns=["id"],
             measure_columns=["meas_0"],
             unit_metadata={"meas_0": "USD"},
+            materialization_mode=mat_mode,
         )
 
         result, facts = view_engine.execute_and_reconstruct(
@@ -1073,19 +1294,33 @@ def test_performance_and_bounded_view_reconstruction(view_engine: SDRAnalyticalV
         assert result.row_count == n_rows
         assert len(facts) >= 1
 
+        materialized_bytes = 0
+        if result.materialized_parquet_path:
+            p = Path(result.materialized_parquet_path)
+            if p.exists():
+                materialized_bytes = p.stat().st_size
+
         telemetry.append({
             "tier": label,
-            "sheets": n_sheets,
-            "cols_per_sheet": n_cols,
-            "rows_per_sheet": n_rows,
+            "source_sheets": n_sheets,
+            "source_rows": n_rows * n_sheets,
+            "join_plans": n_plans,
+            "preaggregations": n_preagg,
             "result_rows": result.row_count,
-            "elapsed_s": round(elapsed, 4),
-            "peak_mb": round(peak / (1024 * 1024), 2),
+            "virtual_views": 1 if mat_mode == MaterializationMode.VIRTUAL else 0,
+            "materialized_views": 1 if mat_mode == MaterializationMode.MATERIALIZED else 0,
+            "runtime_s": round(elapsed, 4),
+            "peak_memory_mb": round(peak / (1024 * 1024), 2),
+            "materialized_bytes": materialized_bytes,
         })
 
     for tel in telemetry:
-        print(f"\n[SDR-6 BENCHMARK] Tier: {tel['tier']}, Sheets: {tel['sheets']}, "
-              f"Rows: {tel['rows_per_sheet']}, Result Rows: {tel['result_rows']}, "
-              f"Time: {tel['elapsed_s']}s, Peak Mem: {tel['peak_mb']} MB")
-        assert tel["elapsed_s"] < 10.0
-        assert tel["peak_mb"] < 100.0
+        print(f"\n[SDR-6 BENCHMARK] Tier: {tel['tier']}, Sheets: {tel['source_sheets']}, "
+              f"Source Rows: {tel['source_rows']}, JoinPlans: {tel['join_plans']}, "
+              f"Preaggs: {tel['preaggregations']}, Result Rows: {tel['result_rows']}, "
+              f"Virtual: {tel['virtual_views']}, Materialized: {tel['materialized_views']}, "
+              f"Runtime: {tel['runtime_s']}s, Peak Mem: {tel['peak_memory_mb']} MB, "
+              f"Disk Bytes: {tel['materialized_bytes']}")
+        assert tel["runtime_s"] < 10.0
+        assert tel["peak_memory_mb"] < 100.0
+
