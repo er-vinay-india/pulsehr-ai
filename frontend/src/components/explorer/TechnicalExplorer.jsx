@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Cpu, Table, Database, CheckCircle2, AlertTriangle, Layers, ChevronDown, Activity, Sparkles, ShieldCheck, GitBranch } from "lucide-react";
+import { Info, Table, Database, CheckCircle2, AlertTriangle, Layers, ChevronDown, Activity, Sparkles, ShieldCheck, GitBranch } from "lucide-react";
 import DataTable from "../DataTable";
 import { getAdaptiveDashboardPrimaryElementByDataset } from "../../api/client";
 
@@ -8,6 +8,7 @@ export default function TechnicalExplorer({
   datasetId = null,
   edaReport = null,
   dataVersion = "curated",
+  supportsVersions = true,
   onDataVersionChange = () => {},
   // DataTable props
   data = null,
@@ -53,18 +54,18 @@ export default function TechnicalExplorer({
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px", marginBottom: "14px" }}>
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
-              <Cpu size={18} color={themeTokens?.colors?.brandBlue || "#2563eb"} />
+              <Table size={18} color={themeTokens?.colors?.brandBlue || "#2563eb"} />
               <h2 style={{ margin: 0, fontSize: "1.1rem", fontWeight: 700, color: themeTokens?.colors?.textPrimary }}>
-                Technical Diagnostics & Record Inspector
+                Data table
               </h2>
             </div>
             <p style={{ margin: 0, fontSize: "0.80rem", color: themeTokens?.colors?.textSecondary }}>
-              Schema diagnostics, inferred column data types, missing value ratios, and raw vs curated observations.
+              Browse and search your rows. Open column or processing details when you need a closer look.
             </p>
           </div>
 
           {/* Sub-view toggle & Raw/Curated switch */}
-          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
             <div
               style={{
                 display: "inline-flex",
@@ -88,7 +89,7 @@ export default function TechnicalExplorer({
                   cursor: "pointer",
                 }}
               >
-                Table Records
+                Rows
               </button>
               <button
                 type="button"
@@ -104,11 +105,17 @@ export default function TechnicalExplorer({
                   cursor: "pointer",
                 }}
               >
-                Schema Diagnostics
+                Column details
               </button>
             </div>
 
-            {/* Curated vs Raw toggle */}
+            {supportsVersions && activeSubTab === "records" && (
+            <details>
+              <summary style={{ cursor: "pointer", fontSize: "0.78rem", color: themeTokens?.colors?.textSecondary }}>Data options</summary>
+              <p style={{ fontSize: "0.78rem", color: themeTokens?.colors?.textSecondary, maxWidth: "360px" }}>
+                Prepared data has standardized values for analysis. Original values show the imported rows before preparation, for checking changes.
+                Both views may match if no values changed. Download the workbook for the original file layout.
+              </p>
             <div
               style={{
                 display: "inline-flex",
@@ -121,6 +128,7 @@ export default function TechnicalExplorer({
               <button
                 type="button"
                 onClick={() => onDataVersionChange("curated")}
+                aria-pressed={dataVersion === "curated"}
                 style={{
                   padding: "4px 10px",
                   fontSize: "0.74rem",
@@ -132,11 +140,12 @@ export default function TechnicalExplorer({
                   cursor: "pointer",
                 }}
               >
-                Curated
+                Prepared data
               </button>
               <button
                 type="button"
                 onClick={() => onDataVersionChange("raw")}
+                aria-pressed={dataVersion === "raw"}
                 style={{
                   padding: "4px 10px",
                   fontSize: "0.74rem",
@@ -148,11 +157,22 @@ export default function TechnicalExplorer({
                   cursor: "pointer",
                 }}
               >
-                Raw
+                Original values
               </button>
             </div>
+            </details>
+            )}
           </div>
         </div>
+        {supportsVersions && activeSubTab === "records" && !loading && data && (
+          <p role="status" style={{ margin: 0, fontSize: "0.78rem", color: themeTokens?.colors?.textSecondary }}>
+            {dataVersion === "raw"
+              ? "Showing original values before preparation. Use Data options to return to prepared data."
+              : data.version === "raw"
+                ? "No separate prepared version is available. Showing original values."
+                : "Showing prepared data with standardized values for analysis."}
+          </p>
+        )}
 
         {/* 2. SUBVIEW A: SCHEMA DIAGNOSTICS */}
         {activeSubTab === "schema" && (
@@ -162,10 +182,10 @@ export default function TechnicalExplorer({
                 <thead>
                   <tr style={{ borderBottom: `2px solid ${themeTokens?.colors?.borderSubtle}`, textAlign: "left" }}>
                     <th style={{ padding: "8px 10px", color: themeTokens?.colors?.textSecondary }}>Column</th>
-                    <th style={{ padding: "8px 10px", color: themeTokens?.colors?.textSecondary }}>Inferred Type</th>
+                    <th style={{ padding: "8px 10px", color: themeTokens?.colors?.textSecondary }}>Data type</th>
                     <th style={{ padding: "8px 10px", color: themeTokens?.colors?.textSecondary }}>Completeness</th>
-                    <th style={{ padding: "8px 10px", color: themeTokens?.colors?.textSecondary }}>Distinct Values</th>
-                    <th style={{ padding: "8px 10px", color: themeTokens?.colors?.textSecondary }}>Null Count</th>
+                    <th style={{ padding: "8px 10px", color: themeTokens?.colors?.textSecondary }}>Unique values</th>
+                    <th style={{ padding: "8px 10px", color: themeTokens?.colors?.textSecondary }}>Missing values</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -225,29 +245,30 @@ export default function TechnicalExplorer({
       </div>
 
       {/* 2. GATED COLLAPSIBLE DEEP DIAGNOSTICS & AUDIT SUITE */}
-      <div
+      <details
         style={{
           padding: "18px 20px",
           borderRadius: "10px",
           backgroundColor: themeTokens?.colors?.surface,
           border: `1px solid ${themeTokens?.colors?.borderSubtle}`,
-          display: "flex",
-          flexDirection: "column",
-          gap: "12px",
         }}
       >
+        <summary style={{ cursor: "pointer", fontWeight: 600, fontSize: "0.82rem", color: themeTokens?.colors?.textSecondary }}>
+          <Info size={14} style={{ verticalAlign: "middle", marginRight: "6px" }} />
+          Processing details
+        </summary>
+        <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginTop: "12px" }}>
         <div>
           <h3 style={{ margin: "0 0 2px 0", fontSize: "0.98rem", fontWeight: 700, color: themeTokens?.colors?.textPrimary }}>
-            Governed Architectural Audits & Developer Traces
+            Processing & verification
           </h3>
           <p style={{ margin: 0, fontSize: "0.78rem", color: themeTokens?.colors?.textSecondary }}>
-            Deep execution traces, visual decision audits, and lineage telemetry gated safely away from the Executive Dashboard.
+            Additional information for investigating how the data was processed.
           </p>
         </div>
 
         {/* Diagnostic Accordion 0: Adaptive Table Reconstruction & Ingestion Safety */}
         <details
-          open
           style={{
             borderRadius: "8px",
             border: `1px solid ${themeTokens?.colors?.borderSubtle}`,
@@ -425,7 +446,8 @@ export default function TechnicalExplorer({
             <div><strong>Domain Profile:</strong> {dashboardData?.domain_profile?.display_domain_name || "Standard Enterprise"}</div>
           </div>
         </details>
-      </div>
+        </div>
+      </details>
     </div>
   );
 }

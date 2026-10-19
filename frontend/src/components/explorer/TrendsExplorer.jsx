@@ -50,10 +50,10 @@ export default function TrendsExplorer({
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "12px" }}>
           <div>
             <h2 style={{ margin: "0 0 4px 0", fontSize: "1.1rem", fontWeight: 700, color: themeTokens?.colors?.textPrimary }}>
-              Temporal Cadence & Longitudinal Trends
+              Trends
             </h2>
             <p style={{ margin: 0, fontSize: "0.80rem", color: themeTokens?.colors?.textSecondary }}>
-              Longitudinal progression across cycles and reporting periods identified during ingestion.
+              See how values change over time.
             </p>
           </div>
 

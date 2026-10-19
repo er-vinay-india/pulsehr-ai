@@ -97,11 +97,11 @@ export default function EvidenceExplorer({
             <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
               <ShieldCheck size={18} color={themeTokens?.colors?.statusSuccess || "#10b981"} />
               <h2 style={{ margin: 0, fontSize: "1.1rem", fontWeight: 700, color: themeTokens?.colors?.textPrimary }}>
-                Audited Evidence Ledger & Mathematical Lineage
+                Sources & calculations
               </h2>
             </div>
             <p style={{ margin: 0, fontSize: "0.80rem", color: themeTokens?.colors?.textSecondary }}>
-              Deterministic, cryptographically bound evidence graph backing all dashboard insights, slides, and decisions.
+              Review the data and calculations behind dashboard findings.
             </p>
           </div>
 
@@ -230,7 +230,7 @@ export default function EvidenceExplorer({
                   </p>
                   {claim.supporting_evidence_ids?.length > 0 && (
                     <div style={{ display: "flex", alignItems: "center", gap: "4px", marginTop: "6px", fontSize: "0.70rem", color: themeTokens?.colors?.textMuted }}>
-                      <span>Supporting Evidence:</span>
+                      <span>Sources:</span>
                       {claim.supporting_evidence_ids.map((id) => (
                         <code key={id} style={{ padding: "1px 4px", borderRadius: "3px", backgroundColor: isDark ? "rgba(255, 255, 255, 0.06)" : "rgba(0, 0, 0, 0.05)" }}>
                           {id}
@@ -257,10 +257,10 @@ export default function EvidenceExplorer({
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px", flexWrap: "wrap", gap: "10px" }}>
           <div>
             <h3 style={{ margin: "0 0 2px 0", fontSize: "0.98rem", fontWeight: 700, color: themeTokens?.colors?.textPrimary }}>
-              Candidate Material Findings
+              Findings
             </h3>
             <p style={{ margin: 0, fontSize: "0.78rem", color: themeTokens?.colors?.textSecondary }}>
-              Each finding is linked to an underlying mathematical calculation ID and verified data lineage.
+              Select a finding to review its calculation and source details.
             </p>
           </div>
 
@@ -286,7 +286,7 @@ export default function EvidenceExplorer({
 
         {loading ? (
           <div style={{ padding: "20px", textAlign: "center", fontSize: "0.82rem", color: themeTokens?.colors?.textSecondary }}>
-            Loading cryptographic evidence ledger…
+            Loading sources and calculations…
           </div>
         ) : error ? (
           <div style={{ padding: "14px", borderRadius: "8px", backgroundColor: "rgba(239, 68, 68, 0.1)", color: themeTokens?.colors?.statusError, fontSize: "0.80rem" }}>
@@ -363,7 +363,7 @@ export default function EvidenceExplorer({
                       <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                         <Code2 size={13} color={themeTokens?.colors?.brandBlue || "#2563eb"} />
                         <span style={{ fontSize: "0.74rem", fontWeight: 700, color: themeTokens?.colors?.textPrimary }}>
-                          Underlying Mathematical Formula & Proof
+                          Calculation details
                         </span>
                       </div>
                       <div style={{ fontSize: "0.76rem", fontFamily: "monospace", color: themeTokens?.colors?.textPrimary }}>

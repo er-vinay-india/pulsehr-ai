@@ -23,7 +23,7 @@ export default function OverviewExplorer({
   themeTokens,
   isDark = false,
 }) {
-  const sheets = catalog?.sheets || [];
+  const sheets = (catalog?.sheets || []).filter((sheet) => String(sheet.dataset_id) === String(selectedSheet?.dataset_id));
   const entities = rankingSchema?.entities || [];
   const measures = rankingSchema?.measures || [];
   const totalRows = selectedSheet?.row_count || activeDataset?.row_count || 0;
@@ -55,13 +55,13 @@ export default function OverviewExplorer({
           }}
         >
           <span style={{ fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase", color: themeTokens?.colors?.textSecondary }}>
-            Active Dataset
+            Workbook
           </span>
           <div style={{ marginTop: "4px", fontSize: "1.1rem", fontWeight: 700, color: themeTokens?.colors?.textPrimary }}>
             {activeDataset?.original_name || activeDataset?.display_name || selectedSheet?.display_name || "Active Workbook"}
           </div>
           <div style={{ fontSize: "0.76rem", color: themeTokens?.colors?.textMuted, marginTop: "2px" }}>
-            {sheets.length} reconciled sheet{sheets.length !== 1 ? "s" : ""} · {totalRows.toLocaleString()} rows
+            {sheets.length} sheet{sheets.length !== 1 ? "s" : ""} · {totalRows.toLocaleString()} rows
           </div>
         </div>
 
@@ -80,7 +80,7 @@ export default function OverviewExplorer({
             {selectedSheet?.display_name || selectedSheet?.name || "Single Sheet"}
           </div>
           <div style={{ fontSize: "0.76rem", color: themeTokens?.colors?.textMuted, marginTop: "2px" }}>
-            {colCount} schema columns · {selectedSheet?.row_count?.toLocaleString() || 0} observations
+            {colCount} columns · {selectedSheet?.row_count?.toLocaleString() || 0} rows
           </div>
         </div>
 
@@ -93,13 +93,13 @@ export default function OverviewExplorer({
           }}
         >
           <span style={{ fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase", color: themeTokens?.colors?.textSecondary }}>
-            Data Health & Quality
+            Data completeness
           </span>
           <div style={{ marginTop: "4px", fontSize: "1.1rem", fontWeight: 700, color: dataHealth?.completenessPct >= 95 ? "#10b981" : "#f59e0b" }}>
-            {dataHealth?.completenessPct != null ? `${dataHealth.completenessPct}% Complete` : "Validated (100%)"}
+            {dataHealth?.completenessPct != null ? `${dataHealth.completenessPct}% Complete` : "Not available"}
           </div>
           <div style={{ fontSize: "0.76rem", color: themeTokens?.colors?.textMuted, marginTop: "2px" }}>
-            {dataHealth?.totalNullCells || 0} missing cells audited
+            {dataHealth?.totalNullCells || 0} missing cells
           </div>
         </div>
       </section>
@@ -128,7 +128,7 @@ export default function OverviewExplorer({
             <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px" }}>
               <Database size={15} color={themeTokens?.colors?.brandBlue || "#2563eb"} />
               <h3 style={{ margin: 0, fontSize: "0.92rem", fontWeight: 700, color: themeTokens?.colors?.textPrimary }}>
-                Detected Entities ({entities.length})
+                Categories to compare ({entities.length})
               </h3>
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginTop: "6px" }}>
@@ -145,12 +145,12 @@ export default function OverviewExplorer({
                     border: `1px solid ${isDark ? "rgba(37, 99, 235, 0.3)" : "rgba(37, 99, 235, 0.2)"}`,
                   }}
                 >
-                  {e.display_name} ({e.cardinality} cohorts)
+                  {e.display_name} ({e.cardinality} groups)
                 </span>
               ))}
               {entities.length === 0 && (
                 <span style={{ fontSize: "0.78rem", color: themeTokens?.colors?.textMuted }}>
-                  Categorical entities derived from sheet columns.
+                  No comparison categories found yet.
                 </span>
               )}
             </div>
@@ -172,12 +172,12 @@ export default function OverviewExplorer({
               padding: 0,
             }}
           >
-            <span>Explore entity rankings</span>
+            <span>View rankings</span>
             <ArrowRight size={12} />
           </button>
         </div>
 
-        {/* Detected Rankable Measures */}
+        {/* Detected Numbers to explore */}
         <div
           style={{
             padding: "16px",
@@ -193,7 +193,7 @@ export default function OverviewExplorer({
             <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px" }}>
               <Award size={15} color="#d97706" />
               <h3 style={{ margin: 0, fontSize: "0.92rem", fontWeight: 700, color: themeTokens?.colors?.textPrimary }}>
-                Rankable Measures ({measures.length})
+                Numbers to explore ({measures.length})
               </h3>
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginTop: "6px" }}>
@@ -237,12 +237,12 @@ export default function OverviewExplorer({
               padding: 0,
             }}
           >
-            <span>Analyze measure distributions</span>
+            <span>View value ranges</span>
             <ArrowRight size={12} />
           </button>
         </div>
 
-        {/* Temporal Cadence & Relations */}
+        {/* Trends & connections */}
         <div
           style={{
             padding: "16px",
@@ -258,11 +258,11 @@ export default function OverviewExplorer({
             <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px" }}>
               <Calendar size={15} color="#10b981" />
               <h3 style={{ margin: 0, fontSize: "0.92rem", fontWeight: 700, color: themeTokens?.colors?.textPrimary }}>
-                Temporal Cadence & Relations
+                Trends & connections
               </h3>
             </div>
             <p style={{ margin: "4px 0", fontSize: "0.78rem", color: themeTokens?.colors?.textSecondary, lineHeight: 1.4 }}>
-              Ingestion engine detected reporting cycles across dates and cross-sheet relational joins.
+              Explore changes over time and connections between sheets.
             </p>
           </div>
           <div style={{ display: "flex", gap: "12px", marginTop: "12px" }}>
@@ -301,81 +301,14 @@ export default function OverviewExplorer({
                 padding: 0,
               }}
             >
-              <span>View relationships</span>
+              <span>View connections</span>
               <ArrowRight size={12} />
             </button>
           </div>
         </div>
       </section>
 
-      {/* 3. QUICK LINKS TO ANALYTICAL MODULES */}
-      <section
-        style={{
-          padding: "14px 16px",
-          borderRadius: "10px",
-          backgroundColor: isDark ? "rgba(255, 255, 255, 0.02)" : "rgba(0, 0, 0, 0.02)",
-          border: `1px solid ${themeTokens?.colors?.borderSubtle}`,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          flexWrap: "wrap",
-          gap: "10px",
-        }}
-      >
-        <span style={{ fontSize: "0.78rem", fontWeight: 600, color: themeTokens?.colors?.textSecondary }}>
-          Jump directly to analytical modules:
-        </span>
-        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={() => onNavigateTab("rankings")}
-            style={{ fontSize: "0.74rem", padding: "4px 10px" }}
-          >
-            Rankings
-          </button>
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={() => onNavigateTab("trends")}
-            style={{ fontSize: "0.74rem", padding: "4px 10px" }}
-          >
-            Trends
-          </button>
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={() => onNavigateTab("relationships")}
-            style={{ fontSize: "0.74rem", padding: "4px 10px" }}
-          >
-            Relationships
-          </button>
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={() => onNavigateTab("distributions")}
-            style={{ fontSize: "0.74rem", padding: "4px 10px" }}
-          >
-            Distributions
-          </button>
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={() => onNavigateTab("evidence")}
-            style={{ fontSize: "0.74rem", padding: "4px 10px" }}
-          >
-            Evidence
-          </button>
-          <button
-            type="button"
-            className="btn-secondary"
-            onClick={() => onNavigateTab("technical")}
-            style={{ fontSize: "0.74rem", padding: "4px 10px" }}
-          >
-            Technical
-          </button>
-        </div>
-      </section>
+
     </div>
   );
 }

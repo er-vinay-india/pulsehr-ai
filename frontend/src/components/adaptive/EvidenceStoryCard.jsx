@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Sparkles, ShieldCheck, Database, ChevronDown, ChevronUp, Activity, ArrowRight } from "lucide-react";
 import { SurfaceGuard } from "../guard";
 import Button from "../../design-system/components/Button";
+import { formatGovernedNumber, formatExactMeasure } from "../../utils/numericDisplayFormatter";
 
 /**
  * Causal badge styles mapped strictly into Highview's centralized theme tokens.
@@ -281,7 +282,13 @@ export default function EvidenceStoryCard({ storyPlan, evidenceGraph, snapshot, 
             >
               <div style={{ display: "flex", justifyContent: "space-between" }}>
                 <span style={{ fontWeight: 700, color: "var(--color-brand-primary)" }}>{n.evidence_id}</span>
-                <span style={{ color: "var(--color-success)", fontWeight: 600 }}>{n.formatted_value}</span>
+                <span
+                  style={{ color: "var(--color-success)", fontWeight: 600 }}
+                  title={n.value != null ? formatExactMeasure(n.value, { unit: n.unit }) : n.formatted_value}
+                  data-raw-value={n.value != null ? String(n.value) : ""}
+                >
+                  {n.value != null ? formatGovernedNumber(n.value, { unit: n.unit }) : n.formatted_value}
+                </span>
               </div>
               <div style={{ color: "var(--color-text-muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginTop: "2px" }}>
                 {n.subject}

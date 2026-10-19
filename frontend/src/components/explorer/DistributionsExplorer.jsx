@@ -131,10 +131,10 @@ export default function DistributionsExplorer({
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
           <div>
             <h2 style={{ margin: "0 0 4px 0", fontSize: "1.1rem", fontWeight: 700, color: themeTokens?.colors?.textPrimary }}>
-              Metric Distributions, Spread & Variance
+              Value ranges
             </h2>
             <p style={{ margin: 0, fontSize: "0.80rem", color: themeTokens?.colors?.textSecondary }}>
-              Parametric summary, shape symmetry, quartile boundaries, and detected population outliers.
+              See typical values, how widely they vary, and any unusual results.
             </p>
           </div>
 

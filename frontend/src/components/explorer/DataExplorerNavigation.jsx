@@ -6,18 +6,19 @@ import {
   GitMerge,
   BarChart2,
   FileText,
-  Cpu,
+  Table,
+  Info,
   ChevronDown,
 } from "lucide-react";
 
 export const EXPLORER_TABS = [
-  { id: "overview", label: "Overview", icon: LayoutDashboard, desc: "Dataset context & semantic map" },
-  { id: "rankings", label: "Rankings", icon: Award, desc: "Entity rankings & percentiles" },
-  { id: "trends", label: "Trends", icon: TrendingUp, desc: "Temporal patterns & cycles" },
-  { id: "relationships", label: "Relationships", icon: GitMerge, desc: "Cross-sheet links & correlations" },
-  { id: "distributions", label: "Distributions", icon: BarChart2, desc: "Spread, percentiles & histograms" },
-  { id: "evidence", label: "Evidence", icon: FileText, desc: "Audited findings & empirical nodes" },
-  { id: "technical", label: "Technical", icon: Cpu, desc: "Diagnostics, grain & telemetry" },
+  { id: "overview", label: "Overview", icon: LayoutDashboard, desc: "About your data" },
+  { id: "technical", label: "Data table", icon: Table, desc: "Browse and search rows" },
+  { id: "rankings", label: "Rankings", icon: Award, desc: "Compare highest and lowest values" },
+  { id: "trends", label: "Trends", icon: TrendingUp, desc: "Changes over time" },
+  { id: "relationships", label: "Connections", icon: GitMerge, desc: "How sheets and values relate" },
+  { id: "distributions", label: "Value ranges", icon: BarChart2, desc: "Typical values and unusual results" },
+  { id: "evidence", label: "Sources & calculations", icon: FileText, desc: "Check how findings were produced" },
 ];
 
 export default function DataExplorerNavigation({
@@ -32,7 +33,8 @@ export default function DataExplorerNavigation({
       aria-label="Data Explorer Subpages"
       style={{
         display: "flex",
-        flexDirection: "column",
+        flexDirection: "row",
+        alignItems: "center",
         gap: "10px",
         marginBottom: "16px",
       }}
@@ -48,9 +50,11 @@ export default function DataExplorerNavigation({
           borderBottom: `1px solid ${themeTokens?.colors?.borderSubtle || "#e2e8f0"}`,
           paddingBottom: "4px",
           overflowX: "auto",
+          flex: 1,
+          minWidth: 0,
         }}
       >
-        {EXPLORER_TABS.map((tab) => {
+        {EXPLORER_TABS.filter((tab) => tab.id !== "evidence").map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
           return (
@@ -96,7 +100,8 @@ export default function DataExplorerNavigation({
       <div
         className="explorer-mobile-tab-dropdown"
         style={{
-          width: "100%",
+          flex: 1,
+          minWidth: 0,
         }}
       >
         <div style={{ position: "relative", width: "100%" }}>
@@ -116,9 +121,9 @@ export default function DataExplorerNavigation({
               appearance: "none",
             }}
           >
-            {EXPLORER_TABS.map((tab) => (
+            {EXPLORER_TABS.filter((tab) => tab.id !== "evidence" || activeTab === "evidence").map((tab) => (
               <option key={tab.id} value={tab.id}>
-                {tab.label} — {tab.desc}
+                {tab.label}
               </option>
             ))}
           </select>
@@ -135,6 +140,20 @@ export default function DataExplorerNavigation({
           </div>
         </div>
       </div>
+      <button
+        type="button"
+        id="explorer-tab-evidence"
+        className="btn-secondary"
+        aria-label="Details: sources and calculations"
+        aria-pressed={activeTab === "evidence"}
+        aria-controls="explorer-panel-evidence"
+        title="Check sources and calculations behind the findings"
+        onClick={() => onSelectTab("evidence")}
+        style={{ display: "inline-flex", alignItems: "center", gap: "6px", flexShrink: 0 }}
+      >
+        <Info size={14} />
+        <span>Details</span>
+      </button>
     </nav>
   );
 }

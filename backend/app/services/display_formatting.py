@@ -335,7 +335,15 @@ def format_exact_measure(
     combined = f"{metric_id} {label} {column_name}".strip().lower()
     tokens = set(re.split(r"[_\s\-]+", combined)) if combined else set()
 
-    if "." in str_val:
+    if (isinstance(num, float) and num.is_integer()) or isinstance(num, int):
+        int_num = int(abs_num)
+        is_year_or_postal = (
+            measure_class in ("YEAR", "POSTAL_CODE")
+            or str(unit).lower().strip() in ("year", "yr")
+            or (1800 <= abs_num <= 2200 and tokens.intersection(YEAR_TOKENS))
+        )
+        formatted_num = str(int_num) if is_year_or_postal else f"{int_num:,}"
+    elif "." in str_val:
         int_part, dec_part = str_val.split(".", 1)
         int_num = int(int_part)
         formatted_num = f"{int_num:,}.{dec_part}"

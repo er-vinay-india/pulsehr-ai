@@ -10,6 +10,7 @@ import SectionHeader from "./SectionHeader";
 import ScenarioSummaryCard from "./ScenarioSummaryCard";
 import HighviewSidePanel from "../../design-system/components/HighviewSidePanel";
 import Button from "../../design-system/components/Button";
+import { formatGovernedNumber, formatExactMeasure, parseGovernedNumber } from "../../utils/numericDisplayFormatter";
 
 /**
  * Partition executive visual topics into logical decision tiers:
@@ -376,17 +377,56 @@ export default function UnifiedExecutiveInsightsGrid({
               >
                 Audited Value
               </span>
-              <div
-                style={{
-                  fontSize: "2rem",
-                  fontWeight: 800,
-                  color: "var(--color-brand-primary, #183B56)",
-                  lineHeight: 1.2,
-                  marginTop: "2px",
-                }}
-              >
-                {activeKpiEvidence.formatted_value || `${activeKpiEvidence.value}${activeKpiEvidence.unit || ""}`}
-              </div>
+              {(() => {
+                const rawVal = activeKpiEvidence.value;
+                const hasRaw = rawVal != null && rawVal !== "" && parseGovernedNumber(rawVal) !== null;
+                const semanticOpts = {
+                  unit: activeKpiEvidence.unit,
+                  metric_id: activeKpiEvidence.kpi_id,
+                  label: activeKpiEvidence.label,
+                  measure_class: activeKpiEvidence.measure_class,
+                  currency: activeKpiEvidence.currency,
+                };
+                const displayVal = hasRaw
+                  ? formatGovernedNumber(rawVal, semanticOpts)
+                  : (activeKpiEvidence.formatted_value || "—");
+                const exactVal = hasRaw
+                  ? formatExactMeasure(rawVal, semanticOpts)
+                  : (activeKpiEvidence.exact_value_text || activeKpiEvidence.formatted_value || displayVal);
+
+                return (
+                  <div>
+                    <div
+                      className="quick-inspect-display-value"
+                      style={{
+                        fontSize: "2rem",
+                        fontWeight: 800,
+                        color: "var(--color-brand-primary, #183B56)",
+                        lineHeight: 1.2,
+                        marginTop: "2px",
+                      }}
+                    >
+                      {displayVal}
+                    </div>
+                    {hasRaw && exactVal !== displayVal && (
+                      <div
+                        className="quick-inspect-exact-value"
+                        style={{
+                          fontSize: "0.90rem",
+                          fontWeight: 600,
+                          color: "var(--color-text-secondary, #334B57)",
+                          marginTop: "4px",
+                        }}
+                      >
+                        <span style={{ fontSize: "0.72rem", textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--color-text-muted, #3C5059)", marginRight: "6px" }}>
+                          Exact Value:
+                        </span>
+                        {exactVal}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
               {activeKpiEvidence.subtext && (
                 <p
                   style={{

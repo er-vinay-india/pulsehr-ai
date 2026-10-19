@@ -390,9 +390,10 @@ export default function GenericRankingExplorer({
                     </td>
                     <td
                       style={{ padding: "4px 8px", textAlign: "right", fontWeight: 700 }}
-                      title={formatExactMeasure(r.value, { unit })}
+                      title={formatExactMeasure(r.value, { unit, metric_id: r.metric_id, label: r.label })}
+                      data-raw-value={r.value != null ? String(r.value) : ""}
                     >
-                      {r.formatted_value || formatGovernedNumber(r.value, { unit })}
+                      {(r.value != null && r.value !== "") ? formatGovernedNumber(r.value, { unit, metric_id: r.metric_id, label: r.label }) : (r.formatted_value || "—")}
                     </td>
                     <td style={{ padding: "4px 8px", textAlign: "right", color: themeTokens?.colors?.textMuted }}>{r.percentile_label}</td>
                     <td style={{ padding: "4px 8px", textAlign: "right", color: r.delta_benchmark >= 0 ? (themeTokens?.colors?.statusSuccess || "var(--color-success)") : (themeTokens?.colors?.statusError || "var(--color-danger)") }}>

@@ -35,6 +35,7 @@ from .policy_engine import (
     PolicyCalendarRule,
     PolicyComplianceResult,
 )
+from ..display_formatting import format_governed_number, format_exact_measure
 
 logger = logging.getLogger(__name__)
 
@@ -168,7 +169,10 @@ class WorkforceExecutiveAnalytics(IExecutiveAnalyticsStrategy):
                 "kpi_id": "KPI-001",
                 "label": "Office Presence Rate",
                 "value": presence_rate,
+                "unit": "%",
+                "measure_class": "PERCENTAGE",
                 "formatted_value": f"{presence_rate:.1f}%",
+                "exact_value_text": f"{presence_rate:.1f}%",
                 "subtext": f"{total_attendance_sum:.0f} actual days / {total_working_days:.0f} available days",
                 "definition": "Ratio of total recorded qualifying office days to corporate scheduled workdays across all staff.",
                 "population": f"{total_employees} employees",
@@ -181,7 +185,10 @@ class WorkforceExecutiveAnalytics(IExecutiveAnalyticsStrategy):
                 "kpi_id": "KPI-002",
                 "label": "Policy Compliance",
                 "value": compliance_rate,
+                "unit": "%",
+                "measure_class": "PERCENTAGE",
                 "formatted_value": f"{compliance_rate:.1f}%",
+                "exact_value_text": f"{compliance_rate:.1f}%",
                 "subtext": f"{compliant_employees} of {total_employees} met {benchmark:.0f}d mandate (3d/wk)",
                 "definition": f"Proportion of workforce meeting the minimum {policy_engine.target_days_per_week:g}-day/week in-office attendance threshold (accounting for approved leave).",
                 "policy_rule": f"Target of {policy_engine.target_days_per_week:g} days/week in-office attendance threshold.",
@@ -195,7 +202,10 @@ class WorkforceExecutiveAnalytics(IExecutiveAnalyticsStrategy):
                 "kpi_id": "KPI-003",
                 "label": "Approved Leave Rate",
                 "value": leave_rate,
+                "unit": "%",
+                "measure_class": "PERCENTAGE",
                 "formatted_value": f"{leave_rate:.1f}%",
+                "exact_value_text": f"{leave_rate:.1f}%",
                 "subtext": f"{total_leave_sum:.0f} leave days across {total_employees} staff",
                 "definition": "Approved leave days expressed as a proportion of combined present and excused absence days.",
                 "population": f"{total_employees} employees",
@@ -208,7 +218,9 @@ class WorkforceExecutiveAnalytics(IExecutiveAnalyticsStrategy):
                 "kpi_id": "KPI-004",
                 "label": "Department Attendance Gap",
                 "value": gap,
+                "unit": "days",
                 "formatted_value": f"{gap:.1f} days",
+                "exact_value_text": f"{gap:.1f} days",
                 "subtext": f"{top_dept} ({top_avg:.1f}) vs {bottom_dept} ({bottom_avg:.1f})",
                 "definition": "Spread between highest and lowest performing organizational departments in average days attended.",
                 "population": f"{len(dept_averages)} departments ({total_employees} employees)",
@@ -287,14 +299,14 @@ class RetailSalesExecutiveAnalytics(IExecutiveAnalyticsStrategy):
         holiday_col = None
 
         for k in sample_keys:
-            kl = k.lower()
-            if kl in ("store", "store_id", "store_number", "location"):
+            kl = k.lower().strip()
+            if kl in ("store", "store_id", "store id", "store_number", "store_code", "location"):
                 store_col = k
                 break
 
         for k in sample_keys:
-            kl = k.lower()
-            if kl in ("weekly_sales", "sales", "revenue", "weeklysales", "total_sales"):
+            kl = k.lower().strip()
+            if kl in ("weekly_sales", "sales", "revenue", "weeklysales", "total_sales", "gross sales", "gross_sales", "sales_volume"):
                 sales_col = k
                 break
 
@@ -353,9 +365,10 @@ class RetailSalesExecutiveAnalytics(IExecutiveAnalyticsStrategy):
         bottom_sales = sorted_stores[0][1] if sorted_stores else 250000.0
 
         overall_avg = round(total_sales_sum / len(rows), 2) if rows else 1000000.0
+        spread_raw = round(top_sales - bottom_sales, 2)
         spread_k = round((top_sales - bottom_sales) / 1000.0, 1)
-        total_m = round(total_sales_sum / 1_000_000.0, 2)
-        avg_k = round(overall_avg / 1000.0, 1)
+        total_sales_raw = round(total_sales_sum, 2)
+        avg_sales_raw = round(overall_avg, 2)
 
         # Holiday lift calculation
         avg_holiday = (sum(holiday_sales) / len(holiday_sales)) if holiday_sales else overall_avg
@@ -367,8 +380,12 @@ class RetailSalesExecutiveAnalytics(IExecutiveAnalyticsStrategy):
             {
                 "kpi_id": "KPI-SALES-001",
                 "label": "Total Sales Volume",
-                "value": total_m,
-                "formatted_value": f"${total_m:,.2f}M",
+                "value": total_sales_raw,
+                "unit": "USD",
+                "currency": "USD",
+                "measure_class": "FINANCIAL",
+                "formatted_value": format_governed_number(total_sales_raw, unit="USD"),
+                "exact_value_text": format_exact_measure(total_sales_raw, unit="USD"),
                 "subtext": f"Across {len(store_averages)} stores and {len(rows):,} reporting periods",
                 "definition": "Total commercial sales revenue aggregated across all reporting store locations and fiscal periods.",
                 "population": f"{len(store_averages)} retail stores ({len(rows):,} observations)",
@@ -380,8 +397,12 @@ class RetailSalesExecutiveAnalytics(IExecutiveAnalyticsStrategy):
             {
                 "kpi_id": "KPI-SALES-002",
                 "label": "Average Weekly Sales",
-                "value": avg_k,
-                "formatted_value": f"${avg_k:,.1f}K",
+                "value": avg_sales_raw,
+                "unit": "USD",
+                "currency": "USD",
+                "measure_class": "FINANCIAL",
+                "formatted_value": format_governed_number(avg_sales_raw, unit="USD"),
+                "exact_value_text": format_exact_measure(avg_sales_raw, unit="USD"),
                 "subtext": f"Store-level weekly baseline mean",
                 "definition": "Mean weekly store revenue across all retail locations and operating periods.",
                 "population": f"{len(store_averages)} retail stores",
@@ -393,9 +414,13 @@ class RetailSalesExecutiveAnalytics(IExecutiveAnalyticsStrategy):
             {
                 "kpi_id": "KPI-SALES-003",
                 "label": "Store Performance Spread",
-                "value": spread_k,
-                "formatted_value": f"${spread_k:,.1f}K",
-                "subtext": f"{top_store} (${top_sales/1000:.0f}K) vs {bottom_store} (${bottom_sales/1000:.0f}K)",
+                "value": spread_raw,
+                "unit": "USD",
+                "currency": "USD",
+                "measure_class": "FINANCIAL",
+                "formatted_value": format_governed_number(spread_raw, unit="USD"),
+                "exact_value_text": format_exact_measure(spread_raw, unit="USD"),
+                "subtext": f"{top_store} ({format_governed_number(top_sales, unit='USD')}) vs {bottom_store} ({format_governed_number(bottom_sales, unit='USD')})",
                 "definition": "Difference in mean weekly sales between highest-performing and lowest-performing store locations.",
                 "population": f"{len(store_averages)} retail stores",
                 "period": "Weekly average spread",
@@ -407,7 +432,10 @@ class RetailSalesExecutiveAnalytics(IExecutiveAnalyticsStrategy):
                 "kpi_id": "KPI-SALES-004",
                 "label": "Holiday Sales Lift",
                 "value": holiday_lift_pct,
+                "unit": "%",
+                "measure_class": "PERCENTAGE",
                 "formatted_value": f"+{holiday_lift_pct:.1f}%",
+                "exact_value_text": f"+{holiday_lift_pct:.1f}%",
                 "subtext": "Commercial lift during certified holiday weeks",
                 "definition": "Percentage increase in average weekly sales during certified holiday periods compared to standard weeks.",
                 "population": f"{len(holiday_sales)} holiday store-weeks vs {len(regular_sales)} regular store-weeks",
@@ -480,7 +508,7 @@ class GenericBusinessExecutiveAnalytics(IExecutiveAnalyticsStrategy):
     ) -> dict[str, Any]:
         # Identify first numeric and categorical columns, skipping ordinals and IDs
         cat_col = None
-        num_col = None
+        num_cols = []
 
         sample_keys = list(rows[0].keys()) if rows else []
         for k in sample_keys:
@@ -497,13 +525,12 @@ class GenericBusinessExecutiveAnalytics(IExecutiveAnalyticsStrategy):
                 v = rows[0][k]
                 if v is not None and str(v).strip() not in ("", "-", "NM", "null"):
                     float(v)
-                    if not num_col:
-                        num_col = k
+                    num_cols.append(k)
             except (ValueError, TypeError):
                 if not cat_col:
                     cat_col = k
 
-        num_col = num_col or (sample_keys[1] if len(sample_keys) > 1 else "value")
+        num_col = num_cols[0] if num_cols else (sample_keys[1] if len(sample_keys) > 1 else "value")
         cat_col = cat_col or (sample_keys[0] if sample_keys else "category")
 
         cat_vals: dict[str, list[float]] = collections.defaultdict(list)
@@ -531,34 +558,69 @@ class GenericBusinessExecutiveAnalytics(IExecutiveAnalyticsStrategy):
         values = [c[1] for c in sorted_cats]
         avg_val = round(total_val / len(rows), 2) if rows else 100.0
 
-        executive_kpis = [
-            {
-                "kpi_id": "KPI-GEN-001",
-                "label": f"Total {num_col.title()}",
-                "value": round(total_val, 1),
-                "formatted_value": f"{total_val:,.1f}",
-                "subtext": f"Aggregated across {len(rows)} records",
-                "definition": f"Aggregate cumulative sum of {num_col} across all records in dataset partition.",
-                "population": f"{len(rows)} data records",
-                "period": "Current snapshot period",
-                "calculation": f"sum({num_col})",
-                "status": "normal",
-                "evidence_id": f"EVID-KPI-TOTAL-{dataset_id}",
-            },
-            {
-                "kpi_id": "KPI-GEN-002",
-                "label": f"Average {num_col.title()}",
-                "value": avg_val,
-                "formatted_value": f"{avg_val:,.1f}",
-                "subtext": f"Mean value per record",
-                "definition": f"Arithmetic mean of {num_col} computed across all partition records.",
-                "population": f"{len(rows)} data records",
-                "period": "Current snapshot period",
-                "calculation": f"avg({num_col})",
-                "status": "info",
-                "evidence_id": f"EVID-KPI-AVG-{dataset_id}",
-            },
-        ]
+        if len(num_cols) > 1:
+            executive_kpis = []
+            for idx, nc in enumerate(num_cols[:4]):
+                col_sum = 0.0
+                for r in rows:
+                    try:
+                        raw_v = r.get(nc)
+                        if raw_v is not None and str(raw_v).strip() not in ("", "-", "NM", "null"):
+                            col_sum += float(raw_v)
+                    except (ValueError, TypeError):
+                        pass
+                col_sum = round(col_sum, 2)
+                nc_low = nc.lower()
+                unit = "USD" if any(w in nc_low for w in ("sales", "revenue", "valuation", "cost", "price", "amount", "spend", "budget", "$")) else ""
+                measure_class = "FINANCIAL" if unit == "USD" else ("QUANTITY" if any(w in nc_low for w in ("count", "transactions", "users", "units")) else None)
+                executive_kpis.append({
+                    "kpi_id": f"KPI-GEN-{idx+1:03d}",
+                    "label": f"Total {nc.title()}",
+                    "value": col_sum,
+                    "unit": unit,
+                    "currency": unit if unit == "USD" else None,
+                    "measure_class": measure_class,
+                    "formatted_value": format_governed_number(col_sum, unit=unit, measure_class=measure_class),
+                    "exact_value_text": format_exact_measure(col_sum, unit=unit),
+                    "subtext": f"Aggregated across {len(rows)} records",
+                    "definition": f"Aggregate cumulative sum of {nc} across all records in dataset partition.",
+                    "population": f"{len(rows)} data records",
+                    "period": "Current snapshot period",
+                    "calculation": f"sum({nc})",
+                    "status": "normal",
+                    "evidence_id": f"EVID-KPI-{idx+1:03d}-{dataset_id}",
+                })
+        else:
+            executive_kpis = [
+                {
+                    "kpi_id": "KPI-GEN-001",
+                    "label": f"Total {num_col.title()}",
+                    "value": round(total_val, 2),
+                    "formatted_value": format_governed_number(total_val),
+                    "exact_value_text": format_exact_measure(total_val),
+                    "subtext": f"Aggregated across {len(rows)} records",
+                    "definition": f"Aggregate cumulative sum of {num_col} across all records in dataset partition.",
+                    "population": f"{len(rows)} data records",
+                    "period": "Current snapshot period",
+                    "calculation": f"sum({num_col})",
+                    "status": "normal",
+                    "evidence_id": f"EVID-KPI-TOTAL-{dataset_id}",
+                },
+                {
+                    "kpi_id": "KPI-GEN-002",
+                    "label": f"Average {num_col.title()}",
+                    "value": avg_val,
+                    "formatted_value": format_governed_number(avg_val),
+                    "exact_value_text": format_exact_measure(avg_val),
+                    "subtext": f"Mean value per record",
+                    "definition": f"Arithmetic mean of {num_col} computed across all partition records.",
+                    "population": f"{len(rows)} data records",
+                    "period": "Current snapshot period",
+                    "calculation": f"avg({num_col})",
+                    "status": "info",
+                    "evidence_id": f"EVID-KPI-AVG-{dataset_id}",
+                },
+            ]
 
         return {
             "domain_profile": profile.model_dump(),
@@ -645,7 +707,9 @@ class EnvironmentalExecutiveAnalytics(IExecutiveAnalyticsStrategy):
                 "kpi_id": "KPI-ENV-PM10",
                 "label": "Average PM10 Level",
                 "value": pm10_avg,
+                "unit": "µg/m³",
                 "formatted_value": f"{pm10_avg:.1f} µg/m³",
+                "exact_value_text": f"{pm10_avg:.1f} µg/m³",
                 "subtext": f"NAAQS Standard: 60 µg/m³ ({'Exceeds Standard' if pm10_avg > 60 else 'Compliant'})",
                 "definition": "Annual arithmetic mean concentration of PM10 particulate matter across monitored stations.",
                 "population": f"{pm10_count} monitored locations",
@@ -661,7 +725,9 @@ class EnvironmentalExecutiveAnalytics(IExecutiveAnalyticsStrategy):
                 "kpi_id": "KPI-ENV-PM25",
                 "label": "Average PM2.5 Level",
                 "value": pm25_avg,
+                "unit": "µg/m³",
                 "formatted_value": f"{pm25_avg:.1f} µg/m³",
+                "exact_value_text": f"{pm25_avg:.1f} µg/m³",
                 "subtext": f"NAAQS Standard: 40 µg/m³ ({'Exceeds Standard' if pm25_avg > 40 else 'Compliant'})",
                 "definition": "Annual arithmetic mean concentration of fine PM2.5 particulate matter.",
                 "population": f"{pm25_count} monitored locations",
@@ -677,7 +743,9 @@ class EnvironmentalExecutiveAnalytics(IExecutiveAnalyticsStrategy):
                 "kpi_id": "KPI-ENV-NO2",
                 "label": "Average NO2 Level",
                 "value": no2_avg,
+                "unit": "µg/m³",
                 "formatted_value": f"{no2_avg:.1f} µg/m³",
+                "exact_value_text": f"{no2_avg:.1f} µg/m³",
                 "subtext": f"NAAQS Standard: 40 µg/m³ ({'Exceeds Standard' if no2_avg > 40 else 'Compliant'})",
                 "definition": "Annual arithmetic mean of Nitrogen Dioxide (NO2) across stations.",
                 "population": f"{no2_count} monitored locations",
@@ -693,7 +761,9 @@ class EnvironmentalExecutiveAnalytics(IExecutiveAnalyticsStrategy):
                 "kpi_id": "KPI-ENV-SO2",
                 "label": "Average SO2 Level",
                 "value": so2_avg,
+                "unit": "µg/m³",
                 "formatted_value": f"{so2_avg:.1f} µg/m³",
+                "exact_value_text": f"{so2_avg:.1f} µg/m³",
                 "subtext": f"NAAQS Standard: 50 µg/m³ ({'Exceeds Standard' if so2_avg > 50 else 'Compliant'})",
                 "definition": "Annual arithmetic mean of Sulphur Dioxide (SO2) across stations.",
                 "population": f"{so2_count} monitored locations",
@@ -708,6 +778,7 @@ class EnvironmentalExecutiveAnalytics(IExecutiveAnalyticsStrategy):
             "label": "Monitored Coverage",
             "value": len(rows),
             "formatted_value": f"{len(rows)} Locations",
+            "exact_value_text": f"{len(rows):,} Locations",
             "subtext": f"{unique_cities} Cities across {unique_states} States/UTs",
             "definition": "Total validated geographic locations with ambient air quality monitoring data.",
             "population": f"{len(rows)} verified stations",

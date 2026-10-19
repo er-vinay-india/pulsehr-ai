@@ -47,10 +47,10 @@ export default function RankingsExplorer({
       >
         <div style={{ marginBottom: "12px" }}>
           <h2 style={{ margin: "0 0 4px 0", fontSize: "1.1rem", fontWeight: 700, color: themeTokens?.colors?.textPrimary }}>
-            Entity Rankings & Benchmark Intelligence
+            Rankings
           </h2>
           <p style={{ margin: 0, fontSize: "0.80rem", color: themeTokens?.colors?.textSecondary }}>
-            Server-side group-by aggregation across entities. Toggle Top/Bottom/Both, expand from 5 to 500/Full, and search the complete population without UI clutter.
+            Compare groups, find the highest and lowest values, or search the full list.
           </p>
         </div>
 

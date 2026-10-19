@@ -367,11 +367,7 @@ export function formatExactMeasure(value, options = {}) {
   const strVal = String(absNum).trim();
 
   let formattedNumber = '';
-  if (strVal.includes('.')) {
-    const [intPart, decPart] = strVal.split('.');
-    const intNum = Number(intPart);
-    formattedNumber = Number.isFinite(intNum) ? `${intNum.toLocaleString('en-US')}.${decPart}` : strVal;
-  } else {
+  if (absNum % 1 === 0) {
     const combined = `${opts.metric_id || ''} ${opts.label || ''} ${opts.column_name || ''}`.trim().toLowerCase();
     const tokens = new Set(combined ? combined.split(/[\s_\-]+/) : []);
     let isYearToken = false;
@@ -386,7 +382,13 @@ export function formatExactMeasure(value, options = {}) {
       String(unit).toLowerCase().trim() === 'yr' ||
       (absNum >= 1800 && absNum <= 2200 && isYearToken)
     );
-    formattedNumber = isYearOrPostal ? strVal : absNum.toLocaleString('en-US');
+    formattedNumber = isYearOrPostal ? String(absNum) : absNum.toLocaleString('en-US');
+  } else if (strVal.includes('.')) {
+    const [intPart, decPart] = strVal.split('.');
+    const intNum = Number(intPart);
+    formattedNumber = Number.isFinite(intNum) ? `${intNum.toLocaleString('en-US')}.${decPart}` : strVal;
+  } else {
+    formattedNumber = absNum.toLocaleString('en-US');
   }
 
   const currencyInfo = resolveCurrencyFormat(unit, opts);

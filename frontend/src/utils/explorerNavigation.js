@@ -94,7 +94,7 @@ export function getContextualExplorerTarget(topic, datasetId = null) {
   if (intent === "RELATIONSHIP" || topic.is_cross_sheet || topic.relationship_id) {
     return {
       tab: "relationships",
-      label: topic.is_cross_sheet ? "Explore cross-source relationships" : "Explore relationship",
+      label: topic.is_cross_sheet ? "Explore connections between sheets" : "Explore relationship",
       url: buildExplorerUrl({
         datasetId,
         tab: "relationships",
@@ -109,7 +109,7 @@ export function getContextualExplorerTarget(topic, datasetId = null) {
   if (intent === "ANOMALY" || spec.chart_type === "variance_bar") {
     return {
       tab: "distributions",
-      label: "Explore distribution & anomalies",
+      label: "Explore value ranges",
       url: buildExplorerUrl({ datasetId, tab: "distributions", entity, measure, topicId, evidenceId }),
     };
   }
@@ -126,7 +126,7 @@ export function getContextualExplorerTarget(topic, datasetId = null) {
   // 6. Fallback -> Data Explorer / Evidence
   return {
     tab: "evidence",
-    label: "Explore evidence ledger",
+    label: "View sources & calculations",
     url: buildExplorerUrl({ datasetId, tab: "evidence", topicId, evidenceId }),
   };
 }

@@ -77,6 +77,7 @@ export default function DataExplorerPage() {
     }
     // Backward compatibility for view=eda or view=table
     const v = getCombinedUrlParam('view');
+    if (v === 'table') return 'technical';
     if (v === 'eda') return 'overview';
     return 'overview';
   });
@@ -379,7 +380,7 @@ export default function DataExplorerPage() {
           <div className="page-title-group">
             <h1 className="page-heading">Data Explorer</h1>
             <p className="page-description">
-              Modular analytical inspection across entity rankings, temporal trends, relationships, distributions, evidence, and technical diagnostics.
+              Browse your data, compare results, and explore patterns.
             </p>
           </div>
         </div>
@@ -391,7 +392,7 @@ export default function DataExplorerPage() {
             <div className="explorer-toolbar-left" style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', flexWrap: 'wrap', flex: 1, minWidth: 0 }}>
               <Select
                 value={selected}
-                disabled={!!selectedDerivedId}
+                disabled={activeTab === 'technical' && !!selectedDerivedId}
                 aria-label="Select spreadsheet sheet"
                 placeholder="Select a sheet..."
                 icon={<FileSpreadsheet size={16} color="var(--brand-400)" />}
@@ -415,14 +416,14 @@ export default function DataExplorerPage() {
                 }}
               />
 
-              {derivedTables.length > 0 && (
+              {activeTab === 'technical' && derivedTables.length > 0 && (
                 <Select
                   value={selectedDerivedId}
-                  aria-label="Select derived table or relational join"
-                  placeholder="Single Sheet"
+                  aria-label="Select sheet or combined table"
+                  placeholder="Selected sheet"
                   icon={<GitMerge size={14} color="#ffb089" />}
                   options={[
-                    { value: "", label: "Single Sheet" },
+                    { value: "", label: "Selected sheet" },
                     ...derivedTables.map((dt) => {
                       const isRollup = dt.join_keys?.type === 'scientific_enrichment_rollup';
                       return {
@@ -461,10 +462,10 @@ export default function DataExplorerPage() {
                     fontWeight: 600,
                     cursor: 'pointer'
                   }}
-                  title="Toggle discovery inspection: semantic groups, discovered formulas, derived features, and analytical tables"
+                  title="Review added columns and how they were calculated"
                 >
                   <Sparkles size={14} />
-                  <span>+{derivedFeatCount} Scientific Features</span>
+                  <span>+{derivedFeatCount} added columns</span>
                   {showEnrichmentReview ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                 </button>
               )}
@@ -672,7 +673,7 @@ export default function DataExplorerPage() {
             isDark={isDark}
           />
 
-          {selectedDerivedId && activeDerivedTable && (
+          {activeTab === 'technical' && selectedDerivedId && activeDerivedTable && (
             <div
               style={{
                 background: activeDerivedTable.join_keys?.type === 'scientific_enrichment_rollup'
@@ -693,13 +694,13 @@ export default function DataExplorerPage() {
               }}
             >
               <span>
-                <strong>Derived View Active:</strong> {activeDerivedTable.display_name} ({activeDerivedTable.row_count} rows)
+                <strong>Combined table:</strong> {activeDerivedTable.display_name} ({activeDerivedTable.row_count} rows)
               </span>
             </div>
           )}
 
           {/* SUBPAGE VIEW ROUTING */}
-          <div className="explorer-subpage-content" id={`explorer-panel-${activeTab}`} role="tabpanel">
+          <div className="explorer-subpage-content" id={`explorer-panel-${activeTab}`} role="tabpanel" aria-labelledby={`explorer-tab-${activeTab}`}>
             {activeTab === 'overview' && (
               <OverviewExplorer
                 activeDataset={activeDataset}
@@ -778,7 +779,8 @@ export default function DataExplorerPage() {
                 datasetId={activeDataset?.id || selectedSheet?.dataset_id}
                 edaReport={edaReport}
                 dataVersion={dataVersion}
-                onDataVersionChange={setDataVersion}
+                onDataVersionChange={(version) => { setDataVersion(version); setPage(1); }}
+                supportsVersions={!selectedDerivedId && !relation}
                 data={data}
                 columns={columns}
                 rows={rows}
@@ -789,10 +791,10 @@ export default function DataExplorerPage() {
                 onSearchChange={setSearch}
                 sourceLabel={
                   selectedDerivedId
-                    ? activeDerivedTable?.display_name || 'derived_view'
+                    ? activeDerivedTable?.display_name || 'Combined table'
                     : relation
-                    ? 'relational_join'
-                    : `${selectedSheet?.display_name || selectedSheet?.original_name || 'table'} [${dataVersion.toUpperCase()}]`
+                    ? 'Linked sheets'
+                    : `${selectedSheet?.display_name || selectedSheet?.original_name || 'Sheet'} · ${data?.version === 'raw' ? 'Original values' : 'Prepared data'}`
                 }
                 themeTokens={themeTokens}
                 isDark={isDark}

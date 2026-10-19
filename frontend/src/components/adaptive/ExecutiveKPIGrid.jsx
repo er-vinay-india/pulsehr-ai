@@ -1,6 +1,6 @@
 import React from "react";
 import ActionIconButton from "../../design-system/components/ActionIconButton";
-import { formatGovernedNumber, formatExactMeasure } from "../../utils/numericDisplayFormatter";
+import { formatGovernedNumber, formatExactMeasure, parseGovernedNumber } from "../../utils/numericDisplayFormatter";
 
 /**
  * Governed Executive KPI Grid using semantic definition-list `<dl>`, `<dt>`, `<dd>` markup.
@@ -98,37 +98,32 @@ export default function ExecutiveKPIGrid({
             }}
           >
             {(() => {
-              const displayVal = kpi.formatted_value || (
-                (kpi.value != null && kpi.value !== "")
-                  ? formatGovernedNumber(kpi.value, {
-                      unit: kpi.unit,
-                      metric_id: kpi.kpi_id,
-                      label: kpi.label,
-                      measure_class: kpi.measure_class,
-                      currency: kpi.currency,
-                      unavailable_label: "—",
-                    })
-                  : "—"
-              );
+              const rawVal = kpi.value;
+              const hasRawNum = rawVal != null && rawVal !== "" && parseGovernedNumber(rawVal) !== null;
+              const semanticOpts = {
+                unit: kpi.unit,
+                metric_id: kpi.kpi_id,
+                label: kpi.label,
+                measure_class: kpi.measure_class,
+                currency: kpi.currency,
+                unavailable_label: "—",
+              };
 
-              const exactVal = kpi.exact_value_text || (
-                (kpi.value != null && kpi.value !== "")
-                  ? formatExactMeasure(kpi.value, {
-                      unit: kpi.unit,
-                      metric_id: kpi.kpi_id,
-                      label: kpi.label,
-                      measure_class: kpi.measure_class,
-                      currency: kpi.currency,
-                      unavailable_label: displayVal,
-                    })
-                  : displayVal
-              );
+              // Authoritative display formatting derived dynamically at render time from raw governed value.
+              // Stale/legacy cached formatted_value is strictly fallback when raw numeric value is genuinely absent.
+              const displayVal = hasRawNum
+                ? formatGovernedNumber(rawVal, semanticOpts)
+                : (kpi.formatted_value && kpi.formatted_value !== "Unavailable" ? kpi.formatted_value : "—");
+
+              const exactVal = hasRawNum
+                ? formatExactMeasure(rawVal, semanticOpts)
+                : (kpi.exact_value_text || kpi.formatted_value || displayVal);
 
               return (
                 <dd
                   className="kpi-value"
                   title={exactVal}
-                  data-raw-value={kpi.value != null ? String(kpi.value) : ""}
+                  data-raw-value={rawVal != null ? String(rawVal) : ""}
                   style={{
                     fontSize: "1.45rem",
                     fontWeight: 800,
