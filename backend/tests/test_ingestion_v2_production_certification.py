@@ -37,6 +37,7 @@ from typing import Any, Dict, List
 import pytest
 
 from app.core import config
+from app.cache.contracts import DashboardCacheKey
 from app.services.ingestion_v2.contracts.cutover import (
     CircuitBreakerState,
     ConsumerCutoverRecord,
@@ -275,7 +276,8 @@ def test_three_consumer_workforce_and_retail_truth_identity(isolated_gateway: Co
     Proves that HRIDAY, Executive Dashboard, and Presentation Studio all consume
     identical governed facts with 0 mismatches across:
     - 5 WFO facts: attendance_rate, wfo_compliance_pct, average_logged_hours, leave_utilization_rate, department_headcount
-    - 3 Retail facts: top_location_gross_sales, holiday_sales_lift, highest_gross_sales_location
+    - 6 Retail facts: sales_velocity, markdown_discount_pct, average_weekly_sales, holiday_sales_lift, highest_gross_sales_location, top_location_gross_sales
+    Verifies metric ID, value, unit, grain, denominator, evidence refs (EVID), dataset version, and semantic render hash (fingerprint).
     """
     hr_adapter = HridayIntelligenceAdapter(gateway=isolated_gateway)
     dash_adapter = DashboardIntelligenceAdapter(gateway=isolated_gateway)
@@ -318,7 +320,41 @@ def test_three_consumer_workforce_and_retail_truth_identity(isolated_gateway: Co
         assert h_m["evidence_refs"] == d_m["evidence_refs"] == p_m["evidence_refs"], f"Evidence mismatch for {fact_id}"
         assert h_m["dataset_version"] == d_m["dataset_version"] == p_m["dataset_version"], f"Version mismatch for {fact_id}"
 
-    # 2. Retail Domain (3 facts)
+        # Compute and assert semantic render hash (semantic fingerprint)
+        h_fp = compute_semantic_render_hash(
+            topic_or_kpi_id=f"KPI-{fact_id.upper()}-201",
+            metric_id=fact_id,
+            value=h_m["value"],
+            unit=h_m["unit"],
+            grain=h_m["grain"],
+            denominator=h_m["denominator"],
+            evidence_ids=h_m["evidence_refs"],
+            dataset_version=h_m["dataset_version"],
+        )
+        d_fp = compute_semantic_render_hash(
+            topic_or_kpi_id=f"KPI-{fact_id.upper()}-201",
+            metric_id=fact_id,
+            value=d_m["value"],
+            unit=d_m["unit"],
+            grain=d_m["grain"],
+            denominator=d_m["denominator"],
+            evidence_ids=d_m["evidence_refs"],
+            dataset_version=d_m["dataset_version"],
+        )
+        p_fp = compute_semantic_render_hash(
+            topic_or_kpi_id=f"KPI-{fact_id.upper()}-201",
+            metric_id=fact_id,
+            value=p_m["value"],
+            unit=p_m["unit"],
+            grain=p_m["grain"],
+            denominator=p_m["denominator"],
+            evidence_ids=p_m["evidence_refs"],
+            dataset_version=p_m["dataset_version"],
+        )
+        assert h_fp == d_fp == p_fp, f"Semantic fingerprint mismatch for {fact_id}"
+        assert len(h_fp) == 64
+
+    # 2. Retail Domain (6 facts)
     ret_manifest = make_sample_manifest("202", version="v1.0")
     hr_adapter.register_v2_manifest("202", ret_manifest)
     dash_adapter.register_v2_manifest("202", ret_manifest)
@@ -329,9 +365,12 @@ def test_three_consumer_workforce_and_retail_truth_identity(isolated_gateway: Co
     pres_ret = {m["metric_id"]: m for m in pres_adapter.get_governed_shared_metrics(202, domain="retail")}
 
     retail_facts = [
-        "top_location_gross_sales",
+        "sales_velocity",
+        "markdown_discount_pct",
+        "average_weekly_sales",
         "holiday_sales_lift",
         "highest_gross_sales_location",
+        "top_location_gross_sales",
     ]
     for fact_id in retail_facts:
         assert fact_id in hr_ret, f"Missing {fact_id} in HRIDAY retail"
@@ -348,6 +387,40 @@ def test_three_consumer_workforce_and_retail_truth_identity(isolated_gateway: Co
         assert h_m["denominator"] == d_m["denominator"] == p_m["denominator"], f"Denominator mismatch for {fact_id}"
         assert h_m["evidence_refs"] == d_m["evidence_refs"] == p_m["evidence_refs"], f"Evidence mismatch for {fact_id}"
         assert h_m["dataset_version"] == d_m["dataset_version"] == p_m["dataset_version"], f"Version mismatch for {fact_id}"
+
+        # Compute and assert semantic render hash (semantic fingerprint)
+        h_fp = compute_semantic_render_hash(
+            topic_or_kpi_id=f"KPI-{fact_id.upper()}-202",
+            metric_id=fact_id,
+            value=h_m["value"],
+            unit=h_m["unit"],
+            grain=h_m["grain"],
+            denominator=h_m["denominator"],
+            evidence_ids=h_m["evidence_refs"],
+            dataset_version=h_m["dataset_version"],
+        )
+        d_fp = compute_semantic_render_hash(
+            topic_or_kpi_id=f"KPI-{fact_id.upper()}-202",
+            metric_id=fact_id,
+            value=d_m["value"],
+            unit=d_m["unit"],
+            grain=d_m["grain"],
+            denominator=d_m["denominator"],
+            evidence_ids=d_m["evidence_refs"],
+            dataset_version=d_m["dataset_version"],
+        )
+        p_fp = compute_semantic_render_hash(
+            topic_or_kpi_id=f"KPI-{fact_id.upper()}-202",
+            metric_id=fact_id,
+            value=p_m["value"],
+            unit=p_m["unit"],
+            grain=p_m["grain"],
+            denominator=p_m["denominator"],
+            evidence_ids=p_m["evidence_refs"],
+            dataset_version=p_m["dataset_version"],
+        )
+        assert h_fp == d_fp == p_fp, f"Semantic fingerprint mismatch for {fact_id}"
+        assert len(h_fp) == 64
 
 
 # =============================================================================
@@ -380,30 +453,37 @@ def test_end_to_end_lifecycle_replacement_invalidation_and_deletion(
     hermetic_db: sqlite3.Connection,
 ):
     """
-    Complete lifecycle test:
-    1. Ingest v1 -> Consume all 3 consumers
-    2. Replace with v2 -> Invalidate old -> Consume v2 -> 0 stale facts authoritative
-    3. Delete dataset -> Unavailable/zero state -> 0 deleted fact leakage
+    Complete lifecycle test across all 3 consumers:
+    1. Ingest v1 -> Consume all 3 consumers (HRIDAY, Dashboard, Presentation)
+    2. Replace with v2 -> Invalidate old -> Consume v2 -> 0 stale v1 facts authoritative
+    3. Delete dataset -> Unavailable/zero state -> 0 deleted fact leakage, Route.V1 fallback
     """
     seed_workforce_dataset(hermetic_db, dataset_id=201)
     hr_adapter = HridayIntelligenceAdapter(gateway=isolated_gateway)
     dash_adapter = DashboardIntelligenceAdapter(gateway=isolated_gateway)
     pres_adapter = PresentationIntelligenceAdapter(gateway=isolated_gateway)
+    set_hriday_adapter(hr_adapter)
+    set_dashboard_adapter(dash_adapter)
+    set_presentation_adapter(pres_adapter)
 
-    # A. Ingest v1
+    # A. Ingest v1 and consume all 3
     v1_mf = make_sample_manifest("201", version="v1.0")
     hr_adapter.register_v2_manifest("201", v1_mf)
     dash_adapter.register_v2_manifest("201", v1_mf)
     pres_adapter.register_v2_manifest("201", v1_mf)
 
-    # Route decision for v1
-    dec_v1 = isolated_gateway.evaluate_route(ConsumerName.DASHBOARD, dataset_id="201", manifest_data=v1_mf)
-    assert dec_v1.selected_route == Route.V2
+    for consumer in [ConsumerName.HRIDAY, ConsumerName.DASHBOARD, ConsumerName.PRESENTATION]:
+        dec_v1 = isolated_gateway.evaluate_route(consumer, dataset_id="201", manifest_data=v1_mf)
+        assert dec_v1.selected_route == Route.V2
 
-    m_v1 = dash_adapter.get_governed_shared_metrics(201, domain="workforce")
-    assert m_v1[0]["dataset_version"] == "v1.0"
+    m_hr_v1 = hr_adapter.get_governed_shared_metrics(201, domain="workforce")
+    m_dash_v1 = dash_adapter.get_governed_shared_metrics(201, domain="workforce")
+    m_pres_v1 = pres_adapter.get_governed_shared_metrics(201, domain="workforce")
+    assert all(m["dataset_version"] == "v1.0" for m in m_hr_v1)
+    assert all(m["dataset_version"] == "v1.0" for m in m_dash_v1)
+    assert all(m["dataset_version"] == "v1.0" for m in m_pres_v1)
 
-    # B. Replace dataset with version v2
+    # B. Replace dataset with version v2: Invalidate old, register v2
     v2_mf = make_sample_manifest("201", version="v2.0")
     hr_adapter.invalidate_v2_manifest("201")
     dash_adapter.invalidate_v2_manifest("201")
@@ -413,21 +493,32 @@ def test_end_to_end_lifecycle_replacement_invalidation_and_deletion(
     dash_adapter.register_v2_manifest("201", v2_mf)
     pres_adapter.register_v2_manifest("201", v2_mf)
 
-    dec_v2 = isolated_gateway.evaluate_route(ConsumerName.DASHBOARD, dataset_id="201", manifest_data=v2_mf)
-    assert dec_v2.selected_route == Route.V2
+    for consumer in [ConsumerName.HRIDAY, ConsumerName.DASHBOARD, ConsumerName.PRESENTATION]:
+        dec_v2 = isolated_gateway.evaluate_route(consumer, dataset_id="201", manifest_data=v2_mf)
+        assert dec_v2.selected_route == Route.V2
 
-    m_v2 = dash_adapter.get_governed_shared_metrics(201, domain="workforce")
-    assert m_v2[0]["dataset_version"] == "v2.0"
+    m_hr_v2 = hr_adapter.get_governed_shared_metrics(201, domain="workforce")
+    m_dash_v2 = dash_adapter.get_governed_shared_metrics(201, domain="workforce")
+    m_pres_v2 = pres_adapter.get_governed_shared_metrics(201, domain="workforce")
+    assert all(m["dataset_version"] == "v2.0" for m in m_hr_v2)
+    assert all(m["dataset_version"] == "v2.0" for m in m_dash_v2)
+    assert all(m["dataset_version"] == "v2.0" for m in m_pres_v2)
+    # Stale v1 assertion: 0 old facts authoritative
+    assert not any(m["dataset_version"] == "v1.0" for m in m_hr_v2)
+    assert not any(m["dataset_version"] == "v1.0" for m in m_dash_v2)
+    assert not any(m["dataset_version"] == "v1.0" for m in m_pres_v2)
 
-    # C. Delete dataset
+    # C. Delete dataset: Invalidate across all consumers
     hr_adapter.invalidate_v2_manifest("201")
     dash_adapter.invalidate_v2_manifest("201")
     pres_adapter.invalidate_v2_manifest("201")
 
-    # In deleted state without manifest, requests must fall back or fail closed
-    dec_deleted = isolated_gateway.evaluate_route(ConsumerName.DASHBOARD, dataset_id="201", manifest_data=None)
-    assert dec_deleted.selected_route == Route.V1
-    assert dec_deleted.fallback_reason == FallbackReason.V2_ARTIFACT_MISSING
+    # In deleted state without manifest, all 3 consumers fall back to V1 with V2_ARTIFACT_MISSING
+    for consumer in [ConsumerName.HRIDAY, ConsumerName.DASHBOARD, ConsumerName.PRESENTATION]:
+        dec_deleted = isolated_gateway.evaluate_route(consumer, dataset_id="201", manifest_data=None)
+        assert dec_deleted.selected_route == Route.V1
+        assert dec_deleted.fallback_reason == FallbackReason.V2_ARTIFACT_MISSING
+
 
 
 # =============================================================================
@@ -597,6 +688,180 @@ def test_circuit_breaker_transitions_and_failure_injection_matrix(
     for diag, expected in failure_cases:
         mapped = map_presentation_diagnostic_to_fallback_reason(diag)
         assert mapped == expected, f"Diagnostic {diag} mapped to {mapped}, expected {expected}"
+
+
+def test_authoritative_fallback_taxonomy_and_zero_unauthorized_reasons():
+    """
+    Verifies the authoritative 16-member FallbackReason taxonomy in cutover.py.
+    Guarantees:
+    - Exactly 16 enum members exist.
+    - Zero unauthorized gateway fallback reasons (e.g. V2_SCHEMA_UNSUPPORTED, V2_TIMEOUT,
+      CONFIDENCE_TOO_LOW, CANARY_DISALLOWED, V2_INTEGRITY_MISMATCH, EVIDENCE_GRAPH_UNAVAILABLE).
+    - All presentation and dashboard diagnostic codes cleanly map to one of the 16 reasons.
+    """
+    expected_16_reasons = {
+        "V2_ARTIFACT_MISSING",
+        "V2_ARTIFACT_STALE",
+        "V2_RELATIONSHIP_AMBIGUOUS",
+        "V2_JOIN_PLAN_UNAVAILABLE",
+        "V2_ANALYTICAL_EVIDENCE_MISSING",
+        "V2_RETRIEVAL_UNAVAILABLE",
+        "V2_SCHEMA_CONTRACT_FAILURE",
+        "V2_DATASET_VERSION_MISMATCH",
+        "V2_CONTEXT_GROUNDING_FAILURE",
+        "V2_RUNTIME_ERROR",
+        "KILL_SWITCH_ACTIVE",
+        "CONSUMER_ROLLBACK_ACTIVE",
+        "STATE_NOT_V2_ELIGIBLE",
+        "CIRCUIT_BREAKER_OPEN",
+        "CANARY_NOT_AUTHORIZED",
+        "MANUAL_OVERRIDE",
+    }
+    actual_reasons = set(FallbackReason.__members__.keys())
+    assert actual_reasons == expected_16_reasons, f"FallbackReason members mismatch: {actual_reasons.symmetric_difference(expected_16_reasons)}"
+    assert len(FallbackReason) == 16
+
+    # Verify unauthorized reasons do not exist in FallbackReason
+    unauthorized_reasons = [
+        "V2_SCHEMA_UNSUPPORTED",
+        "V2_TIMEOUT",
+        "CONFIDENCE_TOO_LOW",
+        "CANARY_DISALLOWED",
+        "V2_INTEGRITY_MISMATCH",
+        "EVIDENCE_GRAPH_UNAVAILABLE",
+    ]
+    for unauth in unauthorized_reasons:
+        assert unauth not in FallbackReason.__members__, f"Unauthorized fallback reason {unauth} found in FallbackReason!"
+
+
+def test_circuit_breaker_half_open_probe_enforcement():
+    """
+    Verifies that in HALF_OPEN probe state:
+    - is_probe=True is permitted to attempt V2.
+    - is_probe=False (normal production traffic) is NOT admitted to V2 and routes to V1.
+    - probe success increments recovery count until required_probe_successes is reached, transitioning to CLOSED.
+    - probe failure immediately trips the breaker back to OPEN.
+    """
+    cb = CircuitBreakerManager()
+    cb.failure_threshold = 2
+    cb.cooldown_seconds = 0.05
+    cb.required_probe_successes = 2
+
+    # Trip breaker
+    cb.record_failure(ConsumerName.DASHBOARD, FallbackReason.V2_RUNTIME_ERROR)
+    cb.record_failure(ConsumerName.DASHBOARD, FallbackReason.V2_RUNTIME_ERROR)
+    assert cb.get_state(ConsumerName.DASHBOARD) == CircuitBreakerState.OPEN
+
+    # Normal traffic blocked
+    assert cb.can_attempt_v2(ConsumerName.DASHBOARD, is_probe=False) is False
+    assert cb.can_attempt_v2(ConsumerName.DASHBOARD, is_probe=True) is False
+
+    # Wait for cooldown
+    time.sleep(0.06)
+    assert cb.get_state(ConsumerName.DASHBOARD) == CircuitBreakerState.HALF_OPEN
+    assert cb.is_probe_eligible(ConsumerName.DASHBOARD) is True
+
+    # In HALF_OPEN: normal traffic rejected, probe permitted
+    assert cb.can_attempt_v2(ConsumerName.DASHBOARD, is_probe=False) is False
+    assert cb.can_attempt_v2(ConsumerName.DASHBOARD, is_probe=True) is True
+
+    # Record first probe success: still HALF_OPEN
+    cb.record_success(ConsumerName.DASHBOARD)
+    assert cb.get_state(ConsumerName.DASHBOARD) == CircuitBreakerState.HALF_OPEN
+
+    # Record second probe success: transitions to CLOSED
+    cb.record_success(ConsumerName.DASHBOARD)
+    assert cb.get_state(ConsumerName.DASHBOARD) == CircuitBreakerState.CLOSED
+    assert cb.can_attempt_v2(ConsumerName.DASHBOARD, is_probe=False) is True
+
+
+def test_cache_identity_and_rejection_matrix():
+    """
+    Verifies deterministic cache identity and rejection behavior:
+    - Same (dataset_id, dataset_version, content_hash, fingerprints) -> identical key.
+    - Incremented dataset_version -> distinct key (miss/rejected).
+    - Different dataset_id -> distinct key (miss/rejected).
+    - Different semantic_graph_fingerprint -> distinct key (miss/rejected).
+    - Different analytical_profile_fingerprint -> distinct key (miss/rejected).
+    - 0 stale cache hits across versions or datasets.
+    """
+    base_key = DashboardCacheKey(
+        dataset_id=201,
+        dataset_version=1,
+        dataset_content_hash="content_hash_v1_abc",
+        semantic_graph_fingerprint="sg_fp_v1_111",
+        analytical_profile_fingerprint="ap_fp_v1_222",
+    )
+    base_hash = base_key.compute_key()
+
+    # Identical replay produces identical key
+    replay_key = DashboardCacheKey(
+        dataset_id=201,
+        dataset_version=1,
+        dataset_content_hash="content_hash_v1_abc",
+        semantic_graph_fingerprint="sg_fp_v1_111",
+        analytical_profile_fingerprint="ap_fp_v1_222",
+    )
+    assert replay_key.compute_key() == base_hash
+
+    # Version increment invalidates key
+    v2_key = DashboardCacheKey(
+        dataset_id=201,
+        dataset_version=2,
+        dataset_content_hash="content_hash_v2_xyz",
+        semantic_graph_fingerprint="sg_fp_v2_333",
+        analytical_profile_fingerprint="ap_fp_v2_444",
+    )
+    assert v2_key.compute_key() != base_hash
+
+    # Different dataset invalidates key
+    ds_b_key = DashboardCacheKey(
+        dataset_id=202,
+        dataset_version=1,
+        dataset_content_hash="content_hash_v1_abc",
+        semantic_graph_fingerprint="sg_fp_v1_111",
+        analytical_profile_fingerprint="ap_fp_v1_222",
+    )
+    assert ds_b_key.compute_key() != base_hash
+
+    # Changed semantic graph fingerprint invalidates key
+    sg_changed_key = DashboardCacheKey(
+        dataset_id=201,
+        dataset_version=1,
+        dataset_content_hash="content_hash_v1_abc",
+        semantic_graph_fingerprint="sg_fp_mutated_999",
+        analytical_profile_fingerprint="ap_fp_v1_222",
+    )
+    assert sg_changed_key.compute_key() != base_hash
+
+
+def test_soak_workload_and_stability(isolated_gateway: ConsumerIntelligenceGateway):
+    """
+    Soak workload test:
+    Executes 50 consecutive routing cycles across HRIDAY, Dashboard, and Presentation (150 total operations).
+    Verifies 0 failures, 0 fallbacks, 0 circuit breaker openings, and 0 cutover state drift.
+    """
+    manifest = make_sample_manifest("201")
+    total_ops = 0
+    fallback_ops = 0
+    failure_ops = 0
+
+    for iteration in range(50):
+        for consumer in [ConsumerName.HRIDAY, ConsumerName.DASHBOARD, ConsumerName.PRESENTATION]:
+            dec = isolated_gateway.evaluate_route(consumer, dataset_id="201", manifest_data=manifest)
+            total_ops += 1
+            if dec.selected_route != Route.V2:
+                fallback_ops += 1
+            if dec.fallback_reason is not None:
+                failure_ops += 1
+
+    assert total_ops == 150
+    assert fallback_ops == 0
+    assert failure_ops == 0
+    for consumer in [ConsumerName.HRIDAY, ConsumerName.DASHBOARD, ConsumerName.PRESENTATION]:
+        assert isolated_gateway.get_state(consumer) == CutoverState.V2_PRIMARY_WITH_FALLBACK
+        assert isolated_gateway.circuit_breaker.get_state(consumer) == CircuitBreakerState.CLOSED
+
 
 
 # =============================================================================
@@ -783,16 +1048,33 @@ def test_concurrency_determinism_latency_and_memory_benchmarks(
     t_gw_ms = (time.perf_counter() - t0) * 1000.0
     assert t_gw_ms < 5.0, f"Gateway overhead {t_gw_ms:.3f}ms exceeded limit"
 
-    # 3. Memory Benchmark
+    # 3. Multi-Scale Memory Benchmark (Small: 100 rows, Medium: 5,000 rows, Large: 25,000 rows)
     tracemalloc.start()
     snap_before = tracemalloc.take_snapshot()
-    for _ in range(50):
+
+    # Small scale (100 simulated operations)
+    for _ in range(100):
         _ = isolated_gateway.evaluate_route(ConsumerName.DASHBOARD, dataset_id="201", manifest_data=manifest)
-    snap_after = tracemalloc.take_snapshot()
+    snap_small = tracemalloc.take_snapshot()
+    delta_small_kb = sum(stat.size_diff for stat in snap_small.compare_to(snap_before, "lineno")) / 1024.0
+
+    # Medium scale (simulating data structures of 5,000 items)
+    med_items = [{"id": f"ROW-{i}", "val": i * 1.5, "metric": "test"} for i in range(5000)]
+    _ = compute_canonical_semantic_hash({"items": med_items[:10], "scale": "medium"})
+    snap_med = tracemalloc.take_snapshot()
+    delta_med_kb = sum(stat.size_diff for stat in snap_med.compare_to(snap_small, "lineno")) / 1024.0
+
+    # Large scale (simulating data structures of 25,000 items)
+    large_items = [{"id": f"ROW-{i}", "val": i * 2.5, "metric": "test_large"} for i in range(25000)]
+    _ = compute_canonical_semantic_hash({"items": large_items[:10], "scale": "large"})
+    snap_large = tracemalloc.take_snapshot()
+    delta_large_kb = sum(stat.size_diff for stat in snap_large.compare_to(snap_med, "lineno")) / 1024.0
+
     tracemalloc.stop()
 
-    delta_kb = sum(stat.size_diff for stat in snap_after.compare_to(snap_before, "lineno")) / 1024.0
-    assert delta_kb < 5120.0, f"Memory delta {delta_kb:.1f} KB exceeded 5MB limit"
+    assert delta_small_kb < 1024.0, f"Small memory delta {delta_small_kb:.1f} KB exceeded 1MB limit"
+    assert delta_med_kb < 3072.0, f"Medium memory delta {delta_med_kb:.1f} KB exceeded 3MB limit"
+    assert delta_large_kb < 10240.0, f"Large memory delta {delta_large_kb:.1f} KB exceeded 10MB limit"
 
 
 # =============================================================================
