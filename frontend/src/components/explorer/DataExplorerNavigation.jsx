@@ -2,6 +2,7 @@ import React from "react";
 import {
   Info,
   Table,
+  Activity,
   Sparkles,
   GitMerge,
   LayoutDashboard,
@@ -11,13 +12,14 @@ import {
 
 /**
  * HighView Data Explorer Navigation
- * Unified 6-tab Information Architecture:
- * Overview -> Data -> Semantic Model -> Relationships -> Analysis -> Evidence / Lineage
+ * Target 7-tab Information Architecture:
+ * Overview -> Data -> Data Profile -> Semantic Model -> Relationships -> Analysis -> Evidence / Lineage
  * Derives 100% of styling from centralized HighView theme tokens.
  */
 export const EXPLORER_TABS = [
   { id: "overview", label: "Overview", icon: Info, desc: "High-level metrics, entities, and workbook catalog" },
   { id: "data", label: "Data", icon: Table, desc: "Exact raw observed records without derived columns" },
+  { id: "profile", label: "Data Profile", icon: Activity, desc: "Understand data quality, distributions, ranges, and unusual values." },
   { id: "semantics", label: "Semantic Model", icon: Sparkles, desc: "Entities, semantic column profiles, candidate keys, and enrichments" },
   { id: "relationships", label: "Relationships", icon: GitMerge, desc: "Governed connections, join safety, and preaggregation rules" },
   { id: "analysis", label: "Analysis", icon: LayoutDashboard, desc: "Reconstructed analytical views, verified metrics, and facts" },

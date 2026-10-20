@@ -957,6 +957,18 @@ export async function getExplorerSourceRows(datasetId, sheetId, page = 1, pageSi
   return res.json();
 }
 
+export async function getExplorerProfiling(datasetId, sheetId = null) {
+  const params = new URLSearchParams();
+  if (sheetId) params.set("sheet_id", sheetId);
+  const qs = params.toString() ? `?${params.toString()}` : "";
+  const res = await fetch(`${API_BASE}/datasets/${datasetId}/explorer/profiling${qs}`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Failed to fetch data profile");
+  }
+  return res.json();
+}
+
 export async function getExplorerSemantics(datasetId, sheetId = null) {
   const params = new URLSearchParams();
   if (sheetId) params.set("sheet_id", sheetId);

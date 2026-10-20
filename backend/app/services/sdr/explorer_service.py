@@ -656,6 +656,275 @@ class SDRExplorerService:
         }
 
     # =========================================================================
+    # DATA PROFILE MODE (EDA-A Structural Quality, Types, Distributions, Outliers)
+    # =========================================================================
+
+    def get_profiling_data(self, dataset_id: str, sheet_id: str | None = None) -> dict[str, Any]:
+        """Returns deterministic structural data profiling: completeness, types, distributions, outliers, and quality."""
+        columns_out: list[dict[str, Any]] = []
+        sheets_out: list[dict[str, Any]] = []
+        total_rows = 0
+        total_columns = 0
+        numeric_count = 0
+        categorical_count = 0
+        outlier_cols_count = 0
+        attention_cols_count = 0
+        weighted_null_cells = 0
+        total_cells = 0
+
+        # 1. Try SQLite eda_reports and sheets
+        conn = get_connection()
+        try:
+            sh_rows = conn.execute(
+                "SELECT id, dataset_id, name, display_name, row_count, columns_json FROM sheets WHERE dataset_id = ?",
+                (dataset_id,)
+            ).fetchall()
+            if not sh_rows and sheet_id:
+                sh_rows = conn.execute(
+                    "SELECT id, dataset_id, name, display_name, row_count, columns_json FROM sheets WHERE id = ? OR name = ?",
+                    (sheet_id, sheet_id)
+                ).fetchall()
+            if not sh_rows:
+                sh_rows = conn.execute("SELECT id, dataset_id, name, display_name, row_count, columns_json FROM sheets WHERE dataset_id = ?", (dataset_id,)).fetchall()
+
+            for s in sh_rows:
+                sid = str(s["id"])
+                s_name = s["display_name"] or s["name"]
+                s_rows = s["row_count"] or 0
+                cols_raw = []
+                if s["columns_json"]:
+                    try:
+                        cols_raw = json.loads(s["columns_json"])
+                    except Exception:
+                        cols_raw = []
+                sheets_out.append({
+                    "sheet_id": sid,
+                    "name": s_name,
+                    "row_count": s_rows,
+                    "column_count": len(cols_raw),
+                })
+
+                # If filtering by sheet_id, skip non-matching sheets for column diagnostics
+                if sheet_id and sid != str(sheet_id) and str(s["name"]) != str(sheet_id):
+                    continue
+
+                total_rows += s_rows
+
+                rep_row = conn.execute(
+                    "SELECT report_json, health_score FROM eda_reports WHERE sheet_id = ?",
+                    (s["id"],)
+                ).fetchone()
+
+                if rep_row:
+                    try:
+                        report = json.loads(rep_row["report_json"])
+                    except Exception:
+                        report = {}
+
+                    col_diags = report.get("column_diagnostics", {})
+                    metric_dists = report.get("visual_analytics", {}).get("metric_distributions", {})
+
+                    for c_name, diag in col_diags.items():
+                        inferred_type = diag.get("inferred_type", "categorical")
+                        is_numeric = inferred_type.startswith("numeric")
+                        null_cnt = diag.get("null_count", 0)
+                        null_pct = round(diag.get("null_percentage", 0.0), 1)
+                        pop_pct = round(max(0.0, 100.0 - null_pct), 1)
+                        dist_cnt = diag.get("distinct_count", 0)
+                        dist_pct = round((dist_cnt / max(1, s_rows)) * 100.0, 1) if s_rows else 0.0
+
+                        dist_info = metric_dists.get(c_name, {})
+                        min_v = dist_info.get("min") if dist_info.get("min") is not None else diag.get("min")
+                        max_v = dist_info.get("max") if dist_info.get("max") is not None else diag.get("max")
+                        mean_v = dist_info.get("mean") if dist_info.get("mean") is not None else diag.get("mean")
+                        med_v = dist_info.get("median") if dist_info.get("median") is not None else diag.get("median")
+                        std_v = dist_info.get("std") if dist_info.get("std") is not None else diag.get("std")
+
+                        q25 = dist_info.get("q25")
+                        q75 = dist_info.get("q75")
+                        iqr = dist_info.get("iqr")
+                        outlier_low = dist_info.get("outlier_low")
+                        outlier_high = dist_info.get("outlier_high")
+                        bins = dist_info.get("bins", [])
+
+                        outlier_cnt = diag.get("outlier_count", 0) or dist_info.get("outliers_count", 0)
+                        outliers_list = diag.get("outliers", []) or dist_info.get("outliers", [])
+
+                        # Status formatting
+                        if null_pct > 20.0 or outlier_cnt > 10:
+                            q_status = "Needs Attention"
+                            attention_cols_count += 1
+                        elif outlier_cnt > 0:
+                            q_status = "Potential Outliers"
+                            outlier_cols_count += 1
+                        elif null_cnt > 0:
+                            q_status = "Missing Values"
+                            attention_cols_count += 1
+                        else:
+                            q_status = "Clean"
+
+                        if is_numeric:
+                            numeric_count += 1
+                            display_type = "Numeric"
+                        elif inferred_type in ("datetime", "date", "time"):
+                            display_type = "Date/Time"
+                        elif inferred_type in ("identifier", "id"):
+                            display_type = "Identifier"
+                        elif inferred_type in ("boolean", "bool"):
+                            display_type = "Boolean"
+                        else:
+                            categorical_count += 1
+                            display_type = "Categorical"
+
+                        total_columns += 1
+                        total_cells += s_rows
+                        weighted_null_cells += null_cnt
+
+                        columns_out.append({
+                            "column": c_name,
+                            "sheet_id": sid,
+                            "sheet_name": s_name,
+                            "data_type": display_type,
+                            "raw_type": inferred_type,
+                            "is_numeric": is_numeric,
+                            "null_count": null_cnt,
+                            "null_percentage": null_pct,
+                            "populated_pct": pop_pct,
+                            "distinct_count": dist_cnt,
+                            "distinct_pct": dist_pct,
+                            "row_count": s_rows,
+                            "min": min_v,
+                            "max": max_v,
+                            "mean": round(mean_v, 2) if mean_v is not None else None,
+                            "median": round(med_v, 2) if med_v is not None else None,
+                            "std": round(std_v, 2) if std_v is not None else None,
+                            "q25": round(q25, 2) if q25 is not None else None,
+                            "q75": round(q75, 2) if q75 is not None else None,
+                            "iqr": round(iqr, 2) if iqr is not None else None,
+                            "outlier_low": round(outlier_low, 2) if outlier_low is not None else None,
+                            "outlier_high": round(outlier_high, 2) if outlier_high is not None else None,
+                            "outlier_count": outlier_cnt,
+                            "outliers": outliers_list,
+                            "status": q_status,
+                            "bins": bins,
+                        })
+        finally:
+            conn.close()
+
+        # 2. If no columns from SQLite, fall back to disk SDR artifacts
+        if not columns_out:
+            sdr_dir = self._get_sdr_dir(dataset_id)
+            if not sdr_dir.exists():
+                fallback = self.base_dir / "datasets" / "sdr7_cert" / "sdr"
+                if fallback.exists():
+                    sdr_dir = fallback
+
+            raw_profiles = self._read_json(sdr_dir / "semantic_column_profiles.json") or []
+            raw_grains = self._read_json(sdr_dir / "grain_profiles.json") or []
+            sheet_rows_map = {g.get("sheet_id"): g.get("row_count", 0) for g in raw_grains}
+
+            # Filter sheet_id if provided
+            if sheet_id:
+                raw_profiles = [p for p in raw_profiles if str(p.get("sheet_id")) == str(sheet_id)]
+
+            sheets_seen = set()
+            for p in raw_profiles:
+                p_sheet = p.get("sheet_id", "Sheet1")
+                if p_sheet not in sheets_seen:
+                    sheets_seen.add(p_sheet)
+                    sh_row_cnt = sheet_rows_map.get(p_sheet, p.get("features", {}).get("row_count", 0))
+                    sheets_out.append({
+                        "sheet_id": p_sheet,
+                        "name": p_sheet,
+                        "row_count": sh_row_cnt,
+                        "column_count": 0,
+                    })
+
+            for p in raw_profiles:
+                col_name = p.get("column_id") or p.get("source_name")
+                p_sheet = p.get("sheet_id", "Sheet1")
+                feat = p.get("features", {})
+                p_dtype = p.get("physical_dtype", "string").lower()
+                s_dtype = p.get("semantic_dtype", "").lower()
+                is_num = "int" in p_dtype or "float" in p_dtype or "num" in p_dtype or "numeric" in s_dtype
+
+                null_cnt = feat.get("null_count", 0)
+                null_ratio = feat.get("null_ratio", 0.0)
+                null_pct = round(null_ratio * 100.0, 1)
+                pop_pct = round(max(0.0, 100.0 - null_pct), 1)
+                dist_cnt = feat.get("distinct_count", 0)
+                r_cnt = sheet_rows_map.get(p_sheet) or feat.get("row_count", 0)
+                dist_pct = round((dist_cnt / max(1, r_cnt)) * 100.0, 1) if r_cnt else 0.0
+
+                if is_num:
+                    display_type = "Numeric"
+                    numeric_count += 1
+                elif "date" in p_dtype or "time" in p_dtype:
+                    display_type = "Date/Time"
+                elif "id" in s_dtype or "code" in s_dtype:
+                    display_type = "Identifier"
+                else:
+                    display_type = "Categorical"
+                    categorical_count += 1
+
+                q_status = "Clean"
+                if null_pct > 20.0:
+                    q_status = "Needs Attention"
+                    attention_cols_count += 1
+                elif null_cnt > 0:
+                    q_status = "Missing Values"
+                    attention_cols_count += 1
+
+                total_columns += 1
+                total_cells += r_cnt
+                weighted_null_cells += null_cnt
+
+                columns_out.append({
+                    "column": col_name,
+                    "sheet_id": p_sheet,
+                    "sheet_name": p_sheet,
+                    "data_type": display_type,
+                    "raw_type": p_dtype,
+                    "is_numeric": is_num,
+                    "null_count": null_cnt,
+                    "null_percentage": null_pct,
+                    "populated_pct": pop_pct,
+                    "distinct_count": dist_cnt,
+                    "distinct_pct": dist_pct,
+                    "row_count": r_cnt,
+                    "min": None,
+                    "max": None,
+                    "mean": None,
+                    "median": None,
+                    "std": None,
+                    "q25": None,
+                    "q75": None,
+                    "iqr": None,
+                    "outlier_low": None,
+                    "outlier_high": None,
+                    "outlier_count": 0,
+                    "outliers": [],
+                    "status": q_status,
+                    "bins": [],
+                })
+
+        overall_comp = round(((total_cells - weighted_null_cells) / max(1, total_cells)) * 100.0, 2) if total_cells else 100.0
+
+        return {
+            "summary": {
+                "total_rows": total_rows,
+                "total_columns": total_columns,
+                "completeness_pct": overall_comp,
+                "numeric_columns": numeric_count,
+                "categorical_columns": categorical_count,
+                "columns_with_outliers": outlier_cols_count,
+                "columns_needing_attention": attention_cols_count,
+            },
+            "columns": columns_out,
+            "sheets": sheets_out,
+        }
+
+    # =========================================================================
     # RELATIONSHIPS MODE
     # =========================================================================
 

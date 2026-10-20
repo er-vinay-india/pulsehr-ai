@@ -105,6 +105,39 @@ def test_explorer_source_rows_api_server_sorting():
     assert cities == ["Austin", "Bengaluru", "San Francisco", "Springfield"]
 
 
+def test_explorer_profiling_api():
+    """Verify /profiling provides deterministic structural data profiling: summary, columns, types, missingness, and outliers."""
+    response = client.get(f"/api/datasets/{DATASET_ID}/explorer/profiling")
+    assert response.status_code == 200
+    data = response.json()
+
+    assert "summary" in data
+    assert "columns" in data
+    assert "sheets" in data
+    summary = data["summary"]
+    assert summary["total_columns"] >= 20
+    assert summary["completeness_pct"] > 0
+    assert summary["numeric_columns"] > 0
+
+    columns = data["columns"]
+    assert len(columns) >= 20
+    col_map = {f"{c['sheet_id']}_{c['column']}": c for c in columns}
+    
+    # Check Employees city column
+    emp_city = col_map.get("Employees_city")
+    assert emp_city is not None
+    assert emp_city["sheet_name"] == "Employees"
+    assert emp_city["null_count"] == 0
+    assert emp_city["populated_pct"] == 100.0
+
+    # Test sheet_id filter
+    sheet_resp = client.get(f"/api/datasets/{DATASET_ID}/explorer/profiling?sheet_id=Employees")
+    assert sheet_resp.status_code == 200
+    sheet_data = sheet_resp.json()
+    assert len(sheet_data["columns"]) == 7
+    assert all(c["sheet_id"] == "Employees" for c in sheet_data["columns"])
+
+
 def test_explorer_semantics_api():
     """Verify /semantics provides entity hypothesis, grain explanation, candidate keys, and GEO-1 resolutions."""
     response = client.get(f"/api/datasets/{DATASET_ID}/explorer/semantics?sheet_id=Employees")

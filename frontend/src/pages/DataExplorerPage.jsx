@@ -40,6 +40,7 @@ import DistributionsExplorer from '../components/explorer/DistributionsExplorer'
 import EvidenceExplorer from '../components/explorer/EvidenceExplorer';
 import TechnicalExplorer from '../components/explorer/TechnicalExplorer';
 import SourceMode from '../components/explorer/sdr/SourceMode';
+import DataProfileMode from '../components/explorer/sdr/DataProfileMode';
 import SemanticsMode from '../components/explorer/sdr/SemanticsMode';
 import RelationshipsMode from '../components/explorer/sdr/RelationshipsMode';
 import AnalyticalViewsMode from '../components/explorer/sdr/AnalyticalViewsMode';
@@ -61,11 +62,12 @@ export function normalizeExplorerTab(tab) {
   if (!tab) return 'overview';
   const t = String(tab).toLowerCase();
   if (t === 'data' || t === 'source' || t === 'technical' || t === 'table') return 'data';
+  if (t === 'profile' || t === 'data-profile' || t === 'profiling' || t === 'quality' || t === 'eda') return 'profile';
   if (t === 'semantics' || t === 'added-columns' || t === 'semantic-model') return 'semantics';
   if (t === 'relationships') return 'relationships';
   if (t === 'analysis' || t === 'analytical-views' || t === 'rankings' || t === 'trends' || t === 'distributions') return 'analysis';
   if (t === 'evidence' || t === 'lineage') return 'evidence';
-  if (t === 'overview' || t === 'eda') return 'overview';
+  if (t === 'overview') return 'overview';
   return 'overview';
 }
 
@@ -84,7 +86,7 @@ export default function DataExplorerPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Unified 6-Tab Navigation State: 'overview' | 'data' | 'semantics' | 'relationships' | 'analysis' | 'evidence'
+  // Unified 7-Tab Navigation State: 'overview' | 'data' | 'profile' | 'semantics' | 'relationships' | 'analysis' | 'evidence'
   const [activeTab, setActiveTab] = useState(() => {
     const tabParam = getCombinedUrlParam('tab');
     if (tabParam) {
@@ -92,7 +94,7 @@ export default function DataExplorerPage() {
     }
     const v = getCombinedUrlParam('view');
     if (v === 'table') return 'data';
-    if (v === 'eda') return 'overview';
+    if (v === 'eda') return 'profile';
     return 'overview';
   });
 
@@ -317,7 +319,7 @@ export default function DataExplorerPage() {
       .catch((err) => {
         if (active) {
           setEdaReport(null);
-          if (!['data', 'source', 'semantics', 'relationships', 'analysis', 'analytical-views'].includes(activeTab)) {
+          if (!['data', 'source', 'profile', 'data-profile', 'semantics', 'relationships', 'analysis', 'analytical-views'].includes(activeTab)) {
             const rawMsg = err?.message || '';
             const cleanMsg = typeof rawMsg === 'string' && rawMsg !== '[object Object]' ? rawMsg : '';
             if (cleanMsg && catalog.sheets.length > 0) {
@@ -781,6 +783,17 @@ export default function DataExplorerPage() {
 
             {(activeTab === 'data' || activeTab === 'source' || activeTab === 'technical') && (
               <SourceMode
+                datasetId={sdrDatasetId}
+                sheets={sdrSheets}
+                selectedSheetId={selected}
+                onSelectSheet={setSelected}
+                themeTokens={themeTokens}
+                isDark={isDark}
+              />
+            )}
+
+            {activeTab === 'profile' && (
+              <DataProfileMode
                 datasetId={sdrDatasetId}
                 sheets={sdrSheets}
                 selectedSheetId={selected}

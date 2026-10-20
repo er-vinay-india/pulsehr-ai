@@ -61,6 +61,19 @@ def get_explorer_source_rows(
         raise HTTPException(status_code=500, detail=f"Failed to load source rows: {str(e)}")
 
 
+@router.get("/{dataset_id}/explorer/profiling")
+def get_explorer_profiling(
+    dataset_id: str,
+    sheet_id: str | None = Query(default=None, description="Optional sheet filter"),
+) -> dict[str, Any]:
+    """Returns deterministic structural data profiling: completeness, types, distributions, outliers, and quality."""
+    try:
+        return _explorer_service.get_profiling_data(dataset_id, sheet_id=sheet_id)
+    except Exception as e:
+        logger.error(f"Error fetching explorer profiling for dataset {dataset_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to load data profile: {str(e)}")
+
+
 @router.get("/{dataset_id}/explorer/semantics")
 def get_explorer_semantics(
     dataset_id: str,
