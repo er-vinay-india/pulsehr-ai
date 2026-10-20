@@ -29,7 +29,40 @@ from .pipeline_orchestrator import (
     start_presentation_job
 )
 
+from .pipeline_selector import (
+    PresentationPipelineMode,
+    PresentationPipelineSelector,
+)
+from .content_models import (
+    ContentKind,
+    ContentRole,
+    PresentationContentItem,
+    PresentationContentPackage,
+    UserVisibleContentPolicy,
+)
+from .content_hub import (
+    PresentationContentProvider,
+    DashboardContentProvider,
+    DataExplorerContentProvider,
+    UserContextProvider,
+    PresentationContentRanker,
+    PresentationContentHub,
+)
+
 __all__ = [
+    "PresentationPipelineMode",
+    "PresentationPipelineSelector",
+    "ContentKind",
+    "ContentRole",
+    "PresentationContentItem",
+    "PresentationContentPackage",
+    "UserVisibleContentPolicy",
+    "PresentationContentProvider",
+    "DashboardContentProvider",
+    "DataExplorerContentProvider",
+    "UserContextProvider",
+    "PresentationContentRanker",
+    "PresentationContentHub",
     "THEMES",
     "PresentationJobManager",
     "job_manager",

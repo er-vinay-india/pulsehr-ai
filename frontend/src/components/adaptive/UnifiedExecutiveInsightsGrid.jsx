@@ -158,7 +158,6 @@ export default function UnifiedExecutiveInsightsGrid({
           );
         };
         const critical = coverageWarnings.filter(isCritical);
-        const informational = coverageWarnings.filter((w) => !isCritical(w));
 
         if (critical.length > 0) {
           return (
@@ -180,27 +179,6 @@ export default function UnifiedExecutiveInsightsGrid({
             >
               <AlertTriangle size={14} aria-hidden="true" />
               <span>{critical[0]}</span>
-            </div>
-          );
-        }
-
-        if (informational.length > 0) {
-          return (
-            <div
-              className="governance-status-compact"
-              role="status"
-              title="Analysis uses only the active dataset and passed integrity checks."
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "5px",
-                padding: "2px 0 8px 4px",
-                fontSize: "0.75rem",
-                color: "var(--color-text-muted, #78877f)",
-              }}
-            >
-              <ShieldCheck size={12} style={{ color: "var(--color-success, #075443)" }} aria-hidden="true" />
-              <span style={{ fontWeight: 600, color: "var(--color-text-secondary, #334b57)" }}>✓ Verified</span>
             </div>
           );
         }

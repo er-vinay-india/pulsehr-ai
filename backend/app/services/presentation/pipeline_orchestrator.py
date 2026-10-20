@@ -178,6 +178,9 @@ def execute_presentation_pipeline_async(
 
     mgr = manager or job_manager
     from .runtime import run_dependency, SCOPE_TIMEOUT_SECONDS, EVIDENCE_TIMEOUT_SECONDS, MEMORY_TIMEOUT_SECONDS
+    from .pipeline_selector import PresentationPipelineMode, PresentationPipelineSelector
+    pipeline_mode = PresentationPipelineSelector.select_pipeline(scope)
+    logger.info("Executing presentation job %s with pipeline_mode=%s", job_id, pipeline_mode.value)
     try:
         from .deck_generator import generate_presentation_deck_spec
         from ..display_formatters import format_display_label
@@ -186,9 +189,9 @@ def execute_presentation_pipeline_async(
         mgr.update_stage(
             job_id,
             "brief_setup",
-            "Phase 0: Validating presentation brief, audience seniority, and requested decision...",
+            f"Phase 0: Validating presentation brief, audience seniority, and requested decision ({pipeline_mode.value} pipeline)...",
             3,
-            extra={"active_phase": "brief_setup"}
+            extra={"active_phase": "brief_setup", "pipeline_mode": pipeline_mode.value}
         )
         if mgr.is_cancelled(job_id):
             return
@@ -249,11 +252,34 @@ def execute_presentation_pipeline_async(
                 "current_slide": 0,
                 "total_slides": target_total_slides,
                 "slide_status_list": initial_slides,
-                "active_phase": "evidence_audit"
+                "active_phase": "evidence_audit",
+                "pipeline_mode": pipeline_mode.value
             }
         )
         if mgr.is_cancelled(job_id):
             return
+
+        # PPT-L1: Layered Pipeline Content Hub Assembly
+        layered_content_package = None
+        if pipeline_mode == PresentationPipelineMode.LAYERED:
+            try:
+                from .content_hub import PresentationContentHub
+                content_hub = PresentationContentHub()
+                layered_content_package = content_hub.assemble_package(
+                    scope=scope,
+                    dataset_context=primary_ctx,
+                    workspace_evidence=workspace_evidence
+                )
+                workspace_evidence["layered_content_package"] = layered_content_package.model_dump()
+                logger.info(
+                    "PresentationContentHub assembled package %s (%d items, %d kpis) for job %s",
+                    layered_content_package.package_id,
+                    len(layered_content_package.items),
+                    len(layered_content_package.global_kpis),
+                    job_id
+                )
+            except Exception as exc:
+                logger.warning("PresentationContentHub encountered issue for job %s: %s", job_id, exc)
 
         # PHASE 2 & 3: Narrative Architecture, Slide Sequence, Headlines & Wireframes (15% -> 48%)
         mgr.update_stage(
@@ -326,6 +352,10 @@ def execute_presentation_pipeline_async(
         )
         if mgr.is_cancelled(job_id):
             return
+
+        deck_spec.setdefault("metadata", {})["pipeline_mode"] = pipeline_mode.value
+        if layered_content_package:
+            deck_spec["metadata"]["content_package"] = layered_content_package.model_dump()
 
         total_slides = len(deck_spec.get("slides", []))
 

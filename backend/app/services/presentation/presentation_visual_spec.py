@@ -127,6 +127,10 @@ def compute_visual_semantic_fingerprint(payload: dict[str, Any] | BaseModel) -> 
             "table": "data_table",
             "table_detail": "data_table",
             "data_table": "data_table",
+            "map": "ranked_bar",
+            "choropleth": "ranked_bar",
+            "bubble_map": "ranked_bar",
+            "point_map": "ranked_bar",
         }
         morphology = family_map.get(c_type, c_type)
 
@@ -646,6 +650,10 @@ class PresentationVisualSpec(BaseModel):
             "table": VisualFamily.DATA_TABLE,
             "table_detail": VisualFamily.DATA_TABLE,
             "data_table": VisualFamily.DATA_TABLE,
+            "map": VisualFamily.RANKED_BAR,
+            "choropleth": VisualFamily.RANKED_BAR,
+            "bubble_map": VisualFamily.RANKED_BAR,
+            "point_map": VisualFamily.RANKED_BAR,
         }
         family = family_map.get(raw_type)
         if not family:

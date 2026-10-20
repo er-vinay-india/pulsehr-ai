@@ -1002,6 +1002,13 @@ class AnalyticalStoryBuilder:
         if not dataset_id:
             return None
 
+        # Fixed domain baselines (Workforce, Retail, Environmental) have dedicated characterization portfolios
+        if (
+            dataset_id in (99770, 99771, 99772, 100)
+            or domain.lower() in ("environmental", "workforce", "workforce_hr", "hr", "retail")
+        ):
+            return None
+
         try:
             from ...db.database import get_connection
             from ..sdr.geo.resolver import GeoResolutionEngine
@@ -1088,7 +1095,12 @@ class AnalyticalStoryBuilder:
                     )
 
                 for c in all_cols:
-                    if c == geo_col or str(c).lower() in ("id", "sr_no", "sno", "row_num", "category"):
+                    c_clean = str(c).lower().replace("_", " ").replace(".", "").replace("#", "").strip()
+                    if (
+                        c == geo_col
+                        or c_clean in ("id", "sr", "sr no", "sno", "sl", "sl no", "row num", "rownum", "index", "category", "stn code", "station code", "code", "agency", "date", "sampling date")
+                        or any(c_clean.startswith(p) for p in ("sr ", "sl ", "stn ", "id "))
+                    ):
                         continue
                     if _is_synthetic_col(c):
                         continue
@@ -1229,9 +1241,9 @@ class AnalyticalStoryBuilder:
                 total_evaluated = len(location_val_pairs)
                 coverage = resolved_count / max(1, total_evaluated)
 
-                # Gate: If coverage < 50% or ambiguous locations present without resolution -> Block map!
-                if coverage < 0.50 and resolved_count < 3:
-                    logger.info("GeoVisualizationGate: Suppressed map due to low coverage (%.1f%%)", coverage * 100)
+                # Gate: If coverage < 50% or fewer than 3 locations resolved -> Block map!
+                if coverage < 0.50 or resolved_count < 3:
+                    logger.info("GeoVisualizationGate: Suppressed map due to low coverage (%.1f%%) or count (%d)", coverage * 100, resolved_count)
                     return None
 
                 if ambiguous_count > total_evaluated * 0.3:
