@@ -18,8 +18,10 @@ export default function SourceMode({
   themeTokens,
   isDark = false,
 }) {
+  const effectiveDatasetId = datasetId || sheets[0]?.dataset_id || null;
+
   const [activeSheet, setActiveSheet] = useState(
-    () => selectedSheetId || (sheets[0]?.sheet_id || sheets[0]?.name || "")
+    () => selectedSheetId || (sheets[0]?.sheet_id || sheets[0]?.id || sheets[0]?.name || "")
   );
   const [rowsData, setRowsData] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -38,17 +40,34 @@ export default function SourceMode({
   const brandSoftBg = themeTokens?.colors?.softBlue || "var(--color-bg-soft-blue)";
 
   useEffect(() => {
-    if (selectedSheetId && sheets.some((s) => (s.sheet_id || s.name) === selectedSheetId)) {
+    if (
+      selectedSheetId &&
+      sheets.some(
+        (s) =>
+          String(s.sheet_id || s.id || s.name) === String(selectedSheetId) ||
+          String(s.name) === String(selectedSheetId) ||
+          String(s.id) === String(selectedSheetId)
+      )
+    ) {
       setActiveSheet(selectedSheetId);
       setPage(1);
-    } else if (sheets.length > 0 && !sheets.some((s) => (s.sheet_id || s.name) === activeSheet)) {
-      setActiveSheet(sheets[0].sheet_id || sheets[0].name);
+    } else if (
+      sheets.length > 0 &&
+      !sheets.some(
+        (s) =>
+          String(s.sheet_id || s.id || s.name) === String(activeSheet) ||
+          String(s.name) === String(activeSheet) ||
+          String(s.id) === String(activeSheet)
+      )
+    ) {
+      setActiveSheet(sheets[0].sheet_id || sheets[0].id || sheets[0].name);
       setPage(1);
     }
   }, [selectedSheetId, sheets, activeSheet]);
 
   useEffect(() => {
-    if (!datasetId || !activeSheet) return;
+    const targetDatasetId = effectiveDatasetId;
+    if (!targetDatasetId || !activeSheet) return;
     let isCancelled = false;
 
     async function loadRows() {
@@ -56,7 +75,7 @@ export default function SourceMode({
       setError(null);
       try {
         const res = await getExplorerSourceRows(
-          datasetId,
+          targetDatasetId,
           activeSheet,
           page,
           pageSize,
@@ -82,7 +101,7 @@ export default function SourceMode({
     return () => {
       isCancelled = true;
     };
-  }, [datasetId, activeSheet, page, pageSize, searchTerm, sortCol, sortDir]);
+  }, [effectiveDatasetId, activeSheet, page, pageSize, searchTerm, sortCol, sortDir]);
 
   const handleSheetChange = (sheetId) => {
     setActiveSheet(sheetId);
@@ -139,8 +158,12 @@ export default function SourceMode({
         {/* Sheet Selector Pills */}
         <div style={{ display: "flex", alignItems: "center", gap: "6px", overflowX: "auto", paddingTop: "4px" }}>
           {sheets.map((s) => {
-            const sid = s.sheet_id || s.name;
-            const isSelected = sid === activeSheet;
+            const sid = s.sheet_id || s.id || s.name;
+            const isSelected =
+              String(sid) === String(activeSheet) ||
+              String(s.name) === String(activeSheet) ||
+              String(s.id) === String(activeSheet) ||
+              String(s.sheet_id) === String(activeSheet);
             return (
               <button
                 key={sid}

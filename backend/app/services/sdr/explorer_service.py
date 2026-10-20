@@ -89,10 +89,23 @@ class SDRExplorerService:
                 "SELECT id, original_name, display_name, sheet_count, row_count FROM dataset_uploads WHERE id = ?",
                 (dataset_id,)
             ).fetchone()
+            if not row:
+                row = conn.execute(
+                    "SELECT id, original_name, display_name, sheet_count, row_count FROM dataset_uploads ORDER BY id DESC LIMIT 1"
+                ).fetchone()
+                if row:
+                    dataset_id = str(row["id"])
+                    sdr_dir = self._get_sdr_dir(dataset_id)
+                    has_artifacts = sdr_dir.exists()
+
             sheet_rows = conn.execute(
                 "SELECT id, name, display_name, row_count, columns_json FROM sheets WHERE dataset_id = ?",
                 (dataset_id,)
             ).fetchall()
+            if not sheet_rows:
+                sheet_rows = conn.execute(
+                    "SELECT id, name, display_name, row_count, columns_json FROM sheets ORDER BY id ASC"
+                ).fetchall()
         finally:
             conn.close()
 
@@ -219,9 +232,24 @@ class SDRExplorerService:
             conn = get_connection()
             try:
                 sheet = conn.execute(
-                    "SELECT id, name, display_name, columns_json FROM sheets WHERE dataset_id = ? AND (id = ? OR name = ? OR display_name = ?)",
+                    "SELECT id, dataset_id, name, display_name, columns_json FROM sheets WHERE dataset_id = ? AND (id = ? OR name = ? OR display_name = ?)",
                     (dataset_id, sheet_id, sheet_id, sheet_id)
                 ).fetchone()
+                if not sheet:
+                    sheet = conn.execute(
+                        "SELECT id, dataset_id, name, display_name, columns_json FROM sheets WHERE id = ? OR name = ? OR display_name = ?",
+                        (sheet_id, sheet_id, sheet_id)
+                    ).fetchone()
+                if not sheet:
+                    # If still not found, try getting the first sheet for the dataset or database
+                    sheet = conn.execute(
+                        "SELECT id, dataset_id, name, display_name, columns_json FROM sheets WHERE dataset_id = ? ORDER BY id ASC LIMIT 1",
+                        (dataset_id,)
+                    ).fetchone()
+                if not sheet:
+                    sheet = conn.execute(
+                        "SELECT id, dataset_id, name, display_name, columns_json FROM sheets ORDER BY id ASC LIMIT 1"
+                    ).fetchone()
                 if sheet:
                     sheet_name = sheet["name"]
                     sid = sheet["id"]
@@ -351,6 +379,8 @@ class SDRExplorerService:
                     sh_rows = conn.execute("SELECT id, dataset_id, name, display_name, row_count, columns_json, analysis_context_json FROM sheets WHERE id = ? OR name = ?", (sheet_id, sheet_id)).fetchall()
                 if not sh_rows:
                     sh_rows = conn.execute("SELECT id, dataset_id, name, display_name, row_count, columns_json, analysis_context_json FROM sheets WHERE dataset_id = ?", (dataset_id,)).fetchall()
+                if not sh_rows:
+                    sh_rows = conn.execute("SELECT id, dataset_id, name, display_name, row_count, columns_json, analysis_context_json FROM sheets ORDER BY id ASC").fetchall()
 
                 for s_row in sh_rows:
                     sid = str(s_row["id"])
@@ -686,6 +716,8 @@ class SDRExplorerService:
                 ).fetchall()
             if not sh_rows:
                 sh_rows = conn.execute("SELECT id, dataset_id, name, display_name, row_count, columns_json FROM sheets WHERE dataset_id = ?", (dataset_id,)).fetchall()
+            if not sh_rows:
+                sh_rows = conn.execute("SELECT id, dataset_id, name, display_name, row_count, columns_json FROM sheets ORDER BY id ASC").fetchall()
 
             for s in sh_rows:
                 sid = str(s["id"])
@@ -949,6 +981,15 @@ class SDRExplorerService:
                     JOIN sheets rg ON rg.id = r.right_sheet
                     WHERE l.dataset_id = ? OR rg.dataset_id = ?
                 """, (dataset_id, dataset_id)).fetchall()
+
+                if not db_rels:
+                    db_rels = conn.execute("""
+                        SELECT r.*, l.name as l_name, l.display_name as l_display_name, l.dataset_id as l_dataset_id,
+                               rg.name as r_name, rg.display_name as r_display_name, rg.dataset_id as r_dataset_id
+                        FROM sheet_relationships r
+                        JOIN sheets l ON l.id = r.left_sheet
+                        JOIN sheets rg ON rg.id = r.right_sheet
+                    """).fetchall()
 
                 for r in db_rels:
                     edge_id = f"edge_rel_{r['id']}"

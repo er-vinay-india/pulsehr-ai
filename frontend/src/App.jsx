@@ -25,6 +25,12 @@ function parseHash() {
     } catch {}
     return "adaptive";
   }
+  try {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("tab") || params.get("sheet_id") || params.get("evidence_id") || params.get("topic_id")) {
+      return "explorer";
+    }
+  } catch {}
   return "adaptive";
 }
 

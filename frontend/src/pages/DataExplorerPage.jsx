@@ -337,7 +337,9 @@ export default function DataExplorerPage() {
     };
   }, [selected, catalogLoaded, catalog.sheets, activeTab]);
 
-  const selectedSheet = catalog.sheets.find((s) => String(s.id) === String(selected));
+  const selectedSheet = catalog.sheets.find(
+    (s) => String(s.id) === String(selected) || String(s.name) === String(selected) || String(s.display_name) === String(selected)
+  );
   const activeDataset = datasets.find((d) => Number(d.id) === Number(selectedSheet?.dataset_id));
 
   // Fetch ranking schema for active dataset
@@ -359,7 +361,21 @@ export default function DataExplorerPage() {
 
   // Governed Semantic Refinery (SDR-7) Explorer Data
   const explicitDatasetId = getCombinedUrlParam('dataset_id');
-  const sdrDatasetId = explicitDatasetId || activeDataset?.id || selectedSheet?.dataset_id || null;
+  const sdrDatasetId = useMemo(() => {
+    if (selectedSheet?.dataset_id) {
+      return String(selectedSheet.dataset_id);
+    }
+    if (activeDataset?.id) {
+      return String(activeDataset.id);
+    }
+    if (explicitDatasetId && datasets.some((d) => String(d.id) === String(explicitDatasetId))) {
+      return String(explicitDatasetId);
+    }
+    if (catalog.sheets.length > 0 && catalog.sheets[0].dataset_id) {
+      return String(catalog.sheets[0].dataset_id);
+    }
+    return datasets[0]?.id ? String(datasets[0].id) : (explicitDatasetId || null);
+  }, [selectedSheet?.dataset_id, activeDataset?.id, explicitDatasetId, datasets, catalog.sheets]);
   const [sdrSummary, setSdrSummary] = useState(null);
 
   useEffect(() => {
@@ -373,7 +389,7 @@ export default function DataExplorerPage() {
         if (!cancelled && res) {
           setSdrSummary(res);
           if (res.sheets && res.sheets.length > 0 && catalog.sheets.length > 0) {
-            const hasMatch = catalog.sheets.some((s) => String(s.id) === String(selected));
+            const hasMatch = catalog.sheets.some((s) => String(s.id) === String(selected) || String(s.name) === String(selected));
             if (!hasMatch) {
               const matchedSheet = catalog.sheets.find((s) =>
                 res.sheets.some((rs) => String(rs.sheet_id || rs.name) === String(s.name || s.id))
@@ -397,7 +413,8 @@ export default function DataExplorerPage() {
     if (sdrSummary?.sheets && sdrSummary.sheets.length > 0) {
       return sdrSummary.sheets;
     }
-    return catalog.sheets.filter((s) => !sdrDatasetId || String(s.dataset_id) === String(sdrDatasetId));
+    const filtered = catalog.sheets.filter((s) => !sdrDatasetId || String(s.dataset_id) === String(sdrDatasetId));
+    return filtered.length > 0 ? filtered : catalog.sheets;
   }, [sdrSummary, catalog.sheets, sdrDatasetId]);
   const link = catalog.relationships.find((r) => String(r.id) === relation);
   const left = catalog.sheets.find((s) => s.id === link?.left_sheet);
