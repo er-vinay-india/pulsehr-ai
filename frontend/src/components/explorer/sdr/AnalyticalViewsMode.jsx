@@ -407,7 +407,36 @@ export default function AnalyticalViewsMode({
             )}
           </div>
         </>
-      ) : null}
+      ) : (
+        <section
+          className="explorer-empty-state explorer-empty-state--compact"
+          style={{
+            background: bgCard,
+            border: `1px solid ${borderCol}`,
+            borderRadius: "10px",
+            padding: "36px 20px",
+            textAlign: "center",
+          }}
+        >
+          <div
+            style={{
+              display: "inline-flex",
+              padding: "12px",
+              borderRadius: "50%",
+              background: isDark ? "rgba(37, 99, 235, 0.15)" : "rgba(37, 99, 235, 0.08)",
+              marginBottom: "12px",
+            }}
+          >
+            <LayoutDashboard size={28} color="#2563eb" />
+          </div>
+          <h3 style={{ fontSize: "1.05rem", fontWeight: 700, color: textPrimary, margin: "0 0 6px 0" }}>
+            No Governed Analytical Views Materialized
+          </h3>
+          <p style={{ fontSize: "0.85rem", color: textSecondary, maxWidth: "480px", margin: "0 auto", lineHeight: 1.5 }}>
+            Analytical views remain virtual by default under SDR-6 governance. No pre-aggregated Gold views or derived metric cubes have been materialized for this dataset.
+          </p>
+        </section>
+      )}
 
       {/* Step-by-Step Fact Lineage Drawer */}
       {selectedFact && (

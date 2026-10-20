@@ -79,7 +79,7 @@ export default function SemanticsMode({
 
   const entity = semanticsData?.entities?.[0];
   const grain = semanticsData?.grains?.[0];
-  const keys = semanticsData?.keys || [];
+  const keys = semanticsData?.candidate_keys || semanticsData?.keys || [];
   const geoResolutions = semanticsData?.geo_resolutions || [];
   const columns = semanticsData?.columns || [];
 

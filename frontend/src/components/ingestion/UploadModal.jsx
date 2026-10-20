@@ -9,7 +9,8 @@ import {
   CheckCircle2,
   Table,
   RotateCcw,
-  Minimize2
+  Minimize2,
+  ShieldCheck
 } from "lucide-react";
 import {
   uploadDatasetFile,
@@ -423,8 +424,8 @@ export default function UploadModal({
                 </div>
                 <p className="expectations-description">
                   Specify what you want this analysis to answer, corporate targets, policy rules, or key questions.
-                  HighView will prioritize your intent across autonomous findings.
-                  If you prefer automatic exploratory discovery, simply choose <strong>Skip & Ingest</strong>.
+                  HighView uses your intent to guide analytical prioritization without modifying or altering underlying source data.
+                  If you prefer automatic discovery, simply choose <strong>Skip & Ingest</strong>.
                 </p>
 
                 <textarea
@@ -530,7 +531,7 @@ export default function UploadModal({
                 </div>
               )}
 
-              {/* Minimal Success Card: Pure Confirmation without technical noise */}
+              {/* Minimal Success Card: Compact Governed Artifact Summary */}
               {uploadResult && (
                 <div
                   className="upload-minimal-success"
@@ -539,7 +540,7 @@ export default function UploadModal({
                     flexDirection: "column",
                     alignItems: "center",
                     textAlign: "center",
-                    padding: "2.5rem 1.5rem",
+                    padding: "2rem 1.25rem",
                     background: "rgba(46, 213, 115, 0.04)",
                     border: "1px solid rgba(46, 213, 115, 0.25)",
                     borderRadius: "14px"
@@ -547,31 +548,74 @@ export default function UploadModal({
                 >
                   <div
                     style={{
-                      width: "60px",
-                      height: "60px",
+                      width: "52px",
+                      height: "52px",
                       borderRadius: "50%",
                       background: "rgba(46, 213, 115, 0.15)",
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
-                      marginBottom: "1rem",
+                      marginBottom: "0.75rem",
                       border: "1px solid rgba(46, 213, 115, 0.4)"
                     }}
                   >
-                    <CheckCircle2 size={32} color="#2ed573" />
+                    <CheckCircle2 size={28} color="#2ed573" />
                   </div>
 
-                  <h3 style={{ fontSize: "1.3rem", color: "#fff9f2", marginBottom: "0.4rem" }}>
-                    Spreadsheet Ingested Successfully
+                  <h3 style={{ fontSize: "1.2rem", color: "var(--fg-primary, #fff9f2)", marginBottom: "0.3rem" }}>
+                    Governed Dataset Ingestion Complete
                   </h3>
 
-                  <p style={{ fontSize: "0.92rem", color: "var(--fg-secondary)", maxWidth: "420px", marginBottom: "0.25rem" }}>
-                    <strong>{uploadResult.display_name || uploadResult.filename}</strong> is fully processed.
+                  <p style={{ fontSize: "0.88rem", color: "var(--fg-secondary, #94a3b8)", maxWidth: "440px", marginBottom: "0.25rem" }}>
+                    <strong>{uploadResult.display_name || uploadResult.filename}</strong> has been profiled and cataloged.
                   </p>
 
-                  <p style={{ fontSize: "0.82rem", color: "var(--fg-muted)", maxWidth: "420px", marginBottom: "1.75rem" }}>
-                    {uploadResult.sheets?.length || 1} sheet(s) · {uploadResult.total_rows || 0} rows indexed and normalized for exploratory analytics.
+                  <p style={{ fontSize: "0.8rem", color: "var(--fg-muted, #64748b)", maxWidth: "440px", marginBottom: "1rem" }}>
+                    {uploadResult.sheets?.length || 1} sheet(s) · {uploadResult.total_rows || 0} rows preserved with full source fidelity.
                   </p>
+
+                  {/* Compact Governed Artifact Summary Grid */}
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(3, 1fr)",
+                      gap: "8px",
+                      width: "100%",
+                      maxWidth: "480px",
+                      margin: "0.5rem 0 1rem 0",
+                      textAlign: "left"
+                    }}
+                  >
+                    <div style={{ background: "rgba(255, 255, 255, 0.03)", border: "1px solid rgba(255, 255, 255, 0.08)", borderRadius: "8px", padding: "8px 10px" }}>
+                      <div style={{ fontSize: "0.68rem", color: "var(--fg-muted, #94a3b8)", textTransform: "uppercase", letterSpacing: "0.5px" }}>Sheets</div>
+                      <div style={{ fontSize: "1.05rem", fontWeight: 700, color: "var(--fg-primary, #fff)" }}>{uploadResult.sheets?.length || 1}</div>
+                    </div>
+                    <div style={{ background: "rgba(255, 255, 255, 0.03)", border: "1px solid rgba(255, 255, 255, 0.08)", borderRadius: "8px", padding: "8px 10px" }}>
+                      <div style={{ fontSize: "0.68rem", color: "var(--fg-muted, #94a3b8)", textTransform: "uppercase", letterSpacing: "0.5px" }}>Columns Profiled</div>
+                      <div style={{ fontSize: "1.05rem", fontWeight: 700, color: "var(--fg-primary, #fff)" }}>{uploadResult.columns?.length || 0}</div>
+                    </div>
+                    <div style={{ background: "rgba(255, 255, 255, 0.03)", border: "1px solid rgba(255, 255, 255, 0.08)", borderRadius: "8px", padding: "8px 10px" }}>
+                      <div style={{ fontSize: "0.68rem", color: "var(--fg-muted, #94a3b8)", textTransform: "uppercase", letterSpacing: "0.5px" }}>Entities</div>
+                      <div style={{ fontSize: "1.05rem", fontWeight: 700, color: "var(--fg-primary, #fff)" }}>{uploadResult.entities_count || uploadResult.sheets?.length || 1}</div>
+                    </div>
+                    <div style={{ background: "rgba(255, 255, 255, 0.03)", border: "1px solid rgba(255, 255, 255, 0.08)", borderRadius: "8px", padding: "8px 10px" }}>
+                      <div style={{ fontSize: "0.68rem", color: "var(--fg-muted, #94a3b8)", textTransform: "uppercase", letterSpacing: "0.5px" }}>Candidate Keys</div>
+                      <div style={{ fontSize: "1.05rem", fontWeight: 700, color: "var(--fg-primary, #fff)" }}>{uploadResult.candidate_keys_count ?? 1}</div>
+                    </div>
+                    <div style={{ background: "rgba(255, 255, 255, 0.03)", border: "1px solid rgba(255, 255, 255, 0.08)", borderRadius: "8px", padding: "8px 10px" }}>
+                      <div style={{ fontSize: "0.68rem", color: "var(--fg-muted, #94a3b8)", textTransform: "uppercase", letterSpacing: "0.5px" }}>Relationships</div>
+                      <div style={{ fontSize: "1.05rem", fontWeight: 700, color: "var(--fg-primary, #fff)" }}>{uploadResult.linked_relationships ?? 0}</div>
+                    </div>
+                    <div style={{ background: "rgba(255, 255, 255, 0.03)", border: "1px solid rgba(255, 255, 255, 0.08)", borderRadius: "8px", padding: "8px 10px" }}>
+                      <div style={{ fontSize: "0.68rem", color: "var(--fg-muted, #94a3b8)", textTransform: "uppercase", letterSpacing: "0.5px" }}>Analytical Views</div>
+                      <div style={{ fontSize: "1.05rem", fontWeight: 700, color: "var(--fg-primary, #fff)" }}>{uploadResult.enrichment?.analytical_tables_count || (uploadResult.sheets?.length || 1)}</div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "0.78rem", color: (uploadResult.review_items_count > 0 ? "#f59e0b" : "#10b981"), marginBottom: "1.25rem" }}>
+                    <ShieldCheck size={14} />
+                    <span>{uploadResult.review_items_count > 0 ? `${uploadResult.review_items_count} item(s) flagged for semantic review` : "All artifacts governed under SDR contracts"}</span>
+                  </div>
 
                   <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", justifyContent: "center" }}>
                     <button
@@ -581,9 +625,9 @@ export default function UploadModal({
                         onClose();
                         window.location.hash = "explorer";
                       }}
-                      style={{ display: "inline-flex", alignItems: "center", gap: "8px", padding: "0.6rem 1.25rem" }}
+                      style={{ display: "inline-flex", alignItems: "center", gap: "8px", padding: "0.55rem 1.25rem", fontSize: "0.85rem" }}
                     >
-                      <Table size={16} />
+                      <Table size={15} />
                       <span>Explore in Data Explorer</span>
                     </button>
 
@@ -591,7 +635,7 @@ export default function UploadModal({
                       type="button"
                       className="btn-secondary"
                       onClick={onClose}
-                      style={{ padding: "0.6rem 1.25rem" }}
+                      style={{ padding: "0.55rem 1.25rem", fontSize: "0.85rem" }}
                     >
                       <span>Done</span>
                     </button>

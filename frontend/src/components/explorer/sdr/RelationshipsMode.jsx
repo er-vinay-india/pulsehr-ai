@@ -222,6 +222,35 @@ export default function RelationshipsMode({
           <AlertCircle size={16} />
           <span>{error}</span>
         </div>
+      ) : allRelationships.length === 0 ? (
+        <section
+          className="explorer-empty-state explorer-empty-state--compact"
+          style={{
+            background: bgCard,
+            border: `1px solid ${borderCol}`,
+            borderRadius: "10px",
+            padding: "36px 20px",
+            textAlign: "center",
+          }}
+        >
+          <div
+            style={{
+              display: "inline-flex",
+              padding: "12px",
+              borderRadius: "50%",
+              background: isDark ? "rgba(37, 99, 235, 0.15)" : "rgba(37, 99, 235, 0.08)",
+              marginBottom: "12px",
+            }}
+          >
+            <GitMerge size={28} color="#2563eb" />
+          </div>
+          <h3 style={{ fontSize: "1.05rem", fontWeight: 700, color: textPrimary, margin: "0 0 6px 0" }}>
+            No Governed Cross-Sheet Relationships
+          </h3>
+          <p style={{ fontSize: "0.85rem", color: textSecondary, maxWidth: "480px", margin: "0 auto", lineHeight: 1.5 }}>
+            This dataset either has a single table or contains no validated cross-sheet join candidates. Relationships require strict key identity validation under SDR-5.
+          </p>
+        </section>
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: "16px" }}>
           {/* Relationships List / Graph */}
