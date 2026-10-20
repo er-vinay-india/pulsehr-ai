@@ -137,25 +137,27 @@ def test_targeted_source_context_service():
 
 
 def test_paginated_related_evidence_service():
-    """Verify that get_paginated_related_evidence bounds page size to 25 and supports search."""
+    """Verify that get_paginated_related_evidence bounds page size to 25 and supports server-side pagination."""
     conn = get_connection()
     try:
-        res = get_paginated_related_evidence(
+        res_p1 = get_paginated_related_evidence(
             conn,
             sheet_id=9967451,
             page=1,
-            page_size=25,
+            limit=25,
         )
-        assert len(res["items"]) <= 25
-        assert res["total_count"] > 0
-        assert res["page"] == 1
-        assert res["page_size"] == 25
+        assert len(res_p1["items"]) <= 25
+        assert res_p1["total"] > 0
+        assert res_p1["page"] == 1
+        assert res_p1["limit"] == 25
+        assert "has_next" in res_p1
+        assert "has_previous" in res_p1
 
         # Test search filter
         search_res = get_paginated_related_evidence(
             conn,
             sheet_id=9967451,
-            search="Finding",
+            search="Population",
         )
         assert len(search_res["items"]) > 0
     finally:
@@ -163,7 +165,7 @@ def test_paginated_related_evidence_service():
 
 
 def test_targeted_evidence_api_endpoints(client):
-    """Verify HTTP API contracts for targeted evidence retrieval."""
+    """Verify HTTP API contracts for targeted evidence retrieval and server-side pagination."""
     # 1. Targeted evidence
     r = client.get("/api/analytics/overview/evidence/EVID-S9967451-EVID-002?dataset_id=99795&sheet_id=9967451&topic_id=TOPIC-6fbddfb2")
     assert r.status_code == 200
@@ -183,8 +185,14 @@ def test_targeted_evidence_api_endpoints(client):
     src_data = r_src.json()
     assert len(src_data["rows"]) == 5
 
-    # 4. Paginated evidence
-    r_paged = client.get("/api/analytics/overview/evidence?sheet_id=9967451&page=1&page_size=25")
-    assert r_paged.status_code == 200
-    paged_data = r_paged.json()
-    assert len(paged_data["items"]) <= 25
+    # 4. Paginated evidence (Page 1)
+    r_p1 = client.get("/api/analytics/overview/evidence?sheet_id=9967451&page=1&limit=25")
+    assert r_p1.status_code == 200
+    p1_data = r_p1.json()
+    assert len(p1_data["items"]) <= 25
+    assert p1_data["page"] == 1
+    assert p1_data["limit"] == 25
+    assert "total" in p1_data
+    assert "total_pages" in p1_data
+    assert "has_next" in p1_data
+    assert "has_previous" in p1_data

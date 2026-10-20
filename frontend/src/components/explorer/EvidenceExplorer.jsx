@@ -56,6 +56,7 @@ export default function EvidenceExplorer({
   const [relatedPage, setRelatedPage] = useState(1);
   const [relatedPageSize, setRelatedPageSize] = useState(25);
   const [relatedTotalCount, setRelatedTotalCount] = useState(0);
+  const [relatedTotalPages, setRelatedTotalPages] = useState(1);
   const [relatedSearch, setRelatedSearch] = useState("");
 
   // In-memory cache & request cancellation refs
@@ -175,7 +176,7 @@ export default function EvidenceExplorer({
       });
   };
 
-  // 4. PAGINATED RELATED EVIDENCE FETCH
+  // 4. PAGINATED RELATED EVIDENCE FETCH (Server-Side)
   useEffect(() => {
     let mounted = true;
     setLoadingRelated(true);
@@ -186,13 +187,14 @@ export default function EvidenceExplorer({
         datasetId,
         topicId: initialTopicId,
         page: relatedPage,
-        pageSize: relatedPageSize,
+        limit: relatedPageSize,
         search: relatedSearch || null,
       })
         .then((res) => {
           if (mounted) {
             setRelatedItems(res.items || []);
-            setRelatedTotalCount(res.total_count || 0);
+            setRelatedTotalCount(res.total ?? res.total_count ?? 0);
+            setRelatedTotalPages(res.total_pages ?? 1);
           }
         })
         .catch((err) => {
@@ -807,7 +809,7 @@ export default function EvidenceExplorer({
           </div>
         </div>
 
-        {/* Enterprise Shared DataTable */}
+        {/* Enterprise Shared DataTable (Server-Side Paginated) */}
         <DataTable
           columns={relatedColumns}
           rows={relatedItems}
@@ -818,6 +820,13 @@ export default function EvidenceExplorer({
               setActiveEvidenceId(row.evidence_id);
             }
           }}
+          serverSide={true}
+          totalRows={relatedTotalCount}
+          serverPage={relatedPage}
+          serverTotalPages={relatedTotalPages}
+          onPageChange={(newPage) => {
+            setRelatedPage(newPage);
+          }}
           pageSize={relatedPageSize}
           onPageSizeChange={(newSize) => {
             setRelatedPageSize(newSize);
@@ -827,6 +836,7 @@ export default function EvidenceExplorer({
           themeTokens={themeTokens}
           isDark={isDark}
           showRowIndex={true}
+          loading={loadingRelated}
         />
       </div>
     </div>

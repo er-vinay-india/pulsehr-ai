@@ -86,13 +86,15 @@ export async function getEvidenceSourceContext(evidenceId, { sheetId = null, lim
   return res.json();
 }
 
-export async function getPaginatedEvidence({ sheetId = null, datasetId = null, topicId = null, page = 1, pageSize = 25, search = null } = {}, signal = null) {
+export async function getPaginatedEvidence({ sheetId = null, datasetId = null, topicId = null, page = 1, limit = 25, pageSize = 25, search = null } = {}, signal = null) {
   const params = new URLSearchParams();
   if (sheetId) params.set("sheet_id", sheetId);
   if (datasetId) params.set("dataset_id", datasetId);
   if (topicId) params.set("topic_id", topicId);
+  const actualLimit = limit || pageSize || 25;
   params.set("page", page);
-  params.set("page_size", pageSize);
+  params.set("limit", actualLimit);
+  params.set("page_size", actualLimit);
   if (search) params.set("search", search);
   const res = await fetch(`${API_BASE}/analytics/overview/evidence?${params.toString()}`, { signal });
   if (!res.ok) {

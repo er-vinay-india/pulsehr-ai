@@ -111,14 +111,16 @@ def api_overview_related_evidence(
     dataset_id: int | None = Query(None),
     topic_id: str | None = Query(None),
     page: int = Query(1, ge=1),
-    page_size: int = Query(25, ge=1, le=100),
+    limit: int | None = Query(None, ge=1, le=100),
+    page_size: int | None = Query(None, ge=1, le=100),
     search: str | None = Query(None),
 ):
-    """Returns paginated related evidence with bounded payloads and search filtering."""
+    """Returns server-side paginated related evidence with bounded payloads and search filtering."""
     clean_sheet_id = int(sheet_id) if sheet_id is not None and not hasattr(sheet_id, 'default') else None
     clean_dataset_id = int(dataset_id) if dataset_id is not None and not hasattr(dataset_id, 'default') else None
     clean_topic_id = str(topic_id) if topic_id is not None and not hasattr(topic_id, 'default') else None
     clean_search = str(search) if search is not None and not hasattr(search, 'default') else None
+    effective_limit = limit if limit is not None else (page_size if page_size is not None else 25)
 
     conn = get_connection()
     try:
@@ -129,7 +131,7 @@ def api_overview_related_evidence(
             dataset_id=clean_dataset_id,
             topic_id=clean_topic_id,
             page=page,
-            page_size=page_size,
+            limit=effective_limit,
             search=clean_search,
         )
     finally:
