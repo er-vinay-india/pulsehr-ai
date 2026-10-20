@@ -95,7 +95,7 @@ export default function OverviewExplorer({
           <span style={{ fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase", color: themeTokens?.colors?.textSecondary }}>
             Data completeness
           </span>
-          <div style={{ marginTop: "4px", fontSize: "1.1rem", fontWeight: 700, color: dataHealth?.completenessPct >= 95 ? "#10b981" : "#f59e0b" }}>
+          <div style={{ marginTop: "4px", fontSize: "1.1rem", fontWeight: 700, color: dataHealth?.completenessPct >= 95 ? (themeTokens?.colors?.statusSuccess || "var(--color-success)") : (themeTokens?.colors?.statusWarning || "var(--color-warning)") }}>
             {dataHealth?.completenessPct != null ? `${dataHealth.completenessPct}% Complete` : "Not available"}
           </div>
           <div style={{ fontSize: "0.76rem", color: themeTokens?.colors?.textMuted, marginTop: "2px" }}>
@@ -126,7 +126,7 @@ export default function OverviewExplorer({
         >
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px" }}>
-              <Database size={15} color={themeTokens?.colors?.brandBlue || "#2563eb"} />
+              <Database size={15} color={themeTokens?.colors?.brandPrimary || "var(--color-brand-primary)"} />
               <h3 style={{ margin: 0, fontSize: "0.92rem", fontWeight: 700, color: themeTokens?.colors?.textPrimary }}>
                 Categories to compare ({entities.length})
               </h3>
@@ -140,9 +140,9 @@ export default function OverviewExplorer({
                     borderRadius: "6px",
                     fontSize: "0.74rem",
                     fontWeight: 600,
-                    backgroundColor: isDark ? "rgba(37, 99, 235, 0.15)" : "rgba(37, 99, 235, 0.08)",
-                    color: themeTokens?.colors?.brandBlue || "#2563eb",
-                    border: `1px solid ${isDark ? "rgba(37, 99, 235, 0.3)" : "rgba(37, 99, 235, 0.2)"}`,
+                    backgroundColor: themeTokens?.colors?.softBlue || "var(--color-bg-soft-blue)",
+                    color: themeTokens?.colors?.brandPrimary || "var(--color-brand-primary)",
+                    border: `1px solid ${themeTokens?.colors?.borderSubtle || "var(--color-divider)"}`,
                   }}
                 >
                   {e.display_name} ({e.cardinality} groups)
@@ -157,12 +157,12 @@ export default function OverviewExplorer({
           </div>
           <button
             type="button"
-            onClick={() => onNavigateTab("rankings")}
+            onClick={() => onNavigateTab("analysis")}
             style={{
               marginTop: "12px",
               background: "transparent",
               border: "none",
-              color: themeTokens?.colors?.brandBlue || "#2563eb",
+              color: themeTokens?.colors?.brandPrimary || "var(--color-brand-primary)",
               fontSize: "0.76rem",
               fontWeight: 600,
               cursor: "pointer",
@@ -191,7 +191,7 @@ export default function OverviewExplorer({
         >
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px" }}>
-              <Award size={15} color="#d97706" />
+              <Award size={15} color={themeTokens?.colors?.gold || "var(--color-gold)"} />
               <h3 style={{ margin: 0, fontSize: "0.92rem", fontWeight: 700, color: themeTokens?.colors?.textPrimary }}>
                 Numbers to explore ({measures.length})
               </h3>
@@ -205,9 +205,9 @@ export default function OverviewExplorer({
                     borderRadius: "6px",
                     fontSize: "0.74rem",
                     fontWeight: 600,
-                    backgroundColor: isDark ? "rgba(217, 119, 6, 0.15)" : "rgba(217, 119, 6, 0.08)",
-                    color: "#d97706",
-                    border: `1px solid ${isDark ? "rgba(217, 119, 6, 0.3)" : "rgba(217, 119, 6, 0.2)"}`,
+                    backgroundColor: themeTokens?.colors?.softGold || "var(--color-bg-soft-gold)",
+                    color: themeTokens?.colors?.gold || "var(--color-gold)",
+                    border: `1px solid ${themeTokens?.colors?.borderSubtle || "var(--color-divider)"}`,
                   }}
                 >
                   {m.measure_label} {m.unit ? `(${m.unit})` : ""}
@@ -222,12 +222,12 @@ export default function OverviewExplorer({
           </div>
           <button
             type="button"
-            onClick={() => onNavigateTab("distributions")}
+            onClick={() => onNavigateTab("analysis")}
             style={{
               marginTop: "12px",
               background: "transparent",
               border: "none",
-              color: "#d97706",
+              color: themeTokens?.colors?.gold || "var(--color-gold)",
               fontSize: "0.76rem",
               fontWeight: 600,
               cursor: "pointer",
@@ -256,7 +256,7 @@ export default function OverviewExplorer({
         >
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px" }}>
-              <Calendar size={15} color="#10b981" />
+              <Calendar size={15} color={themeTokens?.colors?.statusSuccess || "var(--color-success)"} />
               <h3 style={{ margin: 0, fontSize: "0.92rem", fontWeight: 700, color: themeTokens?.colors?.textPrimary }}>
                 Trends & connections
               </h3>
@@ -268,11 +268,11 @@ export default function OverviewExplorer({
           <div style={{ display: "flex", gap: "12px", marginTop: "12px" }}>
             <button
               type="button"
-              onClick={() => onNavigateTab("trends")}
+              onClick={() => onNavigateTab("analysis")}
               style={{
                 background: "transparent",
                 border: "none",
-                color: "#10b981",
+                color: themeTokens?.colors?.statusSuccess || "var(--color-success)",
                 fontSize: "0.76rem",
                 fontWeight: 600,
                 cursor: "pointer",
@@ -291,7 +291,7 @@ export default function OverviewExplorer({
               style={{
                 background: "transparent",
                 border: "none",
-                color: "#8b5cf6",
+                color: themeTokens?.colors?.brandPrimary || "var(--color-brand-primary)",
                 fontSize: "0.76rem",
                 fontWeight: 600,
                 cursor: "pointer",

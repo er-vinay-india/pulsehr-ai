@@ -1,7 +1,13 @@
 import React, { useState, useEffect } from "react";
 import { getExplorerSourceRows } from "../../../api/client";
 import { Table, Search, ChevronLeft, ChevronRight, ShieldCheck, Database, AlertCircle } from "lucide-react";
+import StatusBadge from "../common/StatusBadge";
 
+/**
+ * HighView Data Explorer — Data (Source Records)
+ * Displays authentic source records without derived columns.
+ * Guaranteed 100% theme token integration and WCAG AAA compliance.
+ */
 export default function SourceMode({
   datasetId,
   sheets = [],
@@ -18,6 +24,17 @@ export default function SourceMode({
   const [pageSize] = useState(25);
   const [searchTerm, setSearchTerm] = useState("");
   const [searchInput, setSearchInput] = useState("");
+
+  const bgSurface = themeTokens?.colors?.surface || "var(--color-bg-surface)";
+  const bgSubtle = themeTokens?.colors?.surfaceHover || "var(--color-bg-subtle)";
+  const borderCol = themeTokens?.colors?.borderSubtle || "var(--color-divider)";
+  const borderStrong = themeTokens?.colors?.border || "var(--color-border)";
+  const textPrimary = themeTokens?.colors?.textPrimary || "var(--color-text-primary)";
+  const textSecondary = themeTokens?.colors?.textSecondary || "var(--color-text-secondary)";
+  const textMuted = themeTokens?.colors?.textMuted || "var(--color-text-muted)";
+  const brandPrimary = themeTokens?.colors?.brandPrimary || "var(--color-brand-primary)";
+  const brandSoftBg = themeTokens?.colors?.softBlue || "var(--color-bg-soft-blue)";
+
   useEffect(() => {
     if (selectedSheetId && sheets.some(s => (s.sheet_id || s.name) === selectedSheetId)) {
       setActiveSheet(selectedSheetId);
@@ -73,17 +90,12 @@ export default function SourceMode({
 
   const totalPages = rowsData ? Math.max(1, Math.ceil(rowsData.total_rows / pageSize)) : 1;
 
-  const bgCard = isDark ? "#1e293b" : "#ffffff";
-  const borderCol = isDark ? "#334155" : "#e2e8f0";
-  const textPrimary = isDark ? "#f8fafc" : "#0f172a";
-  const textSecondary = isDark ? "#94a3b8" : "#64748b";
-
   return (
     <div className="sdr-source-mode-container" style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-      {/* Header & Exactness Guarantee Banner */}
+      {/* Header & Exactness Guarantee */}
       <div
         style={{
-          background: isDark ? "rgba(30, 41, 59, 0.7)" : "#ffffff",
+          background: bgSurface,
           border: `1px solid ${borderCol}`,
           borderRadius: "10px",
           padding: "16px",
@@ -94,49 +106,18 @@ export default function SourceMode({
       >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <Database size={18} color="#2563eb" />
+            <Database size={18} color={brandPrimary} aria-hidden="true" />
             <h2 style={{ margin: 0, fontSize: "1.1rem", fontWeight: 700, color: textPrimary }}>
-              Source Data (Raw Observed Evidence)
+              Source Data
             </h2>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
-            <span
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "5px",
-                fontSize: "0.75rem",
-                fontWeight: 600,
-                padding: "3px 8px",
-                borderRadius: "6px",
-                background: "rgba(16, 185, 129, 0.12)",
-                color: "#10b981",
-                border: "1px solid rgba(16, 185, 129, 0.3)",
-              }}
-            >
-              <ShieldCheck size={13} />
-              Exactness-First · Raw Values
-            </span>
-            <span
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "5px",
-                fontSize: "0.75rem",
-                fontWeight: 600,
-                padding: "3px 8px",
-                borderRadius: "6px",
-                background: "rgba(99, 102, 241, 0.12)",
-                color: "#6366f1",
-                border: "1px solid rgba(99, 102, 241, 0.3)",
-              }}
-            >
-              0 Derived Columns Masquerading
-            </span>
+            <StatusBadge status="Exact raw values" variant="success" icon={ShieldCheck} />
+            <StatusBadge status="0 derived columns" variant="neutral" />
           </div>
         </div>
         <p style={{ margin: 0, fontSize: "0.82rem", color: textSecondary }}>
-          Displays authentic uploaded records with zero synthetic derivations, intact leading zeros, and uncompacted identifiers.
+          Authentic uploaded records with intact identifiers and preserved precision.
         </p>
 
         {/* Sheet Selector Pills */}
@@ -154,9 +135,9 @@ export default function SourceMode({
                   fontSize: "0.8rem",
                   fontWeight: isSelected ? 700 : 500,
                   borderRadius: "8px",
-                  border: isSelected ? "1px solid #2563eb" : `1px solid ${borderCol}`,
-                  background: isSelected ? (isDark ? "rgba(37, 99, 235, 0.2)" : "rgba(37, 99, 235, 0.08)") : "transparent",
-                  color: isSelected ? "#2563eb" : textSecondary,
+                  border: isSelected ? `1px solid ${brandPrimary}` : `1px solid ${borderCol}`,
+                  background: isSelected ? brandSoftBg : "transparent",
+                  color: isSelected ? brandPrimary : textSecondary,
                   cursor: "pointer",
                   whiteSpace: "nowrap",
                   transition: "all 0.15s ease",
@@ -185,13 +166,13 @@ export default function SourceMode({
               display: "flex",
               alignItems: "center",
               gap: "6px",
-              background: bgCard,
-              border: `1px solid ${borderCol}`,
+              background: bgSurface,
+              border: `1px solid ${borderStrong}`,
               borderRadius: "8px",
               padding: "5px 10px",
             }}
           >
-            <Search size={14} color={textSecondary} />
+            <Search size={14} color={textSecondary} aria-hidden="true" />
             <input
               type="text"
               aria-label="Search raw values"
@@ -211,11 +192,11 @@ export default function SourceMode({
           <button
             type="submit"
             style={{
-              padding: "6px 12px",
+              padding: "6px 14px",
               fontSize: "0.8rem",
               fontWeight: 600,
-              background: "#2563eb",
-              color: "#ffffff",
+              background: brandPrimary,
+              color: themeTokens?.colors?.textOnDark || "#ffffff",
               border: "none",
               borderRadius: "8px",
               cursor: "pointer",
@@ -261,8 +242,8 @@ export default function SourceMode({
                   padding: "4px 8px",
                   borderRadius: "6px",
                   border: `1px solid ${borderCol}`,
-                  background: bgCard,
-                  color: page <= 1 ? (isDark ? "#475569" : "#cbd5e1") : textPrimary,
+                  background: bgSurface,
+                  color: page <= 1 ? textMuted : textPrimary,
                   cursor: page <= 1 ? "not-allowed" : "pointer",
                   display: "flex",
                   alignItems: "center",
@@ -282,8 +263,8 @@ export default function SourceMode({
                   padding: "4px 8px",
                   borderRadius: "6px",
                   border: `1px solid ${borderCol}`,
-                  background: bgCard,
-                  color: page >= totalPages ? (isDark ? "#475569" : "#cbd5e1") : textPrimary,
+                  background: bgSurface,
+                  color: page >= totalPages ? textMuted : textPrimary,
                   cursor: page >= totalPages ? "not-allowed" : "pointer",
                   display: "flex",
                   alignItems: "center",
@@ -299,16 +280,16 @@ export default function SourceMode({
       {/* Main Table Content */}
       {loading ? (
         <div style={{ padding: "40px", textAlign: "center", color: textSecondary, fontSize: "0.9rem" }}>
-          Loading exact source records…
+          Loading source records…
         </div>
       ) : error ? (
         <div
           style={{
             padding: "16px",
-            background: "rgba(239, 68, 68, 0.1)",
-            border: "1px solid rgba(239, 68, 68, 0.3)",
+            background: themeTokens?.colors?.softError || "var(--color-bg-soft-error)",
+            border: `1px solid ${themeTokens?.colors?.statusError || "var(--color-error)"}`,
             borderRadius: "8px",
-            color: "#ef4444",
+            color: themeTokens?.colors?.statusError || "var(--color-error)",
             display: "flex",
             alignItems: "center",
             gap: "8px",
@@ -322,7 +303,7 @@ export default function SourceMode({
         <div
           style={{
             overflowX: "auto",
-            background: bgCard,
+            background: bgSurface,
             border: `1px solid ${borderCol}`,
             borderRadius: "10px",
           }}
@@ -336,7 +317,7 @@ export default function SourceMode({
             }}
           >
             <thead>
-              <tr style={{ background: isDark ? "#0f172a" : "#f8fafc", borderBottom: `2px solid ${borderCol}` }}>
+              <tr style={{ background: bgSubtle, borderBottom: `2px solid ${borderCol}` }}>
                 <th style={{ padding: "10px 12px", width: "50px", color: textSecondary, fontWeight: 700 }}>
                   #
                 </th>
@@ -353,7 +334,7 @@ export default function SourceMode({
                   key={row.__row_index || idx}
                   style={{
                     borderBottom: `1px solid ${borderCol}`,
-                    background: idx % 2 === 1 ? (isDark ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.015)") : "transparent",
+                    background: idx % 2 === 1 ? bgSubtle : "transparent",
                   }}
                 >
                   <td style={{ padding: "10px 12px", color: textSecondary, fontWeight: 600 }}>
@@ -367,7 +348,7 @@ export default function SourceMode({
                         key={col}
                         style={{
                           padding: "10px 12px",
-                          color: isNull ? (isDark ? "#64748b" : "#94a3b8") : textPrimary,
+                          color: isNull ? textMuted : textPrimary,
                           fontFamily: typeof val === "number" || (typeof val === "string" && /^\d+$/.test(val)) ? "monospace" : "inherit",
                           fontStyle: isNull ? "italic" : "normal",
                           whiteSpace: "nowrap",

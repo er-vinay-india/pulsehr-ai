@@ -1,6 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { getExplorerAnalyticalViews } from "../../../api/client";
 import LineageDrawer from "./LineageDrawer";
+import StatusBadge from "../common/StatusBadge";
+import RankingsExplorer from "../RankingsExplorer";
+import TrendsExplorer from "../TrendsExplorer";
+import DistributionsExplorer from "../DistributionsExplorer";
 import {
   LayoutDashboard,
   ShieldCheck,
@@ -9,23 +13,48 @@ import {
   GitBranch,
   Layers,
   CheckCircle2,
-  Lock,
   Clock,
   ArrowRight,
   Eye,
   AlertCircle,
+  Table,
+  TrendingUp,
+  BarChart2,
 } from "lucide-react";
 
+/**
+ * HighView Data Explorer — Analysis
+ * "Cards summarize. Tables compare. Drawers explain."
+ * Primary representation:
+ * 1. Analysis Table (Reconstructed views, grains, freshness, modes)
+ * 2. Analytical Facts Table (Full exact metric values, units, denominators, lineage)
+ * Optional sub-tabs for Rankings, Trends, and Distributions.
+ */
 export default function AnalyticalViewsMode({
   datasetId,
   themeTokens,
   isDark = false,
+  edaReport = null,
+  rankingSchema = null,
+  selectedSheet = null,
+  initialSubView = "views", // 'views' | 'rankings' | 'trends' | 'distributions'
 }) {
   const [viewsData, setViewsData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [subView, setSubView] = useState(initialSubView || "views");
   const [selectedViewId, setSelectedViewId] = useState(null);
   const [selectedFact, setSelectedFact] = useState(null);
+
+  const bgSurface = themeTokens?.colors?.surface || "var(--color-bg-surface)";
+  const bgSubtle = themeTokens?.colors?.surfaceHover || "var(--color-bg-subtle)";
+  const borderCol = themeTokens?.colors?.borderSubtle || "var(--color-divider)";
+  const borderStrong = themeTokens?.colors?.border || "var(--color-border)";
+  const textPrimary = themeTokens?.colors?.textPrimary || "var(--color-text-primary)";
+  const textSecondary = themeTokens?.colors?.textSecondary || "var(--color-text-secondary)";
+  const textMuted = themeTokens?.colors?.textMuted || "var(--color-text-muted)";
+  const brandPrimary = themeTokens?.colors?.brandPrimary || "var(--color-brand-primary)";
+  const brandSoftBg = themeTokens?.colors?.softBlue || "var(--color-bg-soft-blue)";
 
   useEffect(() => {
     if (!datasetId) return;
@@ -59,12 +88,6 @@ export default function AnalyticalViewsMode({
     };
   }, [datasetId]);
 
-  const bgCard = isDark ? "#1e293b" : "#ffffff";
-  const borderCol = isDark ? "#334155" : "#e2e8f0";
-  const textPrimary = isDark ? "#f8fafc" : "#0f172a";
-  const textSecondary = isDark ? "#94a3b8" : "#64748b";
-  const bgSubtle = isDark ? "#0f172a" : "#f8fafc";
-
   const allViews = viewsData?.views || [];
   const allFacts = viewsData?.facts || [];
 
@@ -73,10 +96,10 @@ export default function AnalyticalViewsMode({
 
   return (
     <div className="sdr-analytical-views-mode-container" style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-      {/* Header & Governance Banner */}
+      {/* Header & Sub-view Pills */}
       <div
         style={{
-          background: isDark ? "rgba(30, 41, 59, 0.7)" : "#ffffff",
+          background: bgSurface,
           border: `1px solid ${borderCol}`,
           borderRadius: "10px",
           padding: "16px",
@@ -87,362 +110,394 @@ export default function AnalyticalViewsMode({
       >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <LayoutDashboard size={18} color="#2563eb" />
+            <LayoutDashboard size={18} color={brandPrimary} aria-hidden="true" />
             <h2 style={{ margin: 0, fontSize: "1.1rem", fontWeight: 700, color: textPrimary }}>
-              Governed Analytical Views & Gold Facts (SDR-6)
+              Analysis
             </h2>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
-            <span
-              style={{
-                fontSize: "0.75rem",
-                fontWeight: 600,
-                padding: "3px 8px",
-                borderRadius: "6px",
-                background: "rgba(16, 185, 129, 0.12)",
-                color: "#10b981",
-                border: "1px solid rgba(16, 185, 129, 0.3)",
-              }}
-            >
-              Default Virtual Materialization
-            </span>
-            <span
-              style={{
-                fontSize: "0.75rem",
-                fontWeight: 600,
-                padding: "3px 8px",
-                borderRadius: "6px",
-                background: "rgba(239, 68, 68, 0.12)",
-                color: "#ef4444",
-                border: "1px solid rgba(239, 68, 68, 0.3)",
-              }}
-            >
-              Stale Views Blocked from Serving
-            </span>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <StatusBadge status="Virtual Materialization" variant="info" />
+            <StatusBadge status="Current" variant="success" />
           </div>
         </div>
         <p style={{ margin: 0, fontSize: "0.82rem", color: textSecondary }}>
-          Inspect reconstructed multi-table analytical views, freshness statuses, exact Gold metric facts, and complete provenance lineage paths.
+          Governed analytical calculations, verified metrics, rankings, and trends.
         </p>
 
-        {/* View Selection Tabs */}
+        {/* Sub-view Navigation */}
         <div style={{ display: "flex", alignItems: "center", gap: "6px", overflowX: "auto", paddingTop: "4px" }}>
-          {allViews.map((v) => {
-            const isSelected = v.view_id === selectedViewId;
+          {[
+            { id: "views", label: "Analytical Views & Facts", icon: Table },
+            { id: "rankings", label: "Rankings", icon: Award },
+            { id: "trends", label: "Trends", icon: TrendingUp },
+            { id: "distributions", label: "Value Ranges", icon: BarChart2 },
+          ].map((item) => {
+            const Icon = item.icon;
+            const isActive = subView === item.id;
             return (
               <button
-                key={v.view_id}
+                key={item.id}
                 type="button"
-                onClick={() => setSelectedViewId(v.view_id)}
+                onClick={() => setSubView(item.id)}
                 style={{
-                  padding: "6px 12px",
-                  fontSize: "0.8rem",
-                  fontWeight: isSelected ? 700 : 500,
-                  borderRadius: "8px",
-                  border: isSelected ? "1px solid #2563eb" : `1px solid ${borderCol}`,
-                  background: isSelected ? (isDark ? "rgba(37, 99, 235, 0.2)" : "rgba(37, 99, 235, 0.08)") : "transparent",
-                  color: isSelected ? "#2563eb" : textSecondary,
-                  cursor: "pointer",
-                  whiteSpace: "nowrap",
                   display: "inline-flex",
                   alignItems: "center",
                   gap: "6px",
+                  padding: "6px 12px",
+                  fontSize: "0.8rem",
+                  fontWeight: isActive ? 700 : 500,
+                  borderRadius: "8px",
+                  border: isActive ? `1px solid ${brandPrimary}` : `1px solid ${borderCol}`,
+                  background: isActive ? brandSoftBg : "transparent",
+                  color: isActive ? brandPrimary : textSecondary,
+                  cursor: "pointer",
+                  whiteSpace: "nowrap",
+                  transition: "all 0.15s ease",
                 }}
               >
-                {v.is_stale && <AlertTriangle size={12} color="#ef4444" />}
-                <span>{v.name}</span>
+                <Icon size={13} />
+                <span>{item.label}</span>
               </button>
             );
           })}
         </div>
       </div>
 
-      {loading ? (
-        <div style={{ padding: "40px", textAlign: "center", color: textSecondary, fontSize: "0.9rem" }}>
-          Loading analytical views…
-        </div>
-      ) : error ? (
-        <div
-          style={{
-            padding: "16px",
-            background: "rgba(239, 68, 68, 0.1)",
-            border: "1px solid rgba(239, 68, 68, 0.3)",
-            borderRadius: "8px",
-            color: "#ef4444",
-            display: "flex",
-            alignItems: "center",
-            gap: "8px",
-            fontSize: "0.85rem",
-          }}
-        >
-          <AlertCircle size={16} />
-          <span>{error}</span>
-        </div>
-      ) : activeView ? (
-        <>
-          {/* Active View Specification Card */}
-          <div
-            style={{
-              background: bgCard,
-              border: `1px solid ${borderCol}`,
-              borderRadius: "10px",
-              padding: "16px",
-              display: "flex",
-              flexDirection: "column",
-              gap: "12px",
-            }}
-          >
-            {/* Stale Warning Banner if stale */}
-            {activeView.is_stale && (
-              <div
-                style={{
-                  background: "rgba(239, 68, 68, 0.12)",
-                  border: "1px solid rgba(239, 68, 68, 0.35)",
-                  borderRadius: "8px",
-                  padding: "12px 14px",
-                  color: "#ef4444",
-                  display: "flex",
-                  alignItems: "flex-start",
-                  gap: "10px",
-                }}
-              >
-                <AlertTriangle size={18} style={{ flexShrink: 0, marginTop: "2px" }} />
-                <div>
-                  <div style={{ fontWeight: 700, fontSize: "0.88rem" }}>
-                    STALE ANALYTICAL VIEW BLOCKED FROM SERVING
-                  </div>
-                  <div style={{ fontSize: "0.8rem", marginTop: "2px", opacity: 0.9 }}>
-                    {activeView.rejection_reason || "Upstream dependency drift detected. This view cannot be served as current truth until re-verified."}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "10px" }}>
-              <div>
-                <div style={{ fontSize: "1.1rem", fontWeight: 700, color: textPrimary }}>
-                  {activeView.name}
-                </div>
-                <div style={{ fontSize: "0.78rem", color: textSecondary, marginTop: "2px" }}>
-                  View ID: <code>{activeView.view_id}</code> · Result Grain: <strong>{activeView.result_grain}</strong>
-                </div>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <span
-                  style={{
-                    fontSize: "0.75rem",
-                    fontWeight: 700,
-                    padding: "3px 8px",
-                    borderRadius: "6px",
-                    background: activeView.is_stale ? "rgba(239, 68, 68, 0.12)" : "rgba(16, 185, 129, 0.12)",
-                    color: activeView.is_stale ? "#ef4444" : "#10b981",
-                    border: activeView.is_stale ? "1px solid rgba(239, 68, 68, 0.3)" : "1px solid rgba(16, 185, 129, 0.3)",
-                  }}
-                >
-                  Status: {activeView.status}
-                </span>
-                <span
-                  style={{
-                    fontSize: "0.75rem",
-                    fontWeight: 600,
-                    padding: "3px 8px",
-                    borderRadius: "6px",
-                    background: bgSubtle,
-                    color: textSecondary,
-                    border: `1px solid ${borderCol}`,
-                  }}
-                >
-                  {activeView.materialization_mode}
-                </span>
-              </div>
-            </div>
-
-            {/* View Architecture Metadata Grid */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "10px" }}>
-              <div style={{ padding: "8px 12px", background: bgSubtle, borderRadius: "6px", border: `1px solid ${borderCol}` }}>
-                <div style={{ fontSize: "0.7rem", color: textSecondary }}>Source Sheets</div>
-                <div style={{ fontSize: "0.85rem", fontWeight: 600, color: textPrimary, marginTop: "2px" }}>
-                  {activeView.source_sheets.join(", ")}
-                </div>
-              </div>
-              <div style={{ padding: "8px 12px", background: bgSubtle, borderRadius: "6px", border: `1px solid ${borderCol}` }}>
-                <div style={{ fontSize: "0.7rem", color: textSecondary }}>JoinPlans Used</div>
-                <div style={{ fontSize: "0.85rem", fontWeight: 600, color: textPrimary, marginTop: "2px" }}>
-                  {activeView.join_plan_ids.length > 0 ? activeView.join_plan_ids.join(", ") : "Single-sheet (0 JoinPlans)"}
-                </div>
-              </div>
-              <div style={{ padding: "8px 12px", background: bgSubtle, borderRadius: "6px", border: `1px solid ${borderCol}` }}>
-                <div style={{ fontSize: "0.7rem", color: textSecondary }}>Dimensions</div>
-                <div style={{ fontSize: "0.85rem", fontWeight: 600, color: textPrimary, marginTop: "2px" }}>
-                  {activeView.dimension_columns.join(", ") || "None"}
-                </div>
-              </div>
-              <div style={{ padding: "8px 12px", background: bgSubtle, borderRadius: "6px", border: `1px solid ${borderCol}` }}>
-                <div style={{ fontSize: "0.7rem", color: textSecondary }}>Measures</div>
-                <div style={{ fontSize: "0.85rem", fontWeight: 600, color: textPrimary, marginTop: "2px" }}>
-                  {activeView.measure_columns.join(", ") || "None"}
-                </div>
-              </div>
-            </div>
-
-            {/* Derived Measures / Formulas */}
-            {activeView.derived_measures && activeView.derived_measures.length > 0 && (
-              <div style={{ borderTop: `1px solid ${borderCol}`, paddingTop: "10px" }}>
-                <div style={{ fontSize: "0.75rem", color: textSecondary, fontWeight: 700, marginBottom: "6px" }}>
-                  DERIVED MEASURE FORMULAS
-                </div>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
-                  {activeView.derived_measures.map((dm, i) => (
-                    <div
-                      key={i}
-                      style={{
-                        padding: "6px 12px",
-                        borderRadius: "6px",
-                        background: bgSubtle,
-                        border: `1px solid ${borderCol}`,
-                        fontSize: "0.8rem",
-                      }}
-                    >
-                      <strong style={{ color: "#2563eb" }}>{dm.measure_name}</strong> = <code>{dm.formula_repr}</code> {dm.unit && <span style={{ color: textSecondary }}>[{dm.unit}]</span>}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Analytical Facts Table */}
-          <div style={{ background: bgCard, border: `1px solid ${borderCol}`, borderRadius: "10px", overflow: "hidden" }}>
-            <div style={{ padding: "14px 16px", borderBottom: `1px solid ${borderCol}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <Award size={16} color="#f59e0b" />
-                <h3 style={{ margin: 0, fontSize: "0.95rem", fontWeight: 700, color: textPrimary }}>
-                  Governed Gold Metric Facts ({filteredFacts.length} facts)
-                </h3>
-              </div>
-              <span style={{ fontSize: "0.75rem", color: textSecondary }}>
-                Click "Lineage" to view complete reconstruction steps
-              </span>
-            </div>
-
-            {filteredFacts.length === 0 ? (
-              <div style={{ padding: "30px", textAlign: "center", color: textSecondary, fontSize: "0.85rem" }}>
-                No facts materialized for this view.
-              </div>
-            ) : (
-              <div style={{ overflowX: "auto" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.82rem", textAlign: "left" }}>
-                  <thead>
-                    <tr style={{ background: isDark ? "#0f172a" : "#f8fafc", borderBottom: `2px solid ${borderCol}` }}>
-                      <th style={{ padding: "10px 12px", color: textPrimary, fontWeight: 700 }}>Metric</th>
-                      <th style={{ padding: "10px 12px", color: textPrimary, fontWeight: 700 }}>Exact Value</th>
-                      <th style={{ padding: "10px 12px", color: textPrimary, fontWeight: 700 }}>Unit</th>
-                      <th style={{ padding: "10px 12px", color: textPrimary, fontWeight: 700 }}>Result Grain</th>
-                      <th style={{ padding: "10px 12px", color: textPrimary, fontWeight: 700 }}>Provenance Authority</th>
-                      <th style={{ padding: "10px 12px", color: textSecondary, fontWeight: 700, textAlign: "right" }}>Lineage</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredFacts.map((fact, idx) => (
-                      <tr
-                        key={fact.fact_id || idx}
-                        style={{
-                          borderBottom: `1px solid ${borderCol}`,
-                          background: idx % 2 === 1 ? (isDark ? "rgba(255,255,255,0.02)" : "rgba(0,0,0,0.015)") : "transparent",
-                        }}
-                      >
-                        <td style={{ padding: "10px 12px", fontWeight: 600, color: textPrimary }}>
-                          {fact.metric}
-                        </td>
-                        <td style={{ padding: "10px 12px", fontFamily: "monospace", fontSize: "0.88rem", fontWeight: 700, color: textPrimary }}>
-                          {fact.formatted_value || fact.value}
-                        </td>
-                        <td style={{ padding: "10px 12px", color: textSecondary }}>
-                          {fact.unit || "—"}
-                        </td>
-                        <td style={{ padding: "10px 12px", color: textSecondary }}>
-                          {fact.grain}
-                        </td>
-                        <td style={{ padding: "10px 12px" }}>
-                          <span
-                            style={{
-                              padding: "2px 6px",
-                              borderRadius: "4px",
-                              fontSize: "0.72rem",
-                              fontWeight: 600,
-                              background: "rgba(37, 99, 235, 0.1)",
-                              color: "#2563eb",
-                            }}
-                          >
-                            {fact.provenance}
-                          </span>
-                        </td>
-                        <td style={{ padding: "10px 12px", textAlign: "right" }}>
-                          <button
-                            type="button"
-                            onClick={() => setSelectedFact(fact)}
-                            style={{
-                              padding: "4px 8px",
-                              fontSize: "0.75rem",
-                              fontWeight: 600,
-                              borderRadius: "6px",
-                              border: `1px solid ${borderCol}`,
-                              background: bgSubtle,
-                              color: "#2563eb",
-                              cursor: "pointer",
-                              display: "inline-flex",
-                              alignItems: "center",
-                              gap: "4px",
-                            }}
-                          >
-                            <GitBranch size={12} />
-                            Lineage Path
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        </>
-      ) : (
-        <section
-          className="explorer-empty-state explorer-empty-state--compact"
-          style={{
-            background: bgCard,
-            border: `1px solid ${borderCol}`,
-            borderRadius: "10px",
-            padding: "36px 20px",
-            textAlign: "center",
-          }}
-        >
-          <div
-            style={{
-              display: "inline-flex",
-              padding: "12px",
-              borderRadius: "50%",
-              background: isDark ? "rgba(37, 99, 235, 0.15)" : "rgba(37, 99, 235, 0.08)",
-              marginBottom: "12px",
-            }}
-          >
-            <LayoutDashboard size={28} color="#2563eb" />
-          </div>
-          <h3 style={{ fontSize: "1.05rem", fontWeight: 700, color: textPrimary, margin: "0 0 6px 0" }}>
-            No Governed Analytical Views Materialized
-          </h3>
-          <p style={{ fontSize: "0.85rem", color: textSecondary, maxWidth: "480px", margin: "0 auto", lineHeight: 1.5 }}>
-            Analytical views remain virtual by default under SDR-6 governance. No pre-aggregated Gold views or derived metric cubes have been materialized for this dataset.
-          </p>
-        </section>
+      {/* Sub-view: Rankings */}
+      {subView === "rankings" && (
+        <RankingsExplorer
+          datasetId={datasetId}
+          themeTokens={themeTokens}
+          isDark={isDark}
+        />
       )}
 
-      {/* Step-by-Step Fact Lineage Drawer */}
+      {/* Sub-view: Trends */}
+      {subView === "trends" && (
+        <TrendsExplorer
+          edaReport={edaReport}
+          rankingSchema={rankingSchema}
+          selectedSheet={selectedSheet}
+          themeTokens={themeTokens}
+          isDark={isDark}
+        />
+      )}
+
+      {/* Sub-view: Distributions */}
+      {subView === "distributions" && (
+        <DistributionsExplorer
+          edaReport={edaReport}
+          rankingSchema={rankingSchema}
+          themeTokens={themeTokens}
+          isDark={isDark}
+        />
+      )}
+
+      {/* Primary Sub-view: Analytical Views & Facts */}
+      {subView === "views" && (
+        <>
+          {loading ? (
+            <div style={{ padding: "40px", textAlign: "center", color: textSecondary, fontSize: "0.9rem" }}>
+              Loading analysis tables…
+            </div>
+          ) : error ? (
+            <div
+              style={{
+                padding: "16px",
+                background: themeTokens?.colors?.softError || "var(--color-bg-soft-error)",
+                border: `1px solid ${themeTokens?.colors?.statusError || "var(--color-error)"}`,
+                borderRadius: "8px",
+                color: themeTokens?.colors?.statusError || "var(--color-error)",
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                fontSize: "0.85rem",
+              }}
+            >
+              <AlertCircle size={16} />
+              <span>{error}</span>
+            </div>
+          ) : allViews.length === 0 ? (
+            <section
+              style={{
+                background: bgSurface,
+                border: `1px solid ${borderCol}`,
+                borderRadius: "10px",
+                padding: "48px 24px",
+                textAlign: "center",
+              }}
+            >
+              <div style={{ width: "48px", height: "48px", borderRadius: "24px", background: brandSoftBg, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
+                <LayoutDashboard size={24} color={brandPrimary} />
+              </div>
+              <h3 style={{ margin: "0 0 8px", fontSize: "1.1rem", fontWeight: 700, color: textPrimary }}>
+                No analytical views are available yet
+              </h3>
+              <p style={{ fontSize: "0.85rem", color: textSecondary, maxWidth: "480px", margin: "0 auto", lineHeight: 1.5 }}>
+                Analytical views are synthesized from verified relationships and governed measures.
+              </p>
+            </section>
+          ) : (
+            <>
+              {/* Top Summary Strip */}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "10px" }}>
+                <div style={{ background: bgSurface, border: `1px solid ${borderCol}`, borderRadius: "8px", padding: "12px 14px", display: "flex", alignItems: "center", gap: "10px" }}>
+                  <div style={{ padding: "8px", borderRadius: "6px", background: brandSoftBg, color: brandPrimary, display: "flex" }}>
+                    <LayoutDashboard size={16} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: "1.1rem", fontWeight: 700, color: textPrimary }}>{allViews.length}</div>
+                    <div style={{ fontSize: "0.75rem", color: textSecondary }}>Analytical Views</div>
+                  </div>
+                </div>
+
+                <div style={{ background: bgSurface, border: `1px solid ${borderCol}`, borderRadius: "8px", padding: "12px 14px", display: "flex", alignItems: "center", gap: "10px" }}>
+                  <div style={{ padding: "8px", borderRadius: "6px", background: brandSoftBg, color: brandPrimary, display: "flex" }}>
+                    <Award size={16} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: "1.1rem", fontWeight: 700, color: textPrimary }}>{allFacts.length}</div>
+                    <div style={{ fontSize: "0.75rem", color: textSecondary }}>Verified Facts</div>
+                  </div>
+                </div>
+
+                <div style={{ background: bgSurface, border: `1px solid ${borderCol}`, borderRadius: "8px", padding: "12px 14px", display: "flex", alignItems: "center", gap: "10px" }}>
+                  <div style={{ padding: "8px", borderRadius: "6px", background: brandSoftBg, color: brandPrimary, display: "flex" }}>
+                    <Clock size={16} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: "1.1rem", fontWeight: 700, color: textPrimary }}>
+                      {allViews.filter(v => !v.is_stale).length} / {allViews.length} Current
+                    </div>
+                    <div style={{ fontSize: "0.75rem", color: textSecondary }}>Freshness Status</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* TABLE 1: ANALYSIS VIEWS TABLE */}
+              <div style={{ background: bgSurface, border: `1px solid ${borderCol}`, borderRadius: "10px", overflow: "hidden" }}>
+                <div style={{ padding: "12px 16px", borderBottom: `1px solid ${borderCol}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <h3 style={{ margin: 0, fontSize: "0.9rem", fontWeight: 700, color: textPrimary, display: "flex", alignItems: "center", gap: "6px" }}>
+                    <Table size={15} color={brandPrimary} />
+                    Analysis Table ({allViews.length})
+                  </h3>
+                  <span style={{ fontSize: "0.75rem", color: textSecondary }}>
+                    Select an analysis to inspect its metric facts and calculation lineage
+                  </span>
+                </div>
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.82rem", textAlign: "left" }}>
+                    <thead>
+                      <tr style={{ background: bgSubtle, borderBottom: `2px solid ${borderCol}` }}>
+                        <th style={{ padding: "10px 12px", color: textPrimary, fontWeight: 700 }}>Analysis Name</th>
+                        <th style={{ padding: "10px 12px", color: textPrimary, fontWeight: 700 }}>Source Data</th>
+                        <th style={{ padding: "10px 12px", color: textPrimary, fontWeight: 700 }}>Result Grain</th>
+                        <th style={{ padding: "10px 12px", color: textPrimary, fontWeight: 700 }}>Measures</th>
+                        <th style={{ padding: "10px 12px", color: textPrimary, fontWeight: 700 }}>Status</th>
+                        <th style={{ padding: "10px 12px", color: textPrimary, fontWeight: 700 }}>Freshness</th>
+                        <th style={{ padding: "10px 12px", color: textPrimary, fontWeight: 700 }}>Mode</th>
+                        <th style={{ padding: "10px 12px", color: textSecondary, fontWeight: 700, textAlign: "right" }}>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {allViews.map((v, idx) => {
+                        const isSelected = v.view_id === selectedViewId;
+                        return (
+                          <tr
+                            key={v.view_id || idx}
+                            onClick={() => setSelectedViewId(v.view_id)}
+                            style={{
+                              borderBottom: `1px solid ${borderCol}`,
+                              background: isSelected ? brandSoftBg : idx % 2 === 1 ? bgSubtle : "transparent",
+                              cursor: "pointer",
+                            }}
+                          >
+                            <td style={{ padding: "10px 12px", fontWeight: 700, color: textPrimary }}>
+                              {v.name}
+                            </td>
+                            <td style={{ padding: "10px 12px", color: textSecondary }}>
+                              {v.source_sheets?.join(", ")}
+                            </td>
+                            <td style={{ padding: "10px 12px", color: textSecondary }}>
+                              {v.result_grain}
+                            </td>
+                            <td style={{ padding: "10px 12px", color: textSecondary }}>
+                              {v.derived_measures?.map(m => m.measure_name).join(", ") || v.measure_columns?.join(", ") || "—"}
+                            </td>
+                            <td style={{ padding: "10px 12px" }}>
+                              <StatusBadge status={v.status} size="xs" />
+                            </td>
+                            <td style={{ padding: "10px 12px" }}>
+                              <StatusBadge
+                                status={v.is_stale ? "Needs refresh" : "Current"}
+                                variant={v.is_stale ? "warning" : "success"}
+                                size="xs"
+                              />
+                            </td>
+                            <td style={{ padding: "10px 12px" }}>
+                              <StatusBadge status={v.materialization_mode} variant="info" size="xs" />
+                            </td>
+                            <td style={{ padding: "10px 12px", textAlign: "right" }}>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedViewId(v.view_id);
+                                }}
+                                style={{
+                                  padding: "4px 8px",
+                                  fontSize: "0.74rem",
+                                  fontWeight: 600,
+                                  borderRadius: "6px",
+                                  border: `1px solid ${borderCol}`,
+                                  background: bgSubtle,
+                                  color: brandPrimary,
+                                  cursor: "pointer",
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: "4px",
+                                }}
+                              >
+                                <Eye size={12} />
+                                Select
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Stale Warning Banner if active view is stale */}
+              {activeView && activeView.is_stale && (
+                <div
+                  style={{
+                    background: themeTokens?.colors?.softError || "var(--color-bg-soft-error)",
+                    border: `1px solid ${themeTokens?.colors?.statusError || "var(--color-error)"}`,
+                    borderRadius: "8px",
+                    padding: "12px 14px",
+                    color: themeTokens?.colors?.statusError || "var(--color-error)",
+                    display: "flex",
+                    alignItems: "flex-start",
+                    gap: "10px",
+                  }}
+                >
+                  <AlertTriangle size={18} style={{ flexShrink: 0, marginTop: "2px" }} />
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: "0.88rem" }}>
+                      Analysis Needs Refresh
+                    </div>
+                    <div style={{ fontSize: "0.8rem", marginTop: "2px", opacity: 0.9 }}>
+                      {activeView.rejection_reason || "Upstream dependency drift detected. This view cannot be served as current truth until re-verified."}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TABLE 2: ANALYTICAL FACTS TABLE */}
+              <div style={{ background: bgSurface, border: `1px solid ${borderCol}`, borderRadius: "10px", overflow: "hidden" }}>
+                <div style={{ padding: "12px 16px", borderBottom: `1px solid ${borderCol}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <h3 style={{ margin: 0, fontSize: "0.9rem", fontWeight: 700, color: textPrimary, display: "flex", alignItems: "center", gap: "6px" }}>
+                    <Award size={15} color={brandPrimary} />
+                    Analytical Facts Table for "{activeView?.name || "Selected Analysis"}" ({filteredFacts.length} facts)
+                  </h3>
+                  <span style={{ fontSize: "0.75rem", color: textSecondary }}>
+                    Exact metric values, denominators, and calculation lineage
+                  </span>
+                </div>
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.82rem", textAlign: "left" }}>
+                    <thead>
+                      <tr style={{ background: bgSubtle, borderBottom: `2px solid ${borderCol}` }}>
+                        <th style={{ padding: "10px 12px", color: textPrimary, fontWeight: 700 }}>Metric</th>
+                        <th style={{ padding: "10px 12px", color: textPrimary, fontWeight: 700 }}>Value</th>
+                        <th style={{ padding: "10px 12px", color: textPrimary, fontWeight: 700 }}>Unit</th>
+                        <th style={{ padding: "10px 12px", color: textPrimary, fontWeight: 700 }}>Grain</th>
+                        <th style={{ padding: "10px 12px", color: textPrimary, fontWeight: 700 }}>Denominator</th>
+                        <th style={{ padding: "10px 12px", color: textPrimary, fontWeight: 700 }}>Source</th>
+                        <th style={{ padding: "10px 12px", color: textPrimary, fontWeight: 700 }}>Status</th>
+                        <th style={{ padding: "10px 12px", color: textSecondary, fontWeight: 700, textAlign: "right" }}>Lineage</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredFacts.length > 0 ? (
+                        filteredFacts.map((fact, idx) => (
+                          <tr
+                            key={fact.fact_id || idx}
+                            style={{
+                              borderBottom: `1px solid ${borderCol}`,
+                              background: idx % 2 === 1 ? bgSubtle : "transparent",
+                            }}
+                          >
+                            <td style={{ padding: "10px 12px", fontWeight: 700, color: textPrimary }}>
+                              {fact.metric_name}
+                            </td>
+                            <td style={{ padding: "10px 12px", fontWeight: 700, fontFamily: "monospace", color: brandPrimary }}>
+                              {fact.formatted_value || String(fact.exact_value)}
+                            </td>
+                            <td style={{ padding: "10px 12px", color: textSecondary }}>
+                              {fact.unit || "—"}
+                            </td>
+                            <td style={{ padding: "10px 12px", color: textSecondary }}>
+                              {fact.grain || "RECORD"}
+                            </td>
+                            <td style={{ padding: "10px 12px", color: textSecondary }}>
+                              {fact.denominator || "—"}
+                            </td>
+                            <td style={{ padding: "10px 12px", color: textSecondary }}>
+                              {fact.provenance || "Reconstructed"}
+                            </td>
+                            <td style={{ padding: "10px 12px" }}>
+                              <StatusBadge status={fact.status || "Verified"} size="xs" />
+                            </td>
+                            <td style={{ padding: "10px 12px", textAlign: "right" }}>
+                              <button
+                                type="button"
+                                onClick={() => setSelectedFact(fact)}
+                                style={{
+                                  padding: "4px 8px",
+                                  fontSize: "0.74rem",
+                                  fontWeight: 600,
+                                  borderRadius: "6px",
+                                  border: `1px solid ${borderCol}`,
+                                  background: bgSubtle,
+                                  color: brandPrimary,
+                                  cursor: "pointer",
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: "4px",
+                                }}
+                              >
+                                <GitBranch size={12} />
+                                Lineage
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={8} style={{ padding: "20px", textAlign: "center", color: textSecondary }}>
+                            No facts recorded for this view.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </>
+          )}
+        </>
+      )}
+
+      {/* Calculation Lineage Drawer (Progressive Disclosure) */}
       {selectedFact && (
         <LineageDrawer
           fact={selectedFact}
           onClose={() => setSelectedFact(null)}
+          themeTokens={themeTokens}
           isDark={isDark}
         />
       )}

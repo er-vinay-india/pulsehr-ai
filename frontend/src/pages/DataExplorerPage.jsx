@@ -56,6 +56,18 @@ export function getCombinedUrlParam(key) {
   return null;
 }
 
+export function normalizeExplorerTab(tab) {
+  if (!tab) return 'overview';
+  const t = String(tab).toLowerCase();
+  if (t === 'data' || t === 'source' || t === 'technical' || t === 'table') return 'data';
+  if (t === 'semantics' || t === 'added-columns' || t === 'semantic-model') return 'semantics';
+  if (t === 'relationships') return 'relationships';
+  if (t === 'analysis' || t === 'analytical-views' || t === 'rankings' || t === 'trends' || t === 'distributions') return 'analysis';
+  if (t === 'evidence' || t === 'lineage') return 'evidence';
+  if (t === 'overview' || t === 'eda') return 'overview';
+  return 'overview';
+}
+
 export default function DataExplorerPage() {
   const { isDark } = useTheme();
   const themeTokens = getThemeTokens(isDark);
@@ -71,18 +83,25 @@ export default function DataExplorerPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Secondary Navigation Subpage State: 'overview' | 'technical' | 'added-columns' | 'rankings' | 'trends' | 'relationships' | 'distributions' | 'evidence'
+  // Unified 6-Tab Navigation State: 'overview' | 'data' | 'semantics' | 'relationships' | 'analysis' | 'evidence'
   const [activeTab, setActiveTab] = useState(() => {
     const tabParam = getCombinedUrlParam('tab');
-    if (tabParam && ['overview', 'technical', 'added-columns', 'rankings', 'trends', 'relationships', 'distributions', 'evidence', 'source', 'semantics', 'analytical-views'].includes(tabParam)) {
-      return tabParam;
+    if (tabParam) {
+      return normalizeExplorerTab(tabParam);
     }
-    // Backward compatibility for view=eda or view=table
     const v = getCombinedUrlParam('view');
-    if (v === 'table') return 'technical';
+    if (v === 'table') return 'data';
     if (v === 'eda') return 'overview';
     return 'overview';
   });
+
+  const initialAnalysisSubView = useMemo(() => {
+    const raw = getCombinedUrlParam('tab');
+    if (raw === 'rankings') return 'rankings';
+    if (raw === 'trends') return 'trends';
+    if (raw === 'distributions') return 'distributions';
+    return 'views';
+  }, []);
 
   // Ranking schema & metadata state
   const [rankingSchema, setRankingSchema] = useState(null);
@@ -115,9 +134,10 @@ export default function DataExplorerPage() {
   const [notice, setNotice] = useState('');
 
   const handleTabChange = (tabId) => {
-    setActiveTab(tabId);
+    const normalized = normalizeExplorerTab(tabId);
+    setActiveTab(normalized);
     const params = new URLSearchParams(window.location.search);
-    params.set('tab', tabId);
+    params.set('tab', normalized);
     window.history.replaceState(null, '', `${window.location.pathname}?${params.toString()}${window.location.hash}`);
   };
 
@@ -276,7 +296,7 @@ export default function DataExplorerPage() {
       .catch((err) => {
         if (active) {
           setEdaReport(null);
-          if (!['source', 'semantics', 'relationships', 'analytical-views'].includes(activeTab)) {
+          if (!['data', 'source', 'semantics', 'relationships', 'analysis', 'analytical-views'].includes(activeTab)) {
             setError(`Could not load sheet analysis. ${err.message}`);
           }
         }
@@ -463,7 +483,7 @@ export default function DataExplorerPage() {
                   value={selectedDerivedId}
                   aria-label="Select sheet or combined table"
                   placeholder="Selected sheet"
-                  icon={<GitMerge size={14} color="#ffb089" />}
+                  icon={<GitMerge size={14} color={themeTokens?.colors?.brandPrimary || "var(--color-brand-primary)"} />}
                   options={[
                     { value: "", label: "Selected sheet" },
                     ...derivedTables.map((dt) => {
@@ -710,7 +730,20 @@ export default function DataExplorerPage() {
 
           {/* SUBPAGE VIEW ROUTING */}
           <div className="explorer-subpage-content" id={`explorer-panel-${activeTab}`} role="tabpanel" aria-labelledby={`explorer-tab-${activeTab}`}>
-            {activeTab === 'source' && (
+            {activeTab === 'overview' && (
+              <OverviewExplorer
+                activeDataset={activeDataset}
+                selectedSheet={selectedSheet}
+                catalog={catalog}
+                dataHealth={dataHealth}
+                rankingSchema={rankingSchema}
+                onNavigateTab={handleTabChange}
+                themeTokens={themeTokens}
+                isDark={isDark}
+              />
+            )}
+
+            {(activeTab === 'data' || activeTab === 'source' || activeTab === 'technical') && (
               <SourceMode
                 datasetId={sdrDatasetId}
                 sheets={sdrSheets}
@@ -740,65 +773,15 @@ export default function DataExplorerPage() {
               />
             )}
 
-            {activeTab === 'analytical-views' && (
+            {(activeTab === 'analysis' || activeTab === 'analytical-views') && (
               <AnalyticalViewsMode
                 datasetId={sdrDatasetId}
                 themeTokens={themeTokens}
                 isDark={isDark}
-              />
-            )}
-
-            {activeTab === 'added-columns' && (
-              enrichment && derivedFeatCount > 0
-                ? <EnrichmentReviewCard enrichment={enrichment} />
-                : <section className="explorer-empty-state explorer-empty-state--compact">
-                    <h2>No added columns for this workbook</h2>
-                    <p>There are no generated columns to review here.</p>
-                  </section>
-            )}
-            {activeTab === 'overview' && (
-              <OverviewExplorer
-                activeDataset={activeDataset}
-                selectedSheet={selectedSheet}
-                catalog={catalog}
-                dataHealth={dataHealth}
-                rankingSchema={rankingSchema}
-                onNavigateTab={handleTabChange}
-                themeTokens={themeTokens}
-                isDark={isDark}
-              />
-            )}
-
-            {activeTab === 'rankings' && (
-              <RankingsExplorer
-                datasetId={activeDataset?.id || selectedSheet?.dataset_id}
-                initialEntity={initialEntity}
-                initialMeasure={initialMeasure}
-                themeTokens={themeTokens}
-                isDark={isDark}
-              />
-            )}
-
-            {activeTab === 'trends' && (
-              <TrendsExplorer
                 edaReport={edaReport}
                 rankingSchema={rankingSchema}
                 selectedSheet={selectedSheet}
-                initialMeasure={initialMeasure}
-                initialTemporalFamily={initialTemporalFamily}
-                themeTokens={themeTokens}
-                isDark={isDark}
-              />
-            )}
-
-
-            {activeTab === 'distributions' && (
-              <DistributionsExplorer
-                edaReport={edaReport}
-                rankingSchema={rankingSchema}
-                initialMeasure={initialMeasure}
-                themeTokens={themeTokens}
-                isDark={isDark}
+                initialSubView={initialAnalysisSubView}
               />
             )}
 
@@ -808,34 +791,6 @@ export default function DataExplorerPage() {
                 datasetId={activeDataset?.id || selectedSheet?.dataset_id}
                 initialTopicId={initialTopicId}
                 initialEvidenceId={initialEvidenceId}
-                themeTokens={themeTokens}
-                isDark={isDark}
-              />
-            )}
-
-            {activeTab === 'technical' && (
-              <TechnicalExplorer
-                selectedSheet={selectedSheet}
-                datasetId={activeDataset?.id || selectedSheet?.dataset_id}
-                edaReport={edaReport}
-                dataVersion={dataVersion}
-                onDataVersionChange={(version) => { setDataVersion(version); setPage(1); }}
-                supportsVersions={!selectedDerivedId && !relation}
-                data={data}
-                columns={columns}
-                rows={rows}
-                page={page}
-                onPageChange={setPage}
-                loading={loading}
-                search={search}
-                onSearchChange={setSearch}
-                sourceLabel={
-                  selectedDerivedId
-                    ? activeDerivedTable?.display_name || 'Combined table'
-                    : relation
-                    ? 'Linked sheets'
-                    : `${selectedSheet?.display_name || selectedSheet?.original_name || 'Sheet'} · ${data?.version === 'raw' ? 'Original values' : 'Prepared data'}`
-                }
                 themeTokens={themeTokens}
                 isDark={isDark}
               />

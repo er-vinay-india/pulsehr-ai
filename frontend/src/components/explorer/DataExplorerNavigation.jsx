@@ -1,29 +1,27 @@
 import React from "react";
 import {
-  LayoutDashboard,
-  Award,
-  TrendingUp,
-  GitMerge,
-  BarChart2,
-  FileText,
+  Info,
   Table,
   Sparkles,
-  Info,
+  GitMerge,
+  LayoutDashboard,
+  FileText,
   ChevronDown,
 } from "lucide-react";
 
+/**
+ * HighView Data Explorer Navigation
+ * Unified 6-tab Information Architecture:
+ * Overview -> Data -> Semantic Model -> Relationships -> Analysis -> Evidence / Lineage
+ * Derives 100% of styling from centralized HighView theme tokens.
+ */
 export const EXPLORER_TABS = [
-  { id: "source", label: "Source Data", icon: Table, desc: "Exact raw records (no derived columns)" },
-  { id: "semantics", label: "Semantic Models", icon: Sparkles, desc: "Roles, entities, grain, keys, and enrichments" },
-  { id: "relationships", label: "Relationships & Joins", icon: GitMerge, desc: "Governed relationships, join safety, and preaggregation" },
-  { id: "analytical-views", label: "Analytical Views & Facts", icon: LayoutDashboard, desc: "Reconstructed Gold metrics, facts, and lineage" },
-  { id: "overview", label: "Overview", icon: Info, desc: "About your data" },
-  { id: "technical", label: "Data table", icon: Table, desc: "Browse and search rows" },
-  { id: "added-columns", label: "Added columns", icon: Sparkles, desc: "Review columns created from your data" },
-  { id: "rankings", label: "Rankings", icon: Award, desc: "Compare highest and lowest values" },
-  { id: "trends", label: "Trends", icon: TrendingUp, desc: "Changes over time" },
-  { id: "distributions", label: "Value ranges", icon: BarChart2, desc: "Typical values and unusual results" },
-  { id: "evidence", label: "Sources & calculations", icon: FileText, desc: "Check how findings were produced" },
+  { id: "overview", label: "Overview", icon: Info, desc: "High-level metrics, entities, and workbook catalog" },
+  { id: "data", label: "Data", icon: Table, desc: "Exact raw observed records without derived columns" },
+  { id: "semantics", label: "Semantic Model", icon: Sparkles, desc: "Entities, semantic column profiles, candidate keys, and enrichments" },
+  { id: "relationships", label: "Relationships", icon: GitMerge, desc: "Governed connections, join safety, and preaggregation rules" },
+  { id: "analysis", label: "Analysis", icon: LayoutDashboard, desc: "Reconstructed analytical views, verified metrics, and facts" },
+  { id: "evidence", label: "Evidence / Lineage", icon: FileText, desc: "Calculations, audit trails, and source verification" },
 ];
 
 export default function DataExplorerNavigation({
@@ -32,6 +30,11 @@ export default function DataExplorerNavigation({
   themeTokens,
   isDark = false,
 }) {
+  const activeColor = themeTokens?.colors?.brandPrimary || "var(--color-brand-primary)";
+  const inactiveColor = themeTokens?.colors?.textSecondary || "var(--color-text-secondary)";
+  const activeBg = themeTokens?.colors?.softBlue || "var(--color-bg-soft-blue)";
+  const borderColor = themeTokens?.colors?.borderSubtle || "var(--color-divider)";
+
   return (
     <nav
       className="data-explorer-nav-container"
@@ -44,7 +47,7 @@ export default function DataExplorerNavigation({
         marginBottom: "16px",
       }}
     >
-      {/* 1. DESKTOP SECONDARY TAB BAR */}
+      {/* 1. DESKTOP TAB BAR */}
       <div
         className="explorer-desktop-tab-bar"
         role="tablist"
@@ -52,14 +55,14 @@ export default function DataExplorerNavigation({
           display: "flex",
           alignItems: "center",
           gap: "4px",
-          borderBottom: `1px solid ${themeTokens?.colors?.borderSubtle || "#e2e8f0"}`,
+          borderBottom: `1px solid ${borderColor}`,
           paddingBottom: "4px",
           overflowX: "auto",
           flex: 1,
           minWidth: 0,
         }}
       >
-        {EXPLORER_TABS.filter((tab) => tab.id !== "evidence").map((tab) => {
+        {EXPLORER_TABS.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
           return (
@@ -71,6 +74,7 @@ export default function DataExplorerNavigation({
               aria-controls={`explorer-panel-${tab.id}`}
               id={`explorer-tab-${tab.id}`}
               onClick={() => onSelectTab(tab.id)}
+              title={tab.desc}
               style={{
                 display: "inline-flex",
                 alignItems: "center",
@@ -78,15 +82,11 @@ export default function DataExplorerNavigation({
                 padding: "8px 14px",
                 fontSize: "0.82rem",
                 fontWeight: isActive ? 700 : 500,
-                color: isActive
-                  ? (themeTokens?.colors?.brandBlue || "#2563eb")
-                  : (themeTokens?.colors?.textSecondary || "#64748b"),
-                backgroundColor: isActive
-                  ? (isDark ? "rgba(37, 99, 235, 0.12)" : "rgba(37, 99, 235, 0.08)")
-                  : "transparent",
+                color: isActive ? activeColor : inactiveColor,
+                backgroundColor: isActive ? activeBg : "transparent",
                 border: "none",
                 borderBottom: isActive
-                  ? `2px solid ${themeTokens?.colors?.brandBlue || "#2563eb"}`
+                  ? `2px solid ${activeColor}`
                   : "2px solid transparent",
                 borderRadius: "6px 6px 0 0",
                 cursor: "pointer",
@@ -94,7 +94,7 @@ export default function DataExplorerNavigation({
                 transition: "all 0.15s ease",
               }}
             >
-              <Icon size={14} />
+              <Icon size={14} aria-hidden="true" />
               <span>{tab.label}</span>
             </button>
           );
@@ -120,13 +120,13 @@ export default function DataExplorerNavigation({
               fontSize: "0.86rem",
               fontWeight: 600,
               borderRadius: "8px",
-              backgroundColor: themeTokens?.colors?.surface,
-              color: themeTokens?.colors?.textPrimary,
-              border: `1px solid ${themeTokens?.colors?.borderSubtle || "#cbd5e1"}`,
+              backgroundColor: themeTokens?.colors?.surface || "var(--color-bg-surface)",
+              color: themeTokens?.colors?.textPrimary || "var(--color-text-primary)",
+              border: `1px solid ${borderColor}`,
               appearance: "none",
             }}
           >
-            {EXPLORER_TABS.filter((tab) => tab.id !== "evidence" || activeTab === "evidence").map((tab) => (
+            {EXPLORER_TABS.map((tab) => (
               <option key={tab.id} value={tab.id}>
                 {tab.label}
               </option>
@@ -141,24 +141,10 @@ export default function DataExplorerNavigation({
               pointerEvents: "none",
             }}
           >
-            <ChevronDown size={14} color={themeTokens?.colors?.textSecondary} />
+            <ChevronDown size={14} color={inactiveColor} aria-hidden="true" />
           </div>
         </div>
       </div>
-      <button
-        type="button"
-        id="explorer-tab-evidence"
-        className="btn-secondary"
-        aria-label="Details: sources and calculations"
-        aria-pressed={activeTab === "evidence"}
-        aria-controls="explorer-panel-evidence"
-        title="Check sources and calculations behind the findings"
-        onClick={() => onSelectTab("evidence")}
-        style={{ display: "inline-flex", alignItems: "center", gap: "6px", flexShrink: 0 }}
-      >
-        <Info size={14} />
-        <span>Details</span>
-      </button>
     </nav>
   );
 }
