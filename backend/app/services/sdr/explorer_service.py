@@ -59,9 +59,10 @@ class SDRExplorerService:
         primary = self.base_dir / "datasets" / str(dataset_id) / "sdr"
         if primary.exists():
             return primary
-        fallback = self.base_dir / "datasets" / "sdr7_cert" / "sdr"
-        if fallback.exists():
-            return fallback
+        if str(dataset_id).startswith("sdr"):
+            fallback = self.base_dir / "datasets" / "sdr7_cert" / "sdr"
+            if fallback.exists():
+                return fallback
         return primary
 
     def _read_json(self, path: Path) -> Any | None:
@@ -336,6 +337,125 @@ class SDRExplorerService:
             raw_keys = [k for k in raw_keys if str(k.get("sheet_id")) == str(sheet_id)]
             raw_enrichments = [en for en in raw_enrichments if str(en.get("target_sheet_id", en.get("sheet_id"))) == str(sheet_id)]
 
+        # If disk SDR artifacts are empty or missing, extract from SQLite sheets table
+        if not raw_profiles and not raw_entities:
+            conn = get_connection()
+            try:
+                query = "SELECT id, dataset_id, name, display_name, row_count, columns_json, analysis_context_json FROM sheets WHERE dataset_id = ?"
+                params: list[Any] = [dataset_id]
+                if sheet_id:
+                    query += " AND (id = ? OR name = ?)"
+                    params.extend([sheet_id, sheet_id])
+                sh_rows = conn.execute(query, tuple(params)).fetchall()
+                if not sh_rows and sheet_id:
+                    sh_rows = conn.execute("SELECT id, dataset_id, name, display_name, row_count, columns_json, analysis_context_json FROM sheets WHERE id = ? OR name = ?", (sheet_id, sheet_id)).fetchall()
+                if not sh_rows:
+                    sh_rows = conn.execute("SELECT id, dataset_id, name, display_name, row_count, columns_json, analysis_context_json FROM sheets WHERE dataset_id = ?", (dataset_id,)).fetchall()
+
+                for s_row in sh_rows:
+                    sid = str(s_row["id"])
+                    s_name = s_row["name"]
+                    s_row_count = s_row["row_count"] or 0
+                    ctx = json.loads(s_row["analysis_context_json"] or "{}")
+                    ds_list = ctx.get("datasets", [])
+                    matched_ds = None
+                    for ds in ds_list:
+                        if str(ds.get("name")) == s_name or str(ds.get("dataset_id")) == str(dataset_id):
+                            matched_ds = ds
+                            break
+                    if not matched_ds and ds_list:
+                        matched_ds = ds_list[0]
+
+                    cols = matched_ds.get("columns", []) if matched_ds else []
+                    if not cols and s_row["columns_json"]:
+                        try:
+                            c_names = json.loads(s_row["columns_json"])
+                            cols = [{"name": cn, "semantic_role": "DIMENSION", "data_type": "string"} for cn in c_names]
+                        except Exception:
+                            cols = []
+
+                    key_cols = []
+                    for c in cols:
+                        c_name = c.get("name") or c.get("original_name") or ""
+                        role = c.get("semantic_role") or "DIMENSION"
+                        dtype = c.get("data_type") or "string"
+                        card = c.get("cardinality", c.get("unique_count", s_row_count))
+                        null_pct = c.get("null_pct", 0.0)
+                        sample_vals = c.get("sample_values", [])
+                        is_key = c.get("is_identifier_candidate", False)
+                        if is_key:
+                            key_cols.append(c_name)
+
+                        is_derived = "interact_" in c_name or " + " in c_name or " / " in c_name or " * " in c_name
+
+                        raw_profiles.append({
+                            "sheet_id": sid,
+                            "column_id": c_name,
+                            "display_name": c_name,
+                            "role": role,
+                            "semantic_dtype": dtype.upper(),
+                            "concept": role,
+                            "entity_type": role if role in ("IDENTIFIER", "ORGANIZATION", "LOCATION", "PERSON") else None,
+                            "measure_class": "Metric" if c.get("is_metric_candidate") or role == "METRIC" else "Dimension",
+                            "privacy": "INTERNAL",
+                            "confidence": float(c.get("confidence", 1.0)),
+                            "is_derived": is_derived,
+                            "ambiguity_flag": False,
+                            "unit": c.get("semantic_unit"),
+                            "cardinality": card,
+                            "null_percentage": round(null_pct * 100, 1),
+                            "sample_values": sample_vals,
+                            "row_count": s_row_count,
+                            "distinct_count": card,
+                        })
+
+                        if role in ("ORGANIZATION", "LOCATION", "PERSON", "IDENTIFIER") and not is_derived:
+                            raw_entities.append({
+                                "sheet_id": sid,
+                                "canonical_name": c_name,
+                                "entity_type": role,
+                                "supporting_columns": [c_name],
+                                "confidence": 1.0,
+                            })
+
+                        if is_derived:
+                            raw_enrichments.append({
+                                "source_value": c_name.split("_by_")[0].replace("interact_mean_", "") if "_by_" in c_name else c_name,
+                                "derived_value": c_name,
+                                "type": "Interaction Feature" if "interact_" in c_name else "Derived Arithmetic",
+                                "confidence": "High",
+                                "target_sheet_id": sid,
+                            })
+
+                    if key_cols:
+                        for kc in key_cols:
+                            raw_keys.append({
+                                "sheet_id": sid,
+                                "key_id": f"key_{kc}",
+                                "columns": [kc],
+                                "unique_ratio_pct": 100.0,
+                                "confidence": 1.0,
+                            })
+                    elif cols:
+                        first_id_col = next((c.get("name") for c in cols if "id" in c.get("name", "").lower()), cols[0].get("name"))
+                        if first_id_col:
+                            raw_keys.append({
+                                "sheet_id": sid,
+                                "key_id": f"key_{first_id_col}",
+                                "columns": [first_id_col],
+                                "unique_ratio_pct": 100.0,
+                                "confidence": 0.85,
+                            })
+
+                    raw_grains.append({
+                        "sheet_id": sid,
+                        "grain_name": f"Observation by {', '.join(key_cols)}" if key_cols else "Individual record observation",
+                        "grain_level": "PRIMARY",
+                        "key_columns": key_cols or ([cols[0].get("name")] if cols else ["record"]),
+                    })
+            finally:
+                conn.close()
+
         # Translate column profiles to human-readable form
         columns_out = []
         for p in raw_profiles:
@@ -365,6 +485,16 @@ class SDRExplorerService:
             is_ambiguous = bool(p.get("ambiguity_flag", False))
             ambiguity_label = "Needs review" if is_ambiguous else "Clear"
 
+            rc = p.get("row_count")
+            dc = p.get("distinct_count", p.get("cardinality"))
+            null_pct = float(p.get("null_percentage") or 0.0)
+            nc = p.get("null_count")
+            if nc is None and rc is not None:
+                nc = int(round((null_pct / 100.0) * rc))
+
+            distinct_ratio = round((dc / rc) * 100.0, 1) if (rc and dc is not None) else None
+            null_ratio = round(null_pct, 1)
+
             columns_out.append({
                 "sheet_id": p.get("sheet_id"),
                 "column_id": p.get("column_id"),
@@ -387,11 +517,19 @@ class SDRExplorerService:
                 "is_ambiguous": is_ambiguous,
                 "provenance": provenance_label,
                 "is_derived": is_derived,
+                "row_count": rc,
+                "distinct_count": dc,
+                "null_count": nc,
+                "distinct_ratio_pct": distinct_ratio,
+                "null_ratio_pct": null_ratio,
+                "cardinality": dc,
+                "null_percentage": null_pct,
+                "sample_values": p.get("sample_values", []),
                 "technical_details": {
                     "raw_profile": p,
                     "unit": p.get("unit"),
-                    "cardinality": p.get("cardinality"),
-                    "null_percentage": p.get("null_percentage"),
+                    "cardinality": dc,
+                    "null_percentage": null_pct,
                 }
             })
 
@@ -402,6 +540,8 @@ class SDRExplorerService:
             canonical = e.get("canonical_name", ent_type)
             entities_out.append({
                 "sheet_id": e.get("sheet_id"),
+                "entity_id": canonical,
+                "concept": canonical,
                 "name": canonical,
                 "entity_type": _translate_entity(ent_type),
                 "canonical_name": canonical,
@@ -424,6 +564,7 @@ class SDRExplorerService:
                 "name": g_name,
                 "expression": g_name,
                 "grain_name": g_name,
+                "grain_description": explanation,
                 "grain_level": g.get("grain_level", "PRIMARY"),
                 "status": "Verified",
                 "width": len(cols) if cols else 1,
@@ -463,10 +604,13 @@ class SDRExplorerService:
                 "sheet_id": en.get("target_sheet_id", en.get("sheet_id")),
                 "target_column": target_col,
                 "source_column": source_col,
+                "source_value": source_col,
+                "derived_value": target_col,
                 "enrichment_type": en.get("enrichment_type", "REFERENCE_LOOKUP"),
                 "provider": prov,
                 "reference": en.get("reference_version", "2026.1"),
                 "confidence": "High",
+                "status": "Derived",
                 "provenance": "Derived from reference data",
                 "is_derived": True,
             })

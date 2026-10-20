@@ -11,6 +11,11 @@ import {
   Eye,
   AlertCircle,
   Table,
+  Filter,
+  CheckCircle2,
+  ShieldCheck,
+  Hash,
+  Percent,
 } from "lucide-react";
 
 /**
@@ -18,7 +23,7 @@ import {
  * "Cards summarize. Tables compare. Drawers explain."
  * Provides 4 structured DataTable exploration surfaces:
  * 1. Entities Table
- * 2. Semantic Columns Table
+ * 2. Semantic Columns Table (with instant role filters & completeness micro-bars)
  * 3. Candidate Keys Table
  * 4. Reference Enrichments Table
  */
@@ -36,16 +41,19 @@ export default function SemanticsMode({
   const [error, setError] = useState(null);
   const [selectedColumn, setSelectedColumn] = useState(null);
   const [activeTableTab, setActiveTableTab] = useState("all"); // 'all' | 'entities' | 'columns' | 'keys' | 'enrichments'
+  const [quickRoleFilter, setQuickRoleFilter] = useState("all"); // 'all' | 'identifiers' | 'metrics' | 'dimensions' | 'source' | 'derived'
 
   const bgSurface = themeTokens?.colors?.surface || "var(--color-bg-surface)";
+  const bgSubtle = themeTokens?.colors?.surfaceHover || "var(--color-bg-subtle)";
   const borderCol = themeTokens?.colors?.borderSubtle || "var(--color-divider)";
+  const borderStrong = themeTokens?.colors?.border || "var(--color-border)";
   const textPrimary = themeTokens?.colors?.textPrimary || "var(--color-text-primary)";
   const textSecondary = themeTokens?.colors?.textSecondary || "var(--color-text-secondary)";
   const brandPrimary = themeTokens?.colors?.brandPrimary || "var(--color-brand-primary)";
   const brandSoftBg = themeTokens?.colors?.softBlue || "var(--color-bg-soft-blue)";
 
   useEffect(() => {
-    if (selectedSheetId) {
+    if (selectedSheetId !== undefined && selectedSheetId !== activeSheet) {
       setActiveSheet(selectedSheetId);
     }
   }, [selectedSheetId]);
@@ -93,9 +101,19 @@ export default function SemanticsMode({
 
   // Flatten geo resolutions with enrichments for unified table
   const combinedEnrichments = useMemo(() => {
-    const list = [...enrichments];
-    geoResolutions.forEach((g) => {
+    const list = enrichments.map((e, idx) => ({
+      ...e,
+      _rowKey: `enrich-${e.sheet_id || ""}-${idx}`,
+      source_value: e.source_value || e.source_column || "—",
+      derived_value: e.derived_value || e.target_column || "—",
+      type: e.type || e.enrichment_type || "Reference Enrichment",
+      confidence: e.confidence || "High",
+      status: e.status || "Derived",
+    }));
+
+    geoResolutions.forEach((g, idx) => {
       list.push({
+        _rowKey: `geo-${idx}`,
         source_value: `${g.source_value} (${g.source_column})`,
         derived_value: `${g.resolved_state || ""}, ${g.resolved_country || ""}`.trim().replace(/^,|,$/g, ""),
         type: "Geographic (GEO-1)",
@@ -112,41 +130,128 @@ export default function SemanticsMode({
       const matchingGrain = grains.find((g) => g.sheet_id === ent.sheet_id);
       return {
         ...ent,
-        _rowKey: ent.entity_id || `entity-${idx}`,
-        row_grain: matchingGrain?.grain_description || "Individual record observation",
+        _rowKey: ent.entity_id || `entity-${ent.sheet_id}-${idx}`,
+        row_grain: matchingGrain?.grain_description || matchingGrain?.explanation || "Individual record observation",
         supporting_columns_str: ent.supporting_columns?.join(", ") || ent.primary_column || "—",
       };
     });
   }, [entities, grains]);
 
-  // Enrich columns with provenance string and position index
+  // Enrich columns with completeness metrics and display metadata
   const enrichedColumns = useMemo(() => {
     return columns.map((col, idx) => {
       const isEnriched =
         col.provenance_type === "DERIVED_ENRICHMENT" ||
-        col.provenance_type === "DERIVED_RELATIONAL";
+        col.provenance_type === "DERIVED_RELATIONAL" ||
+        col.is_derived === true;
+
+      const nullPct = col.null_ratio_pct ?? col.null_percentage ?? 0;
+      const populatedPct = Math.max(0, Math.min(100, Math.round((100 - nullPct) * 10) / 10));
+
       return {
         ...col,
-        _rowKey: col.column_id || `col-${idx}`,
+        _rowKey: `${col.sheet_id || "sheet"}-${col.column_id || idx}`,
         original_position: idx,
         status_provenance: isEnriched ? "Derived" : "Source",
         measure_dim_label: col.measure_class || "Dimension",
+        populated_pct: populatedPct,
+        null_pct: nullPct,
       };
     });
   }, [columns]);
+
+  // Quick Role Counts
+  const roleCounts = useMemo(() => {
+    let identifiers = 0;
+    let metrics = 0;
+    let dimensions = 0;
+    let source = 0;
+    let derived = 0;
+
+    enrichedColumns.forEach((c) => {
+      const r = (c.role || "").toLowerCase();
+      if (r.includes("identifier") || c.is_identifier_candidate) {
+        identifiers++;
+      } else if (r.includes("metric") || r.includes("measure")) {
+        metrics++;
+      } else {
+        dimensions++;
+      }
+
+      if (c.status_provenance === "Derived" || c.is_derived) {
+        derived++;
+      } else {
+        source++;
+      }
+    });
+
+    return {
+      total: enrichedColumns.length,
+      identifiers,
+      metrics,
+      dimensions,
+      source,
+      derived,
+    };
+  }, [enrichedColumns]);
+
+  // Filtered columns based on quick role pills
+  const displayedColumns = useMemo(() => {
+    if (quickRoleFilter === "all") return enrichedColumns;
+    if (quickRoleFilter === "identifiers") {
+      return enrichedColumns.filter(
+        (c) => (c.role || "").toLowerCase().includes("identifier") || c.is_identifier_candidate
+      );
+    }
+    if (quickRoleFilter === "metrics") {
+      return enrichedColumns.filter(
+        (c) => (c.role || "").toLowerCase().includes("metric") || (c.role || "").toLowerCase().includes("measure")
+      );
+    }
+    if (quickRoleFilter === "dimensions") {
+      return enrichedColumns.filter(
+        (c) =>
+          !(c.role || "").toLowerCase().includes("identifier") &&
+          !(c.role || "").toLowerCase().includes("metric") &&
+          !c.is_identifier_candidate
+      );
+    }
+    if (quickRoleFilter === "source") {
+      return enrichedColumns.filter((c) => c.status_provenance !== "Derived" && !c.is_derived);
+    }
+    if (quickRoleFilter === "derived") {
+      return enrichedColumns.filter((c) => c.status_provenance === "Derived" || c.is_derived);
+    }
+    return enrichedColumns;
+  }, [enrichedColumns, quickRoleFilter]);
 
   // Enrich keys
   const enrichedKeys = useMemo(() => {
     return keys.map((k, idx) => {
       return {
         ...k,
-        _rowKey: `key-${idx}`,
+        _rowKey: `key-${k.sheet_id || ""}-${idx}`,
         key_label: k.columns?.join(" + ") || "Key",
         columns_str: k.columns?.join(", ") || "—",
         uniqueness_pct: k.unique_ratio_pct ?? 100,
       };
     });
   }, [keys]);
+
+  // Active Grain / Key summary for banner
+  const activeGrain = useMemo(() => {
+    if (activeSheet) {
+      return grains.find((g) => g.sheet_id === activeSheet) || grains[0];
+    }
+    return grains[0];
+  }, [grains, activeSheet]);
+
+  const activeSheetKeys = useMemo(() => {
+    if (activeSheet) {
+      return keys.filter((k) => k.sheet_id === activeSheet);
+    }
+    return keys;
+  }, [keys, activeSheet]);
 
   // =========================================================================
   // TABLE COLUMNS CONFIGURATIONS
@@ -171,7 +276,7 @@ export default function SemanticsMode({
       },
       {
         key: "row_grain",
-        label: "Row Grain",
+        label: "Governed Row Grain",
         type: "text",
         sortable: true,
         render: (val) => <span style={{ color: textSecondary }}>{val}</span>,
@@ -195,7 +300,7 @@ export default function SemanticsMode({
         label: "Status",
         type: "status",
         sortable: true,
-        render: (val) => <StatusBadge status={val || "Established"} variant="neutral" size="xs" />,
+        render: (val) => <StatusBadge status={val || "Identified"} variant="neutral" size="xs" />,
       },
     ],
     [textPrimary, textSecondary]
@@ -211,7 +316,14 @@ export default function SemanticsMode({
         sortable: true,
         defaultVisible: true,
         render: (val, row) => (
-          <strong style={{ color: textPrimary }}>{val || row.column_id}</strong>
+          <div>
+            <strong style={{ color: textPrimary, display: "block" }}>{val || row.column_id}</strong>
+            {val && val !== row.column_id && (
+              <span style={{ fontSize: "0.72rem", color: textSecondary, fontFamily: "monospace" }}>
+                {row.column_id}
+              </span>
+            )}
+          </div>
         ),
       },
       {
@@ -223,20 +335,27 @@ export default function SemanticsMode({
         render: (val) => <span style={{ color: textSecondary }}>{val}</span>,
       },
       {
-        key: "concept",
-        label: "Meaning",
-        type: "text",
-        sortable: true,
-        defaultVisible: true,
-        render: (val) => <span style={{ color: textSecondary }}>{val || "—"}</span>,
-      },
-      {
         key: "role",
         label: "Role",
         type: "text",
         sortable: true,
         defaultVisible: true,
-        render: (val) => <span style={{ color: textSecondary }}>{val || "—"}</span>,
+        render: (val) => (
+          <span
+            style={{
+              display: "inline-block",
+              padding: "2px 7px",
+              borderRadius: "4px",
+              fontSize: "0.74rem",
+              fontWeight: 600,
+              background: bgSubtle,
+              border: `1px solid ${borderCol}`,
+              color: textPrimary,
+            }}
+          >
+            {val || "Dimension"}
+          </span>
+        ),
       },
       {
         key: "data_type",
@@ -247,28 +366,63 @@ export default function SemanticsMode({
         render: (val) => <span style={{ color: textSecondary }}>{val || "—"}</span>,
       },
       {
-        key: "measure_dim_label",
-        label: "Measure / Dim",
+        key: "concept",
+        label: "Business Concept",
         type: "text",
         sortable: true,
         defaultVisible: true,
-        render: (val) => <span style={{ color: textSecondary }}>{val}</span>,
-      },
-      {
-        key: "unit",
-        label: "Unit",
-        type: "text",
-        sortable: true,
-        defaultVisible: false,
         render: (val) => <span style={{ color: textSecondary }}>{val || "—"}</span>,
       },
       {
-        key: "privacy",
-        label: "Privacy",
-        type: "status",
+        key: "completeness",
+        label: "Completeness",
+        type: "percentage",
         sortable: true,
-        defaultVisible: false,
-        render: (val) => <StatusBadge status={val} size="xs" />,
+        defaultVisible: true,
+        sortVal: (row) => row.populated_pct,
+        render: (_, row) => {
+          const pop = row.populated_pct ?? 100;
+          return (
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", minWidth: "115px" }}>
+              <div
+                style={{
+                  flex: 1,
+                  height: "6px",
+                  borderRadius: "3px",
+                  backgroundColor: "var(--color-bg-soft-error, #FAEAEE)",
+                  overflow: "hidden",
+                  display: "flex",
+                }}
+                title={`${pop}% populated, ${row.null_pct}% null`}
+              >
+                <div
+                  style={{
+                    width: `${pop}%`,
+                    height: "100%",
+                    backgroundColor: brandPrimary,
+                  }}
+                />
+              </div>
+              <span style={{ fontSize: "0.75rem", fontWeight: 600, color: textPrimary, width: "36px", textAlign: "right" }}>
+                {pop}%
+              </span>
+            </div>
+          );
+        },
+      },
+      {
+        key: "distinct_count",
+        label: "Distinct Values",
+        type: "numeric",
+        sortable: true,
+        defaultVisible: true,
+        sortVal: (row) => row.distinct_count ?? 0,
+        render: (val, row) => (
+          <span style={{ fontSize: "0.78rem", color: textSecondary }}>
+            <strong style={{ color: textPrimary }}>{val != null ? val.toLocaleString() : "—"}</strong>
+            {row.row_count ? ` / ${row.row_count.toLocaleString()}` : ""}
+          </span>
+        ),
       },
       {
         key: "confidence",
@@ -327,7 +481,7 @@ export default function SemanticsMode({
         ),
       },
     ],
-    [textPrimary, textSecondary]
+    [textPrimary, textSecondary, bgSubtle, borderCol, brandPrimary]
   );
 
   // 3. Candidate Keys Columns
@@ -345,11 +499,16 @@ export default function SemanticsMode({
         label: "Candidate Key",
         type: "text",
         sortable: true,
-        render: (val) => <span style={{ color: textPrimary, fontWeight: 600 }}>{val}</span>,
+        render: (val) => (
+          <span style={{ color: textPrimary, fontWeight: 600, display: "flex", alignItems: "center", gap: "6px" }}>
+            <Key size={13} color={brandPrimary} />
+            {val}
+          </span>
+        ),
       },
       {
         key: "columns_str",
-        label: "Columns",
+        label: "Key Columns",
         type: "text",
         sortable: true,
         render: (val) => <span style={{ fontFamily: "monospace", color: textSecondary }}>{val}</span>,
@@ -359,7 +518,11 @@ export default function SemanticsMode({
         label: "Uniqueness",
         type: "percentage",
         sortable: true,
-        render: (val) => <span style={{ color: textSecondary }}>{val}% unique</span>,
+        render: (val) => (
+          <span style={{ color: textPrimary, fontWeight: 600 }}>
+            {val}% unique
+          </span>
+        ),
       },
       {
         key: "confidence",
@@ -370,14 +533,14 @@ export default function SemanticsMode({
         render: (val) => <StatusBadge status={val || "High"} size="xs" />,
       },
       {
-        key: "status",
-        label: "Status",
+        key: "authority",
+        label: "Authority",
         type: "status",
         sortable: true,
-        render: (val) => <StatusBadge status={val || "Candidate"} size="xs" />,
+        render: (val) => <StatusBadge status={val || "Governed"} variant="success" size="xs" />,
       },
     ],
-    [textPrimary, textSecondary]
+    [textPrimary, textSecondary, brandPrimary]
   );
 
   // 4. Enrichments Columns
@@ -385,21 +548,21 @@ export default function SemanticsMode({
     () => [
       {
         key: "source_value",
-        label: "Source Value",
+        label: "Source Value / Column",
         type: "text",
         sortable: true,
         render: (val) => <strong style={{ color: textPrimary }}>{val}</strong>,
       },
       {
         key: "derived_value",
-        label: "Derived Value",
+        label: "Derived Value / Target",
         type: "text",
         sortable: true,
-        render: (val) => <span style={{ color: textPrimary }}>{val}</span>,
+        render: (val) => <span style={{ color: textPrimary, fontWeight: 600 }}>{val}</span>,
       },
       {
         key: "type",
-        label: "Type",
+        label: "Enrichment Type",
         type: "text",
         sortable: true,
         render: (val) => <span style={{ color: textSecondary }}>{val}</span>,
@@ -463,110 +626,240 @@ export default function SemanticsMode({
     []
   );
 
+  const toggleTab = (tabId) => {
+    setActiveTableTab((prev) => (prev === tabId ? "all" : tabId));
+  };
+
   return (
     <div className="sdr-semantics-mode-container" style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-      {/* Overview Cards (KPIs) */}
+      {/* Interactive KPI Overview Cards */}
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+          gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
           gap: "12px",
         }}
+        role="region"
+        aria-label="Semantic Model KPI Overview"
       >
+        {/* Card 1: Business Entities */}
         <div
+          role="button"
+          tabIndex={0}
+          onClick={() => toggleTab("entities")}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              toggleTab("entities");
+            }
+          }}
+          aria-pressed={activeTableTab === "entities"}
           style={{
             background: bgSurface,
-            border: `1px solid ${borderCol}`,
+            border: activeTableTab === "entities" ? `2px solid ${brandPrimary}` : `1px solid ${borderCol}`,
             borderRadius: "10px",
             padding: "14px 16px",
             display: "flex",
             alignItems: "center",
-            gap: "12px",
+            justifyContent: "space-between",
+            cursor: "pointer",
+            transition: "all 0.18s ease",
+            boxShadow: activeTableTab === "entities" ? "0 2px 8px rgba(0,0,0,0.08)" : "none",
           }}
         >
-          <div style={{ width: "36px", height: "36px", borderRadius: "8px", background: brandSoftBg, display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <Layers size={18} color={brandPrimary} />
-          </div>
-          <div>
-            <div style={{ fontSize: "1.2rem", fontWeight: 700, color: textPrimary }}>
-              {entities.length}
+          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            <div
+              style={{
+                width: "38px",
+                height: "38px",
+                borderRadius: "8px",
+                background: brandSoftBg,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Layers size={18} color={brandPrimary} />
             </div>
-            <div style={{ fontSize: "0.75rem", color: textSecondary }}>
-              Business Entities
+            <div>
+              <div style={{ fontSize: "1.25rem", fontWeight: 700, color: textPrimary, lineHeight: 1.2 }}>
+                {entities.length}
+              </div>
+              <div style={{ fontSize: "0.76rem", color: textSecondary, marginTop: "2px" }}>
+                Business Entities
+              </div>
             </div>
           </div>
+          {activeTableTab === "entities" && (
+            <span style={{ fontSize: "0.7rem", fontWeight: 700, color: brandPrimary, background: brandSoftBg, padding: "2px 6px", borderRadius: "4px" }}>
+              Active
+            </span>
+          )}
         </div>
 
+        {/* Card 2: Semantic Columns */}
         <div
+          role="button"
+          tabIndex={0}
+          onClick={() => toggleTab("columns")}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              toggleTab("columns");
+            }
+          }}
+          aria-pressed={activeTableTab === "columns"}
           style={{
             background: bgSurface,
-            border: `1px solid ${borderCol}`,
+            border: activeTableTab === "columns" ? `2px solid ${brandPrimary}` : `1px solid ${borderCol}`,
             borderRadius: "10px",
             padding: "14px 16px",
             display: "flex",
             alignItems: "center",
-            gap: "12px",
+            justifyContent: "space-between",
+            cursor: "pointer",
+            transition: "all 0.18s ease",
+            boxShadow: activeTableTab === "columns" ? "0 2px 8px rgba(0,0,0,0.08)" : "none",
           }}
         >
-          <div style={{ width: "36px", height: "36px", borderRadius: "8px", background: "var(--color-bg-soft-teal, #E7F3ED)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <Sparkles size={18} color="var(--color-success, #075443)" />
-          </div>
-          <div>
-            <div style={{ fontSize: "1.2rem", fontWeight: 700, color: textPrimary }}>
-              {columns.length}
+          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            <div
+              style={{
+                width: "38px",
+                height: "38px",
+                borderRadius: "8px",
+                background: "var(--color-bg-soft-teal, #E7F3ED)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Sparkles size={18} color="var(--color-success, #075443)" />
             </div>
-            <div style={{ fontSize: "0.75rem", color: textSecondary }}>
-              Semantic Columns
+            <div>
+              <div style={{ fontSize: "1.25rem", fontWeight: 700, color: textPrimary, lineHeight: 1.2 }}>
+                {columns.length}
+              </div>
+              <div style={{ fontSize: "0.76rem", color: textSecondary, marginTop: "2px" }}>
+                Semantic Columns
+              </div>
             </div>
           </div>
+          {activeTableTab === "columns" && (
+            <span style={{ fontSize: "0.7rem", fontWeight: 700, color: brandPrimary, background: brandSoftBg, padding: "2px 6px", borderRadius: "4px" }}>
+              Active
+            </span>
+          )}
         </div>
 
+        {/* Card 3: Candidate Keys */}
         <div
+          role="button"
+          tabIndex={0}
+          onClick={() => toggleTab("keys")}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              toggleTab("keys");
+            }
+          }}
+          aria-pressed={activeTableTab === "keys"}
           style={{
             background: bgSurface,
-            border: `1px solid ${borderCol}`,
+            border: activeTableTab === "keys" ? `2px solid ${brandPrimary}` : `1px solid ${borderCol}`,
             borderRadius: "10px",
             padding: "14px 16px",
             display: "flex",
             alignItems: "center",
-            gap: "12px",
+            justifyContent: "space-between",
+            cursor: "pointer",
+            transition: "all 0.18s ease",
+            boxShadow: activeTableTab === "keys" ? "0 2px 8px rgba(0,0,0,0.08)" : "none",
           }}
         >
-          <div style={{ width: "36px", height: "36px", borderRadius: "8px", background: "var(--color-bg-soft-gold, #F6EDDA)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <Key size={18} color="var(--color-warning, #65470C)" />
-          </div>
-          <div>
-            <div style={{ fontSize: "1.2rem", fontWeight: 700, color: textPrimary }}>
-              {keys.length}
+          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            <div
+              style={{
+                width: "38px",
+                height: "38px",
+                borderRadius: "8px",
+                background: "var(--color-bg-soft-gold, #F6EDDA)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Key size={18} color="var(--color-warning, #65470C)" />
             </div>
-            <div style={{ fontSize: "0.75rem", color: textSecondary }}>
-              Candidate Keys
+            <div>
+              <div style={{ fontSize: "1.25rem", fontWeight: 700, color: textPrimary, lineHeight: 1.2 }}>
+                {keys.length}
+              </div>
+              <div style={{ fontSize: "0.76rem", color: textSecondary, marginTop: "2px" }}>
+                Candidate Keys
+              </div>
             </div>
           </div>
+          {activeTableTab === "keys" && (
+            <span style={{ fontSize: "0.7rem", fontWeight: 700, color: brandPrimary, background: brandSoftBg, padding: "2px 6px", borderRadius: "4px" }}>
+              Active
+            </span>
+          )}
         </div>
 
+        {/* Card 4: Reference Enrichments */}
         <div
+          role="button"
+          tabIndex={0}
+          onClick={() => toggleTab("enrichments")}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              toggleTab("enrichments");
+            }
+          }}
+          aria-pressed={activeTableTab === "enrichments"}
           style={{
             background: bgSurface,
-            border: `1px solid ${borderCol}`,
+            border: activeTableTab === "enrichments" ? `2px solid ${brandPrimary}` : `1px solid ${borderCol}`,
             borderRadius: "10px",
             padding: "14px 16px",
             display: "flex",
             alignItems: "center",
-            gap: "12px",
+            justifyContent: "space-between",
+            cursor: "pointer",
+            transition: "all 0.18s ease",
+            boxShadow: activeTableTab === "enrichments" ? "0 2px 8px rgba(0,0,0,0.08)" : "none",
           }}
         >
-          <div style={{ width: "36px", height: "36px", borderRadius: "8px", background: "var(--color-bg-soft-blue, #EAF0F5)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <MapPin size={18} color="var(--color-brand-primary, #183B56)" />
-          </div>
-          <div>
-            <div style={{ fontSize: "1.2rem", fontWeight: 700, color: textPrimary }}>
-              {combinedEnrichments.length}
+          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            <div
+              style={{
+                width: "38px",
+                height: "38px",
+                borderRadius: "8px",
+                background: "var(--color-bg-soft-blue, #EAF0F5)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <MapPin size={18} color="var(--color-brand-primary, #183B56)" />
             </div>
-            <div style={{ fontSize: "0.75rem", color: textSecondary }}>
-              Reference Enrichments
+            <div>
+              <div style={{ fontSize: "1.25rem", fontWeight: 700, color: textPrimary, lineHeight: 1.2 }}>
+                {combinedEnrichments.length}
+              </div>
+              <div style={{ fontSize: "0.76rem", color: textSecondary, marginTop: "2px" }}>
+                Reference Enrichments
+              </div>
             </div>
           </div>
+          {activeTableTab === "enrichments" && (
+            <span style={{ fontSize: "0.7rem", fontWeight: 700, color: brandPrimary, background: brandSoftBg, padding: "2px 6px", borderRadius: "4px" }}>
+              Active
+            </span>
+          )}
         </div>
       </div>
 
@@ -645,6 +938,85 @@ export default function SemanticsMode({
           })}
         </div>
       </div>
+
+      {/* Governed Row Grain & Key Architecture Banner */}
+      {activeGrain && (
+        <div
+          style={{
+            background: bgSurface,
+            border: `1px solid ${borderCol}`,
+            borderRadius: "10px",
+            padding: "14px 16px",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            flexWrap: "wrap",
+            gap: "12px",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "flex-start", gap: "10px", maxWidth: "700px" }}>
+            <div
+              style={{
+                width: "32px",
+                height: "32px",
+                borderRadius: "6px",
+                background: brandSoftBg,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                flexShrink: 0,
+                marginTop: "2px",
+              }}
+            >
+              <ShieldCheck size={18} color={brandPrimary} />
+            </div>
+            <div>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                <span style={{ fontSize: "0.75rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em", color: brandPrimary }}>
+                  Governed Row Grain
+                </span>
+                <span style={{ fontSize: "0.75rem", color: textSecondary }}>
+                  ({activeSheet ? `Sheet: ${activeSheet}` : "Primary Sheet"})
+                </span>
+              </div>
+              <div style={{ fontSize: "0.88rem", fontWeight: 600, color: textPrimary, marginTop: "2px" }}>
+                {activeGrain.explanation || activeGrain.grain_description || activeGrain.name}
+              </div>
+            </div>
+          </div>
+
+          {activeSheetKeys.length > 0 && (
+            <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+              <span style={{ fontSize: "0.75rem", color: textSecondary, fontWeight: 600 }}>
+                Candidate Keys:
+              </span>
+              {activeSheetKeys.map((k, idx) => (
+                <span
+                  key={idx}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "4px",
+                    padding: "3px 8px",
+                    borderRadius: "6px",
+                    fontSize: "0.75rem",
+                    fontWeight: 600,
+                    background: bgSubtle,
+                    border: `1px solid ${borderCol}`,
+                    color: textPrimary,
+                  }}
+                >
+                  <Key size={12} color={brandPrimary} />
+                  {k.columns?.join(" + ") || "Key"}
+                  <span style={{ fontSize: "0.7rem", color: "var(--color-success, #075443)" }}>
+                    ({k.unique_ratio_pct ?? 100}%)
+                  </span>
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {loading ? (
         <div style={{ padding: "40px", textAlign: "center", color: textSecondary, fontSize: "0.9rem" }}>
@@ -745,19 +1117,59 @@ export default function SemanticsMode({
 
           {/* TABLE B: SEMANTIC COLUMNS TABLE */}
           {(activeTableTab === "all" || activeTableTab === "columns") && (
-            <div style={{ background: bgSurface, border: `1px solid ${borderCol}`, borderRadius: "10px", padding: "16px", display: "flex", flexDirection: "column", gap: "10px" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <h3 style={{ margin: 0, fontSize: "0.95rem", fontWeight: 700, color: textPrimary, display: "flex", alignItems: "center", gap: "6px" }}>
-                  <Table size={15} color={brandPrimary} />
-                  Semantic Columns Table ({columns.length})
-                </h3>
-                <span style={{ fontSize: "0.75rem", color: textSecondary }}>
-                  Click row or Inspect to examine value distributions and column diagnostics
-                </span>
+            <div style={{ background: bgSurface, border: `1px solid ${borderCol}`, borderRadius: "10px", padding: "16px", display: "flex", flexDirection: "column", gap: "12px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px" }}>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: "0.95rem", fontWeight: 700, color: textPrimary, display: "flex", alignItems: "center", gap: "6px" }}>
+                    <Table size={15} color={brandPrimary} />
+                    Semantic Columns Table ({displayedColumns.length} of {columns.length})
+                  </h3>
+                  <span style={{ fontSize: "0.75rem", color: textSecondary }}>
+                    Click row or Inspect to examine value distributions and column diagnostics
+                  </span>
+                </div>
+
+                {/* Quick Role Filters Pills */}
+                <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+                  <span style={{ fontSize: "0.74rem", color: textSecondary, fontWeight: 600, display: "flex", alignItems: "center", gap: "4px" }}>
+                    <Filter size={12} /> Filter Role:
+                  </span>
+                  {[
+                    { id: "all", label: `All (${roleCounts.total})` },
+                    { id: "identifiers", label: `Identifiers (${roleCounts.identifiers})` },
+                    { id: "metrics", label: `Metrics (${roleCounts.metrics})` },
+                    { id: "dimensions", label: `Dimensions (${roleCounts.dimensions})` },
+                    { id: "source", label: `Source (${roleCounts.source})` },
+                    { id: "derived", label: `Derived (${roleCounts.derived})` },
+                  ].map((rf) => {
+                    const isSelected = quickRoleFilter === rf.id;
+                    return (
+                      <button
+                        key={rf.id}
+                        type="button"
+                        onClick={() => setQuickRoleFilter(rf.id)}
+                        style={{
+                          padding: "3px 8px",
+                          fontSize: "0.72rem",
+                          fontWeight: isSelected ? 700 : 500,
+                          borderRadius: "6px",
+                          border: isSelected ? `1px solid ${brandPrimary}` : `1px solid ${borderCol}`,
+                          background: isSelected ? brandSoftBg : bgSubtle,
+                          color: isSelected ? brandPrimary : textSecondary,
+                          cursor: "pointer",
+                          transition: "all 0.15s ease",
+                        }}
+                      >
+                        {rf.label}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
+
               <DataTable
                 columns={semanticColumnsConfig}
-                rows={enrichedColumns}
+                rows={displayedColumns}
                 rowKeyProp="_rowKey"
                 onRowClick={(row) => setSelectedColumn(row)}
                 selectedRowKey={selectedColumn?._rowKey}
@@ -771,7 +1183,7 @@ export default function SemanticsMode({
                 pageSize={25}
                 enableColumnVisibility={true}
                 tableAriaLabel="Semantic columns table"
-                emptyMessage="No columns matched your query."
+                emptyMessage="No columns matched your query or role filter."
               />
             </div>
           )}
@@ -822,7 +1234,7 @@ export default function SemanticsMode({
               <DataTable
                 columns={enrichmentColumnsConfig}
                 rows={combinedEnrichments}
-                rowKeyProp={(r, i) => `enrich-${i}`}
+                rowKeyProp="_rowKey"
                 defaultSortCol="source_value"
                 defaultSortDir="asc"
                 secondarySortCol="derived_value"
