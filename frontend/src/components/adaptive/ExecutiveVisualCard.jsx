@@ -2,6 +2,7 @@ import React, { useMemo } from "react";
 import VisualSpecRenderer from "./VisualSpecRenderer";
 import SemanticIcon from "./SemanticIcon";
 import ActionIconButton from "../../design-system/components/ActionIconButton";
+import DataTable from "../DataTable";
 import { resolvePresentationLabel } from "../../design-system/registries/PresentationLabelResolver";
 import { getContextualExplorerTarget } from "../../utils/explorerNavigation";
 
@@ -151,9 +152,16 @@ export default function ExecutiveVisualCard({
   }, [microcopy.short_title, topic.title, topic.visual_spec, topic.analytical_intent]);
 
   // Server-driven Spatial Placement (SpatialCompositionOptimizer)
-  const colSpan = topic.spatial_placement?.column_span || (isHero ? 12 : topic.layout_hint === "LARGE" ? 8 : topic.layout_hint === "COMPACT" ? 4 : 6);
+  const isGeospatial =
+    compactVisualSpec?.chart_type === "map" ||
+    compactVisualSpec?.chart_type === "choropleth" ||
+    compactVisualSpec?.chart_type === "bubble_map" ||
+    compactVisualSpec?.chart_type === "point_map" ||
+    topic.analytical_intent === "GEOSPATIAL";
+
+  const colSpan = topic.spatial_placement?.column_span || (isHero ? 12 : isGeospatial ? 12 : topic.layout_hint === "LARGE" ? 8 : topic.layout_hint === "COMPACT" ? 4 : 6);
   const heightClass = topic.spatial_placement?.height_class || (isHero ? "standard" : "standard");
-  const layoutHint = (topic.layout_hint || topic.visual_spec?.layout_hint || (isHero ? "HERO" : "MEDIUM")).toLowerCase();
+  const layoutHint = (topic.layout_hint || topic.visual_spec?.layout_hint || (isHero ? "HERO" : isGeospatial ? "LARGE" : "MEDIUM")).toLowerCase();
   const layoutClass = `span-${colSpan} height-${heightClass} layout-hint-${layoutHint} visual-card--${layoutHint}`;
 
   // Synchronized chart height based on row height class
@@ -163,6 +171,58 @@ export default function ExecutiveVisualCard({
     if (heightClass === "short") return "190px";
     return "230px";
   }, [heightClass, isHero]);
+
+  const geoTableColumns = useMemo(() => [
+    { key: "rank", label: "Rank", sortable: true, align: "center", width: "65px" },
+    { key: "location", label: compactVisualSpec?.geo_dimension || "Territory", sortable: true, filterable: true },
+    { key: "value", label: compactVisualSpec?.primary_measure || compactVisualSpec?.key_metric || "Metric Value", sortable: true, align: "right" },
+    {
+      key: "lineage",
+      label: "Lineage",
+      sortable: true,
+      align: "center",
+      width: "100px",
+      render: (val) => (
+        <span
+          style={{
+            fontSize: "0.68rem",
+            padding: "2px 6px",
+            borderRadius: "4px",
+            backgroundColor: isDark ? "rgba(59, 130, 246, 0.2)" : "rgba(219, 234, 254, 0.8)",
+            color: isDark ? "#93c5fd" : "#1d4ed8",
+            fontWeight: 600,
+          }}
+        >
+          {val || "OBSERVED"}
+        </span>
+      ),
+    },
+  ], [compactVisualSpec, isDark]);
+
+  const geoTableRows = useMemo(() => {
+    if (!compactVisualSpec || !isGeospatial) return [];
+    if (compactVisualSpec.table_data && compactVisualSpec.table_data.length > 0) {
+      return compactVisualSpec.table_data.map((r, i) => ({
+        id: `geo-row-${i}`,
+        rank: r.rank != null ? r.rank : i + 1,
+        location: r.location || "-",
+        value: r.formatted_value || `${r.value ?? "-"}`,
+        raw_value: r.value != null ? r.value : 0,
+        lineage: r.lineage || compactVisualSpec.geo_source || "OBSERVED",
+      }));
+    }
+    const cats = compactVisualSpec.categories || [];
+    const vals = compactVisualSpec.values || [];
+    const unit = compactVisualSpec.unit || "";
+    return cats.map((cat, idx) => ({
+      id: `geo-row-${idx}`,
+      rank: idx + 1,
+      location: cat,
+      value: vals[idx] != null ? `${vals[idx]} ${unit}`.trim() : "-",
+      raw_value: vals[idx] != null ? vals[idx] : 0,
+      lineage: compactVisualSpec.geo_source || "OBSERVED",
+    }));
+  }, [compactVisualSpec, isGeospatial]);
 
   const accessibleChartDescription = topic.primary_takeaway || topic.takeaway || topic.title || "Visual analytics chart.";
 
@@ -309,8 +369,48 @@ export default function ExecutiveVisualCard({
             visualSpec={compactVisualSpec}
             themeTokens={themeTokens}
             isDark={isDark}
-            height={chartHeight}
+            height={isGeospatial ? "280px" : chartHeight}
           />
+          {/* Map + Ranked Geographic DataTable */}
+          {isGeospatial && geoTableRows.length > 0 && (
+            <div style={{ marginTop: "14px", width: "100%" }}>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  marginBottom: "8px",
+                  padding: "0 2px",
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: "0.74rem",
+                    fontWeight: 700,
+                    color: themeTokens?.colors?.textSecondary,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.04em",
+                  }}
+                >
+                  Ranked Geographic DataTable ({geoTableRows.length} territories)
+                </span>
+                <span style={{ fontSize: "0.72rem", color: themeTokens?.colors?.textMuted }}>
+                  Lineage: <strong>{compactVisualSpec.geo_source || "OBSERVED"}</strong>
+                </span>
+              </div>
+              <DataTable
+                columns={geoTableColumns}
+                rows={geoTableRows}
+                pageSize={6}
+                pageSizeOptions={[6, 12, 25]}
+                defaultSortCol="rank"
+                defaultSortDir="asc"
+                searchPlaceholder="Search locations..."
+                emptyMessage="No geographic records match."
+                tableAriaLabel={`${displayTitle} ranked geographic comparison table`}
+              />
+            </div>
+          )}
           {/* 3. FIGCAPTION ("What can I do next?"): Compressed finding + Deep dive link */}
           <figcaption
             className="visual-card__figcaption card-short-insight"

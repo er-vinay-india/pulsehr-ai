@@ -39,6 +39,10 @@ class VisualCapabilityRegistry:
         "dot_plot": ChartFamily.DISTRIBUTION,
         "heatmap": ChartFamily.SPECIALTY,
         "waterfall": ChartFamily.FLOW,
+        "map": ChartFamily.GEOSPATIAL,
+        "choropleth": ChartFamily.GEOSPATIAL,
+        "bubble_map": ChartFamily.GEOSPATIAL,
+        "point_map": ChartFamily.GEOSPATIAL,
     }
 
     ARCHETYPE_TO_MORPHOLOGY: dict[str, VisualMorphology] = {
@@ -68,6 +72,10 @@ class VisualCapabilityRegistry:
         "area": VisualMorphology.TEMPORAL_PATH,
         "slope": VisualMorphology.TEMPORAL_PATH,
         "heatmap": VisualMorphology.MATRIX,
+        "map": VisualMorphology.GEOSPATIAL,
+        "choropleth": VisualMorphology.GEOSPATIAL,
+        "bubble_map": VisualMorphology.GEOSPATIAL,
+        "point_map": VisualMorphology.GEOSPATIAL,
     }
 
     @classmethod
@@ -114,6 +122,9 @@ class VisualCapabilityRegistry:
 
         if int_norm == "COMPOSITION":
             return "100_percent_stacked_bar"
+
+        if int_norm in ("GEOSPATIAL", "GEO", "MAP"):
+            return "choropleth"
 
         if int_norm == "DISTRIBUTION":
             return "box_plot"

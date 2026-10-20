@@ -236,12 +236,44 @@ class VisualQuestionBuilder:
         residual_component: str | None = None,
         excluded_population: list[str] | None = None,
         series_data: dict[str, list[float]] | None = None,
+        is_geographic_dimension: bool = False,
+        geo_level: str | None = None,
+        geo_scope: str | None = None,
+        has_ambiguous_locations: bool = False,
+        is_unsafe_relationship: bool = False,
+        geographic_coverage: float = 1.0,
+        resolved_locations_count: int = 0,
     ) -> VisualQuestion:
         """Constructs a complete VisualQuestion instance."""
+        fc = finding_context or {}
+        # Auto-detect geographic dimension from primary_dimension or finding_context
+        geo_tokens = ("state", "country", "city", "district", "region", "territory", "location", "lat", "lon", "geo")
+        dim_clean = (primary_dimension or "").strip().lower()
+        is_geo = (
+            is_geographic_dimension
+            or fc.get("is_geographic", False)
+            or any(t in dim_clean for t in geo_tokens)
+        )
+        resolved_geo_level = geo_level or fc.get("geo_level")
+        if not resolved_geo_level and is_geo:
+            if "country" in dim_clean or "nation" in dim_clean:
+                resolved_geo_level = "COUNTRY"
+            elif "state" in dim_clean or "province" in dim_clean or "ut" in dim_clean or "union territory" in dim_clean:
+                resolved_geo_level = "STATE"
+            elif "district" in dim_clean or "county" in dim_clean:
+                resolved_geo_level = "DISTRICT"
+            elif "city" in dim_clean or "town" in dim_clean:
+                resolved_geo_level = "CITY"
+            elif "lat" in dim_clean or "lon" in dim_clean:
+                resolved_geo_level = "POINT"
+
         intent, sec_intent = AnalyticalIntentClassifier.classify(
             question=question_text,
             finding_context=finding_context,
         )
+        if is_geo and intent != AnalyticalIntent.TREND:
+            # Prioritize geospatial intent when geographic dimension is present
+            intent = AnalyticalIntent.GEOSPATIAL
 
         units_map = provided_units or {}
         resolved_semantics = [
@@ -306,4 +338,11 @@ class VisualQuestionBuilder:
             grain=primary_grain,
             temporal_grain=temporal_grain,
             denominator_semantics=denom_semantics,
+            is_geographic_dimension=is_geo,
+            geo_level=resolved_geo_level,
+            geo_scope=geo_scope or fc.get("geo_scope"),
+            has_ambiguous_locations=has_ambiguous_locations or fc.get("has_ambiguous_locations", False),
+            is_unsafe_relationship=is_unsafe_relationship or fc.get("is_unsafe_relationship", False),
+            geographic_coverage=geographic_coverage if geographic_coverage is not None else fc.get("geographic_coverage", 1.0),
+            resolved_locations_count=resolved_locations_count or fc.get("resolved_locations_count", 0),
         )

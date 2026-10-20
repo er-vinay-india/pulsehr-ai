@@ -269,6 +269,17 @@ class AnalyticalStoryBuilder:
                 )
                 story_idx += 1
 
+        # D. Derive Governed Geographic Spatial Story if geographic dimension exists
+        geo_story = cls._derive_governed_geographic_story(
+            dataset_id=dataset_id,
+            gov_metrics=gov_metrics,
+            domain=domain,
+            story_idx=story_idx,
+        )
+        if geo_story:
+            companion_stories.append(geo_story)
+            story_idx += 1
+
         stories.extend(companion_stories)
 
         # Enforce TemporalStoryIntegrity: No TREND story unless genuine temporal dimension exists
@@ -979,6 +990,295 @@ class AnalyticalStoryBuilder:
         return stories
 
     @classmethod
+    def _derive_governed_geographic_story(
+        cls,
+        dataset_id: int | None,
+        gov_metrics: dict[str, Any],
+        domain: str,
+        story_idx: int,
+    ) -> AnalyticalStory | None:
+        """Derives a governed geographic/spatial visual story if a verified geographic dimension exists."""
+        if not dataset_id:
+            return None
+
+        try:
+            from ...db.database import get_connection
+            from ..sdr.geo.resolver import GeoResolutionEngine
+            from ..sdr.geo.contracts import GeoResolutionStatus, GeoLevel
+
+            conn = get_connection()
+            try:
+                # 1. Fetch sheets for dataset
+                sheets = conn.execute(
+                    "SELECT id, name, display_name, columns_json, row_count FROM sheets WHERE dataset_id = ? ORDER BY id ASC",
+                    (dataset_id,)
+                ).fetchall()
+                if not sheets:
+                    return None
+
+                # Search for geographic columns
+                geo_tokens = (
+                    "state", "country", "province", "district", "city", "region",
+                    "location", "territory", "latitude", "longitude", "india/state/union territory"
+                )
+
+                target_sheet = None
+                geo_col = None
+
+                for s in sheets:
+                    col_names = []
+                    try:
+                        import json
+                        cols_raw = s["columns_json"]
+                        col_names = json.loads(cols_raw) if isinstance(cols_raw, str) else (cols_raw or [])
+                    except Exception:
+                        pass
+
+                    for c in col_names:
+                        c_low = str(c).lower().strip()
+                        if any(t in c_low for t in geo_tokens) and not any(skip in c_low for skip in ("interact_", "mean_", "ratio_")):
+                            target_sheet = s
+                            geo_col = c
+                            break
+                    if target_sheet and geo_col:
+                        break
+
+                if not target_sheet or not geo_col:
+                    return None
+
+                sheet_id = target_sheet["id"]
+                row_records = conn.execute(
+                    "SELECT data_json FROM sheet_rows WHERE sheet_id = ? ORDER BY row_index ASC LIMIT 200",
+                    (sheet_id,)
+                ).fetchall()
+
+                if len(row_records) < 3:
+                    return None
+
+                import json
+                rows = []
+                for r in row_records:
+                    try:
+                        d = json.loads(r["data_json"]) if isinstance(r["data_json"], str) else r["data_json"]
+                        if d:
+                            rows.append(d)
+                    except Exception:
+                        continue
+
+                if not rows:
+                    return None
+
+                # 2. Check Candidate Measures
+                all_cols = list(rows[0].keys())
+                candidate_measures = []
+                for c in all_cols:
+                    if c == geo_col or str(c).lower() in ("id", "sr_no", "sno", "row_num", "category"):
+                        continue
+                    if any(c.lower().startswith(p) for p in ("interact_", "ratio_")):
+                        continue
+                    # Check if numeric
+                    vals = []
+                    for r in rows:
+                        raw = r.get(c)
+                        if raw is not None:
+                            try:
+                                v_clean = str(raw).replace(",", "").replace("%", "").strip()
+                                vals.append(float(v_clean))
+                            except (ValueError, TypeError):
+                                pass
+                    if len(vals) >= len(rows) * 0.5:
+                        candidate_measures.append((c, vals))
+
+                if not candidate_measures:
+                    return None
+
+                # Prioritize growth rate / rate / density / percentage for choropleth, or count for bubble map
+                selected_measure = None
+                for c, vals in candidate_measures:
+                    c_low = c.lower()
+                    if any(k in c_low for k in ("rate", "growth", "density", "score", "percentage", "pct", "%", "ratio")):
+                        selected_measure = (c, vals)
+                        break
+                if not selected_measure:
+                    for c, vals in candidate_measures:
+                        c_low = c.lower()
+                        if any(k in c_low for k in ("attendance", "sales", "revenue", "population", "count", "volume")):
+                            selected_measure = (c, vals)
+                            break
+                if not selected_measure:
+                    selected_measure = candidate_measures[0]
+
+                meas_name, meas_vals = selected_measure
+
+                # 3. Geo Resolution Engine: Validate locations, check ambiguity & coverage
+                geo_engine = GeoResolutionEngine()
+                resolved_count = 0
+                ambiguous_count = 0
+                unresolved_count = 0
+                geo_entities = []
+
+                location_val_pairs = []
+                for r in rows:
+                    loc_val = r.get(geo_col)
+                    if loc_val is None or str(loc_val).strip() == "" or str(loc_val).lower() == "india":
+                        continue
+                    loc_str = str(loc_val).strip()
+                    meas_raw = r.get(meas_name)
+                    num_val = None
+                    if meas_raw is not None:
+                        try:
+                            num_val = float(str(meas_raw).replace(",", "").replace("%", "").strip())
+                        except (ValueError, TypeError):
+                            pass
+                    if num_val is not None:
+                        location_val_pairs.append((loc_str, num_val))
+
+                if len(location_val_pairs) < 3:
+                    return None
+
+                # Offline Local Map Boundaries Gazetteer
+                offline_entities = set()
+                try:
+                    from pathlib import Path
+                    maps_dir = Path(__file__).resolve().parents[4] / "frontend" / "src" / "assets" / "maps"
+                    if not maps_dir.exists():
+                        maps_dir = Path("frontend/src/assets/maps").resolve()
+                    for m_file in ("india.json", "usa.json", "world.json"):
+                        mp = maps_dir / m_file
+                        if mp.exists():
+                            with open(mp, "r", encoding="utf-8") as mf:
+                                m_data = json.load(mf)
+                                for feat in m_data.get("features", []):
+                                    fname = feat.get("properties", {}).get("name", "")
+                                    if fname:
+                                        fn = fname.lower().replace("&", "and").replace("islands", "island").replace("territory", "").strip()
+                                        offline_entities.add(fn)
+                except Exception:
+                    pass
+
+                # Disambiguation & Resolution Analysis
+                for loc_str, val in location_val_pairs:
+                    res = geo_engine.resolve_token(loc_str)
+                    norm_loc = loc_str.lower().replace("&", "and").replace("islands", "island").replace("territory", "").strip()
+                    if res.resolution_status == GeoResolutionStatus.RESOLVED:
+                        resolved_count += 1
+                        geo_entities.append(res)
+                    elif norm_loc in offline_entities:
+                        resolved_count += 1
+                    elif res.resolution_status == GeoResolutionStatus.AMBIGUOUS:
+                        ambiguous_count += 1
+                    else:
+                        unresolved_count += 1
+
+                total_evaluated = len(location_val_pairs)
+                coverage = resolved_count / max(1, total_evaluated)
+
+                # Gate: If coverage < 50% or ambiguous locations present without resolution -> Block map!
+                if coverage < 0.50 and resolved_count < 3:
+                    logger.info("GeoVisualizationGate: Suppressed map due to low coverage (%.1f%%)", coverage * 100)
+                    return None
+
+                if ambiguous_count > total_evaluated * 0.3:
+                    logger.info("GeoVisualizationGate: Suppressed map due to high ambiguity count (%d)", ambiguous_count)
+                    return None
+
+                # Determine Geo Scope and Grain
+                geo_scope = "india"
+                geo_level = "STATE"
+                col_low = geo_col.lower()
+                if "india" in col_low or any(t in col_low for t in ("state", "union territory", "ut")):
+                    geo_scope = "india"
+                    geo_level = "STATE"
+                elif any("country" in col_low or (e.resolved_entity_id and "CTRY" in e.resolved_entity_id) for e in geo_entities):
+                    geo_scope = "world"
+                    geo_level = "COUNTRY"
+                elif any(e.resolved_entity_id and "-US-" in e.resolved_entity_id for e in geo_entities) or "usa" in col_low:
+                    geo_scope = "usa"
+                    geo_level = "STATE"
+                elif any("city" in col_low or (e.resolved_entity_id and "CITY" in e.resolved_entity_id) for e in geo_entities):
+                    geo_level = "CITY"
+                    geo_level = "CITY"
+
+                # Normalized measure check (rate, pct, density -> choropleth; count/volume/city -> bubble_map)
+                m_low = meas_name.lower()
+                is_normalized = any(k in m_low for k in ("rate", "ratio", "pct", "%", "percent", "growth", "density", "score", "index", "average", "avg"))
+                map_type = "choropleth" if (is_normalized and geo_level in ("STATE", "COUNTRY")) else "bubble_map"
+
+                unit = "%" if ("rate" in m_low or "growth" in m_low or "%" in m_low) else ("per sq.km" if "density" in m_low else "units")
+
+                # Deduplicate by location and average if multiple entries exist
+                loc_map = collections.defaultdict(list)
+                for loc, val in location_val_pairs:
+                    loc_map[loc].append(val)
+
+                sorted_items = []
+                for loc, v_list in loc_map.items():
+                    avg_v = sum(v_list) / len(v_list)
+                    sorted_items.append((loc, round(avg_v, 2)))
+
+                sorted_items.sort(key=lambda x: x[1], reverse=True)
+
+                top_loc, top_val = sorted_items[0]
+                bot_loc, bot_val = sorted_items[-1]
+
+                table_data = [
+                    {
+                        "rank": idx + 1,
+                        "location": loc,
+                        "value": val,
+                        "formatted_value": f"{val:,.1f} {unit}".strip(),
+                        "lineage": "OBSERVED",
+                        "geo_level": geo_level,
+                    }
+                    for idx, (loc, val) in enumerate(sorted_items)
+                ]
+
+                clean_meas_label = meas_name.replace(" - 2001-2011", "").replace(" - 2011", "").strip()
+
+                return AnalyticalStory(
+                    story_id=f"STORY-GEO-{story_idx:03d}",
+                    semantic_family="geographic_spatial_distribution",
+                    title=f"Regional {clean_meas_label} Spatial Pattern",
+                    business_question=f"How does {clean_meas_label.lower()} vary geographically across regional territories?",
+                    intent="GEOSPATIAL",
+                    periods=["2011" if "2011" in meas_name else "Reporting Period"],
+                    key_metric=f"Top: {top_loc} ({top_val} {unit})",
+                    takeaway=f"Geographic analysis identifies significant spatial variance in {clean_meas_label.lower()}, led by {top_loc} ({top_val} {unit}) and trailing at {bot_loc} ({bot_val} {unit}).",
+                    recommended_action="Prioritize regional resource allocation and localized policy reviews for variance leaders.",
+                    importance_score=0.96,
+                    business_value=0.95,
+                    statistical_significance=0.95,
+                    confidence=round(max(0.85, coverage), 2),
+                    suggested_role="priority",
+                    tokens={
+                        "chart_archetype": map_type,
+                        "layout_hint": "LARGE",
+                        "categories": [p[0] for p in sorted_items],
+                        "values": [p[1] for p in sorted_items],
+                        "unit": unit,
+                        "geo_dimension": geo_col,
+                        "geo_level": geo_level,
+                        "geo_scope": geo_scope,
+                        "map_type": map_type,
+                        "geo_source": "OBSERVED",
+                        "geo_coverage": round(coverage, 2),
+                        "table_data": table_data,
+                        "primary_dimension": geo_col,
+                        "primary_measure": clean_meas_label,
+                        "is_geographic": True,
+                        "has_ambiguous_locations": False,
+                        "is_unsafe_relationship": False,
+                        "unresolved_count": unresolved_count,
+                        "ambiguous_count": ambiguous_count,
+                    },
+                )
+            finally:
+                conn.close()
+        except Exception as exc:
+            logger.warning("Failed to derive governed geographic story: %s", exc)
+            return None
+
+    @classmethod
     def _classify_node_family(cls, node: EvidenceItem, domain: str) -> str:
         """Determines the semantic family key for an evidence node."""
         tokens = node.tokens or {}
@@ -1035,7 +1335,11 @@ class AnalyticalStoryBuilder:
                 return "store_margin_comparison"
             return "store_sales_ranking"
 
-        if any(k in subj or k in metric for k in ("department", "division", "store", "city", "state", "region", "spread", "ranking")):
+        # Geographic / Spatial Pattern
+        if any(k in subj or k in metric for k in ("city", "state", "country", "province", "district", "region", "territory", "location", "geographic", "spatial", "choropleth", "map")):
+            return "geographic_spatial"
+
+        if any(k in subj or k in metric for k in ("department", "division", "store", "spread", "ranking")):
             return "entity_ranking"
 
         # Time series / Cadence
@@ -1157,6 +1461,16 @@ class AnalyticalStoryBuilder:
                 takeaway = "Measurable quartile dispersion observed across segment records."
                 recommended_action = "Review factors driving segment variance."
             biz_val, stat_sig, imp = 0.86, 0.85, 0.85
+
+        elif "geographic" in family_key or "spatial" in family_key:
+            intent = "GEOSPATIAL"
+            arch = "choropleth"
+            hint = "LARGE"
+            title = f"{rep.subject or 'Regional Metric'} Geographic Distribution"
+            question = f"How does {rep.subject or 'performance'} distribute across geographic regions?"
+            takeaway = f"Spatial dispersion highlights regional variation across monitored territories, with {rep.formatted_value} recorded."
+            recommended_action = "Prioritize regional resource allocation and localized policy reviews for variance leaders."
+            biz_val, stat_sig, imp = 0.95, 0.95, 0.95
 
         elif "department" in family_key or "entity" in family_key or "ranking" in family_key:
             intent = "RANKING"

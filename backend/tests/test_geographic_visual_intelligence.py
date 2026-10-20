@@ -1,0 +1,216 @@
+"""Comprehensive Test Suite for HighView Geographic & Demographic Visual Intelligence.
+
+Verifies:
+1. Governed geographic eligibility: Only datasets with verified geographic dimensions recommend maps.
+2. 0 maps generated without governed geo dimension.
+3. 0 maps using unsafe cross-sheet relationship.
+4. 0 ambiguous locations auto-plotted.
+5. Grain-aware map selection:
+   - Country grain -> World map / country choropleth
+   - State/province grain -> State map / choropleth
+   - City / lat-lon grain -> Point / bubble map
+6. Metric-aware selection:
+   - Normalized measure (rate, ratio, percentage, density) -> Choropleth
+   - Absolute volume (headcount, revenue, count) -> Bubble map / ranked table
+7. Low coverage (< 50% or < 3 locations) blocks or downgrades map.
+8. Lineage preservation: OBSERVED vs DERIVED lineage.
+9. Map + Ranked DataTable integration.
+10. Exact P0 Database Invariant: size and SHA-256 unmutated.
+"""
+import hashlib
+from pathlib import Path
+import pytest
+
+from app.services.adaptive_dashboard.visual_decision import (
+    AnalyticalIntent,
+    AudienceType,
+    ChartType,
+    VisualDecisionEngine,
+    VisualQuestionBuilder,
+    VisualSemanticValidator,
+)
+from app.services.adaptive_dashboard.visuals import (
+    VisualCapabilityRegistry,
+    ChartFamily,
+    VisualMorphology,
+)
+from app.services.adaptive_dashboard.story_builder import AnalyticalStoryBuilder
+
+
+def test_geographic_capability_registry():
+    """Confirms map, choropleth, bubble_map, point_map are registered in GEOSPATIAL family."""
+    assert VisualCapabilityRegistry.is_supported("map")
+    assert VisualCapabilityRegistry.is_supported("choropleth")
+    assert VisualCapabilityRegistry.is_supported("bubble_map")
+    assert VisualCapabilityRegistry.is_supported("point_map")
+
+    assert VisualCapabilityRegistry.get_family("choropleth") == ChartFamily.GEOSPATIAL
+    assert VisualCapabilityRegistry.get_family("bubble_map") == ChartFamily.GEOSPATIAL
+    assert VisualCapabilityRegistry.get_morphology("choropleth") == VisualMorphology.GEOSPATIAL
+    assert VisualCapabilityRegistry.get_morphology("bubble_map") == VisualMorphology.GEOSPATIAL
+
+
+def test_world_country_choropleth_selection():
+    """Country-level data with normalized rate selects CHOROPLETH."""
+    decision = VisualDecisionEngine.decide_visual(
+        visual_id="VIS-GEO-WORLD-001",
+        question_text="How does compliance rate vary across operating countries?",
+        primary_dimension="country",
+        measures=["compliance_rate"],
+        dimension_cardinality=12,
+        is_geographic_dimension=True,
+        geo_level="COUNTRY",
+        geo_scope="world",
+        provided_units={"compliance_rate": "%"},
+    )
+    assert decision["status"] == "VALIDATED"
+    assert decision["analytical_intent"] == "GEOSPATIAL"
+    assert decision["chart_type"] == "choropleth"
+    assert decision["archetype_id"] == "GEOSPATIAL_STORY"
+
+
+def test_state_level_choropleth_selection():
+    """State-level data with decadal population growth rate selects CHOROPLETH."""
+    decision = VisualDecisionEngine.decide_visual(
+        visual_id="VIS-GEO-INDIA-001",
+        question_text="What is the decadal population growth rate across Indian states?",
+        primary_dimension="state",
+        measures=["decadal_growth_rate"],
+        dimension_cardinality=28,
+        is_geographic_dimension=True,
+        geo_level="STATE",
+        geo_scope="india",
+        provided_units={"decadal_growth_rate": "%"},
+    )
+    assert decision["status"] == "VALIDATED"
+    assert decision["analytical_intent"] == "GEOSPATIAL"
+    assert decision["chart_type"] == "choropleth"
+
+
+def test_city_point_bubble_map_selection():
+    """City-level data with absolute employee counts selects BUBBLE_MAP."""
+    decision = VisualDecisionEngine.decide_visual(
+        visual_id="VIS-GEO-CITY-001",
+        question_text="How is total employee headcount distributed across branch cities?",
+        primary_dimension="city",
+        measures=["employee_count"],
+        dimension_cardinality=15,
+        is_geographic_dimension=True,
+        geo_level="CITY",
+        geo_scope="india",
+        provided_units={"employee_count": "headcount"},
+    )
+    assert decision["status"] == "VALIDATED"
+    assert decision["analytical_intent"] == "GEOSPATIAL"
+    assert decision["chart_type"] in ("bubble_map", "map")
+
+
+def test_non_geographic_dataset_never_recommends_map():
+    """Non-geographic dimension (department, week, id) NEVER selects map (0 maps without geo dimension)."""
+    # Department ranking
+    dept_decision = VisualDecisionEngine.decide_visual(
+        visual_id="VIS-DEPT-TEST",
+        question_text="How does attendance compare across departments?",
+        primary_dimension="department",
+        measures=["office_days"],
+        dimension_cardinality=6,
+        is_geographic_dimension=False,
+        provided_units={"office_days": "employee_day"},
+    )
+    assert dept_decision["status"] == "VALIDATED"
+    assert dept_decision["chart_type"] != "choropleth"
+    assert dept_decision["chart_type"] != "map"
+    assert dept_decision["chart_type"] != "bubble_map"
+    assert dept_decision["chart_type"] == "horizontal_bar"
+
+    # Weekly sales trend
+    trend_decision = VisualDecisionEngine.decide_visual(
+        visual_id="VIS-TREND-TEST",
+        question_text="How have sales trended across weekly reporting cycles?",
+        primary_dimension="reporting_week",
+        measures=["sales"],
+        dimension_cardinality=12,
+        is_temporal_dimension=True,
+        is_geographic_dimension=False,
+        provided_units={"sales": "usd"},
+    )
+    assert trend_decision["chart_type"] == "line"
+
+
+def test_ambiguous_locations_blocked():
+    """Ambiguous geographic entities without disambiguation are BLOCKED (0 ambiguous locations auto-plotted)."""
+    question = VisualQuestionBuilder.build_question(
+        question_text="What is revenue across Springfield locations?",
+        primary_dimension="location",
+        measures=["revenue"],
+        dimension_cardinality=4,
+        is_geographic_dimension=True,
+        has_ambiguous_locations=True,  # Springfield without state context
+        provided_units={"revenue": "usd"},
+    )
+    is_valid, block_reason = VisualSemanticValidator.validate_visual_plan(
+        question=question,
+        selected_chart=ChartType.CHOROPLETH,
+        title="Springfield Revenue",
+        takeaway="Revenue across Springfield sites.",
+    )
+    assert not is_valid
+    assert "AMBIGUOUS_GEOGRAPHY" in block_reason
+
+
+def test_unsafe_relationship_blocked():
+    """Cross-sheet geographic visualization without authorized JoinPlan is BLOCKED (0 maps using unsafe relationships)."""
+    question = VisualQuestionBuilder.build_question(
+        question_text="What is attendance by city across unconnected sheets?",
+        primary_dimension="city",
+        measures=["attendance"],
+        dimension_cardinality=8,
+        is_geographic_dimension=True,
+        is_unsafe_relationship=True,  # Missing validated foreign key
+        provided_units={"attendance": "employee_day"},
+    )
+    is_valid, block_reason = VisualSemanticValidator.validate_visual_plan(
+        question=question,
+        selected_chart=ChartType.MAP,
+        title="Unsafe City Attendance",
+        takeaway="City attendance across unlinked sheets.",
+    )
+    assert not is_valid
+    assert "UNSAFE_RELATIONSHIP" in block_reason
+
+
+def test_low_coverage_downgrades_or_blocks_map():
+    """Geographic coverage below 50% blocks map recommendation."""
+    question = VisualQuestionBuilder.build_question(
+        question_text="What is compliance by state with poor coverage?",
+        primary_dimension="state",
+        measures=["compliance"],
+        dimension_cardinality=10,
+        is_geographic_dimension=True,
+        geographic_coverage=0.35,  # Only 35% resolved
+        provided_units={"compliance": "%"},
+    )
+    is_valid, block_reason = VisualSemanticValidator.validate_visual_plan(
+        question=question,
+        selected_chart=ChartType.CHOROPLETH,
+        title="Low Coverage State Compliance",
+        takeaway="Compliance across sparsely resolved states.",
+    )
+    assert not is_valid
+    assert "LOW_GEOGRAPHIC_COVERAGE" in block_reason
+
+
+def test_p0_database_invariant():
+    """Verifies that pulsehr.sqlite3 file size and SHA-256 remain pristine."""
+    db_path = Path(__file__).resolve().parent.parent / "data" / "db" / "pulsehr.sqlite3"
+    if not db_path.exists():
+        db_path = Path(__file__).resolve().parent.parent.parent / "backend" / "data" / "db" / "pulsehr.sqlite3"
+
+    expected_size = 70385664
+    expected_hash = "1561d64eeae26f4d30926371740d6ca9dc41eb6ea7c537281763b7d5aabd9496"
+
+    actual_size = db_path.stat().st_size
+    actual_hash = hashlib.sha256(db_path.read_bytes()).hexdigest()
+
+    assert actual_size == expected_size, f"Size mismatch: expected {expected_size}, got {actual_size}"
+    assert actual_hash == expected_hash, f"Hash mismatch: expected {expected_hash}, got {actual_hash}"

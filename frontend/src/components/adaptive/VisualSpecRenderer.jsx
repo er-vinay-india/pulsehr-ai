@@ -1,7 +1,73 @@
 import React, { useMemo } from "react";
+import * as echarts from "echarts";
 import SafeReactECharts from "../charts/SafeReactECharts";
-import { Award, Trophy } from "lucide-react";
+import { Award, Trophy, MapPin, AlertCircle } from "lucide-react";
 import { resolvePresentationLabel } from "../../design-system/registries/PresentationLabelResolver";
+import worldMap from "../../assets/maps/world.json";
+import indiaMap from "../../assets/maps/india.json";
+import usaMap from "../../assets/maps/usa.json";
+
+// Register offline local maps once
+if (typeof window !== "undefined") {
+  try {
+    if (!echarts.getMap("world")) echarts.registerMap("world", worldMap);
+    if (!echarts.getMap("india")) echarts.registerMap("india", indiaMap);
+    if (!echarts.getMap("usa")) echarts.registerMap("usa", usaMap);
+  } catch (err) {
+    console.warn("Failed to register offline ECharts maps:", err);
+  }
+}
+
+const CITY_STATE_CENTROIDS = {
+  "bengaluru": [77.5946, 12.9716],
+  "bangalore": [77.5946, 12.9716],
+  "mumbai": [72.8777, 19.0760],
+  "bombay": [72.8777, 19.0760],
+  "delhi": [77.1025, 28.7041],
+  "new delhi": [77.1025, 28.7041],
+  "kolkata": [88.3639, 22.5726],
+  "calcutta": [88.3639, 22.5726],
+  "chennai": [80.2707, 13.0827],
+  "hyderabad": [78.4867, 17.3850],
+  "pune": [73.8567, 18.5204],
+  "ahmedabad": [72.5714, 23.0225],
+  "karnataka": [75.7139, 15.3173],
+  "maharashtra": [75.7139, 19.7515],
+  "west bengal": [87.8550, 22.9868],
+  "tamil nadu": [78.6569, 11.1271],
+  "telangana": [79.0193, 18.1124],
+  "andhra pradesh": [79.7400, 15.9129],
+  "uttar pradesh": [80.9462, 26.8467],
+  "bihar": [85.3131, 25.0961],
+  "rajasthan": [74.2179, 27.0238],
+  "madhya pradesh": [78.6569, 22.9734],
+  "gujarat": [71.1924, 22.2587],
+  "kerala": [76.2711, 10.8505],
+  "odisha": [85.0985, 20.9517],
+  "punjab": [75.3412, 31.1471],
+  "haryana": [76.0856, 29.0588],
+  "austin": [-97.7431, 30.2672],
+  "chicago": [-87.6298, 41.8781],
+  "san francisco": [-122.4194, 37.7749],
+  "new york": [-74.0060, 40.7128],
+  "london": [-0.1278, 51.5074],
+  "paris": [2.3522, 48.8566],
+  "singapore": [103.8198, 1.3521],
+  "tokyo": [139.6503, 35.6762],
+  "sydney": [151.2093, -33.8688]
+};
+
+const INDIA_STATE_ALIASES = {
+  "orissa": "Odisha",
+  "uttaranchal": "Uttarakhand",
+  "pondicherry": "Puducherry",
+  "andaman & nicobar islands": "Andaman and Nicobar Islands",
+  "andaman and nicobar": "Andaman and Nicobar Islands",
+  "dadra & nagar haveli": "Dadra and Nagar Haveli",
+  "daman & diu": "Daman and Diu",
+  "nct of delhi": "Delhi",
+  "jammu & kashmir": "Jammu and Kashmir",
+};
 
 /**
  * Executive Podium Top 3 Renderer.
@@ -791,6 +857,156 @@ export default function VisualSpecRenderer({
                 shadowColor: "rgba(0, 0, 0, 0.5)",
               },
             },
+          },
+        ],
+      };
+    }
+
+    // 9.8 GEOSPATIAL MAP (Choropleth, Bubble Map, Point Map Archetype)
+    if (chartType === "map" || chartType === "choropleth" || chartType === "bubble_map" || chartType === "point_map") {
+      const scope = visualSpec.geo_scope || "india";
+      const isBubble = visualSpec.map_type === "bubble" || chartType === "bubble_map";
+      const rawCategories = visualSpec.categories || [];
+      const rawValues = visualSpec.values || [];
+
+      // Normalize names for India or World
+      const mapData = rawCategories.map((cat, idx) => {
+        let cleanName = String(cat).trim();
+        const low = cleanName.toLowerCase();
+        if (scope === "india" && INDIA_STATE_ALIASES[low]) {
+          cleanName = INDIA_STATE_ALIASES[low];
+        }
+        const val = rawValues[idx] != null ? rawValues[idx] : 0;
+        return { name: cleanName, value: val };
+      });
+
+      const numericVals = rawValues.filter((v) => v != null && !isNaN(v));
+      const minVal = numericVals.length ? Math.min(...numericVals) : 0;
+      const maxVal = numericVals.length ? Math.max(...numericVals) : 100;
+
+      if (isBubble) {
+        // City / Location Point Map
+        const bubblePoints = rawCategories.map((cat, idx) => {
+          const low = String(cat).toLowerCase().trim();
+          const coords = CITY_STATE_CENTROIDS[low] || [78.9629, 20.5937];
+          const val = rawValues[idx] != null ? rawValues[idx] : 0;
+          return {
+            name: cat,
+            value: [coords[0], coords[1], val],
+          };
+        });
+
+        return {
+          backgroundColor: "transparent",
+          tooltip: {
+            trigger: "item",
+            confine: true,
+            backgroundColor: isDark ? "#1e293b" : "#ffffff",
+            borderColor: isDark ? "#334155" : "#e2e8f0",
+            textStyle: { color: isDark ? "#f1f5f9" : "#0f172a", fontSize: 12 },
+            formatter: (p) => {
+              const val = Array.isArray(p.value) ? p.value[2] : p.value;
+              const unitSuffix = unit ? ` ${unit}` : "";
+              return `<strong>${p.name}</strong><br/>${visualSpec.primary_label || "Metric"}: <strong>${val}${unitSuffix}</strong>`;
+            },
+          },
+          geo: {
+            map: scope,
+            roam: true,
+            scaleLimit: { min: 0.8, max: 4 },
+            itemStyle: {
+              areaColor: isDark ? "#1e293b" : "#f1f5f9",
+              borderColor: isDark ? "#334155" : "#cbd5e1",
+              borderWidth: 0.8,
+            },
+            emphasis: {
+              itemStyle: { areaColor: isDark ? "#334155" : "#e2e8f0" },
+            },
+          },
+          series: [
+            {
+              name: visualSpec.primary_label || "Locations",
+              type: "scatter",
+              coordinateSystem: "geo",
+              data: bubblePoints,
+              symbolSize: (val) => {
+                const spread = Math.max(1, maxVal - minVal);
+                const ratio = ((val[2] || 0) - minVal) / spread;
+                return Math.max(8, Math.min(30, 8 + ratio * 22));
+              },
+              itemStyle: {
+                color: isDark ? "#38bdf8" : "#2563eb",
+                opacity: 0.85,
+                shadowBlur: 4,
+                shadowColor: "rgba(0,0,0,0.25)",
+              },
+            },
+          ],
+        };
+      }
+
+      // Choropleth Map (State or Country)
+      return {
+        backgroundColor: "transparent",
+        tooltip: {
+          trigger: "item",
+          confine: true,
+          backgroundColor: isDark ? "#1e293b" : "#ffffff",
+          borderColor: isDark ? "#334155" : "#e2e8f0",
+          textStyle: { color: isDark ? "#f1f5f9" : "#0f172a", fontSize: 12 },
+          formatter: (p) => {
+            const val = p.value != null && !isNaN(p.value) ? p.value : "N/A";
+            const unitSuffix = unit ? ` ${unit}` : "";
+            return `<strong>${p.name}</strong><br/>${visualSpec.primary_label || "Metric"}: <strong>${val}${unitSuffix}</strong>`;
+          },
+        },
+        visualMap: {
+          min: minVal,
+          max: maxVal,
+          orient: "horizontal",
+          left: "center",
+          bottom: 0,
+          calculable: true,
+          itemWidth: 12,
+          itemHeight: 75,
+          textStyle: { color: textColor, fontSize: 10 },
+          inRange: {
+            color: isDark
+              ? ["#1e293b", "#1e40af", "#2563eb", "#38bdf8", "#93c5fd"]
+              : ["#eff6ff", "#bfdbfe", "#60a5fa", "#2563eb", "#1e40af"],
+          },
+        },
+        series: [
+          {
+            name: visualSpec.primary_label || "Territory",
+            type: "map",
+            map: scope,
+            roam: true,
+            scaleLimit: { min: 0.8, max: 4 },
+            label: {
+              show: false,
+              fontSize: 9,
+              color: isDark ? "#f1f5f9" : "#0f172a",
+            },
+            emphasis: {
+              label: {
+                show: true,
+                fontSize: 10,
+                color: isDark ? "#ffffff" : "#0f172a",
+                fontWeight: "bold",
+              },
+              itemStyle: {
+                areaColor: isDark ? "#38bdf8" : "#93c5fd",
+                borderColor: isDark ? "#ffffff" : "#1e40af",
+                borderWidth: 1.5,
+              },
+            },
+            itemStyle: {
+              areaColor: isDark ? "#0f172a" : "#f8fafc",
+              borderColor: isDark ? "#334155" : "#cbd5e1",
+              borderWidth: 0.8,
+            },
+            data: mapData,
           },
         ],
       };

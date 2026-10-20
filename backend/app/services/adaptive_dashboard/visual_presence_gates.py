@@ -202,6 +202,23 @@ class VisualInformationDensityIntegrity:
                 suppression_reason=f"LOW_VISUAL_INFORMATION: Scatter chart requires at least 3 points (got {len(scatter_pts)})",
             )
 
+        # Geographic maps are valid if geographic regions >= 3 exist
+        if chart_type in ("map", "choropleth", "bubble_map", "point_map"):
+            geo_items = visual_spec.get("categories") or visual_spec.get("table_data") or []
+            vals = visual_spec.get("values") or []
+            if len(geo_items) >= 3:
+                return VisualMarkAudit(
+                    is_valid=True,
+                    renderable_series_count=1,
+                    rendered_mark_count=len(geo_items),
+                )
+            return VisualMarkAudit(
+                is_valid=False,
+                renderable_series_count=1,
+                rendered_mark_count=len(geo_items),
+                suppression_reason=f"LOW_VISUAL_INFORMATION: Geographic map requires at least 3 distinct regions (got {len(geo_items)})",
+            )
+
         # 1. Multi-series check (e.g. 100% stacked bar, grouped bar)
         series_list = visual_spec.get("series")
         if isinstance(series_list, list) and len(series_list) > 0:

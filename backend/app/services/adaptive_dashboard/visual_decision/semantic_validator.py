@@ -77,6 +77,18 @@ class VisualSemanticValidator:
                         f"Missing components must not be silently normalized away."
                     )
 
+        # Invariant 6: Geographic Validation & Gating
+        if selected_chart in (ChartType.MAP, ChartType.CHOROPLETH, ChartType.BUBBLE_MAP, ChartType.POINT_MAP):
+            if not getattr(question, "is_geographic_dimension", False):
+                return False, "NON_GEOGRAPHIC_DIMENSION: Map visualization requires a governed geographic dimension."
+            if getattr(question, "has_ambiguous_locations", False):
+                return False, "AMBIGUOUS_GEOGRAPHY: Map visualization blocked due to unresolved or ambiguous geographic entities."
+            if getattr(question, "is_unsafe_relationship", False):
+                return False, "UNSAFE_RELATIONSHIP: Cross-sheet geographic visualization requires an authorized JoinPlan."
+            if getattr(question, "geographic_coverage", 1.0) < 0.50:
+                cov = getattr(question, "geographic_coverage", 1.0)
+                return False, f"LOW_GEOGRAPHIC_COVERAGE: Geographic coverage is {cov*100:.1f}%, below the 50% threshold."
+
         return True, None
 
     @classmethod

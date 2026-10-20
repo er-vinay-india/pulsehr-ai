@@ -1215,7 +1215,7 @@ class ExecutiveCompositionPlanner:
             rep = getattr(story, "representative_evidence", None)
             s_tokens = getattr(story, "tokens", {}) or {}
             r_tokens = rep.tokens if rep and hasattr(rep, "tokens") and rep.tokens else {}
-            tokens = {**s_tokens, **r_tokens}
+            tokens = {**r_tokens, **s_tokens}
 
             # Visual Decision Engine
             q_text = getattr(story, "business_question", "Performance distribution?")
@@ -1228,6 +1228,8 @@ class ExecutiveCompositionPlanner:
                 "is_temporal": (intent == "TREND"),
                 "metric_family": fam,
                 "claim_type": "trend_change" if intent == "TREND" else None,
+                "is_geographic": tokens.get("is_geographic", False) or (intent == "GEOSPATIAL"),
+                "geo_level": tokens.get("geo_level"),
             }
 
             decision = VisualDecisionEngine.decide_visual(
@@ -1237,6 +1239,10 @@ class ExecutiveCompositionPlanner:
                 measures=[m_name],
                 dimension_cardinality=len(tokens.get("categories", [])) or 5,
                 is_temporal_dimension=(intent == "TREND"),
+                is_geographic_dimension=tokens.get("is_geographic", False) or (intent == "GEOSPATIAL"),
+                geo_level=tokens.get("geo_level"),
+                has_ambiguous_locations=tokens.get("has_ambiguous_locations", False),
+                geographic_coverage=tokens.get("geo_coverage", 1.0),
                 finding_context=finding_ctx,
                 provided_units={m_name: unit},
             )
@@ -1350,6 +1356,19 @@ class ExecutiveCompositionPlanner:
                     v_spec["x_categories"] = tokens["x_categories"]
                 if "y_categories" in tokens:
                     v_spec["y_categories"] = tokens["y_categories"]
+                # Governed Geographic Visual Attributes
+                if chart_type in ("map", "choropleth", "bubble_map", "point_map") or tokens.get("is_geographic"):
+                    v_spec["geo_dimension"] = tokens.get("geo_dimension", "Region")
+                    v_spec["geo_level"] = tokens.get("geo_level", "STATE")
+                    v_spec["geo_scope"] = tokens.get("geo_scope", "india")
+                    v_spec["map_type"] = tokens.get("map_type", chart_type if chart_type != "map" else "choropleth")
+                    v_spec["geo_source"] = tokens.get("geo_source", "OBSERVED")
+                    v_spec["geo_coverage"] = tokens.get("geo_coverage", 1.0)
+                    v_spec["table_data"] = tokens.get("table_data", [])
+                    v_spec["unresolved_count"] = tokens.get("unresolved_count", 0)
+                    v_spec["ambiguous_count"] = tokens.get("ambiguous_count", 0)
+                    if "geo_points" in tokens:
+                        v_spec["geo_points"] = tokens["geo_points"]
 
             # Grounded fallback for Hero or Capacity Composition
             if is_hero_story and gov_metrics.get("hero") and chart_type != "podium_top_3":

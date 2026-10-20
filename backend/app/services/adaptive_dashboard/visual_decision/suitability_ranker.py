@@ -69,7 +69,24 @@ class ChartSuitabilityRanker:
 
             # 2. Semantic Fit
             semantic_fit = 0.70
-            if question.is_temporal_dimension:
+            is_geo_chart = c_type in (ChartType.MAP, ChartType.CHOROPLETH, ChartType.BUBBLE_MAP, ChartType.POINT_MAP)
+            if is_geo_chart:
+                if not question.is_geographic_dimension:
+                    semantic_fit = 0.0
+                    intent_match = 0.0
+                else:
+                    # Determine normalized measure vs absolute total
+                    m_lower = " ".join([m.lower() for m in question.measures] + [ms.unit.lower() for ms in question.metric_semantics])
+                    is_normalized = any(k in m_lower for k in ("rate", "ratio", "pct", "%", "percent", "growth", "density", "score", "index", "average", "avg"))
+                    if c_type == ChartType.CHOROPLETH:
+                        semantic_fit = 0.98 if is_normalized else 0.75
+                        intent_match = 0.98 if is_normalized else 0.80
+                    elif c_type in (ChartType.BUBBLE_MAP, ChartType.MAP):
+                        semantic_fit = 0.96 if not is_normalized or question.geo_level in ("CITY", "POINT") else 0.85
+                        intent_match = 0.96 if not is_normalized or question.geo_level in ("CITY", "POINT") else 0.85
+                    elif c_type == ChartType.POINT_MAP:
+                        semantic_fit = 0.95 if question.geo_level == "POINT" else 0.60
+            elif question.is_temporal_dimension:
                 if c_type in (ChartType.LINE, ChartType.AREA, ChartType.ONE_HUNDRED_PERCENT_STACKED_BAR, ChartType.STACKED_BAR):
                     semantic_fit = 0.90
                 elif c_type == ChartType.HORIZONTAL_BAR:
@@ -150,6 +167,22 @@ class ChartSuitabilityRanker:
 
             if c_type == ChartType.PIE and question.dimension_cardinality > 5:
                 clutter_penalty += 0.40
+
+            # Geographic gating penalties
+            if is_geo_chart:
+                if not question.is_geographic_dimension:
+                    ambiguity_penalty += 0.85
+                else:
+                    if question.dimension_cardinality < 3:
+                        # 1 location -> card; 2 locations -> bar comparison
+                        ambiguity_penalty += 0.35
+                    if question.geographic_coverage < 0.50:
+                        # Poor coverage downgrades map recommendation
+                        ambiguity_penalty += 0.50
+                    if question.has_ambiguous_locations:
+                        ambiguity_penalty += 0.60
+                    if question.is_unsafe_relationship:
+                        ambiguity_penalty += 0.70
 
             # Weighted Total Score
             score = (

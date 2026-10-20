@@ -104,4 +104,15 @@ ARCHETYPE_LIBRARY: dict[str, VisualArchetype] = {
         mobile_behavior="waterfall_summary_stack",
         description="Attributes top drivers contributing to an aggregated total.",
     ),
+    "GEOSPATIAL_STORY": VisualArchetype(
+        archetype_id="GEOSPATIAL_STORY",
+        archetype_name="Geographic & Regional Spatial Pattern",
+        primary_intent=AnalyticalIntent.GEOSPATIAL,
+        preferred_chart=ChartType.CHOROPLETH,
+        drill_down_chart=ChartType.HORIZONTAL_BAR,
+        labeling_strategy="map_choropleth_with_ranked_datatable",
+        takeaway_pattern="Spatial dispersion highlighting regional concentrations and variance",
+        mobile_behavior="map_with_stacked_ranked_table",
+        description="Visualizes spatial geographic patterns paired with an exact ranked comparison table.",
+    ),
 }

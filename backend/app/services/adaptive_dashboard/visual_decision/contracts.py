@@ -32,6 +32,7 @@ class AnalyticalIntent(str, Enum):
     FLOW = "FLOW"
     PART_TO_WHOLE = "PART_TO_WHOLE"
     TARGET_VS_ACTUAL = "TARGET_VS_ACTUAL"
+    GEOSPATIAL = "GEOSPATIAL"
 
 
 class AudienceType(str, Enum):
@@ -64,6 +65,10 @@ class ChartType(str, Enum):
     DUMBBELL = "dumbbell"
     CONTROL_CHART = "control_chart"
     PIE = "pie"
+    MAP = "map"
+    CHOROPLETH = "choropleth"
+    BUBBLE_MAP = "bubble_map"
+    POINT_MAP = "point_map"
 
 
 class MetricSemantics(BaseModel):
@@ -111,6 +116,13 @@ class VisualQuestion(BaseModel):
     grain: str = ""
     temporal_grain: str | None = None
     denominator_semantics: DenominatorIntegrityContract | None = None
+    is_geographic_dimension: bool = False
+    geo_level: str | None = None
+    geo_scope: str | None = None
+    has_ambiguous_locations: bool = False
+    is_unsafe_relationship: bool = False
+    geographic_coverage: float = 1.0
+    resolved_locations_count: int = 0
 
 
 class ChartSuitabilityScore(BaseModel):

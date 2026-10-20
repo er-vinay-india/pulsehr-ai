@@ -78,4 +78,9 @@ CHART_SUITABILITY_MATRIX: dict[AnalyticalIntent, dict[str, list[ChartType]]] = {
         "alternative": [ChartType.BULLET_BAR, ChartType.ONE_HUNDRED_PERCENT_STACKED_BAR],
         "avoid": [ChartType.PIE, ChartType.LINE],
     },
+    AnalyticalIntent.GEOSPATIAL: {
+        "preferred": [ChartType.CHOROPLETH, ChartType.MAP, ChartType.BUBBLE_MAP],
+        "alternative": [ChartType.HORIZONTAL_BAR, ChartType.LOLLIPOP],
+        "avoid": [ChartType.PIE, ChartType.LINE, ChartType.SCATTER],
+    },
 }

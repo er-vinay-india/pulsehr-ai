@@ -131,6 +131,10 @@ class ChartArchetype(str, Enum):
     PIE = "pie"
     DOT_PLOT = "dot_plot"
     WORD_CLOUD = "word_cloud"
+    MAP = "map"
+    CHOROPLETH = "choropleth"
+    BUBBLE_MAP = "bubble_map"
+    POINT_MAP = "point_map"
 
 
 class LayoutHint(str, Enum):
@@ -190,6 +194,10 @@ class ChartCapabilityRegistry:
         ChartArchetype.VARIANCE_BAR.value: ChartFamily.COMPARISON,
         ChartArchetype.HEATMAP.value: ChartFamily.SPECIALTY,
         ChartArchetype.WORD_CLOUD.value: ChartFamily.SPECIALTY,
+        ChartArchetype.MAP.value: ChartFamily.GEOSPATIAL,
+        ChartArchetype.CHOROPLETH.value: ChartFamily.GEOSPATIAL,
+        ChartArchetype.BUBBLE_MAP.value: ChartFamily.GEOSPATIAL,
+        ChartArchetype.POINT_MAP.value: ChartFamily.GEOSPATIAL,
     }
 
     ARCHETYPE_TO_MORPHOLOGY: dict[str, VisualMorphology] = {
@@ -221,6 +229,10 @@ class ChartCapabilityRegistry:
         ChartArchetype.DENDROGRAM.value: VisualMorphology.HIERARCHICAL,
         ChartArchetype.SANKEY.value: VisualMorphology.FLOW,
         ChartArchetype.WORD_CLOUD.value: VisualMorphology.ICONIC,
+        ChartArchetype.MAP.value: VisualMorphology.GEOSPATIAL,
+        ChartArchetype.CHOROPLETH.value: VisualMorphology.GEOSPATIAL,
+        ChartArchetype.BUBBLE_MAP.value: VisualMorphology.GEOSPATIAL,
+        ChartArchetype.POINT_MAP.value: VisualMorphology.GEOSPATIAL,
     }
 
     ARCHETYPE_TO_LAYOUT_HINT: dict[str, LayoutHint] = {
@@ -250,6 +262,10 @@ class ChartCapabilityRegistry:
         ChartArchetype.DENDROGRAM.value: LayoutHint.LARGE,
         ChartArchetype.SANKEY.value: LayoutHint.LARGE,
         ChartArchetype.WORD_CLOUD.value: LayoutHint.COMPACT,
+        ChartArchetype.MAP.value: LayoutHint.LARGE,
+        ChartArchetype.CHOROPLETH.value: LayoutHint.LARGE,
+        ChartArchetype.BUBBLE_MAP.value: LayoutHint.LARGE,
+        ChartArchetype.POINT_MAP.value: LayoutHint.LARGE,
     }
 
     @classmethod
@@ -328,6 +344,15 @@ class ChartCapabilityRegistry:
             has_matrix = bool(spec.get("heatmap_data") or spec.get("data") or (spec.get("x_categories") and spec.get("y_categories")))
             if not has_matrix and not spec.get("categories"):
                 return False, "HEATMAP rejected: requires matrix cross-tabulation data"
+            return True, "VALIDATED"
+
+        # 8. GEOSPATIAL MAP GATING: Valid geographic categories >= 3 with coverage >= 50%
+        if arch in (ChartArchetype.MAP.value, ChartArchetype.CHOROPLETH.value, ChartArchetype.BUBBLE_MAP.value, ChartArchetype.POINT_MAP.value):
+            cats = spec.get("categories") or spec.get("table_data") or []
+            if len(cats) < 3:
+                return False, f"MAP rejected: requires >= 3 geographic entities (found {len(cats)})"
+            if spec.get("geo_coverage", 1.0) < 0.50:
+                return False, f"MAP rejected: low geographic coverage ({spec.get('geo_coverage', 1.0)*100:.1f}%)"
             return True, "VALIDATED"
 
         return True, "VALIDATED"

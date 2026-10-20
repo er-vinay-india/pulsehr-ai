@@ -50,7 +50,7 @@ function partitionTopics(topics, layoutPlan = null) {
   const hero = heroIndex >= 0 ? topics[heroIndex] : topics[0];
   const remaining = topics.filter((t) => t !== hero);
 
-  const priorityIntents = new Set(["TARGET_VS_ACTUAL", "MATRIX", "COMPOSITION", "RANKING"]);
+  const priorityIntents = new Set(["TARGET_VS_ACTUAL", "MATRIX", "COMPOSITION", "RANKING", "GEOSPATIAL"]);
   const diagnosticIntents = new Set(["DISTRIBUTION", "RELATIONSHIP", "ANOMALY", "VARIANCE"]);
 
   const priority = [hero];

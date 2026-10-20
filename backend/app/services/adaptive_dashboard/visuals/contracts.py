@@ -23,6 +23,7 @@ class VisualMorphology(str, Enum):
     AREA = "AREA"                    # 100_percent_stacked_bar, stacked_bar, donut, pie
     TEMPORAL_PATH = "TEMPORAL_PATH"  # line, spline, slope
     MATRIX = "MATRIX"                # heatmap, correlation_matrix
+    GEOSPATIAL = "GEOSPATIAL"        # choropleth, bubble_map, point_map
 
 
 class ChartFamily(str, Enum):
@@ -35,6 +36,7 @@ class ChartFamily(str, Enum):
     DISTRIBUTION = "DISTRIBUTION"
     FLOW = "FLOW"
     SPECIALTY = "SPECIALTY"
+    GEOSPATIAL = "GEOSPATIAL"
 
 
 class VisualSeries(BaseModel):
@@ -131,6 +133,15 @@ class VisualSpec(BaseModel):
     key_metric: str = ""
     evidence_ids: list[str] = Field(default_factory=list)
     layout_hint: str = "MEDIUM"
+    # Governed Geographic Fields
+    geo_dimension: str | None = None
+    geo_level: str | None = None
+    geo_source: str = "OBSERVED"
+    geo_scope: str = "india"
+    map_type: str = "choropleth"
+    geo_coverage: float = 1.0
+    reference_version: str = "2026.1"
+    table_data: list[dict[str, Any]] = Field(default_factory=list)
     properties: dict[str, Any] = Field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -154,6 +165,15 @@ class VisualSpec(BaseModel):
             "evidence_ids": self.evidence_ids,
             "layout_hint": self.layout_hint,
         }
+        if self.geo_dimension:
+            d["geo_dimension"] = self.geo_dimension
+            d["geo_level"] = self.geo_level
+            d["geo_source"] = self.geo_source
+            d["geo_scope"] = self.geo_scope
+            d["map_type"] = self.map_type
+            d["geo_coverage"] = self.geo_coverage
+            d["reference_version"] = self.reference_version
+            d["table_data"] = self.table_data
         if self.benchmark is not None:
             d["benchmark"] = self.benchmark
         if self.benchmark_label:

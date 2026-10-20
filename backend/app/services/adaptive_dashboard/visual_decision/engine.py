@@ -54,6 +54,13 @@ class VisualDecisionEngine:
         denominator_value: float | None = None,
         residual_component: str | None = None,
         excluded_population: list[str] | None = None,
+        is_geographic_dimension: bool = False,
+        geo_level: str | None = None,
+        geo_scope: str | None = None,
+        has_ambiguous_locations: bool = False,
+        is_unsafe_relationship: bool = False,
+        geographic_coverage: float = 1.0,
+        resolved_locations_count: int = 0,
     ) -> dict[str, Any]:
         """Evaluates intent, metrics, and scale to select the optimal chart with full audit trail."""
         # 1. Build VisualQuestion with MetricSemantics & DenominatorIntegrity
@@ -71,6 +78,13 @@ class VisualDecisionEngine:
             residual_component=residual_component,
             excluded_population=excluded_population,
             series_data=series_data,
+            is_geographic_dimension=is_geographic_dimension,
+            geo_level=geo_level,
+            geo_scope=geo_scope,
+            has_ambiguous_locations=has_ambiguous_locations,
+            is_unsafe_relationship=is_unsafe_relationship,
+            geographic_coverage=geographic_coverage,
+            resolved_locations_count=resolved_locations_count,
         )
 
         # 2. Calculate series magnitude ratio
@@ -114,6 +128,8 @@ class VisualDecisionEngine:
             archetype_match = ARCHETYPE_LIBRARY.get("COMPOSITION_STORY")
         elif not archetype_match and v_question.intent == AnalyticalIntent.RANKING:
             archetype_match = ARCHETYPE_LIBRARY.get("RANKING_STORY")
+        elif not archetype_match and v_question.intent == AnalyticalIntent.GEOSPATIAL:
+            archetype_match = ARCHETYPE_LIBRARY.get("GEOSPATIAL_STORY")
 
         # 6. Build Audit Record
         audit = VisualDecisionAudit(
