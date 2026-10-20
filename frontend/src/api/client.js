@@ -969,8 +969,11 @@ export async function getExplorerSemantics(datasetId, sheetId = null) {
   return res.json();
 }
 
-export async function getExplorerRelationships(datasetId) {
-  const res = await fetch(`${API_BASE}/datasets/${datasetId}/explorer/relationships`);
+export async function getExplorerRelationships(datasetId, sheetId = null) {
+  const url = sheetId
+    ? `${API_BASE}/datasets/${datasetId}/explorer/relationships?sheet_id=${encodeURIComponent(sheetId)}`
+    : `${API_BASE}/datasets/${datasetId}/explorer/relationships`;
+  const res = await fetch(url);
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.detail || "Failed to fetch relationship intelligence");

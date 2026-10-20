@@ -167,6 +167,9 @@ def test_explorer_relationships_api():
     assert response.status_code == 200
     data = response.json()
 
+    assert "summary" in data
+    assert data["summary"]["total_relationships"] >= 3
+
     relationships = data["relationships"]
     assert len(relationships) >= 3
 
@@ -198,6 +201,16 @@ def test_explorer_relationships_api():
     assert "repeat parent-level metrics" in unsafe_exp.lower()
     assert "INNER JOIN" not in unsafe_exp
     assert "CROSS JOIN" not in unsafe_exp
+
+
+def test_explorer_relationships_sheet_id_filter():
+    """Verify /relationships accepts sheet_id parameter and filters relationships."""
+    response = client.get(f"/api/datasets/{DATASET_ID}/explorer/relationships?sheet_id=Employees")
+    assert response.status_code == 200
+    data = response.json()
+    assert "relationships" in data
+    assert "summary" in data
+    assert len(data["relationships"]) >= 1
 
 
 def test_explorer_analytical_views_api():

@@ -21,7 +21,15 @@ import {
  * Uses shared Enterprise DataTable with type-aware sorting, governed status ranking,
  * compact search, column visibility, and detail drawer.
  */
-export default function RelationshipsMode({ datasetId, themeTokens, isDark = false }) {
+export default function RelationshipsMode({
+  datasetId,
+  sheets = [],
+  selectedSheetId,
+  onSelectSheet,
+  themeTokens,
+  isDark = false,
+}) {
+  const [activeSheet, setActiveSheet] = useState(() => selectedSheetId || "");
   const [relData, setRelData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -39,6 +47,12 @@ export default function RelationshipsMode({ datasetId, themeTokens, isDark = fal
   const brandSoftBg = themeTokens?.colors?.softBlue || "var(--color-bg-soft-blue)";
 
   useEffect(() => {
+    if (selectedSheetId !== undefined && selectedSheetId !== activeSheet) {
+      setActiveSheet(selectedSheetId);
+    }
+  }, [selectedSheetId]);
+
+  useEffect(() => {
     if (!datasetId) return;
     let isCancelled = false;
 
@@ -46,7 +60,7 @@ export default function RelationshipsMode({ datasetId, themeTokens, isDark = fal
       setLoading(true);
       setError(null);
       try {
-        const res = await getExplorerRelationships(datasetId);
+        const res = await getExplorerRelationships(datasetId, activeSheet || null);
         if (!isCancelled) {
           setRelData(res);
         }
@@ -65,7 +79,12 @@ export default function RelationshipsMode({ datasetId, themeTokens, isDark = fal
     return () => {
       isCancelled = true;
     };
-  }, [datasetId]);
+  }, [datasetId, activeSheet]);
+
+  const handleSheetFilter = (sheetId) => {
+    setActiveSheet(sheetId);
+    if (onSelectSheet) onSelectSheet(sheetId);
+  };
 
   const allRelationships = relData?.relationships || [];
 
@@ -415,6 +434,55 @@ export default function RelationshipsMode({ datasetId, themeTokens, isDark = fal
         <p style={{ margin: 0, fontSize: "0.82rem", color: textSecondary }}>
           Governed connections between sheets, verified key integrity, and safe aggregation rules.
         </p>
+
+        {/* Sheet Selector Pills (if workbook has multiple sheets) */}
+        {sheets && sheets.length > 0 && (
+          <div style={{ display: "flex", alignItems: "center", gap: "6px", overflowX: "auto", paddingTop: "4px" }}>
+            <button
+              type="button"
+              onClick={() => handleSheetFilter("")}
+              style={{
+                padding: "6px 12px",
+                fontSize: "0.8rem",
+                fontWeight: activeSheet === "" ? 700 : 500,
+                borderRadius: "8px",
+                border: activeSheet === "" ? `1px solid ${brandPrimary}` : `1px solid ${borderCol}`,
+                background: activeSheet === "" ? brandSoftBg : "transparent",
+                color: activeSheet === "" ? brandPrimary : textSecondary,
+                cursor: "pointer",
+                whiteSpace: "nowrap",
+                transition: "all 0.15s ease",
+              }}
+            >
+              All Sheets
+            </button>
+            {sheets.map((s) => {
+              const sid = s.sheet_id || s.name;
+              const isSelected = sid === activeSheet;
+              return (
+                <button
+                  key={sid}
+                  type="button"
+                  onClick={() => handleSheetFilter(sid)}
+                  style={{
+                    padding: "6px 12px",
+                    fontSize: "0.8rem",
+                    fontWeight: isSelected ? 700 : 500,
+                    borderRadius: "8px",
+                    border: isSelected ? `1px solid ${brandPrimary}` : `1px solid ${borderCol}`,
+                    background: isSelected ? brandSoftBg : "transparent",
+                    color: isSelected ? brandPrimary : textSecondary,
+                    cursor: "pointer",
+                    whiteSpace: "nowrap",
+                    transition: "all 0.15s ease",
+                  }}
+                >
+                  {s.display_name || s.name}
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         {/* Safety Filter Tabs */}
         <div style={{ display: "flex", alignItems: "center", gap: "6px", overflowX: "auto", paddingTop: "4px" }}>

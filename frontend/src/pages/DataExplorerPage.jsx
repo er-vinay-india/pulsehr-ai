@@ -804,6 +804,9 @@ export default function DataExplorerPage() {
             {activeTab === 'relationships' && (
               <RelationshipsMode
                 datasetId={sdrDatasetId}
+                sheets={sdrSheets}
+                selectedSheetId={selected}
+                onSelectSheet={setSelected}
                 themeTokens={themeTokens}
                 isDark={isDark}
               />

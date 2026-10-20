@@ -75,10 +75,13 @@ def get_explorer_semantics(
 
 
 @router.get("/{dataset_id}/explorer/relationships")
-def get_explorer_relationships(dataset_id: str) -> dict[str, Any]:
+def get_explorer_relationships(
+    dataset_id: str,
+    sheet_id: str | None = Query(default=None, description="Optional sheet filter"),
+) -> dict[str, Any]:
     """Returns validated relationships, join plans, safety status, and topology graph."""
     try:
-        return _explorer_service.get_relationships_data(dataset_id)
+        return _explorer_service.get_relationships_data(dataset_id, sheet_id=sheet_id)
     except Exception as e:
         logger.error(f"Error fetching explorer relationships for dataset {dataset_id}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to load relationships: {str(e)}")
