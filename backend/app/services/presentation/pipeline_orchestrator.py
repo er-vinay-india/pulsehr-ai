@@ -175,12 +175,13 @@ def execute_presentation_pipeline_async(
     11. Accessibility and technical export QA (export_qa)
     12. Rehearsal preparation and final human sign-off (review_ready)
     """
-    from .deck_generator import generate_presentation_deck_spec
-    from ..display_formatters import format_display_label
-    from .observer_ai import SlideContextObserver
 
     mgr = manager or job_manager
+    from .runtime import run_dependency, SCOPE_TIMEOUT_SECONDS, EVIDENCE_TIMEOUT_SECONDS, MEMORY_TIMEOUT_SECONDS
     try:
+        from .deck_generator import generate_presentation_deck_spec
+        from ..display_formatters import format_display_label
+        from .observer_ai import SlideContextObserver
         # PHASE 0: Brief Setup & Scope Definition (0% -> 5%)
         mgr.update_stage(
             job_id,
@@ -192,28 +193,42 @@ def execute_presentation_pipeline_async(
         if mgr.is_cancelled(job_id):
             return
 
-        with session_scope() as conn:
-            preflight = preview_presentation_scope(conn, scope)
-            if not preflight["eligible"]:
-                raise ValueError("No uploaded datasets eligible for presentation generation.")
-            workspace_evidence = collect_workspace_evidence(conn, scope)
-            primary_ctx = workspace_evidence["primary_ctx"]
+        def check_scope():
+            with session_scope() as conn:
+                return preview_presentation_scope(conn, scope)
+
+        preflight = run_dependency(mgr, job_id, 'scope_validation', check_scope, SCOPE_TIMEOUT_SECONDS)
+        if not preflight['eligible']:
+            raise ValueError("No uploaded datasets eligible for presentation generation.")
+        # Evidence loading belongs to the evidence phase, not brief setup.
+        mgr.update_stage(job_id, 'evidence_audit', 'Loading verified data and presentation topics…', 10,
+                         extra={'active_phase': 'evidence_audit'})
+
+        def load_evidence():
+            with session_scope() as conn:
+                return collect_workspace_evidence(conn, scope)
+
+        workspace_evidence = run_dependency(mgr, job_id, 'workspace_evidence', load_evidence, EVIDENCE_TIMEOUT_SECONDS)
+        primary_ctx = workspace_evidence['primary_ctx']
 
         # Retrieve historical memories and context
         try:
             from .memory import presentation_retrieval_service
             query = f"{scope.get('objective', '')} {scope.get('instructions', '')}".strip() or "Executive leadership presentation"
-            retrieved_context_pkg = presentation_retrieval_service.retrieve_presentation_context(
+            retrieved_context_pkg = run_dependency(mgr, job_id, "historical_memory", lambda: presentation_retrieval_service.retrieve_presentation_context(
                 query=query,
                 workspace_id=scope.get("workspace_id"),
                 domain=primary_ctx.get("domain"),
                 audience=scope.get("audience"),
                 dataset_ids=[primary_ctx["target_sheet"]["id"]] if primary_ctx.get("target_sheet") else None
-            )
+            ), MEMORY_TIMEOUT_SECONDS)
             workspace_evidence["retrieved_context"] = retrieved_context_pkg.model_dump()
         except Exception as exc:
-            logger.debug(f"Optional presentation memory retrieval skipped: {exc}")
+            logger.warning("Optional presentation memory unavailable job_id=%s cause=%s", job_id, type(exc).__name__)
             workspace_evidence["retrieved_context"] = {"status": "degraded", "results": [], "historical_decks": []}
+
+        if mgr.is_cancelled(job_id):
+            return
 
         # Initialize the Observer AI supervisor
         observer = SlideContextObserver(
@@ -601,6 +616,9 @@ def execute_presentation_pipeline_async(
                 error_msg = f"Delivery blocked: Technical export QA check failed: {'; '.join(failed_post_export)}"
                 raise RuntimeError(error_msg)
 
+            if mgr.is_cancelled(job_id):
+                return
+
             # Persist presentation deck
             now = datetime.datetime.now(datetime.timezone.utc).isoformat()
             try:
@@ -657,18 +675,33 @@ def execute_presentation_pipeline_async(
 
     except Exception as exc:
         logger.exception(f"Presentation generation pipeline failed: {exc}")
-        mgr.update_stage(job_id, "failed", f"Generation failed: {str(exc)}", 100, error=str(exc))
+        from .runtime import PresentationDependencyTimeout
+        mgr.fail_job(job_id, 'DEPENDENCY_TIMEOUT' if isinstance(exc, PresentationDependencyTimeout) else 'PIPELINE_FAILED',
+                     str(exc) if isinstance(exc, (PresentationDependencyTimeout, ValueError)) else 'Presentation generation failed. Check the server logs, then try again.')
 
 
 def _launch_presentation_worker(job_id: str, scope: dict[str, Any]):
     try:
+        from .runtime import watch_job
+        finished = threading.Event()
+
+        def worker(*args):
+            try:
+                execute_presentation_pipeline_async(*args)
+            except BaseException:
+                logger.exception("Presentation worker exited unexpectedly job_id=%s", job_id)
+                job_manager.fail_job(job_id, 'WORKER_EXITED', 'Presentation worker stopped unexpectedly. Please try again.')
+            finally:
+                finished.set()
+
         thread = threading.Thread(
-            target=execute_presentation_pipeline_async,
+            target=worker,
             args=(job_id, scope),
             daemon=True,
             name=f"pres-worker-{job_id}"
         )
         thread.start()
+        threading.Thread(target=watch_job, args=(job_manager, job_id, finished), daemon=True, name=f"pres-watchdog-{job_id}").start()
     except Exception as exc:
         job_manager.update_stage(job_id, 'failed', 'Could not start presentation generation', 0, error=str(exc))
         raise

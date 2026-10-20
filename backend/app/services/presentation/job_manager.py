@@ -33,7 +33,7 @@ class PresentationJobManager:
     def __init__(self):
         self._jobs: dict[str, dict[str, Any]] = {}
         self._cancel_flags: dict[str, bool] = {}
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         self._ensure_extra_column()
 
     def _ensure_extra_column(self):
@@ -123,9 +123,9 @@ class PresentationJobManager:
         job = {
             "id": job_id,
             "status": "in_progress",
-            "stage": "reviewing_coverage",
-            "stage_label": "Reviewing coverage, date boundaries & partial-year disclosure",
-            "progress_pct": 15,
+            "stage": "brief_setup",
+            "stage_label": "Validating presentation brief and selected sources",
+            "progress_pct": 3,
             "deck_id": None,
             "error": None,
             "scope": scope,
@@ -194,6 +194,23 @@ class PresentationJobManager:
             if job_id not in self._jobs or self._cancel_flags.get(job_id):
                 return
             job = self._jobs[job_id]
+            if job.get("status") not in ("in_progress", "pending"):
+                return
+            now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            if job.get("stage") != stage or not job.get("phase_started_at"):
+                events = job.setdefault("phase_events", [])
+                previous_start = job.get("phase_started_at")
+                if previous_start:
+                    events.append({"phase": job["stage"], "status": "failed" if error else "completed", "at": now,
+                                   "elapsed_ms": round((datetime.datetime.fromisoformat(now) - datetime.datetime.fromisoformat(previous_start)).total_seconds()*1000)})
+                if previous_start:
+                    logger.info("presentation_phase job_id=%s phase=%s status=%s elapsed_ms=%s", job_id, job["stage"], events[-1]["status"], events[-1]["elapsed_ms"])
+                events.append({"phase": stage, "status": "started", "at": now})
+                job["phase_started_at"] = now
+                job["phase_events"] = events[-80:]
+                logger.info("presentation_phase job_id=%s dataset_id=%s sheet_id=%s phase=%s status=%s", job_id, job.get("scope", {}).get("dataset_id"), job.get("scope", {}).get("sheet_id"), stage, "failed" if error else "started")
+            job["heartbeat_at"] = now
+            job["dependency"] = None
             job["stage"] = stage
             job["stage_label"] = stage_label
             # Failure is terminal, not completed work. Preserve the last known
@@ -225,7 +242,7 @@ class PresentationJobManager:
                     "slide_status_list",
                     "observer_note",
                     "observer_context",
-                    "active_phase"
+                    "active_phase", "phase_started_at", "heartbeat_at", "dependency", "phase_events", "error_code"
                 )
                 if k in job
             }
@@ -238,7 +255,39 @@ class PresentationJobManager:
                     (job["status"], stage, stage_label, progress_pct, job.get("deck_id"), error, json.dumps(extra_to_save), now, job_id, os.getpid())
                 )
         except Exception as exc:
-            logger.debug(f"Could not update presentation_jobs in DB: {exc}")
+            logger.exception("Presentation state persistence failed job_id=%s stage=%s", job_id, stage)
+            raise RuntimeError("Could not save presentation progress. Please try again.") from exc
+
+    def heartbeat(self, job_id: str, dependency: str):
+        with self._lock, session_scope() as conn:
+            row = conn.execute("SELECT extra_json FROM presentation_jobs WHERE id=? AND status IN ('in_progress','pending') AND worker_pid=?", (job_id, os.getpid())).fetchone()
+            if not row:
+                return
+            extra = json.loads(row['extra_json'] or '{}')
+            extra.update(heartbeat_at=datetime.datetime.now(datetime.timezone.utc).isoformat(), dependency=dependency)
+            conn.execute("UPDATE presentation_jobs SET extra_json=? WHERE id=? AND status IN ('in_progress','pending') AND worker_pid=?", (json.dumps(extra), job_id, os.getpid()))
+            if job_id in self._jobs:
+                self._jobs[job_id].update(extra)
+
+    def expire_phase(self, job_id: str, timeout: float) -> bool:
+        with self._lock:
+            job = self.get_job(job_id)
+            if not job or job['status'] not in ('in_progress', 'pending'):
+                return False
+            started = job.get('phase_started_at') or job['updated_at']
+            elapsed = (datetime.datetime.now(datetime.timezone.utc) - datetime.datetime.fromisoformat(started)).total_seconds()
+            if elapsed < timeout:
+                return False
+            self.fail_job(job_id, 'PHASE_TIMEOUT', f"Presentation generation exceeded the {timeout:g}-second limit for its current phase. Check the local AI service, then try again.")
+            return True
+
+    def fail_job(self, job_id: str, code: str, message: str):
+        with self._lock:
+            try:
+                self.update_stage(job_id, 'failed', message, 0, error=message, extra={'error_code': code})
+            finally:
+                self._cancel_flags[job_id] = True
+            logger.error('presentation_failed job_id=%s error_code=%s', job_id, code)
 
     def get_job(self, job_id: str) -> dict[str, Any] | None:
         # Persisted state also reflects cancellation by another API worker.
@@ -246,6 +295,15 @@ class PresentationJobManager:
             with session_scope() as conn:
                 r = conn.execute("SELECT * FROM presentation_jobs WHERE id=?", (job_id,)).fetchone()
                 if r:
+                    # A failed write must not make a known terminal failure look
+                    # active. Repair it on the next successful DB connection.
+                    with self._lock:
+                        local = self._jobs.get(job_id)
+                        terminal = copy.deepcopy(local) if local and local.get('status') == 'failed' else None
+                    if terminal and r['status'] in ('in_progress', 'pending') and r['worker_pid'] == os.getpid():
+                        conn.execute("UPDATE presentation_jobs SET status='failed', stage='failed', stage_label=?, error=?, extra_json=?, updated_at=? WHERE id=? AND status IN ('in_progress','pending') AND worker_pid=?",
+                                     (terminal['stage_label'], terminal['error'], json.dumps({k: terminal[k] for k in ('phase_started_at', 'phase_events', 'heartbeat_at', 'error_code') if k in terminal}), terminal['updated_at'], job_id, os.getpid()))
+                        return terminal
                     res = {
                         "id": r["id"],
                         "status": r["status"],

@@ -194,7 +194,8 @@ def test_presentation_job_manager_cancellation():
 
     job = manager.get_job(job_id)
     assert job["status"] in ("in_progress", "pending")
-    assert job["stage"] in ("reviewing_coverage", "collecting_findings", "queued")
+    assert job["stage"] == "brief_setup"
+    assert job["progress_pct"] == 3
 
     manager.update_stage(job_id, "planning_outline", "Structuring presentation slides", 35)
     job = manager.get_job(job_id)
