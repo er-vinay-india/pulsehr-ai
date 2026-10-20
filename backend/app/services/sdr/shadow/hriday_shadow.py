@@ -162,7 +162,18 @@ def evaluate_hriday_shadow(
     semantic_comps: list[SemanticComparison] = []
 
     # 1. Cross-Sheet Answerability
-    is_cross_sheet_q = any(term in lower_q for term in ["department", "region", "by store", "monthly target vs daily", "country"])
+    is_cross_sheet_q = any(
+        term in lower_q
+        for term in [
+            "across ",
+            "linking ",
+            "combining ",
+            "by store region",
+            "country enrichment",
+            "cross-sheet",
+            "cross sheet",
+        ]
+    )
     if is_cross_sheet_q:
         has_v2_rel = any(getattr(m, "is_relational", False) for m in getattr(v2_context, "metrics", [])) or len(getattr(v2_context, "join_plans", [])) > 0
         has_sdr_rel = any(f.provenance_type in ("DERIVED_RELATIONAL", "DERIVED_ENRICHMENT") for f in sdr_facts)
@@ -196,15 +207,12 @@ def evaluate_hriday_shadow(
 
     # Determine Top-Level Evaluation Class
     has_regression = any(fc.difference_type == DisagreementType.REGRESSION for fc in fact_comps)
-    has_improvement = any(
-        fc.comparison_class == ComparisonClass.EXPECTED_IMPROVEMENT for fc in fact_comps
-    ) or any(sc.comparison_class == ComparisonClass.EXPECTED_IMPROVEMENT for sc in semantic_comps)
 
     if has_regression:
         top_comp = ComparisonClass.EXPECTED_DIFFERENCE
         top_diff = DisagreementType.REGRESSION
         top_sev = Severity.CRITICAL
-    elif has_improvement:
+    elif is_cross_sheet_q or is_refusal:
         top_comp = ComparisonClass.EXPECTED_IMPROVEMENT
         top_diff = DisagreementType.EXPECTED_FIX
         top_sev = Severity.INFO

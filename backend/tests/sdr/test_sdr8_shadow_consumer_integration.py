@@ -568,18 +568,24 @@ def test_failure_isolation_and_safety_protections(tmp_path):
     empty_facts, meta = loader.load_governed_facts("non_existent_dataset_9999")
     assert len(empty_facts) == 0
     assert meta["status"] == "UNAVAILABLE"
+    ledger = get_shadow_telemetry_ledger()
+    ledger.record_failure_injection("MISSING_ARTIFACT", ShadowConsumerType.HRIDAY, {"dataset_id": "non_existent_dataset_9999"})
 
     # 2. Inspect sdr8_wfo safety meta -> blocked stale views and unsafe joins
     wfo_facts, wfo_meta = loader.load_governed_facts("sdr8_wfo")
     assert wfo_meta["stale_views_blocked"] >= 1
     assert wfo_meta["unsafe_joins_blocked"] >= 1
     assert wfo_meta["ambiguous_joins_blocked"] >= 1
+    ledger.record_failure_injection("STALE_ARTIFACT", ShadowConsumerType.HRIDAY, {"blocked_views": wfo_meta["stale_views_blocked"]})
+    ledger.record_failure_injection("UNSAFE_BLOCK", ShadowConsumerType.HRIDAY, {"blocked_unsafe_joins": wfo_meta["unsafe_joins_blocked"]})
+    ledger.record_failure_injection("AMBIGUOUS_BLOCK", ShadowConsumerType.HRIDAY, {"blocked_ambiguous": wfo_meta["ambiguous_joins_blocked"]})
     # Verify no fact from view_wfo_unsafe_blocked entered admitted facts!
     assert not any(f.analytical_view_id == "view_wfo_unsafe_blocked" for f in wfo_facts)
     assert not any(f.analytical_view_id == "view_wfo_stale_blocked" for f in wfo_facts)
     assert not any(f.join_plan_id == "JP-UNSAFE-JOIN" for f in wfo_facts)
 
     # 3. Simulate SDR shadow exception inside adapter
+    ledger.record_failure_injection("RUNTIME_EXCEPTION", ShadowConsumerType.HRIDAY, {"simulated": True})
     route_dec = ConsumerRouteDecision(
         decision_id="DEC-TEST",
         decision_timestamp="2026-10-20T00:00:00Z",
@@ -626,3 +632,17 @@ def test_telemetry_and_storage_p0_isolation():
         assert c_sum["REGRESSION"] == 0
         assert c_sum["v2_failures_caused_by_sdr"] == 0
         assert c_sum["user_visible_substitutions"] == 0
+
+    fail_sum = ledger.get_failure_injection_summary()
+    assert fail_sum["missing_artifact_count"] >= 1
+    assert fail_sum["stale_artifact_count"] >= 1
+    assert fail_sum["unsafe_block_count"] >= 1
+    assert fail_sum["ambiguous_block_count"] >= 1
+    assert fail_sum["runtime_exception_count"] >= 1
+    assert fail_sum["v2_failures_caused_by_injections"] == 0
+    assert fail_sum["user_visible_substitutions"] == 0
+
+    lat_sum = ledger.get_detailed_latency_summary()
+    assert "HRIDAY" in lat_sum
+    assert "DASHBOARD" in lat_sum
+    assert "PRESENTATION" in lat_sum
