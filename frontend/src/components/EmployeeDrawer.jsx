@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { X, Calendar, Clock, AlertTriangle, User, Award, ShieldAlert, CheckCircle2 } from "lucide-react";
 import { getEmployeeDetail } from "../api/client";
+import DataTable from "./DataTable";
 
 export default function EmployeeDrawer({ employeeId, onClose }) {
   const [data, setData] = useState(null);
@@ -109,33 +110,64 @@ export default function EmployeeDrawer({ employeeId, onClose }) {
                 <Calendar size={16} />
                 <span>Recent Attendance Punches ({punches.length} records)</span>
               </div>
-              <div className="punches-table-wrap">
-                <table className="mini-table">
-                  <thead>
-                    <tr>
-                      <th>Date</th>
-                      <th>Clock In</th>
-                      <th>Clock Out</th>
-                      <th>Duration</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {punches.slice(0, 15).map((p, idx) => (
-                      <tr key={idx}>
-                        <td>{p.date}</td>
-                        <td>{p.clock_in || "—"}</td>
-                        <td>{p.clock_out || "—"}</td>
-                        <td>{p.duration_hours ? `${p.duration_hours}h` : "—"}</td>
-                        <td>
-                          <span className={`status-pill ${p.status.toLowerCase()}`}>
-                            {p.status}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div style={{ marginTop: "8px" }}>
+                <DataTable
+                  columns={[
+                    {
+                      key: "date",
+                      label: "Date",
+                      type: "date",
+                      sortable: true,
+                      defaultVisible: true,
+                    },
+                    {
+                      key: "clock_in",
+                      label: "Clock In",
+                      type: "text",
+                      sortable: true,
+                      defaultVisible: true,
+                      render: (val) => val || "—",
+                    },
+                    {
+                      key: "clock_out",
+                      label: "Clock Out",
+                      type: "text",
+                      sortable: true,
+                      defaultVisible: true,
+                      render: (val) => val || "—",
+                    },
+                    {
+                      key: "duration_hours",
+                      label: "Duration",
+                      type: "numeric",
+                      sortable: true,
+                      defaultVisible: true,
+                      sortVal: (r) => r.duration_hours ?? 0,
+                      render: (val) => (val ? `${val}h` : "—"),
+                    },
+                    {
+                      key: "status",
+                      label: "Status",
+                      type: "status",
+                      sortable: true,
+                      defaultVisible: true,
+                      render: (val) => (
+                        <span className={`status-pill ${String(val || "").toLowerCase()}`}>
+                          {val || "—"}
+                        </span>
+                      ),
+                    },
+                  ]}
+                  rows={punches}
+                  totalRows={punches.length}
+                  pageSize={10}
+                  pageSizeOptions={[10, 25, 50]}
+                  searchable={true}
+                  searchPlaceholder="Search punches..."
+                  columnVisibilityEnabled={true}
+                  emptyMessage="No punches recorded."
+                  tableAriaLabel="Employee punch history table"
+                />
               </div>
             </div>
           </div>

@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { Table, X, Search, ArrowUpDown, ChevronRight } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Table, X, ChevronRight } from 'lucide-react';
+import DataTable from '../DataTable';
 import { formatDisplayLabel, formatCompleteNumber } from '../../utils/displayFormatters';
 
 export default function ChartDetailModal({
@@ -19,10 +20,6 @@ export default function ChartDetailModal({
   sheetId = null,
   onInvestigate
 }) {
-  const [filterText, setFilterText] = useState('');
-  const [sortField, setSortField] = useState('rank'); // 'rank', 'label', 'value'
-  const [sortAsc, setSortAsc] = useState(true);
-
   // Close on Escape key
   useEffect(() => {
     if (!isOpen) return;
@@ -54,31 +51,131 @@ export default function ChartDetailModal({
   const lowest = items.length > 0 ? items.reduce((prev, curr) => (curr.value < prev.value ? curr : prev), items[0]) : null;
   const spreadRatio = lowest && lowest.value > 0 ? (highest.value / lowest.value).toFixed(2) : null;
 
-  const filteredItems = items.filter((it) =>
-    String(it.label || '').toLowerCase().includes(filterText.toLowerCase().trim())
-  );
+  const modalRows = useMemo(() => {
+    return items.map((it, idx) => ({
+      ...it,
+      rank: it.rank || idx + 1,
+      _index: idx,
+    }));
+  }, [items]);
 
-  const sortedItems = [...filteredItems].sort((a, b) => {
-    if (sortField === 'rank') {
-      return sortAsc ? (a.rank || 0) - (b.rank || 0) : (b.rank || 0) - (a.rank || 0);
-    }
-    if (sortField === 'label') {
-      return sortAsc ? String(a.label).localeCompare(String(b.label)) : String(b.label).localeCompare(String(a.label));
-    }
-    if (sortField === 'value') {
-      return sortAsc ? a.value - b.value : b.value - a.value;
-    }
-    return 0;
-  });
+  const modalColumns = useMemo(() => {
+    const cols = [
+      {
+        key: "rank",
+        label: "Rank",
+        type: "numeric",
+        sortable: true,
+        defaultVisible: true,
+        width: "70px",
+        render: (val, r) => (
+          <span className="table-rank-chip">#{val || r._index + 1}</span>
+        ),
+      },
+      {
+        key: "label",
+        label: formatDisplayLabel(entityLabel),
+        type: "text",
+        sortable: true,
+        defaultVisible: true,
+        render: (val) => <span className="font-semibold">{val}</span>,
+      },
+      {
+        key: "value",
+        label: formatDisplayLabel(metricName),
+        type: "numeric",
+        sortable: true,
+        defaultVisible: true,
+        sortVal: (r) => (r.value != null ? Number(r.value) : -Infinity),
+        render: (val) => (
+          <span className="font-mono" title={`Complete: ${formatCompleteNumber(val)}`} style={{ cursor: "help" }}>
+            {formatVal(val)}
+          </span>
+        ),
+      },
+    ];
 
-  const handleSort = (field) => {
-    if (sortField === field) {
-      setSortAsc(!sortAsc);
-    } else {
-      setSortField(field);
-      setSortAsc(field === 'label' || field === 'rank');
+    if (benchmarkMean != null) {
+      cols.push({
+        key: "diffPct",
+        label: "vs Benchmark",
+        type: "percentage",
+        sortable: true,
+        defaultVisible: true,
+        sortVal: (r) => (r.value != null && benchmarkMean ? ((r.value - benchmarkMean) / benchmarkMean) * 100 : -Infinity),
+        render: (_, r) => {
+          const diffPct = benchmarkMean && r.value != null ? ((r.value - benchmarkMean) / benchmarkMean) * 100 : null;
+          const isPositive = diffPct != null && diffPct >= 0;
+          return diffPct != null ? (
+            <span
+              className={`diff-pill ${isPositive ? "diff-up" : "diff-down"}`}
+              title={`Complete: ${diffPct}%`}
+              style={{ cursor: "help" }}
+            >
+              {isPositive ? `+${diffPct.toFixed(2)}%` : `${diffPct.toFixed(2)}%`}
+            </span>
+          ) : (
+            "—"
+          );
+        },
+      });
     }
-  };
+
+    if (benchmarkTotal != null) {
+      cols.push({
+        key: "sharePct",
+        label: "Share of Total",
+        type: "percentage",
+        sortable: true,
+        defaultVisible: true,
+        sortVal: (r) => (r.value != null && benchmarkTotal ? (r.value / benchmarkTotal) * 100 : -Infinity),
+        render: (_, r) => {
+          const sharePct = benchmarkTotal && r.value != null ? ((r.value / benchmarkTotal) * 100).toFixed(2) : null;
+          return (
+            <span
+              className="font-mono text-muted"
+              title={sharePct != null ? `Complete: ${(r.value / benchmarkTotal) * 100}%` : ""}
+              style={sharePct != null ? { cursor: "help" } : {}}
+            >
+              {sharePct != null ? `${sharePct}%` : "—"}
+            </span>
+          );
+        },
+      });
+    }
+
+    if (onInvestigate) {
+      cols.push({
+        key: "investigate",
+        label: "Evidence Drilldown",
+        sortable: false,
+        filterable: false,
+        defaultVisible: true,
+        render: (_, item) => (
+          <button
+            type="button"
+            className="btn-table-investigate"
+            onClick={(e) => {
+              e.stopPropagation();
+              onClose();
+              onInvestigate({
+                entityType,
+                targetId: item.label,
+                metric: metricName,
+                sheetId,
+              });
+            }}
+            title={`Investigate ${item.label}`}
+          >
+            <span>Investigate</span>
+            <ChevronRight size={13} />
+          </button>
+        ),
+      });
+    }
+
+    return cols;
+  }, [entityLabel, metricName, benchmarkMean, benchmarkTotal, isCurrency, onInvestigate, entityType, sheetId, onClose]);
 
   return (
     <div className="chart-detail-modal-backdrop" onClick={onClose} role="presentation">
@@ -136,135 +233,19 @@ export default function ChartDetailModal({
           )}
         </div>
 
-        {/* Search and Table Controls */}
-        <div className="modal-toolbar">
-          <div className="modal-search-box">
-            <Search size={14} className="search-icon" />
-            <input
-              type="text"
-              placeholder={`Search ${items.length} ${entityLabel.toLowerCase()}s...`}
-              value={filterText}
-              onChange={(e) => setFilterText(e.target.value)}
-              className="modal-search-input"
-            />
-            {filterText && (
-              <button
-                type="button"
-                className="btn-clear-search"
-                onClick={() => setFilterText('')}
-                aria-label="Clear filter"
-              >
-                <X size={12} />
-              </button>
-            )}
-          </div>
-          <span className="modal-showing-count">
-            Showing <strong>{sortedItems.length}</strong> of {items.length} {entityLabel.toLowerCase()}
-          </span>
-        </div>
-
-        {/* Scrollable Table Container */}
-        <div className="modal-table-scroll-wrap">
-          <table className="chart-detail-table">
-            <thead>
-              <tr>
-                <th onClick={() => handleSort('rank')} className="sortable-th th-rank">
-                  <span>Rank</span>
-                  <ArrowUpDown size={12} className={sortField === 'rank' ? 'active-sort' : ''} />
-                </th>
-                <th onClick={() => handleSort('label')} className="sortable-th th-label" title={`Category dimension: ${entityLabel}`}>
-                  <span>{formatDisplayLabel(entityLabel)}</span>
-                  <ArrowUpDown size={12} className={sortField === 'label' ? 'active-sort' : ''} />
-                </th>
-                <th onClick={() => handleSort('value')} className="sortable-th th-val" title={`Source field: ${metricName}`}>
-                  <span>{formatDisplayLabel(metricName)}</span>
-                  <ArrowUpDown size={12} className={sortField === 'value' ? 'active-sort' : ''} />
-                </th>
-                {benchmarkMean != null && (
-                  <th className="th-benchmark">
-                    <span>vs Benchmark</span>
-                  </th>
-                )}
-                {benchmarkTotal != null && (
-                  <th className="th-share">
-                    <span>Share of Total</span>
-                  </th>
-                )}
-                <th className="th-action">
-                  <span>Evidence Drilldown</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {sortedItems.map((item, idx) => {
-                const diffPct = benchmarkMean ? ((item.value - benchmarkMean) / benchmarkMean) * 100 : null;
-                const sharePct = benchmarkTotal ? ((item.value / benchmarkTotal) * 100).toFixed(2) : null;
-                const isPositive = diffPct != null && diffPct >= 0;
-
-                return (
-                  <tr key={idx} className="detail-table-row">
-                    <td className="td-rank">
-                      <span className="table-rank-chip">#{item.rank || idx + 1}</span>
-                    </td>
-                    <td className="td-label font-semibold">{item.label}</td>
-                    <td className="td-val font-mono" title={`Complete: ${formatCompleteNumber(item.value)}`} style={{ cursor: 'help' }}>
-                      {formatVal(item.value)}
-                    </td>
-                    {benchmarkMean != null && (
-                      <td className="td-benchmark">
-                        {diffPct != null ? (
-                          <span
-                            className={`diff-pill ${isPositive ? 'diff-up' : 'diff-down'}`}
-                            title={`Complete: ${diffPct}%`}
-                            style={{ cursor: 'help' }}
-                          >
-                            {isPositive ? `+${diffPct.toFixed(2)}%` : `${diffPct.toFixed(2)}%`}
-                          </span>
-                        ) : '—'}
-                      </td>
-                    )}
-                    {benchmarkTotal != null && (
-                      <td
-                        className="td-share font-mono text-muted"
-                        title={sharePct != null ? `Complete: ${((item.value / benchmarkTotal) * 100)}%` : ''}
-                        style={sharePct != null ? { cursor: 'help' } : {}}
-                      >
-                        {sharePct != null ? `${sharePct}%` : '—'}
-                      </td>
-                    )}
-                    <td className="td-action">
-                      {onInvestigate && (
-                        <button
-                          type="button"
-                          className="btn-table-investigate"
-                          onClick={() => {
-                            onClose();
-                            onInvestigate({
-                              entityType: entityType,
-                              targetId: item.label,
-                              metric: metricName,
-                              sheetId: sheetId
-                            });
-                          }}
-                          title={`Investigate ${item.label}`}
-                        >
-                          <span>Investigate</span>
-                          <ChevronRight size={13} />
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-              {sortedItems.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="modal-empty-search">
-                    No {entityLabel.toLowerCase()} matched "{filterText}".
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+        {/* Reusable Enterprise DataTable */}
+        <div style={{ padding: "0 18px 18px", overflowY: "auto" }}>
+          <DataTable
+            columns={modalColumns}
+            rows={modalRows}
+            totalRows={modalRows.length}
+            pageSize={25}
+            searchable={true}
+            searchPlaceholder={`Search ${items.length} ${entityLabel.toLowerCase()}s...`}
+            columnVisibilityEnabled={true}
+            emptyMessage={`No ${entityLabel.toLowerCase()} records match your search.`}
+            tableAriaLabel={`${title} dataset view`}
+          />
         </div>
 
         {/* Modal Footer */}

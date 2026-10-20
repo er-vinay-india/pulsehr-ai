@@ -1,4 +1,4 @@
-import React, { memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { memo, useEffect, useLayoutEffect, useRef, useState, useMemo } from 'react';
 import { ArrowUp, ArrowDown, Square, SquarePen, X, Maximize2, Minimize2, Copy, ThumbsUp, ThumbsDown, RefreshCw, Download, Sparkles } from 'lucide-react';
 import AnimatedAcousticOrb from '../presentation/AnimatedAcousticOrb.jsx';
 import MarkdownView from '../MarkdownView.jsx';
@@ -8,8 +8,56 @@ import IconButton from './IconButton.jsx';
 import HRIDAYActivity from './HRIDAYActivity.jsx';
 import SlideChart from '../presentation/slides/SlideChart.jsx';
 import { useTheme } from '../../context/ThemeContext.jsx';
+import DataTable from '../DataTable';
 
 const HRIDAYAnswer = memo(MarkdownView);
+
+const HRIDAYChartDataTable = memo(function HRIDAYChartDataTable({ vc }) {
+  const columns = useMemo(() => {
+    const cols = [
+      {
+        key: 'category',
+        label: vc.dimension_col || 'Cohort',
+        sortable: true
+      }
+    ];
+    (vc.series || []).forEach((s, sIdx) => {
+      cols.push({
+        key: `series_${sIdx}`,
+        label: s.name || `Series ${sIdx + 1}`,
+        sortable: true,
+        sortType: 'numeric',
+        align: 'right',
+        render: (val) => val != null && val !== '—' ? `${val}${vc.unit ? ` ${vc.unit}` : ''}` : '—'
+      });
+    });
+    return cols;
+  }, [vc]);
+
+  const rows = useMemo(() => {
+    return (vc.categories || []).map((cat, idx) => {
+      const row = { id: idx, category: cat };
+      (vc.series || []).forEach((s, sIdx) => {
+        row[`series_${sIdx}`] = s.values?.[idx] ?? s.data?.[idx] ?? '—';
+      });
+      return row;
+    });
+  }, [vc]);
+
+  return (
+    <div style={{ marginTop: '8px' }}>
+      <DataTable
+        columns={columns}
+        rows={rows}
+        rowKeyProp="id"
+        pageSize={10}
+        pageSizeOptions={[5, 10, 25]}
+        searchPlaceholder="Search chart data..."
+        tableAriaLabel={vc.title || 'Chart data'}
+      />
+    </div>
+  );
+});
 
 // Text ticks must not rebuild chart options or reset chart interactions.
 const HRIDAYCharts = memo(function HRIDAYCharts({ charts, isDark }) {
@@ -17,15 +65,9 @@ const HRIDAYCharts = memo(function HRIDAYCharts({ charts, isDark }) {
   return <div className="hriday-chat-visuals">
     {charts.map((vc, vIdx) => <div key={vc.chart_id || `chat-chart-${vIdx}`} className="hriday-chat-chart-wrapper">
       <SlideChart chart={vc} theme={{ is_dark: isDark }} />
-      {vc.categories?.length > 0 && vc.series?.length > 0 && <details className="hriday-chart-data">
-        <summary>View chart data</summary>
-        <div><table>
-          <caption>{vc.title || 'Chart data'}</caption>
-          <thead><tr><th scope="col">{vc.dimension_col || 'Cohort'}</th>{vc.series.map((series, index) => <th scope="col" key={index}>{series.name}</th>)}</tr></thead>
-          <tbody>{vc.categories.map((category, index) => <tr key={index}>
-            <th scope="row">{category}</th>{vc.series.map((series, seriesIndex) => <td key={seriesIndex}>{series.values?.[index] ?? series.data?.[index] ?? '—'}{vc.unit ? ` ${vc.unit}` : ''}</td>)}
-          </tr>)}</tbody>
-        </table></div>
+      {vc.categories?.length > 0 && vc.series?.length > 0 && <details className="hriday-chart-data" style={{ marginTop: '8px' }}>
+        <summary style={{ cursor: 'pointer', fontSize: '0.82rem', color: 'var(--brand-400)' }}>View chart data</summary>
+        <HRIDAYChartDataTable vc={vc} />
       </details>}
     </div>)}
   </div>;

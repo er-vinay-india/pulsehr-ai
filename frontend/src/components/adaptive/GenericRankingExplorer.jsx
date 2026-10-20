@@ -14,6 +14,7 @@ import {
   Search,
 } from "lucide-react";
 import VisualSpecRenderer from "./VisualSpecRenderer";
+import DataTable from "../DataTable";
 import Button from "../../design-system/components/Button";
 import { getRankingSchema, fetchRanking as apiFetchRanking } from "../../api/client";
 import { formatGovernedNumber, formatExactMeasure } from "../../utils/numericDisplayFormatter";
@@ -141,6 +142,99 @@ export default function GenericRankingExplorer({
         (r.secondary_id && String(r.secondary_id).toLowerCase().includes(q))
     );
   }, [rows, searchFilter]);
+
+  const rankingTableColumns = useMemo(
+    () => [
+      {
+        key: "rank",
+        label: "Rank",
+        type: "numeric",
+        sortable: true,
+        defaultVisible: true,
+        width: "60px",
+        render: (val) => (
+          <span style={{ fontWeight: 700, color: themeTokens?.colors?.textSecondary }}>
+            #{val}
+          </span>
+        ),
+      },
+      {
+        key: "entity",
+        label: "Entity",
+        type: "text",
+        sortable: true,
+        defaultVisible: true,
+        render: (val, r) => (
+          <span style={{ fontWeight: 600 }}>
+            {val}
+            {r.secondary_id && (
+              <span
+                style={{
+                  fontSize: "0.68rem",
+                  color: themeTokens?.colors?.textMuted || "var(--color-text-muted, var(--text-muted))",
+                  marginLeft: "5px",
+                  fontWeight: "normal",
+                }}
+              >
+                ({r.secondary_id})
+              </span>
+            )}
+          </span>
+        ),
+      },
+      {
+        key: "value",
+        label: "Value",
+        type: "numeric",
+        sortable: true,
+        defaultVisible: true,
+        sortVal: (r) => (r.value != null ? Number(r.value) : -Infinity),
+        render: (val, r) => (
+          <span
+            style={{ fontWeight: 700 }}
+            title={formatExactMeasure(val, { unit, metric_id: r.metric_id, label: r.label })}
+            data-raw-value={val != null ? String(val) : ""}
+          >
+            {val != null && val !== ""
+              ? formatGovernedNumber(val, { unit, metric_id: r.metric_id, label: r.label })
+              : r.formatted_value || "—"}
+          </span>
+        ),
+      },
+      {
+        key: "percentile_label",
+        label: "Percentile",
+        type: "text",
+        sortable: true,
+        defaultVisible: true,
+        render: (val) => <span style={{ color: themeTokens?.colors?.textMuted }}>{val}</span>,
+      },
+      {
+        key: "delta_benchmark",
+        label: "Delta",
+        type: "numeric",
+        sortable: true,
+        defaultVisible: true,
+        sortVal: (r) => r.delta_benchmark ?? 0,
+        render: (val) => {
+          const isPos = val >= 0;
+          return (
+            <span
+              style={{
+                fontWeight: 600,
+                color: isPos
+                  ? themeTokens?.colors?.statusSuccess || "var(--color-success)"
+                  : themeTokens?.colors?.statusError || "var(--color-danger)",
+              }}
+            >
+              {isPos ? `+${val}` : val}
+            </span>
+          );
+        },
+      },
+    ],
+    [themeTokens, unit]
+  );
 
   // Determine Visual Archetype from Limit & Cardinality
   // 5 / 15 -> Normal Chart
@@ -337,72 +431,19 @@ export default function GenericRankingExplorer({
             </div>
           )}
 
-          {/* Table Search Filter */}
-          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-            <Search size={12} color={themeTokens?.colors?.textMuted} />
-            <input
-              type="text"
-              placeholder={`Filter ${populationCount} entities...`}
-              value={searchFilter}
-              onChange={(e) => setSearchFilter(e.target.value)}
-              style={{
-                width: "100%",
-                padding: "4px 8px",
-                fontSize: "0.74rem",
-                borderRadius: "4px",
-                backgroundColor: "transparent",
-                border: `1px solid ${themeTokens?.colors?.borderSubtle}`,
-                color: themeTokens?.colors?.textPrimary,
-              }}
+          {/* Reusable Enterprise DataTable */}
+          <div style={{ marginTop: "4px" }}>
+            <DataTable
+              columns={rankingTableColumns}
+              rows={rows}
+              totalRows={rows.length}
+              pageSize={25}
+              searchable={true}
+              searchPlaceholder={`Filter ${populationCount} entities...`}
+              columnVisibilityEnabled={true}
+              emptyMessage="No matching entities found."
+              tableAriaLabel="Ranked entities table"
             />
-          </div>
-
-          {/* Virtualized / Scrollable Ranked Table */}
-          <div style={{ overflowY: "auto", maxHeight: "200px", border: `1px solid ${themeTokens?.colors?.borderSubtle}`, borderRadius: "6px" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.74rem", textAlign: "left" }}>
-              <thead>
-                <tr style={{ backgroundColor: isDark ? "rgba(255, 255, 255, 0.05)" : "rgba(0, 0, 0, 0.03)", borderBottom: `1px solid ${themeTokens?.colors?.borderSubtle}` }}>
-                  <th style={{ padding: "6px 8px", width: "45px" }}>Rank</th>
-                  <th style={{ padding: "6px 8px" }}>Entity</th>
-                  <th style={{ padding: "6px 8px", textAlign: "right" }}>Value</th>
-                  <th style={{ padding: "6px 8px", textAlign: "right" }}>Percentile</th>
-                  <th style={{ padding: "6px 8px", textAlign: "right" }}>Delta</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredRows.map((r) => (
-                  <tr key={r.rank + r.entity} style={{ borderBottom: `1px solid ${themeTokens?.colors?.borderSubtle}` }}>
-                    <td style={{ padding: "4px 8px", fontWeight: 700, color: themeTokens?.colors?.textSecondary }}>#{r.rank}</td>
-                    <td style={{ padding: "4px 8px", fontWeight: 600 }}>
-                      <span>{r.entity}</span>
-                      {r.secondary_id && (
-                        <span
-                          style={{
-                            fontSize: "0.68rem",
-                            color: themeTokens?.colors?.textMuted || "var(--color-text-muted, var(--text-muted))",
-                            marginLeft: "5px",
-                            fontWeight: "normal",
-                          }}
-                        >
-                          ({r.secondary_id})
-                        </span>
-                      )}
-                    </td>
-                    <td
-                      style={{ padding: "4px 8px", textAlign: "right", fontWeight: 700 }}
-                      title={formatExactMeasure(r.value, { unit, metric_id: r.metric_id, label: r.label })}
-                      data-raw-value={r.value != null ? String(r.value) : ""}
-                    >
-                      {(r.value != null && r.value !== "") ? formatGovernedNumber(r.value, { unit, metric_id: r.metric_id, label: r.label }) : (r.formatted_value || "—")}
-                    </td>
-                    <td style={{ padding: "4px 8px", textAlign: "right", color: themeTokens?.colors?.textMuted }}>{r.percentile_label}</td>
-                    <td style={{ padding: "4px 8px", textAlign: "right", color: r.delta_benchmark >= 0 ? (themeTokens?.colors?.statusSuccess || "var(--color-success)") : (themeTokens?.colors?.statusError || "var(--color-danger)") }}>
-                      {r.delta_benchmark >= 0 ? `+${r.delta_benchmark}` : r.delta_benchmark}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
           </div>
         </div>
       ) : dynamicVisualSpec ? (

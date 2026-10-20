@@ -4,6 +4,7 @@ import { getDatasetDownloadUrl } from "../../api/client";
 import AnalysisBriefCard from "./AnalysisBriefCard";
 import ContextReviewCard from "./ContextReviewCard";
 import EnrichmentReviewCard from "./EnrichmentReviewCard";
+import DataTable from "../DataTable";
 
 export default function UploadResultCard({ uploadResult }) {
   if (!uploadResult) return null;
@@ -93,10 +94,15 @@ export default function UploadResultCard({ uploadResult }) {
 
       {/* Optional Collapsible Sample Preview */}
       {uploadResult.sample_preview && uploadResult.sample_preview.length > 0 && (() => {
-        const MAX_COLS = 8;
-        const allCols = uploadResult.columns || [];
-        const displayCols = allCols.length > MAX_COLS ? allCols.slice(0, MAX_COLS) : allCols;
-        const remainingCount = allCols.length - displayCols.length;
+        const allCols = uploadResult.columns || Object.keys(uploadResult.sample_preview[0] || {});
+        const previewCols = allCols.map((c) => ({
+          key: c,
+          label: c,
+          type: "text",
+          sortable: true,
+          defaultVisible: true,
+          render: (val) => <span>{val !== undefined && val !== null ? String(val) : "—"}</span>,
+        }));
 
         return (
           <details
@@ -131,45 +137,18 @@ export default function UploadResultCard({ uploadResult }) {
             </summary>
 
             <div style={{ marginTop: "0.85rem" }}>
-              {remainingCount > 0 && (
-                <div style={{ fontSize: "0.75rem", color: "var(--fg-muted)", marginBottom: "8px" }}>
-                  Showing first {MAX_COLS} of {allCols.length} columns to keep preview readable. All {allCols.length} columns are fully parsed & indexed.
-                </div>
-              )}
-              <div style={{ overflowX: "auto", borderRadius: "6px", border: "1px solid var(--border-subtle)" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.78rem" }}>
-                  <thead>
-                    <tr style={{ background: "#15110f", borderBottom: "1px solid var(--border)" }}>
-                      {displayCols.map((col, idx) => (
-                        <th key={idx} style={{ padding: "8px 12px", textAlign: "left", color: "var(--brand-400)", fontWeight: 700, whiteSpace: "nowrap" }}>
-                          {col}
-                        </th>
-                      ))}
-                      {remainingCount > 0 && (
-                        <th style={{ padding: "8px 12px", textAlign: "left", color: "var(--fg-muted)", fontStyle: "italic", whiteSpace: "nowrap" }}>
-                          +{remainingCount} more columns...
-                        </th>
-                      )}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {uploadResult.sample_preview.map((row, rIdx) => (
-                      <tr key={rIdx} style={{ borderBottom: "1px solid var(--border-subtle)" }}>
-                        {displayCols.map((col, cIdx) => (
-                          <td key={cIdx} style={{ padding: "8px 12px", color: "var(--fg-primary)", whiteSpace: "nowrap" }}>
-                            {String(row[col] !== undefined && row[col] !== null ? row[col] : "—")}
-                          </td>
-                        ))}
-                        {remainingCount > 0 && (
-                          <td style={{ padding: "8px 12px", color: "var(--fg-muted)", fontStyle: "italic" }}>
-                            ...
-                          </td>
-                        )}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <DataTable
+                columns={previewCols}
+                rows={uploadResult.sample_preview}
+                totalRows={uploadResult.sample_preview.length}
+                pageSize={10}
+                pageSizeOptions={[10, 25, 50]}
+                searchable={true}
+                searchPlaceholder="Search sample preview..."
+                columnVisibilityEnabled={true}
+                emptyMessage="No sample records available."
+                tableAriaLabel="Uploaded sample preview table"
+              />
             </div>
           </details>
         );

@@ -20,6 +20,7 @@ import ReactECharts from '../charts/SafeReactECharts';
 import { useTheme } from '../../context/ThemeContext';
 import { getThemeTokens } from '../../theme/tokens';
 import Select from '../common/Select.jsx';
+import DataTable from '../DataTable';
 
 export default function VisualEdaDashboard({
   edaReport,
@@ -665,6 +666,227 @@ export default function VisualEdaDashboard({
         }
       ]
     };
+  }, [currentBreakdown, themeTokens]);
+
+  const columnDiagnosticCols = useMemo(() => [
+    {
+      key: 'column',
+      label: 'Column Name',
+      sortable: true,
+      render: (val) => <strong>{val}</strong>
+    },
+    {
+      key: 'inferred_type',
+      label: 'Type',
+      sortable: true,
+      render: (val) => {
+        const typeStr = val || 'categorical';
+        return (
+          <span
+            className={`col-type-badge badge-${typeStr.split('_')[0]}`}
+            style={{
+              padding: '3px 8px',
+              borderRadius: '5px',
+              fontWeight: 700,
+              fontSize: '0.74rem',
+              display: 'inline-block'
+            }}
+          >
+            {typeStr.replace('_', ' ')}
+          </span>
+        );
+      }
+    },
+    {
+      key: 'null_count',
+      label: 'Missing Values',
+      sortable: true,
+      sortType: 'numeric',
+      render: (val, row) => {
+        if (val > 0) {
+          return (
+            <span style={{ color: '#f43f5e', fontWeight: 700 }}>
+              ⚠️ {val} ({row.null_percentage}%)
+            </span>
+          );
+        }
+        return (
+          <span style={{ color: '#10b981', fontWeight: 600 }}>
+            ✓ 0 (0.0%)
+          </span>
+        );
+      }
+    },
+    {
+      key: 'imputation',
+      label: 'Imputation Strategy',
+      sortable: false,
+      render: (val) => {
+        if (!val) {
+          return <span style={{ color: themeTokens.colors.statusSuccess, fontSize: '0.82rem' }}>✓ Complete</span>;
+        }
+        return (
+          <div style={{ fontSize: '0.82rem', color: 'var(--brand-300)' }}>
+            <span style={{ padding: '2px 6px', background: themeTokens.colors.softBlue, borderRadius: '4px', fontWeight: 600 }}>
+              {val.strategy?.toUpperCase()} → {String(val.recommended_value)}
+            </span>
+            {val.rationale && (
+              <div style={{ fontSize: '0.74rem', opacity: 0.8, marginTop: '4px', maxWidth: '250px', lineHeight: 1.25 }}>
+                {val.rationale}
+              </div>
+            )}
+          </div>
+        );
+      }
+    },
+    {
+      key: 'distinct_count',
+      label: 'Distinct Values',
+      sortable: true,
+      sortType: 'numeric'
+    },
+    {
+      key: 'distribution',
+      label: 'Distribution (Min / Max / Mean / Median)',
+      sortable: false,
+      render: (_, row) => (
+        row.min != null
+          ? `${row.min} / ${row.max} · μ: ${row.mean} (med: ${row.median})`
+          : '—'
+      )
+    },
+    {
+      key: 'outlier_count',
+      label: 'Outliers Flagged',
+      sortable: true,
+      sortType: 'numeric',
+      render: (val) => (
+        val > 0 ? (
+          <span style={{ color: themeTokens.colors.statusError, fontWeight: 600 }}>
+            ⚠️ {val} outliers
+          </span>
+        ) : (
+          <span style={{ color: themeTokens.colors.statusSuccess }}>✓ Normal</span>
+        )
+      )
+    }
+  ], [themeTokens]);
+
+  const columnDiagnosticRows = useMemo(() => {
+    return Object.values(edaReport?.column_diagnostics || {});
+  }, [edaReport]);
+
+  const transformationAuditCols = useMemo(() => [
+    {
+      key: 'column',
+      label: 'Target Column',
+      sortable: true,
+      render: (val) => <strong>{val}</strong>
+    },
+    {
+      key: 'inferred_type',
+      label: 'Inferred Semantic Type',
+      sortable: true,
+      render: (val) => <span className="type-cell">{val}</span>
+    },
+    {
+      key: 'unit_format',
+      label: 'Standardized Format / Unit',
+      sortable: true
+    },
+    {
+      key: 'cells_transformed',
+      label: 'Cells Coerced',
+      sortable: true,
+      sortType: 'numeric',
+      render: (val) => <span className="stat-cell">{val} cells</span>
+    },
+    {
+      key: 'transformation',
+      label: 'Transformation Rule Applied',
+      sortable: true
+    }
+  ], []);
+
+  const transformationAuditRows = useMemo(() => {
+    if (!edaReport?.transformations_log || edaReport.transformations_log.length === 0) return [];
+    return edaReport.transformations_log.map((t, idx) => {
+      const diag = edaReport.column_diagnostics?.[t.column] || {};
+      return {
+        id: `${t.column}-${idx}`,
+        ...t,
+        unit_format: diag.unit ? `Unit: ${diag.unit}` : 'Standard numeric / string'
+      };
+    });
+  }, [edaReport]);
+
+  const rollupCols = useMemo(() => {
+    if (!currentBreakdown) return [];
+    return [
+      {
+        key: 'category',
+        label: `${currentBreakdown.dimension_label || 'Dimension'} Category`,
+        sortable: true,
+        render: (val, row) => {
+          const isTop = row.category === currentBreakdown.top_category;
+          return (
+            <div>
+              <strong>{val}</strong>
+              {isTop && (
+                <span style={{ marginLeft: '6px', fontSize: '0.7rem', color: themeTokens.colors.gold, fontWeight: 600 }}>
+                  [Top Cohort]
+                </span>
+              )}
+            </div>
+          );
+        }
+      },
+      {
+        key: 'count',
+        label: 'Record Count',
+        sortable: true,
+        sortType: 'numeric',
+        align: 'right'
+      },
+      {
+        key: 'share_records_pct',
+        label: 'Sample Share',
+        sortable: true,
+        sortType: 'percentage',
+        align: 'right',
+        render: (val) => `${val}%`
+      },
+      {
+        key: 'mean',
+        label: `Mean ${currentBreakdown.measure_label || 'Measure'}`,
+        sortable: true,
+        sortType: 'numeric',
+        align: 'right',
+        render: (val, row) => {
+          const isTop = row.category === currentBreakdown.top_category;
+          return (
+            <span style={{ fontWeight: 700, color: isTop ? themeTokens.colors.gold : 'inherit' }}>
+              {val}
+            </span>
+          );
+        }
+      },
+      {
+        key: 'total',
+        label: 'Total Sum',
+        sortable: true,
+        sortType: 'numeric',
+        align: 'right'
+      },
+      {
+        key: 'share_measure_pct',
+        label: 'Metric Share',
+        sortable: true,
+        sortType: 'percentage',
+        align: 'right',
+        render: (val) => `${val}%`
+      }
+    ];
   }, [currentBreakdown, themeTokens]);
 
   if (loadingEda) {
@@ -1427,83 +1649,18 @@ export default function VisualEdaDashboard({
               </p>
             </div>
 
-            <div className="eda-table-container">
-              <table className="eda-data-grid">
-                <thead>
-                  <tr>
-                    <th>Column Name</th>
-                    <th>Type</th>
-                    <th>Missing Values</th>
-                    <th>Imputation Strategy</th>
-                    <th>Distinct Values</th>
-                    <th>Distribution (Min / Max / Mean / Median)</th>
-                    <th>Outliers Flagged</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {Object.values(edaReport.column_diagnostics || {}).map((col, idx) => (
-                    <tr key={idx}>
-                      <td>
-                        <strong>{col.column}</strong>
-                      </td>
-                      <td className="type-cell">
-                        <span
-                          className={`col-type-badge badge-${(col.inferred_type || 'categorical').split('_')[0]}`}
-                          style={{
-                            padding: '3px 8px',
-                            borderRadius: '5px',
-                            fontWeight: 700,
-                            fontSize: '0.74rem',
-                            display: 'inline-block'
-                          }}
-                        >
-                          {col.inferred_type.replace('_', ' ')}
-                        </span>
-                      </td>
-                      <td className="stat-cell">
-                        {col.null_count > 0 ? (
-                          <span style={{ color: '#f43f5e', fontWeight: 700 }}>
-                            ⚠️ {col.null_count} ({col.null_percentage}%)
-                          </span>
-                        ) : (
-                          <span style={{ color: '#10b981', fontWeight: 600 }}>
-                            ✓ 0 (0.0%)
-                          </span>
-                        )}
-                      </td>
-                      <td className="stat-cell">
-                        {col.imputation ? (
-                          <div style={{ fontSize: '0.82rem', color: 'var(--brand-300)' }}>
-                            <span style={{ padding: '2px 6px', background: themeTokens.colors.softBlue, borderRadius: '4px', fontWeight: 600 }}>
-                              {col.imputation.strategy.toUpperCase()} → {String(col.imputation.recommended_value)}
-                            </span>
-                            <div style={{ fontSize: '0.74rem', opacity: 0.8, marginTop: '4px', maxWidth: '250px', lineHeight: 1.25 }}>
-                              {col.imputation.rationale}
-                            </div>
-                          </div>
-                        ) : (
-                          <span style={{ color: themeTokens.colors.statusSuccess, fontSize: '0.82rem' }}>✓ Complete</span>
-                        )}
-                      </td>
-                      <td className="stat-cell">{col.distinct_count}</td>
-                      <td className="stat-cell">
-                        {col.min != null
-                          ? `${col.min} / ${col.max} · μ: ${col.mean} (med: ${col.median})`
-                          : '—'}
-                      </td>
-                      <td>
-                        {col.outlier_count > 0 ? (
-                          <span style={{ color: themeTokens.colors.statusError, fontWeight: 600 }}>
-                            ⚠️ {col.outlier_count} outliers
-                          </span>
-                        ) : (
-                          <span style={{ color: themeTokens.colors.statusSuccess }}>✓ Normal</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div style={{ marginTop: '0.75rem' }}>
+              <DataTable
+                columns={columnDiagnosticCols}
+                rows={columnDiagnosticRows}
+                rowKeyProp="column"
+                pageSize={25}
+                pageSizeOptions={[15, 25, 50, 100]}
+                searchPlaceholder="Search column profiles, types, imputation..."
+                defaultSortCol="column"
+                defaultSortDir="asc"
+                tableAriaLabel="Column profiles and imputation strategies"
+              />
             </div>
           </div>
 
@@ -1519,42 +1676,19 @@ export default function VisualEdaDashboard({
               </p>
             </div>
 
-            <div className="eda-table-container">
-              <table className="eda-data-grid">
-                <thead>
-                  <tr>
-                    <th>Target Column</th>
-                    <th>Inferred Semantic Type</th>
-                    <th>Standardized Format / Unit</th>
-                    <th>Cells Coerced</th>
-                    <th>Transformation Rule Applied</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {edaReport.transformations_log && edaReport.transformations_log.length > 0 ? (
-                    edaReport.transformations_log.map((t, idx) => {
-                      const diag = edaReport.column_diagnostics?.[t.column] || {};
-                      return (
-                        <tr key={idx}>
-                          <td>
-                            <strong>{t.column}</strong>
-                          </td>
-                          <td className="type-cell">{t.inferred_type}</td>
-                          <td>{diag.unit ? `Unit: ${diag.unit}` : 'Standard numeric / string'}</td>
-                          <td className="stat-cell">{t.cells_transformed} cells</td>
-                          <td>{t.transformation}</td>
-                        </tr>
-                      );
-                    })
-                  ) : (
-                    <tr>
-                      <td colSpan={5} style={{ textAlign: 'center', color: themeTokens.colors.textMuted, padding: '1rem' }}>
-                        All column values in this sheet are already in canonical format; no type coercions required.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+            <div style={{ marginTop: '0.75rem' }}>
+              <DataTable
+                columns={transformationAuditCols}
+                rows={transformationAuditRows}
+                rowKeyProp="id"
+                pageSize={15}
+                pageSizeOptions={[15, 25, 50]}
+                searchPlaceholder="Search transformations..."
+                defaultSortCol="column"
+                defaultSortDir="asc"
+                emptyMessage="All column values in this sheet are already in canonical format; no type coercions required."
+                tableAriaLabel="Data cleansing and normalization audit trail"
+              />
             </div>
           </div>
         </div>
@@ -1751,44 +1885,17 @@ export default function VisualEdaDashboard({
                 <h4 style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--fg-secondary)', marginBottom: '0.6rem' }}>
                   Tabular Rollup Breakdown ({currentBreakdown.dimension_label} × {currentBreakdown.measure_label})
                 </h4>
-                <div className="eda-table-container">
-                  <table className="eda-data-grid">
-                    <thead>
-                      <tr>
-                        <th>{currentBreakdown.dimension_label} Category</th>
-                        <th style={{ textAlign: 'right' }}>Record Count</th>
-                        <th style={{ textAlign: 'right' }}>Sample Share</th>
-                        <th style={{ textAlign: 'right' }}>Mean {currentBreakdown.measure_label}</th>
-                        <th style={{ textAlign: 'right' }}>Total Sum</th>
-                        <th style={{ textAlign: 'right' }}>Metric Share</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {currentBreakdown.table_rows.map((row, idx) => {
-                        const isTop = row.category === currentBreakdown.top_category;
-                        return (
-                          <tr key={idx} style={isTop ? { background: themeTokens.colors.softGold } : undefined}>
-                            <td>
-                              <strong>{row.category}</strong>
-                              {isTop && (
-                                <span style={{ marginLeft: '6px', fontSize: '0.7rem', color: themeTokens.colors.gold, fontWeight: 600 }}>
-                                  [Top Cohort]
-                                </span>
-                              )}
-                            </td>
-                            <td className="stat-cell" style={{ textAlign: 'right' }}>{row.count}</td>
-                            <td style={{ textAlign: 'right' }}>{row.share_records_pct}%</td>
-                            <td className="stat-cell" style={{ textAlign: 'right', fontWeight: 700, color: isTop ? themeTokens.colors.gold : 'inherit' }}>
-                              {row.mean}
-                            </td>
-                            <td className="stat-cell" style={{ textAlign: 'right' }}>{row.total}</td>
-                            <td style={{ textAlign: 'right' }}>{row.share_measure_pct}%</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+                <DataTable
+                  columns={rollupCols}
+                  rows={currentBreakdown.table_rows}
+                  rowKeyProp="category"
+                  pageSize={15}
+                  pageSizeOptions={[10, 15, 25, 50]}
+                  searchPlaceholder="Search categories..."
+                  defaultSortCol="count"
+                  defaultSortDir="desc"
+                  tableAriaLabel={`Rollup breakdown ${currentBreakdown.dimension_label} by ${currentBreakdown.measure_label}`}
+                />
               </div>
             )}
           </div>

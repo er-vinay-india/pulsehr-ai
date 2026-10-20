@@ -7,6 +7,7 @@ import { repairChartLayout } from '../visualization/repair/repairChartLayout';
 import { VISUAL_POLICY } from '../visualization/policy/visualPolicy';
 import { formatCompactNumber, humanizeLabel } from '../visualization/layout/formatters';
 import Button from '../../design-system/components/Button';
+import DataTable from '../DataTable';
 
 export default function DataChart({
   items = [],
@@ -155,6 +156,40 @@ export default function DataChart({
     ? Math.max(height, Math.min(displayItems.length, 12) * 48 + 60)
     : height;
 
+  const chartTableCols = useMemo(() => [
+    {
+      key: 'label',
+      label: 'Category',
+      sortable: true,
+      render: (val, p) => (
+        onSelect ? (
+          <Button
+            variant="GHOST"
+            size="sm"
+            onClick={() => onSelect(p)}
+            style={{ padding: "2px 6px", fontSize: "0.80rem" }}
+          >
+            {val}
+          </Button>
+        ) : (
+          val
+        )
+      )
+    },
+    {
+      key: 'value',
+      label: metric,
+      sortable: true,
+      sortType: 'numeric',
+      align: 'right',
+      render: (val) => (
+        <span title={formatFullValue(val, unit)} tabIndex={0} aria-label={formatFullValue(val, unit)}>
+          {formatCompactNumber(val, unit)}
+        </span>
+      )
+    }
+  ], [metric, unit, onSelect]);
+
   return (
     <div ref={containerRef} className="data-chart-wrapper" style={{ minWidth: 0, width: '100%' }}>
       {isConsolidated && (
@@ -196,38 +231,16 @@ export default function DataChart({
         <summary style={{ cursor: 'pointer', fontSize: '0.82rem', color: 'var(--color-brand-primary, #0284c7)' }}>
           View full dataset ({items.length} rows){onSelect ? ' and investigate' : ''}
         </summary>
-        <div style={{ maxHeight: 240, overflow: 'auto', marginTop: 4 }}>
-          <table>
-            <thead>
-              <tr>
-                <th>Category</th>
-                <th>{metric}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((p, i) => (
-                <tr key={i}>
-                  <td>
-                    {onSelect ? (
-                      <Button
-                        variant="GHOST"
-                        size="sm"
-                        onClick={() => onSelect(p)}
-                        style={{ padding: "2px 6px", fontSize: "0.80rem" }}
-                      >
-                        {p.label}
-                      </Button>
-                    ) : (
-                      p.label
-                    )}
-                  </td>
-                  <td title={formatFullValue(p.value, unit)} tabIndex={0} aria-label={formatFullValue(p.value, unit)}>
-                    {formatCompactNumber(p.value, unit)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div style={{ marginTop: 8 }}>
+          <DataTable
+            columns={chartTableCols}
+            rows={items}
+            rowKeyProp="label"
+            pageSize={10}
+            pageSizeOptions={[10, 25, 50]}
+            searchPlaceholder={`Search ${metric}...`}
+            tableAriaLabel={`${metric} data table`}
+          />
         </div>
       </details>
     </div>

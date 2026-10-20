@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { Sparkles, Layers, Atom, Table, ChevronDown, ChevronRight, Zap, CheckCircle2 } from "lucide-react";
+import DataTable from "../DataTable";
 
 export default function EnrichmentReviewCard({ enrichment }) {
   if (!enrichment) return null;
@@ -125,45 +126,77 @@ export default function EnrichmentReviewCard({ enrichment }) {
 
       {/* Tab 1: Derived Features */}
       {activeTab === "features" && (
-        <div style={{ marginTop: "0.75rem", maxHeight: "280px", overflowY: "auto" }}>
+        <div style={{ marginTop: "0.75rem" }}>
           {enrichment.derived_features && enrichment.derived_features.length > 0 ? (
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.78rem" }}>
-              <thead>
-                <tr style={{ borderBottom: "1px solid var(--border)", color: "var(--fg-muted)", textAlign: "left" }}>
-                  <th style={{ padding: "6px 8px" }}>Feature Name</th>
-                  <th style={{ padding: "6px 8px" }}>Derivation Type</th>
-                  <th style={{ padding: "6px 8px" }}>Expression</th>
-                  <th style={{ padding: "6px 8px" }}>Unit</th>
-                  <th style={{ padding: "6px 8px", textAlign: "right" }}>Utility</th>
-                </tr>
-              </thead>
-              <tbody>
-                {enrichment.derived_features.map((feat, idx) => (
-                  <tr key={idx} style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
-                    <td style={{ padding: "6px 8px", color: "var(--brand-400)", fontWeight: 600 }}>
-                      {feat.name}
-                    </td>
-                    <td style={{ padding: "6px 8px" }}>
-                      <span className="filetype-badge" style={{ fontSize: "0.7rem", padding: "1px 6px" }}>
-                        {feat.derivation_type}
-                      </span>
-                    </td>
-                    <td style={{ padding: "6px 8px", color: "var(--accent-500)", fontFamily: "monospace" }}>
-                      {feat.expression}
-                    </td>
-                    <td style={{ padding: "6px 8px", color: "var(--fg-secondary)" }}>
-                      {feat.unit || "—"}
-                    </td>
-                    <td style={{ padding: "6px 8px", textAlign: "right", color: "var(--emerald-tier)" }}>
-                      {(feat.utility_score * 100).toFixed(0)}%
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <DataTable
+              columns={[
+                {
+                  key: "name",
+                  label: "Feature Name",
+                  type: "text",
+                  sortable: true,
+                  defaultVisible: true,
+                  render: (val) => (
+                    <span style={{ color: "var(--brand-400)", fontWeight: 600 }}>{val}</span>
+                  ),
+                },
+                {
+                  key: "derivation_type",
+                  label: "Derivation Type",
+                  type: "text",
+                  sortable: true,
+                  defaultVisible: true,
+                  render: (val) => (
+                    <span className="filetype-badge" style={{ fontSize: "0.7rem", padding: "1px 6px" }}>
+                      {val}
+                    </span>
+                  ),
+                },
+                {
+                  key: "expression",
+                  label: "Expression",
+                  type: "text",
+                  sortable: true,
+                  defaultVisible: true,
+                  render: (val) => (
+                    <span style={{ color: "var(--accent-500)", fontFamily: "monospace" }}>{val}</span>
+                  ),
+                },
+                {
+                  key: "unit",
+                  label: "Unit",
+                  type: "text",
+                  sortable: true,
+                  defaultVisible: true,
+                  render: (val) => <span style={{ color: "var(--fg-secondary)" }}>{val || "—"}</span>,
+                },
+                {
+                  key: "utility_score",
+                  label: "Utility",
+                  type: "percentage",
+                  sortable: true,
+                  defaultVisible: true,
+                  sortVal: (r) => r.utility_score ?? 0,
+                  render: (val) => (
+                    <span style={{ color: "var(--emerald-tier)", fontWeight: 600 }}>
+                      {val != null ? `${(val * 100).toFixed(0)}%` : "—"}
+                    </span>
+                  ),
+                },
+              ]}
+              rows={enrichment.derived_features}
+              totalRows={enrichment.derived_features.length}
+              pageSize={15}
+              pageSizeOptions={[15, 25, 50]}
+              searchable={true}
+              searchPlaceholder="Search derived features..."
+              columnVisibilityEnabled={true}
+              emptyMessage="No derived features found."
+              tableAriaLabel="Derived features table"
+            />
           ) : (
             <p style={{ color: "var(--fg-muted)", fontStyle: "italic", padding: "8px 0" }}>
-              No derived features were required for this dataset.
+              No derived features were identified for this dataset.
             </p>
           )}
         </div>
@@ -250,29 +283,28 @@ export default function EnrichmentReviewCard({ enrichment }) {
                 </p>
 
                 {isExp && tbl.data_preview && tbl.data_preview.length > 0 && (
-                  <div style={{ marginTop: "10px", overflowX: "auto", borderRadius: "6px", border: "1px solid var(--border-subtle)" }}>
-                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.75rem" }}>
-                      <thead>
-                        <tr style={{ background: "#15110f", borderBottom: "1px solid var(--border)" }}>
-                          {tbl.columns.map((c, colIdx) => (
-                            <th key={colIdx} style={{ padding: "6px 10px", textAlign: "left", color: "var(--brand-400)" }}>
-                              {c}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {tbl.data_preview.map((row, rIdx) => (
-                          <tr key={rIdx} style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
-                            {tbl.columns.map((c, colIdx) => (
-                              <td key={colIdx} style={{ padding: "6px 10px", color: "var(--fg-primary)" }}>
-                                {String(row[c] !== undefined ? row[c] : "—")}
-                              </td>
-                            ))}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                  <div style={{ marginTop: "10px" }}>
+                    <DataTable
+                      columns={(tbl.columns || []).map((c) => ({
+                        key: c,
+                        label: c,
+                        type: "text",
+                        sortable: true,
+                        defaultVisible: true,
+                        render: (val) => (
+                          <span style={{ color: "var(--fg-primary)" }}>
+                            {val !== undefined && val !== null ? String(val) : "—"}
+                          </span>
+                        ),
+                      }))}
+                      rows={tbl.data_preview}
+                      totalRows={tbl.data_preview.length}
+                      pageSize={10}
+                      searchable={true}
+                      searchPlaceholder={`Search ${tbl.title || "table"} preview...`}
+                      columnVisibilityEnabled={true}
+                      tableAriaLabel={`${tbl.title || "Table"} sample preview`}
+                    />
                   </div>
                 )}
               </div>

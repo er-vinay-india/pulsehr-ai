@@ -729,32 +729,44 @@ export default function EvidenceExplorer({
                     <span>Loading bounded sample of source records…</span>
                   </div>
                 ) : sourceContextData?.rows?.length > 0 ? (
-                  <div style={{ overflowX: "auto", maxHeight: "260px", border: `1px solid ${themeTokens?.colors?.borderSubtle}`, borderRadius: "6px" }}>
-                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.76rem" }}>
-                      <thead>
-                        <tr style={{ backgroundColor: isDark ? "rgba(255, 255, 255, 0.04)" : "#f8fafc" }}>
-                          <th style={{ padding: "6px 10px", textAlign: "left", borderBottom: `1px solid ${themeTokens?.colors?.borderSubtle}`, color: themeTokens?.colors?.textMuted, width: "40px" }}>#</th>
-                          {(sourceContextData.columns || []).slice(0, 6).map((c, cIdx) => (
-                            <th key={cIdx} style={{ padding: "6px 10px", textAlign: "left", borderBottom: `1px solid ${themeTokens?.colors?.borderSubtle}`, color: themeTokens?.colors?.textPrimary, fontWeight: 700 }}>
-                              {c}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {sourceContextData.rows.map((r, rIdx) => (
-                          <tr key={rIdx} style={{ borderBottom: `1px solid ${themeTokens?.colors?.borderSubtle}` }}>
-                            <td style={{ padding: "6px 10px", color: themeTokens?.colors?.textMuted }}>{r._row_index != null ? r._row_index + 1 : rIdx + 1}</td>
-                            {(sourceContextData.columns || []).slice(0, 6).map((c, cIdx) => (
-                              <td key={cIdx} style={{ padding: "6px 10px", color: themeTokens?.colors?.textPrimary }}>
-                                {r[c] != null ? String(r[c]) : "—"}
-                              </td>
-                            ))}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                  <DataTable
+                    columns={[
+                      {
+                        key: "_row_num",
+                        label: "#",
+                        type: "numeric",
+                        sortable: true,
+                        defaultVisible: true,
+                        width: "50px",
+                        render: (_, r, idx) => (
+                          <span style={{ color: themeTokens?.colors?.textMuted }}>
+                            {r._row_index != null ? r._row_index + 1 : idx + 1}
+                          </span>
+                        ),
+                      },
+                      ...(sourceContextData.columns || []).slice(0, 8).map((c) => ({
+                        key: c,
+                        label: formatDisplayLabel(c),
+                        type: "text",
+                        sortable: true,
+                        defaultVisible: true,
+                        render: (val) => (
+                          <span style={{ color: themeTokens?.colors?.textPrimary }}>
+                            {val != null ? String(val) : "—"}
+                          </span>
+                        ),
+                      })),
+                    ]}
+                    rows={sourceContextData.rows}
+                    totalRows={sourceContextData.rows.length}
+                    pageSize={10}
+                    pageSizeOptions={[10, 25, 50]}
+                    searchable={true}
+                    searchPlaceholder="Search source sample rows..."
+                    columnVisibilityEnabled={true}
+                    emptyMessage="No source records available."
+                    tableAriaLabel="Bounded source context records"
+                  />
                 ) : (
                   <div style={{ padding: "16px", textAlign: "center", fontSize: "0.78rem", color: themeTokens?.colors?.textMuted }}>
                     No source records available for this item.

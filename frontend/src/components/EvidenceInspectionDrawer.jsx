@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
+import DataTable from "./DataTable";
 import {
   ShieldCheck,
   X,
@@ -313,60 +314,98 @@ export default function EvidenceInspectionDrawer({
               <p className="ledger-intro-text">
                 Every slide in this presentation maps to an immutable Evidence ID in the workspace evidence ledger.
               </p>
-              <div className="ledger-table-container">
-                <table className="ledger-data-table">
-                  <thead>
-                    <tr>
-                      <th>Evidence ID</th>
-                      <th>Finding Type</th>
-                      <th>Title</th>
-                      <th>Sources</th>
-                      <th>Primary Metric</th>
-                      <th>Tolerance</th>
-                      <th>Slide</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(evidenceLedger.length > 0 ? evidenceLedger : [currentEvidence]).map((ev, idx) => {
-                      const isCurrent = ev.evidence_id === currentEvidence.evidence_id;
-                      return (
-                        <tr key={ev.evidence_id || idx} className={isCurrent ? "highlighted-row" : ""}>
-                          <td>
-                            <span className="table-evid-pill">{ev.evidence_id}</span>
-                          </td>
-                          <td>
-                            <span className="table-type-tag">{(ev.finding_type || "fact").replace("_", " ")}</span>
-                          </td>
-                          <td className="table-ev-title">
-                            <strong>{ev.title}</strong>
-                            <div className="table-sub-detail">{ev.what_it_establishes?.slice(0, 80)}...</div>
-                          </td>
-                          <td>{(ev.source_sheets || []).join(", ") || "Workspace"}</td>
-                          <td>
-                            <span className="table-metric-val">{ev.metric_value || "Verified"}</span>
-                          </td>
-                          <td>
-                            <span className="table-tol-badge">±0.1%</span>
-                          </td>
-                          <td>
-                            {ev.slide_index ? (
-                              <button
-                                type="button"
-                                className="btn-jump-slide"
-                                onClick={() => {
-                                  onSelectSlide(ev.slide_index - 1);
-                                  setActiveTab("board_briefing");
-                                }}
-                              >
-                                Slide {ev.slide_index}
-                              </button>
-                            ) : "—"}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+              <div className="ledger-table-container" style={{ marginTop: "12px" }}>
+                <DataTable
+                  columns={[
+                    {
+                      key: "evidence_id",
+                      label: "Evidence ID",
+                      type: "text",
+                      sortable: true,
+                      defaultVisible: true,
+                      render: (val) => <span className="table-evid-pill">{val}</span>,
+                    },
+                    {
+                      key: "finding_type",
+                      label: "Finding Type",
+                      type: "text",
+                      sortable: true,
+                      defaultVisible: true,
+                      render: (val) => <span className="table-type-tag">{(val || "fact").replace("_", " ")}</span>,
+                    },
+                    {
+                      key: "title",
+                      label: "Title",
+                      type: "text",
+                      sortable: true,
+                      defaultVisible: true,
+                      render: (val, ev) => (
+                        <div className="table-ev-title">
+                          <strong>{val}</strong>
+                          {ev.what_it_establishes && (
+                            <div className="table-sub-detail">{ev.what_it_establishes.slice(0, 80)}...</div>
+                          )}
+                        </div>
+                      ),
+                    },
+                    {
+                      key: "sources",
+                      label: "Sources",
+                      type: "text",
+                      sortable: true,
+                      defaultVisible: true,
+                      sortVal: (ev) => (ev.source_sheets || []).join(", "),
+                      render: (_, ev) => <span>{(ev.source_sheets || []).join(", ") || "Workspace"}</span>,
+                    },
+                    {
+                      key: "metric_value",
+                      label: "Primary Metric",
+                      type: "text",
+                      sortable: true,
+                      defaultVisible: true,
+                      render: (val) => <span className="table-metric-val">{val || "Verified"}</span>,
+                    },
+                    {
+                      key: "tolerance",
+                      label: "Tolerance",
+                      type: "text",
+                      sortable: false,
+                      defaultVisible: true,
+                      render: () => <span className="table-tol-badge">±0.1%</span>,
+                    },
+                    {
+                      key: "slide_index",
+                      label: "Slide",
+                      type: "numeric",
+                      sortable: true,
+                      defaultVisible: true,
+                      render: (val, ev) =>
+                        val ? (
+                          <button
+                            type="button"
+                            className="btn-jump-slide"
+                            onClick={() => {
+                              onSelectSlide(ev.slide_index - 1);
+                              setActiveTab("board_briefing");
+                            }}
+                          >
+                            Slide {val}
+                          </button>
+                        ) : (
+                          "—"
+                        ),
+                    },
+                  ]}
+                  rows={evidenceLedger.length > 0 ? evidenceLedger : [currentEvidence]}
+                  totalRows={evidenceLedger.length > 0 ? evidenceLedger.length : 1}
+                  pageSize={15}
+                  pageSizeOptions={[15, 25, 50]}
+                  searchable={true}
+                  searchPlaceholder="Search evidence ledger..."
+                  columnVisibilityEnabled={true}
+                  emptyMessage="No evidence ledger records found."
+                  tableAriaLabel="Workspace evidence ledger table"
+                />
               </div>
             </div>
           )}

@@ -177,47 +177,76 @@ export default function TechnicalExplorer({
         {/* 2. SUBVIEW A: SCHEMA DIAGNOSTICS */}
         {activeSubTab === "schema" && (
           <div style={{ marginTop: "14px" }}>
-            <div style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.78rem" }}>
-                <thead>
-                  <tr style={{ borderBottom: `2px solid ${themeTokens?.colors?.borderSubtle}`, textAlign: "left" }}>
-                    <th style={{ padding: "8px 10px", color: themeTokens?.colors?.textSecondary }}>Column</th>
-                    <th style={{ padding: "8px 10px", color: themeTokens?.colors?.textSecondary }}>Data type</th>
-                    <th style={{ padding: "8px 10px", color: themeTokens?.colors?.textSecondary }}>Completeness</th>
-                    <th style={{ padding: "8px 10px", color: themeTokens?.colors?.textSecondary }}>Unique values</th>
-                    <th style={{ padding: "8px 10px", color: themeTokens?.colors?.textSecondary }}>Missing values</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {Object.entries(columnDiagnostics).map(([colName, diag], idx) => {
-                    const completePct = diag.null_count != null && diag.total_count
-                      ? Math.round(((diag.total_count - diag.null_count) / diag.total_count) * 100)
-                      : 100;
-                    return (
-                      <tr key={idx} style={{ borderBottom: `1px solid ${themeTokens?.colors?.borderSubtle}` }}>
-                        <td style={{ padding: "8px 10px", fontWeight: 600, color: themeTokens?.colors?.textPrimary }}>
-                          <code>{colName}</code>
-                        </td>
-                        <td style={{ padding: "8px 10px", color: themeTokens?.colors?.textSecondary }}>
-                          {diag.inferred_type || "text"}
-                        </td>
-                        <td style={{ padding: "8px 10px" }}>
-                          <span style={{ color: completePct >= 95 ? (themeTokens?.colors?.statusSuccess || "#10b981") : (themeTokens?.colors?.gold || "#d97706"), fontWeight: 600 }}>
-                            {completePct}%
-                          </span>
-                        </td>
-                        <td style={{ padding: "8px 10px", color: themeTokens?.colors?.textSecondary }}>
-                          {diag.unique_count != null ? diag.unique_count.toLocaleString() : "—"}
-                        </td>
-                        <td style={{ padding: "8px 10px", color: themeTokens?.colors?.textMuted }}>
-                          {diag.null_count != null ? diag.null_count : 0}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+            <DataTable
+              columns={[
+                {
+                  key: "column",
+                  label: "Column",
+                  type: "text",
+                  sortable: true,
+                  defaultVisible: true,
+                  render: (val) => <code>{val}</code>,
+                },
+                {
+                  key: "data_type",
+                  label: "Data type",
+                  type: "text",
+                  sortable: true,
+                  defaultVisible: true,
+                  render: (val) => <span style={{ color: themeTokens?.colors?.textSecondary }}>{val}</span>,
+                },
+                {
+                  key: "completeness",
+                  label: "Completeness",
+                  type: "percentage",
+                  sortable: true,
+                  defaultVisible: true,
+                  sortVal: (r) => r.completeness,
+                  render: (val) => (
+                    <span style={{ color: val >= 95 ? (themeTokens?.colors?.statusSuccess || "#10b981") : (themeTokens?.colors?.gold || "#d97706"), fontWeight: 600 }}>
+                      {val}%
+                    </span>
+                  ),
+                },
+                {
+                  key: "unique_values",
+                  label: "Unique values",
+                  type: "numeric",
+                  sortable: true,
+                  defaultVisible: true,
+                  sortVal: (r) => r.unique_values ?? 0,
+                  render: (val) => <span style={{ color: themeTokens?.colors?.textSecondary }}>{val != null ? val.toLocaleString() : "—"}</span>,
+                },
+                {
+                  key: "missing_values",
+                  label: "Missing values",
+                  type: "numeric",
+                  sortable: true,
+                  defaultVisible: true,
+                  sortVal: (r) => r.missing_values ?? 0,
+                  render: (val) => <span style={{ color: themeTokens?.colors?.textMuted }}>{val}</span>,
+                },
+              ]}
+              rows={Object.entries(columnDiagnostics).map(([colName, diag]) => {
+                const completePct = diag.null_count != null && diag.total_count
+                  ? Math.round(((diag.total_count - diag.null_count) / diag.total_count) * 100)
+                  : 100;
+                return {
+                  column: colName,
+                  data_type: diag.inferred_type || "text",
+                  completeness: completePct,
+                  unique_values: diag.unique_count,
+                  missing_values: diag.null_count != null ? diag.null_count : 0,
+                };
+              })}
+              totalRows={Object.keys(columnDiagnostics).length}
+              pageSize={25}
+              searchable={true}
+              searchPlaceholder="Search schema columns..."
+              columnVisibilityEnabled={true}
+              emptyMessage="No schema columns found."
+              tableAriaLabel="Schema diagnostics table"
+            />
           </div>
         )}
 

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
   X,
   Search,
@@ -15,6 +15,7 @@ import {
 import { investigateEvidence } from '../api/client';
 import { formatDisplayLabel } from '../utils/displayFormatters';
 import MarkdownView from './MarkdownView';
+import DataTable from './DataTable';
 
 export default function InvestigationDrawer({
   investigationTarget,
@@ -68,6 +69,41 @@ export default function InvestigationDrawer({
   const recordColumns = records.length > 0 && records[0].data
     ? Object.keys(records[0].data).filter((k) => !k.startsWith('__'))
     : [];
+
+  const recordTableColumns = useMemo(() => {
+    return [
+      {
+        key: 'row_index',
+        label: '# Row',
+        type: 'numeric',
+        sortable: true,
+        defaultVisible: true,
+        width: '80px',
+        render: (val) => <span className="row-num-cell">#{val}</span>,
+      },
+      {
+        key: 'file',
+        label: 'Source File',
+        type: 'text',
+        sortable: true,
+        defaultVisible: true,
+        render: (val) => <span className="row-file-cell">{val}</span>,
+      },
+      ...recordColumns.map((col) => ({
+        key: col,
+        label: formatDisplayLabel(col),
+        type: 'text',
+        sortable: true,
+        defaultVisible: true,
+        sortVal: (r) => (r.data ? r.data[col] : ''),
+        render: (_, r) => (
+          <span className={col === data?.metric ? 'metric-highlight-cell' : ''}>
+            {r.data && r.data[col] != null ? String(r.data[col]) : '—'}
+          </span>
+        ),
+      })),
+    ];
+  }, [recordColumns, data?.metric]);
 
   return (
     <div className="drawer-overlay" onClick={onClose} role="dialog" aria-modal="true">
@@ -276,57 +312,19 @@ export default function InvestigationDrawer({
 
               {/* TAB 2: SOURCE RECORDS EXPLORER */}
               {activeTab === 'records' && (
-                <div className="tab-pane records-pane">
-                  <div className="records-toolbar">
-                    <div className="records-search-box">
-                      <Search size={15} />
-                      <input
-                        type="text"
-                        placeholder="Search records in this cohort..."
-                        value={recordSearch}
-                        onChange={(e) => setRecordSearch(e.target.value)}
-                      />
-                      {recordSearch && (
-                        <button className="btn-clear-search" onClick={() => setRecordSearch('')}>✕</button>
-                      )}
-                    </div>
-                    <span className="records-count">
-                      Showing {filteredRecords.length} of {records.length} records
-                    </span>
-                  </div>
-
-                  {filteredRecords.length === 0 ? (
-                    <div className="records-empty">No matching records found.</div>
-                  ) : (
-                    <div className="source-table-wrapper">
-                      <table className="source-data-table">
-                        <thead>
-                          <tr>
-                            <th># Row</th>
-                            <th>Source File</th>
-                            {recordColumns.map((col) => (
-                              <th key={col} title={`Source field: ${col}`}>
-                                {formatDisplayLabel(col)}
-                              </th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {filteredRecords.map((r, rIdx) => (
-                            <tr key={rIdx}>
-                              <td className="row-num-cell">#{r.row_index}</td>
-                              <td className="row-file-cell">{r.file}</td>
-                              {recordColumns.map((col) => (
-                                <td key={col} className={col === data?.metric ? 'metric-highlight-cell' : ''}>
-                                  {r.data && r.data[col] != null ? String(r.data[col]) : '—'}
-                                </td>
-                              ))}
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
+                <div className="tab-pane records-pane" style={{ marginTop: '8px' }}>
+                  <DataTable
+                    columns={recordTableColumns}
+                    rows={records}
+                    totalRows={records.length}
+                    pageSize={15}
+                    pageSizeOptions={[15, 25, 50]}
+                    searchable={true}
+                    searchPlaceholder="Search records in this cohort..."
+                    columnVisibilityEnabled={true}
+                    emptyMessage="No matching records found."
+                    tableAriaLabel="Source records table"
+                  />
                 </div>
               )}
 

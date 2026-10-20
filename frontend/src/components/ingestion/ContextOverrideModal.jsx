@@ -1,7 +1,8 @@
-import React, { useState } from "react";
+import React, { useState, useMemo, useCallback } from "react";
 import { X, Check, AlertTriangle, Sliders, Database, Layers, HelpCircle, Save } from "lucide-react";
 import { patchWorkspaceContext } from "../../api/client";
 import Select from "../common/Select.jsx";
+import DataTable from "../DataTable";
 
 const DOMAIN_OPTIONS = [
   "Workforce Operations",
@@ -67,9 +68,53 @@ export default function ContextOverrideModal({
     return init;
   });
 
-  const handleRoleChange = (colName, newRole) => {
+  const handleRoleChange = useCallback((colName, newRole) => {
     setColumnRoles((prev) => ({ ...prev, [colName]: newRole }));
-  };
+  }, []);
+
+  const columnRows = useMemo(() => {
+    return datasets.flatMap((ds) =>
+      (ds.columns || []).map((col, idx) => ({
+        id: `${ds.dataset_id}-${col.name}-${idx}`,
+        name: col.name,
+        is_sensitive: col.is_sensitive,
+        currentRole: columnRoles[col.name] || col.semantic_role || "METRIC"
+      }))
+    );
+  }, [datasets, columnRoles]);
+
+  const columnRoleCols = useMemo(() => [
+    {
+      key: 'name',
+      label: 'Column',
+      sortable: true,
+      render: (val) => <span style={{ fontWeight: 500, color: "var(--fg-primary, #F8FAFC)" }}>{val}</span>
+    },
+    {
+      key: 'currentRole',
+      label: 'Assigned Semantic Role',
+      sortable: true,
+      render: (val, row) => (
+        <Select
+          size="sm"
+          value={val}
+          onChange={(e) => handleRoleChange(row.name, e.target.value)}
+          options={COLUMN_ROLE_OPTIONS.map((r) => ({ value: r, label: r }))}
+          triggerStyle={{ minHeight: "28px", padding: "2px 8px", fontSize: "0.72rem" }}
+        />
+      )
+    },
+    {
+      key: 'is_sensitive',
+      label: 'Sensitive',
+      sortable: true,
+      render: (val) => (
+        <span style={{ color: val ? "var(--amber-tier, #F59E0B)" : "var(--fg-muted, #94A3B8)" }}>
+          {val ? "Yes" : "No"}
+        </span>
+      )
+    }
+  ], [handleRoleChange]);
 
   const handleJoinToggle = (relId, isManyToMany) => {
     if (isManyToMany) return; // Permanent invariant: unsafe many-to-many cannot be auto-enabled
@@ -203,53 +248,23 @@ export default function ContextOverrideModal({
 
             {/* Column Semantic Roles Review */}
             <div>
-              <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 600, color: "var(--fg-secondary, #CBD5E1)", marginBottom: "4px" }}>
-                Column Semantic Classification
-              </label>
-              <div
-                style={{
-                  border: "1px solid var(--border-subtle, rgba(255,255,255,0.08))",
-                  borderRadius: "6px",
-                  maxHeight: "180px",
-                  overflowY: "auto"
-                }}
-              >
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.75rem" }}>
-                  <thead>
-                    <tr style={{ background: "rgba(255,255,255,0.04)", textAlign: "left", color: "var(--fg-muted, #94A3B8)" }}>
-                      <th style={{ padding: "6px 10px" }}>Column</th>
-                      <th style={{ padding: "6px 10px" }}>Assigned Semantic Role</th>
-                      <th style={{ padding: "6px 10px" }}>Sensitive</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {datasets.flatMap((ds) =>
-                      (ds.columns || []).map((col, idx) => (
-                        <tr
-                          key={`${ds.dataset_id}-${col.name}-${idx}`}
-                          style={{ borderTop: "1px solid rgba(255,255,255,0.04)" }}
-                        >
-                          <td style={{ padding: "6px 10px", fontWeight: 500, color: "var(--fg-primary, #F8FAFC)" }}>
-                            {col.name}
-                          </td>
-                          <td style={{ padding: "4px 10px" }}>
-                            <Select
-                              size="sm"
-                              value={columnRoles[col.name] || col.semantic_role || "METRIC"}
-                              onChange={(e) => handleRoleChange(col.name, e.target.value)}
-                              options={COLUMN_ROLE_OPTIONS.map((r) => ({ value: r, label: r }))}
-                              triggerStyle={{ minHeight: "28px", padding: "2px 8px", fontSize: "0.72rem" }}
-                            />
-                          </td>
-                          <td style={{ padding: "6px 10px", color: col.is_sensitive ? "var(--amber-tier, #F59E0B)" : "var(--fg-muted, #94A3B8)" }}>
-                            {col.is_sensitive ? "Yes" : "No"}
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "6px" }}>
+                <label style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--fg-secondary, #CBD5E1)" }}>
+                  Column Semantic Classification
+                </label>
+                <span style={{ fontSize: "0.72rem", color: "var(--fg-muted, #94A3B8)" }}>
+                  Change roles if auto-detection misclassified dimensions vs metrics.
+                </span>
               </div>
+              <DataTable
+                columns={columnRoleCols}
+                rows={columnRows}
+                rowKeyProp="id"
+                pageSize={10}
+                pageSizeOptions={[10, 25, 50]}
+                searchPlaceholder="Search columns..."
+                tableAriaLabel="Column semantic classification"
+              />
             </div>
 
             {/* Candidate Joins Review */}
