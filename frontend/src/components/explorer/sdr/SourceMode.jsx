@@ -194,6 +194,7 @@ export default function SourceMode({
             <Search size={14} color={textSecondary} />
             <input
               type="text"
+              aria-label="Search raw values"
               placeholder="Search raw values..."
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
@@ -253,6 +254,7 @@ export default function SourceMode({
             <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
               <button
                 type="button"
+                aria-label="Previous page"
                 disabled={page <= 1 || loading}
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 style={{
@@ -273,6 +275,7 @@ export default function SourceMode({
               </span>
               <button
                 type="button"
+                aria-label="Next page"
                 disabled={page >= totalPages || loading}
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 style={{
