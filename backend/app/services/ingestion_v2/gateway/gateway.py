@@ -541,6 +541,35 @@ class ConsumerIntelligenceGateway:
         """Returns the full cutover record for a consumer."""
         return self.state_machine.get_record(consumer)
 
+    def get_sdr_adoption_manager(self) -> Any:
+        """Returns the SDR Controlled Adoption Manager."""
+        from app.services.sdr.adoption.manager import get_sdr_adoption_manager
+        return get_sdr_adoption_manager()
+
+    def evaluate_sdr_route(
+        self,
+        consumer: ConsumerName,
+        dataset_id: str | None = None,
+        dataset_version: str | None = None,
+        is_canary_request: bool = False,
+        canary_authorized: bool = False,
+        cohort: str | None = None,
+        expected_contract_fingerprint: str | None = None,
+        manifest_data: dict[str, Any] | None = None,
+    ) -> Any:
+        """Evaluates SDR controlled adoption route through the central Gateway."""
+        mgr = self.get_sdr_adoption_manager()
+        return mgr.evaluate_route(
+            consumer=consumer,
+            dataset_id=dataset_id,
+            dataset_version=dataset_version,
+            is_canary_request=is_canary_request,
+            canary_authorized=canary_authorized,
+            cohort=cohort,
+            expected_contract_fingerprint=expected_contract_fingerprint,
+            manifest_data=manifest_data,
+        )
+
     def record_success(self, consumer: ConsumerName) -> None:
         """Records a successful V2 execution on the consumer's circuit breaker."""
         self.circuit_breaker.record_success(consumer)

@@ -37,6 +37,7 @@ class Route(str, Enum):
     """Explicit, unambiguous routing options."""
     V1 = "V1"
     V2 = "V2"
+    SDR = "SDR"
 
 
 class CircuitBreakerState(str, Enum):
@@ -102,6 +103,9 @@ class ConsumerCutoverRecord(BaseModel):
     configuration_source: ConfigurationSource = ConfigurationSource.CONTROL_PLANE
     cutover_state_schema_version: int = CURRENT_CUTOVER_STATE_SCHEMA_VERSION
     last_transition_timestamp: str | None = None
+    sdr_adoption_state: str | None = None
+    sdr_artifact_fingerprint: str | None = None
+    consumer_contract_fingerprint: str | None = None
 
 
 class ConsumerRouteDecision(BaseModel):
@@ -128,6 +132,11 @@ class ConsumerRouteDecision(BaseModel):
     v2_manifest_fingerprint: str | None = None
     semantic_graph_fingerprint: str | None = None
     rationale: str = ""
+    sdr_adoption_state: str | None = None
+    sdr_artifact_fingerprint: str | None = None
+    consumer_contract_fingerprint: str | None = None
+    sdr_fallback_used: bool = False
+    sdr_fallback_reason: str | None = None
 
 
 class FallbackRecord(BaseModel):

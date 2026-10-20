@@ -168,6 +168,25 @@ class HridayIntelligenceAdapter:
                 except Exception as sdr_err:
                     logger.debug("SDR shadow evaluation caught exception (isolated from user path): %s", sdr_err)
 
+                # SDR-9 Controlled Adoption (Evaluates SDR route gate)
+                try:
+                    sdr_mgr = self.gateway.get_sdr_adoption_manager()
+                    sdr_dec = sdr_mgr.evaluate_route(
+                        consumer=ConsumerName.HRIDAY,
+                        dataset_id=str_ds_id,
+                        dataset_version=active_manifest.get("dataset_version") if active_manifest else None,
+                        is_canary_request=canary_authorized,
+                        canary_authorized=canary_authorized,
+                        cohort=canary_cohort,
+                        manifest_data=active_manifest,
+                    )
+                    if sdr_dec.selected_route == Route.SDR:
+                        from app.services.sdr.adoption.hriday_adoption import build_sdr_hriday_context
+                        return build_sdr_hriday_context(query, str_ds_id, v2_ctx)
+                except Exception as sdr_adopt_err:
+                    logger.warning("SDR adoption failed for HRIDAY (%s). Falling back to authoritative V2.", sdr_adopt_err)
+                    sdr_mgr.record_failure(ConsumerName.HRIDAY, FallbackReason.V2_RUNTIME_ERROR)
+
                 return v2_ctx
             except Exception as exc:
                 logger.warning(f"V2 context acquisition failed for HRIDAY: {exc}. Evaluating governed fallback.")

@@ -233,6 +233,25 @@ class DashboardIntelligenceAdapter:
                 except Exception as sdr_err:
                     logger.debug("SDR shadow evaluation caught exception (isolated from user path): %s", sdr_err)
 
+                # SDR-9 Controlled Adoption (Evaluates SDR route gate)
+                try:
+                    sdr_mgr = self.gateway.get_sdr_adoption_manager()
+                    sdr_dec = sdr_mgr.evaluate_route(
+                        consumer=ConsumerName.DASHBOARD,
+                        dataset_id=str_ds_id,
+                        dataset_version=active_manifest.get("dataset_version") if active_manifest else None,
+                        is_canary_request=canary_authorized,
+                        canary_authorized=canary_authorized,
+                        cohort=canary_cohort,
+                        manifest_data=active_manifest,
+                    )
+                    if sdr_dec.selected_route == Route.SDR:
+                        from app.services.sdr.adoption.dashboard_adoption import build_sdr_dashboard_response
+                        return build_sdr_dashboard_response(str_ds_id, v2_resp, manifest_data=active_manifest)
+                except Exception as sdr_adopt_err:
+                    logger.warning("SDR adoption failed for DASHBOARD (%s). Falling back to authoritative V2.", sdr_adopt_err)
+                    sdr_mgr.record_failure(ConsumerName.DASHBOARD, FallbackReason.V2_RUNTIME_ERROR)
+
                 return v2_resp
 
             except Exception as exc:
