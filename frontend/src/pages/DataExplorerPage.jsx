@@ -153,29 +153,44 @@ export default function DataExplorerPage() {
       setDerivedTables(derived.derived_tables || []);
       setCrossCorrelations(correlations.correlations || []);
       setSelectedWorkbookIds(ids => ids.filter(id => (workbooks.datasets || []).some(d => d.id === id)));
-      setSelected(current => {
-        const urlSheet = getCombinedUrlParam('sheet_id');
-        const urlDataset = getCombinedUrlParam('dataset_id');
-        let targetSheet = null;
-        if (urlDataset) {
-          const dsSheets = sheets.sheets.filter(s => String(s.dataset_id) === String(urlDataset));
-          if (dsSheets.length > 0) {
-            targetSheet = String(dsSheets[0].id);
-          }
-        }
-        const next = targetSheet
-          || (sheets.sheets.some(s => String(s.id) === current) ? current
-          : sheets.sheets.some(s => String(s.id) === urlSheet) ? urlSheet
-          : String(sheets.sheets[sheets.sheets.length - 1]?.id || ''));
+      if (sheets.sheets.length === 0) {
+        setSelected('');
+        setSelectedDerivedId('');
+        setRelation('');
+        setData(null);
+        setEdaReport(null);
+        setError('');
         const params = new URLSearchParams(window.location.search);
-        if (urlDataset && !params.get('dataset_id')) params.set('dataset_id', urlDataset);
-        const urlTab = getCombinedUrlParam('tab');
-        if (urlTab && !params.get('tab')) params.set('tab', urlTab);
-        if (next) params.set('sheet_id', next); else params.delete('sheet_id');
+        params.delete('sheet_id');
+        params.delete('dataset_id');
+        params.delete('derived_id');
         const cleanHash = window.location.hash.split('?')[0] || '#explorer';
         window.history.replaceState(null, '', `${window.location.pathname}${params.size ? '?' + params : ''}${cleanHash}`);
-        return next;
-      });
+      } else {
+        setSelected(current => {
+          const urlSheet = getCombinedUrlParam('sheet_id');
+          const urlDataset = getCombinedUrlParam('dataset_id');
+          let targetSheet = null;
+          if (urlDataset) {
+            const dsSheets = sheets.sheets.filter(s => String(s.dataset_id) === String(urlDataset));
+            if (dsSheets.length > 0) {
+              targetSheet = String(dsSheets[0].id);
+            }
+          }
+          const next = targetSheet
+            || (sheets.sheets.some(s => String(s.id) === current) ? current
+            : sheets.sheets.some(s => String(s.id) === urlSheet) ? urlSheet
+            : String(sheets.sheets[sheets.sheets.length - 1]?.id || ''));
+          const params = new URLSearchParams(window.location.search);
+          if (urlDataset && !params.get('dataset_id')) params.set('dataset_id', urlDataset);
+          const urlTab = getCombinedUrlParam('tab');
+          if (urlTab && !params.get('tab')) params.set('tab', urlTab);
+          if (next) params.set('sheet_id', next); else params.delete('sheet_id');
+          const cleanHash = window.location.hash.split('?')[0] || '#explorer';
+          window.history.replaceState(null, '', `${window.location.pathname}${params.size ? '?' + params : ''}${cleanHash}`);
+          return next;
+        });
+      }
       setSelectedDerivedId(current => (derived.derived_tables || []).some(d => String(d.id) === current) ? current : '');
       setRelation('');
       setPage(1);
@@ -278,7 +293,12 @@ export default function DataExplorerPage() {
 
   // Fetch EDA Report for active sheet
   useEffect(() => {
-    if (!catalogLoaded || !selected) { setEdaReport(null); setLoadingEda(false); return; }
+    const isSheetValid = catalog.sheets.some((s) => String(s.id) === String(selected));
+    if (!catalogLoaded || !selected || !isSheetValid) {
+      setEdaReport(null);
+      setLoadingEda(false);
+      return;
+    }
 
     let active = true;
     setLoadingEda(true);
@@ -297,7 +317,11 @@ export default function DataExplorerPage() {
         if (active) {
           setEdaReport(null);
           if (!['data', 'source', 'semantics', 'relationships', 'analysis', 'analytical-views'].includes(activeTab)) {
-            setError(`Could not load sheet analysis. ${err.message}`);
+            const rawMsg = err?.message || '';
+            const cleanMsg = typeof rawMsg === 'string' && rawMsg !== '[object Object]' ? rawMsg : '';
+            if (cleanMsg && catalog.sheets.length > 0) {
+              setError(`Could not load sheet analysis. ${cleanMsg}`);
+            }
           }
         }
       })
@@ -308,7 +332,7 @@ export default function DataExplorerPage() {
     return () => {
       active = false;
     };
-  }, [selected, catalogLoaded]);
+  }, [selected, catalogLoaded, catalog.sheets, activeTab]);
 
   const selectedSheet = catalog.sheets.find((s) => String(s.id) === String(selected));
   const activeDataset = datasets.find((d) => Number(d.id) === Number(selectedSheet?.dataset_id));
@@ -331,29 +355,40 @@ export default function DataExplorerPage() {
   const derivedFeatCount = enrichment?.derived_features_count || enrichment?.derived_features?.length || 0;
 
   // Governed Semantic Refinery (SDR-7) Explorer Data
-  const sdrDatasetId = getCombinedUrlParam('dataset_id') || activeDataset?.id || selectedSheet?.dataset_id || 'sdr7_cert';
+  const explicitDatasetId = getCombinedUrlParam('dataset_id');
+  const sdrDatasetId = explicitDatasetId || activeDataset?.id || selectedSheet?.dataset_id || null;
   const [sdrSummary, setSdrSummary] = useState(null);
 
   useEffect(() => {
-    if (!sdrDatasetId) return;
+    if (!sdrDatasetId || catalog.sheets.length === 0) {
+      setSdrSummary(null);
+      return;
+    }
     let cancelled = false;
     getExplorerSummary(sdrDatasetId)
       .then((res) => {
         if (!cancelled && res) {
           setSdrSummary(res);
-          if (res.sheets && res.sheets.length > 0) {
-            const hasMatch = res.sheets.some((s) => String(s.sheet_id || s.name) === String(selected));
+          if (res.sheets && res.sheets.length > 0 && catalog.sheets.length > 0) {
+            const hasMatch = catalog.sheets.some((s) => String(s.id) === String(selected));
             if (!hasMatch) {
-              setSelected(res.sheets[0].sheet_id || res.sheets[0].name);
+              const matchedSheet = catalog.sheets.find((s) =>
+                res.sheets.some((rs) => String(rs.sheet_id || rs.name) === String(s.name || s.id))
+              );
+              if (matchedSheet) {
+                setSelected(String(matchedSheet.id));
+              }
             }
           }
         }
       })
-      .catch(() => {});
+      .catch(() => {
+        if (!cancelled) setSdrSummary(null);
+      });
     return () => {
       cancelled = true;
     };
-  }, [sdrDatasetId, selected]);
+  }, [sdrDatasetId, selected, catalog.sheets]);
 
   const sdrSheets = useMemo(() => {
     if (sdrSummary?.sheets && sdrSummary.sheets.length > 0) {
@@ -686,7 +721,7 @@ export default function DataExplorerPage() {
         </section>
       )}
 
-      {error && (
+      {error && catalogLoaded && catalog.sheets.length > 0 && (
         <div className="alert-box alert-error" style={{ marginBottom: '1rem' }}>
           <span>{error}</span>
         </div>

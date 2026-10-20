@@ -449,10 +449,25 @@ export async function getCalculationColumns(dataset, sheet, relationship) {
   return data;
 }
 
+export function formatApiErrorDetail(detail, fallback = 'Request failed') {
+  if (!detail) return fallback;
+  if (typeof detail === 'string') return detail;
+  if (Array.isArray(detail)) {
+    return detail.map((d) => (typeof d === 'string' ? d : d.msg || d.detail || JSON.stringify(d))).join('; ');
+  }
+  if (typeof detail === 'object') {
+    return detail.message || detail.msg || detail.detail || JSON.stringify(detail);
+  }
+  return String(detail);
+}
+
 async function readSheetApi(url) {
   const res = await fetch(url);
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.detail || 'Unable to load sheets');
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const errorMsg = formatApiErrorDetail(data.detail, `Request failed with status ${res.status}`);
+    throw new Error(errorMsg);
+  }
   return data;
 }
 export const getSheets = () => readSheetApi(`${API_BASE}/sheets`);
