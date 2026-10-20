@@ -127,10 +127,11 @@ def compute_visual_semantic_fingerprint(payload: dict[str, Any] | BaseModel) -> 
             "table": "data_table",
             "table_detail": "data_table",
             "data_table": "data_table",
-            "map": "ranked_bar",
-            "choropleth": "ranked_bar",
-            "bubble_map": "ranked_bar",
-            "point_map": "ranked_bar",
+            # Geographic visual families preserve authentic source morphology
+            "map": "map",
+            "choropleth": "choropleth",
+            "bubble_map": "bubble_map",
+            "point_map": "point_map",
         }
         morphology = family_map.get(c_type, c_type)
 
@@ -591,6 +592,11 @@ class PresentationVisualSpec(BaseModel):
     native_editable: bool = True
     aspect_ratio: str = "16:9"
 
+    # Source visual semantics preservation (for Layered pipeline and audit)
+    source_visual_type: str = ""
+    source_visual_family: str = ""
+    is_legacy_fallback: bool = False
+
     @classmethod
     def from_governed_visual(
         cls,
@@ -617,6 +623,13 @@ class PresentationVisualSpec(BaseModel):
             or payload.get("recommended_visual")
             or "bar"
         ).lower()
+
+        # Legacy renderer compatibility fallback:
+        # Maps geographic visual families (map, choropleth, bubble_map, point_map) to VisualFamily.RANKED_BAR
+        # for legacy PPTX/PDF rendering while strictly preserving source geographic semantics.
+        is_geo_fallback = raw_type in ("map", "choropleth", "bubble_map", "point_map")
+        src_vtype = raw_type
+        src_vfamily = "geographic" if is_geo_fallback else raw_type
 
         # Map to registered VisualFamily (no re-inferring!)
         family_map = {
@@ -812,7 +825,10 @@ class PresentationVisualSpec(BaseModel):
             legend=legend_spec,
             number_format_type=num_fmt_type,
             native_editable=capability.native_editable,
-            aspect_ratio="16:9"
+            aspect_ratio="16:9",
+            source_visual_type=src_vtype,
+            source_visual_family=src_vfamily,
+            is_legacy_fallback=is_geo_fallback,
         )
 
     def to_semantic_fingerprint_dict(self) -> dict[str, Any]:
@@ -842,8 +858,14 @@ class PresentationVisualSpec(BaseModel):
         lval_str = f"{float(lval):.6g}" if lval is not None and str(lval).strip() != "" and isinstance(lval, (int, float)) else (str(lval) if lval is not None else "")
         r_dir = self.leader_annotation.ranking_direction if self.leader_annotation else ""
 
+        morph = (
+            self.source_visual_type
+            if (self.is_legacy_fallback and self.source_visual_type)
+            else family_morphology_map.get(self.family, self.family.value)
+        )
+
         return {
-            "morphology": family_morphology_map.get(self.family, self.family.value),
+            "morphology": morph,
             "analytical_intent": self.analytical_intent,
             "metric": self.metric,
             "unit": self.unit,

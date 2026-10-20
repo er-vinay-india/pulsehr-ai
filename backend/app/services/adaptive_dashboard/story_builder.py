@@ -1002,13 +1002,6 @@ class AnalyticalStoryBuilder:
         if not dataset_id:
             return None
 
-        # Fixed domain baselines (Workforce, Retail, Environmental) have dedicated characterization portfolios
-        if (
-            dataset_id in (99770, 99771, 99772, 100)
-            or domain.lower() in ("environmental", "workforce", "workforce_hr", "hr", "retail")
-        ):
-            return None
-
         try:
             from ...db.database import get_connection
             from ..sdr.geo.resolver import GeoResolutionEngine
@@ -1094,13 +1087,42 @@ class AnalyticalStoryBuilder:
                         or " * " in cl
                     )
 
+                def _is_identifier_or_code(c_name: str, sample_rows: list[dict[str, Any]]) -> bool:
+                    """Identifies non-measure columns (identifiers, serials, codes, sequence indices) using semantic rules."""
+                    import re
+                    norm = re.sub(r"[^a-z0-9]", " ", str(c_name).lower()).strip()
+                    words = set(norm.split())
+
+                    id_tokens = {
+                        "id", "identifier", "code", "key", "num", "number", "no", "sno", "sr",
+                        "srno", "sl", "slno", "serial", "sequence", "index", "idx", "row", "rownum",
+                        "stn", "station", "badge", "sku", "uuid", "guid", "hash", "category",
+                        "agency", "date", "sampling date", "timestamp"
+                    }
+                    if norm in id_tokens:
+                        return True
+                    if any(norm == f"sr {tok}" or norm == f"sl {tok}" or norm == f"stn {tok}" or norm == f"row {tok}" for tok in ("no", "num", "number", "code", "id")):
+                        return True
+                    if any(tok in words for tok in ("id", "code", "key", "uuid", "guid", "hash", "serial")):
+                        if not any(m in words for m in ("rate", "score", "index", "percent", "pct", "amount", "value", "revenue", "sales", "density")):
+                            return True
+
+                    # Check if purely sequential integer row indices (1, 2, 3, 4, 5...)
+                    sample_vals = [r.get(c_name) for r in sample_rows[:20] if r.get(c_name) is not None]
+                    if len(sample_vals) >= 5:
+                        try:
+                            int_vals = [int(float(str(v).replace(",", "").strip())) for v in sample_vals]
+                            diffs = [int_vals[i] - int_vals[i-1] for i in range(1, len(int_vals))]
+                            if all(d == 1 for d in diffs):
+                                return True
+                        except (ValueError, TypeError):
+                            pass
+                    return False
+
                 for c in all_cols:
-                    c_clean = str(c).lower().replace("_", " ").replace(".", "").replace("#", "").strip()
-                    if (
-                        c == geo_col
-                        or c_clean in ("id", "sr", "sr no", "sno", "sl", "sl no", "row num", "rownum", "index", "category", "stn code", "station code", "code", "agency", "date", "sampling date")
-                        or any(c_clean.startswith(p) for p in ("sr ", "sl ", "stn ", "id "))
-                    ):
+                    if c == geo_col:
+                        continue
+                    if _is_identifier_or_code(c, rows):
                         continue
                     if _is_synthetic_col(c):
                         continue
@@ -1120,7 +1142,8 @@ class AnalyticalStoryBuilder:
                 if not candidate_measures:
                     return None
 
-                # Prioritize density for choropleth area shading, then growth rate, then counts
+                # 2b. Semantic measure suitability: Geographic visualizations require an analytical measure
+                # representing density, rates/percentages, population, volume, revenue, sales, or counts.
                 selected_measure = None
                 for c, vals in candidate_measures:
                     if "density" in c.lower():
@@ -1129,17 +1152,20 @@ class AnalyticalStoryBuilder:
                 if not selected_measure:
                     for c, vals in candidate_measures:
                         c_low = c.lower()
-                        if any(k in c_low for k in ("rate", "growth", "score", "percentage", "pct", "%", "ratio")):
+                        if any(k in c_low for k in ("rate", "growth", "score", "percentage", "pct", "%", "ratio", "index")):
                             selected_measure = (c, vals)
                             break
                 if not selected_measure:
                     for c, vals in candidate_measures:
                         c_low = c.lower()
-                        if any(k in c_low for k in ("attendance", "sales", "revenue", "population", "count", "volume")):
+                        if any(k in c_low for k in ("attendance", "sales", "revenue", "population", "count", "volume", "headcount", "customers")):
                             selected_measure = (c, vals)
                             break
+
+                # Without a semantically suitable geographic measure, do not synthesize an artificial map
                 if not selected_measure:
-                    selected_measure = candidate_measures[0]
+                    logger.info("GeoVisualizationGate: Suppressed map due to lack of semantically suitable geographic measure")
+                    return None
 
                 meas_name, meas_vals = selected_measure
 
@@ -1241,9 +1267,10 @@ class AnalyticalStoryBuilder:
                 total_evaluated = len(location_val_pairs)
                 coverage = resolved_count / max(1, total_evaluated)
 
-                # Gate: If coverage < 50% or fewer than 3 locations resolved -> Block map!
-                if coverage < 0.50 or resolved_count < 3:
-                    logger.info("GeoVisualizationGate: Suppressed map due to low coverage (%.1f%%) or count (%d)", coverage * 100, resolved_count)
+                # Gate: If coverage < 50% or fewer than 5 locations resolved -> Block map!
+                unique_locs = {loc_str.lower() for loc_str, _ in location_val_pairs}
+                if coverage < 0.50 or resolved_count < 5 or len(unique_locs) < 5:
+                    logger.info("GeoVisualizationGate: Suppressed map due to low coverage (%.1f%%) or count (%d) or cardinality (%d)", coverage * 100, resolved_count, len(unique_locs))
                     return None
 
                 if ambiguous_count > total_evaluated * 0.3:

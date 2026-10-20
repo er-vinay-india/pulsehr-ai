@@ -1194,7 +1194,7 @@ class ExecutiveCompositionPlanner:
         else:
             domain_name = ""
             detected_entities = []
-        is_workforce = domain_name.lower() in ("workforce", "workforce_hr", "hr") or dataset_id in (99750, 999)
+        is_workforce = domain_name.lower() in ("workforce", "workforce_hr", "hr")
 
         has_temporal = bool(gov_metrics.get("domain_profile", {}).get("temporal_column")) if isinstance(gov_metrics.get("domain_profile"), dict) else bool(getattr(gov_metrics.get("domain_profile"), "temporal_column", None))
 
