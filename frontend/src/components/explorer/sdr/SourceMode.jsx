@@ -191,15 +191,15 @@ export default function SourceMode({
           </div>
           <button
             type="submit"
+            className="btn-primary"
             style={{
               padding: "6px 14px",
               fontSize: "0.8rem",
               fontWeight: 600,
-              background: brandPrimary,
-              color: themeTokens?.colors?.textOnDark || "#ffffff",
-              border: "none",
               borderRadius: "8px",
               cursor: "pointer",
+              minHeight: "unset",
+              lineHeight: 1.25,
             }}
           >
             Filter
@@ -207,6 +207,7 @@ export default function SourceMode({
           {searchTerm && (
             <button
               type="button"
+              className="btn-secondary"
               onClick={() => {
                 setSearchInput("");
                 setSearchTerm("");
@@ -215,11 +216,10 @@ export default function SourceMode({
               style={{
                 padding: "6px 10px",
                 fontSize: "0.78rem",
-                background: "transparent",
-                color: textSecondary,
-                border: `1px solid ${borderCol}`,
                 borderRadius: "8px",
                 cursor: "pointer",
+                minHeight: "unset",
+                lineHeight: 1.25,
               }}
             >
               Clear
@@ -235,18 +235,18 @@ export default function SourceMode({
             <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
               <button
                 type="button"
+                className="btn-secondary"
                 aria-label="Previous page"
                 disabled={page <= 1 || loading}
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 style={{
                   padding: "4px 8px",
                   borderRadius: "6px",
-                  border: `1px solid ${borderCol}`,
-                  background: bgSurface,
-                  color: page <= 1 ? textMuted : textPrimary,
                   cursor: page <= 1 ? "not-allowed" : "pointer",
                   display: "flex",
                   alignItems: "center",
+                  minHeight: "unset",
+                  opacity: page <= 1 ? 0.4 : 1,
                 }}
               >
                 <ChevronLeft size={14} />
@@ -256,18 +256,18 @@ export default function SourceMode({
               </span>
               <button
                 type="button"
+                className="btn-secondary"
                 aria-label="Next page"
                 disabled={page >= totalPages || loading}
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 style={{
                   padding: "4px 8px",
                   borderRadius: "6px",
-                  border: `1px solid ${borderCol}`,
-                  background: bgSurface,
-                  color: page >= totalPages ? textMuted : textPrimary,
                   cursor: page >= totalPages ? "not-allowed" : "pointer",
                   display: "flex",
                   alignItems: "center",
+                  minHeight: "unset",
+                  opacity: page >= totalPages ? 0.4 : 1,
                 }}
               >
                 <ChevronRight size={14} />

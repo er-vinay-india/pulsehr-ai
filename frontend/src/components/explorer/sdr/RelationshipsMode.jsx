@@ -343,6 +343,7 @@ export default function RelationshipsMode({
                       <td style={{ padding: "10px 12px", textAlign: "right" }}>
                         <button
                           type="button"
+                          className="btn-secondary"
                           onClick={(e) => {
                             e.stopPropagation();
                             setSelectedRel(rel);
@@ -352,13 +353,12 @@ export default function RelationshipsMode({
                             fontSize: "0.74rem",
                             fontWeight: 600,
                             borderRadius: "6px",
-                            border: `1px solid ${borderCol}`,
-                            background: bgSubtle,
-                            color: brandPrimary,
                             cursor: "pointer",
                             display: "inline-flex",
                             alignItems: "center",
                             gap: "4px",
+                            minHeight: "unset",
+                            lineHeight: 1.25,
                           }}
                         >
                           <Eye size={12} />
