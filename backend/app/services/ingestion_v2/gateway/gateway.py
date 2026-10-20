@@ -504,6 +504,14 @@ class ConsumerIntelligenceGateway:
         """Returns all global telemetry counters."""
         return self.provenance_ledger.get_telemetry()
 
+    def get_sdr_shadow_telemetry(self) -> dict[str, Any]:
+        """Returns aggregated telemetry from the SDR-8 Shadow Consumer Integration ledger."""
+        try:
+            from app.services.sdr.shadow.telemetry import get_shadow_telemetry_ledger
+            return get_shadow_telemetry_ledger().get_all_summaries()
+        except Exception:
+            return {}
+
     def transition_state(
         self,
         consumer: ConsumerName,

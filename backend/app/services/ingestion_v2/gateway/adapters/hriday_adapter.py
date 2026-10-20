@@ -152,6 +152,22 @@ class HridayIntelligenceAdapter:
                 v2_ctx.telemetry["v2_context_acquisition_ms"] = round(v2_duration_ms, 3)
                 v2_ctx.telemetry["total_context_acquisition_ms"] = round((time.perf_counter() - t0) * 1000, 3)
                 self.gateway.record_success(ConsumerName.HRIDAY)
+
+                # SDR-8 Shadow Consumer Integration (Non-blocking / 0 substitutions)
+                try:
+                    if os.getenv("HIGHVIEW_SDR_SHADOW_ENABLED", "true").lower() in ("true", "1", "yes"):
+                        from app.services.sdr.shadow.hriday_shadow import evaluate_hriday_shadow
+                        from app.services.sdr.shadow.telemetry import get_shadow_telemetry_ledger
+                        sdr_eval = evaluate_hriday_shadow(
+                            query=query,
+                            dataset_id=str_ds_id,
+                            v2_context=v2_ctx,
+                            manifest_data=active_manifest,
+                        )
+                        get_shadow_telemetry_ledger().record_evaluation(sdr_eval)
+                except Exception as sdr_err:
+                    logger.debug("SDR shadow evaluation caught exception (isolated from user path): %s", sdr_err)
+
                 return v2_ctx
             except Exception as exc:
                 logger.warning(f"V2 context acquisition failed for HRIDAY: {exc}. Evaluating governed fallback.")

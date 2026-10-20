@@ -217,6 +217,22 @@ class DashboardIntelligenceAdapter:
                     v2_resp.executive_integrity["total_execution_ms"] = round((time.perf_counter() - t0) * 1000, 3)
 
                 self.gateway.record_success(ConsumerName.DASHBOARD)
+
+                # SDR-8 Shadow Consumer Integration (Non-blocking / 0 substitutions)
+                try:
+                    import os
+                    if os.getenv("HIGHVIEW_SDR_SHADOW_ENABLED", "true").lower() in ("true", "1", "yes"):
+                        from app.services.sdr.shadow.dashboard_shadow import evaluate_dashboard_shadow
+                        from app.services.sdr.shadow.telemetry import get_shadow_telemetry_ledger
+                        sdr_eval = evaluate_dashboard_shadow(
+                            dataset_id=str_ds_id,
+                            v2_response=v2_resp,
+                            manifest_data=active_manifest,
+                        )
+                        get_shadow_telemetry_ledger().record_evaluation(sdr_eval)
+                except Exception as sdr_err:
+                    logger.debug("SDR shadow evaluation caught exception (isolated from user path): %s", sdr_err)
+
                 return v2_resp
 
             except Exception as exc:

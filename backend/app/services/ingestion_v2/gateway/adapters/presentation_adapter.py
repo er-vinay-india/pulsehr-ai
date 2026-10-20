@@ -226,6 +226,24 @@ class PresentationIntelligenceAdapter:
                 v2_evidence["metadata"]["total_execution_ms"] = round((time.perf_counter() - t0) * 1000, 3)
 
                 self.gateway.record_success(ConsumerName.PRESENTATION)
+
+                # SDR-8 Shadow Consumer Integration (Non-blocking / 0 substitutions)
+                try:
+                    import os
+                    if os.getenv("HIGHVIEW_SDR_SHADOW_ENABLED", "true").lower() in ("true", "1", "yes"):
+                        from app.services.sdr.shadow.presentation_shadow import evaluate_presentation_shadow
+                        from app.services.sdr.shadow.telemetry import get_shadow_telemetry_ledger
+                        sdr_eval = evaluate_presentation_shadow(
+                            conn=conn,
+                            scope=scope,
+                            dataset_id=str_ds_id,
+                            v2_evidence=v2_evidence,
+                            manifest_data=active_manifest,
+                        )
+                        get_shadow_telemetry_ledger().record_evaluation(sdr_eval)
+                except Exception as sdr_err:
+                    logger.debug("SDR shadow evaluation caught exception (isolated from user path): %s", sdr_err)
+
                 return v2_evidence
 
             except Exception as exc:
