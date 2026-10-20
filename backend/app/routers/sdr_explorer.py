@@ -42,6 +42,8 @@ def get_explorer_source_rows(
     page: int = Query(default=1, ge=1, description="Page number (1-based)"),
     page_size: int = Query(default=50, ge=1, le=500, description="Rows per page"),
     search: str | None = Query(default=None, description="Optional search term"),
+    sort_by: str | None = Query(default=None, description="Optional column to sort by"),
+    sort_direction: str | None = Query(default=None, description="Sort direction: 'asc' or 'desc'"),
 ) -> dict[str, Any]:
     """Returns exact raw source rows without derived column additions or type distortions."""
     try:
@@ -51,6 +53,8 @@ def get_explorer_source_rows(
             page=page,
             page_size=page_size,
             search=search,
+            sort_by=sort_by,
+            sort_direction=sort_direction,
         )
     except Exception as e:
         logger.error(f"Error fetching source rows for dataset {dataset_id} sheet {sheet_id}: {e}", exc_info=True)

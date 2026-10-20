@@ -78,6 +78,33 @@ def test_explorer_source_rows_api_exactness():
     assert search_data["rows"][0]["employee_name"] == "Bob Smith"
 
 
+def test_explorer_source_rows_api_server_sorting():
+    """Verify server-side full-dataset type-aware sorting: numeric, currency/salary, and text."""
+    # 1. Numeric ascending: salary 85000 < 92000 < 145000 < 160000
+    resp_asc = client.get(f"/api/datasets/{DATASET_ID}/explorer/source-rows?sheet_id=Employees&sort_by=salary&sort_direction=asc")
+    assert resp_asc.status_code == 200
+    data_asc = resp_asc.json()
+    salaries_asc = [r["salary"] for r in data_asc["rows"]]
+    assert salaries_asc == [85000.0, 92000.0, 145000.0, 160000.0]
+    assert data_asc["rows"][0]["employee_name"] == "David Miller"
+    assert data_asc["rows"][-1]["employee_name"] == "Carol Danvers"
+
+    # 2. Numeric descending: salary 160000 > 145000 > 92000 > 85000
+    resp_desc = client.get(f"/api/datasets/{DATASET_ID}/explorer/source-rows?sheet_id=Employees&sort_by=salary&sort_direction=desc")
+    assert resp_desc.status_code == 200
+    data_desc = resp_desc.json()
+    salaries_desc = [r["salary"] for r in data_desc["rows"]]
+    assert salaries_desc == [160000.0, 145000.0, 92000.0, 85000.0]
+    assert data_desc["rows"][0]["employee_name"] == "Carol Danvers"
+    assert data_desc["rows"][-1]["employee_name"] == "David Miller"
+
+    # 3. String natural sorting: city ascending
+    resp_city = client.get(f"/api/datasets/{DATASET_ID}/explorer/source-rows?sheet_id=Employees&sort_by=city&sort_direction=asc")
+    assert resp_city.status_code == 200
+    cities = [r["city"] for r in resp_city.json()["rows"]]
+    assert cities == ["Austin", "Bengaluru", "San Francisco", "Springfield"]
+
+
 def test_explorer_semantics_api():
     """Verify /semantics provides entity hypothesis, grain explanation, candidate keys, and GEO-1 resolutions."""
     response = client.get(f"/api/datasets/{DATASET_ID}/explorer/semantics?sheet_id=Employees")

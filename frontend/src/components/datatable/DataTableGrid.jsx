@@ -1,115 +1,198 @@
 import React from "react";
 import { ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
-import { formatDisplayLabel, formatCuratedNumber, formatCompleteNumber, isDecimalNumber } from "../../utils/displayFormatters";
+import {
+  formatDisplayLabel,
+  formatCuratedNumber,
+  formatCompleteNumber,
+} from "../../utils/displayFormatters";
 
 export default function DataTableGrid({
-  loading,
-  columns,
-  displayedCols,
-  processedRows,
-  localFilter,
-  sortCol,
-  sortDir,
-  onSort,
+  loading = false,
+  displayedCols = [],
+  processedRows = [],
+  showRowIndex = false,
+  sortCol = null,
+  sortDir = null,
+  onSort = () => {},
+  onRowClick = null,
+  selectedRowKey = null,
+  rowKeyProp = null,
+  localFilter = "",
+  hasActiveFilters = false,
+  onClearFilters = () => {},
+  tableAriaLabel = "Data Explorer table",
 }) {
+  const getColDef = (col) =>
+    typeof col === "string" ? { key: col, label: formatDisplayLabel(col), sortable: true } : col;
+
+  const getRowVal = (row, colKey) => {
+    if (!row) return undefined;
+    if (row.values && row.values[colKey] !== undefined) return row.values[colKey];
+    return row[colKey];
+  };
+
+  const getRowKey = (row, idx) => {
+    if (typeof rowKeyProp === "function") return rowKeyProp(row, idx);
+    if (typeof rowKeyProp === "string" && row[rowKeyProp] !== undefined) return row[rowKeyProp];
+    return (
+      row.id ||
+      row.column_id ||
+      row.relationship_id ||
+      row.view_id ||
+      row.fact_id ||
+      row.__row_index ||
+      row.number ||
+      idx
+    );
+  };
+
+  const isFiltered = Boolean(localFilter.trim() || hasActiveFilters);
+
   return (
     <div
       className="datatable-scroll-container"
       style={{
         overflowX: "auto",
-        maxHeight: "580px",
+        maxHeight: "560px",
         overflowY: "auto",
         borderRadius: "8px",
-        border: "1px solid var(--hv-border, #e2e8f0)",
-        background: "var(--hv-bg-surface, #ffffff)",
-        position: "relative"
+        border: "1px solid var(--color-border, #D4DDD6)",
+        background: "var(--color-bg-surface, #ffffff)",
+        position: "relative",
       }}
     >
       {loading && (
-        <div style={{ position: "absolute", inset: 0, background: "rgba(255, 255, 255, 0.85)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 10 }}>
-          <span style={{ fontSize: "0.85rem", color: "var(--hv-brand-secondary, #005A6B)", fontWeight: 600 }}>Loading rows…</span>
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            background: "rgba(255, 255, 255, 0.75)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 10,
+          }}
+        >
+          <span
+            style={{
+              fontSize: "0.85rem",
+              color: "var(--color-brand-primary, #183B56)",
+              fontWeight: 600,
+            }}
+          >
+            Loading records…
+          </span>
         </div>
       )}
 
-      <table aria-label="Dataset records table" style={{ width: "100%", borderCollapse: "separate", borderSpacing: 0, fontSize: "0.78rem" }}>
+      <table
+        aria-label={tableAriaLabel}
+        style={{
+          width: "100%",
+          borderCollapse: "separate",
+          borderSpacing: 0,
+          fontSize: "0.8rem",
+          textAlign: "left",
+        }}
+      >
         <thead>
           <tr>
-            {/* Sticky Source Row Index Header */}
-            <th
-              scope="col"
-              style={{
-                position: "sticky",
-                left: 0,
-                top: 0,
-                zIndex: 5,
-                background: "var(--hv-bg-page, #F8FAFC)",
-                padding: "9px 12px",
-                textAlign: "center",
-                borderBottom: "2px solid var(--hv-border, #E2E8F0)",
-                borderRight: "1px solid var(--hv-border, #E2E8F0)",
-                color: "var(--hv-text-primary, #0B1F3A)",
-                fontWeight: 700,
-                whiteSpace: "nowrap",
-                width: "80px",
-                minWidth: "80px"
-              }}
-            >
-              # Row
-            </th>
+            {/* Optional Sticky Source Row Index Header */}
+            {showRowIndex && (
+              <th
+                scope="col"
+                style={{
+                  position: "sticky",
+                  left: 0,
+                  top: 0,
+                  zIndex: 5,
+                  background: "var(--color-bg-page, #F6F5F0)",
+                  padding: "10px 12px",
+                  textAlign: "center",
+                  borderBottom: "2px solid var(--color-border, #D4DDD6)",
+                  borderRight: "1px solid var(--color-border, #D4DDD6)",
+                  color: "var(--color-text-primary, #172B3A)",
+                  fontWeight: 700,
+                  whiteSpace: "nowrap",
+                  width: "60px",
+                  minWidth: "60px",
+                }}
+              >
+                #
+              </th>
+            )}
 
             {/* Data Column Headers */}
-            {displayedCols.map(col => {
-              const isSorted = sortCol === col;
+            {displayedCols.map((col) => {
+              const colDef = getColDef(col);
+              const colKey = colDef.key;
+              const isSorted = sortCol === colKey;
+              const isSortable = colDef.sortable !== false;
+              const align = colDef.align || (colDef.type === "number" || colDef.type === "currency" || colDef.type === "percentage" ? "right" : "left");
+
               return (
                 <th
-                  key={col}
+                  key={colKey}
                   scope="col"
                   aria-sort={isSorted ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
                   style={{
                     position: "sticky",
                     top: 0,
                     zIndex: 3,
-                    background: "var(--hv-bg-page, #F8FAFC)",
-                    padding: "9px 12px",
-                    textAlign: "left",
-                    borderBottom: "2px solid var(--hv-border, #E2E8F0)",
-                    borderRight: "1px solid var(--hv-border-subtle, #F1F5F9)",
-                    color: isSorted ? "var(--hv-brand-secondary, #005A6B)" : "var(--hv-text-primary, #0B1F3A)",
+                    background: "var(--color-bg-page, #F6F5F0)",
+                    padding: "10px 12px",
+                    textAlign: align,
+                    borderBottom: "2px solid var(--color-border, #D4DDD6)",
+                    borderRight: "1px solid var(--color-divider, #E5E9E3)",
+                    color: isSorted ? "var(--color-brand-primary, #183B56)" : "var(--color-text-primary, #172B3A)",
                     fontWeight: 700,
                     whiteSpace: "nowrap",
                     userSelect: "none",
-                    transition: "color 0.15s ease, background 0.15s ease"
+                    width: colDef.width || undefined,
                   }}
                 >
-                  <button
-                    type="button"
-                    onClick={() => onSort(col)}
-                    style={{
-                      background: "none",
-                      border: "none",
-                      padding: 0,
-                      font: "inherit",
-                      color: "inherit",
-                      cursor: "pointer",
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: "6px",
-                      textAlign: "left"
-                    }}
-                    aria-label={`Sort by ${formatDisplayLabel(col)}${isSorted ? (sortDir === "asc" ? ", sorted ascending" : ", sorted descending") : ""}`}
-                    title={`Click to sort by ${col}. Original field: ${col}`}
-                  >
-                    <span>{formatDisplayLabel(col)}</span>
-                    {isSorted ? (
-                      sortDir === "asc" ? (
-                        <ArrowUp size={13} color="var(--hv-brand-secondary, #005A6B)" aria-hidden="true" />
+                  {isSortable ? (
+                    <button
+                      type="button"
+                      onClick={() => onSort(colKey)}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        padding: 0,
+                        font: "inherit",
+                        color: "inherit",
+                        cursor: "pointer",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        textAlign: align,
+                        width: "100%",
+                        justifyContent: align === "right" ? "flex-end" : align === "center" ? "center" : "flex-start",
+                      }}
+                      aria-label={`Sort by ${colDef.label}${
+                        isSorted ? (sortDir === "asc" ? ", sorted ascending" : ", sorted descending") : ""
+                      }`}
+                      title={`Click to sort by ${colDef.label}`}
+                    >
+                      <span>{colDef.label}</span>
+                      {isSorted ? (
+                        sortDir === "asc" ? (
+                          <ArrowUp size={13} color="var(--color-brand-primary, #183B56)" aria-hidden="true" />
+                        ) : (
+                          <ArrowDown size={13} color="var(--color-brand-primary, #183B56)" aria-hidden="true" />
+                        )
                       ) : (
-                        <ArrowDown size={13} color="var(--hv-brand-secondary, #005A6B)" aria-hidden="true" />
-                      )
-                    ) : (
-                      <ArrowUpDown size={12} color="var(--hv-text-muted, #64748B)" style={{ opacity: 0.5 }} aria-hidden="true" />
-                    )}
-                  </button>
+                        <ArrowUpDown
+                          size={12}
+                          color="var(--color-text-muted, #3C5059)"
+                          style={{ opacity: 0.4 }}
+                          aria-hidden="true"
+                        />
+                      )}
+                    </button>
+                  ) : (
+                    <span>{colDef.label}</span>
+                  )}
                 </th>
               );
             })}
@@ -120,49 +203,109 @@ export default function DataTableGrid({
           {processedRows.length === 0 ? (
             <tr>
               <td
-                colSpan={displayedCols.length + 1}
-                style={{ textAlign: "center", padding: "2.5rem 1rem", color: "var(--hv-text-muted, #64748B)" }}
+                colSpan={displayedCols.length + (showRowIndex ? 1 : 0)}
+                style={{
+                  textAlign: "center",
+                  padding: "2.5rem 1rem",
+                  color: "var(--color-text-secondary, #334B57)",
+                }}
               >
-                {localFilter ? "No matching records found for your filter." : "No records available."}
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "8px" }}>
+                  <span>
+                    {isFiltered
+                      ? "No records match the current search or filters."
+                      : "No records available for this table."}
+                  </span>
+                  {isFiltered && (
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      onClick={onClearFilters}
+                      style={{
+                        padding: "4px 12px",
+                        fontSize: "0.78rem",
+                        marginTop: "4px",
+                      }}
+                    >
+                      Clear filters
+                    </button>
+                  )}
+                </div>
               </td>
             </tr>
           ) : (
             processedRows.map((row, rIdx) => {
+              const rKey = getRowKey(row, rIdx);
+              const isSelected = selectedRowKey && String(selectedRowKey) === String(rKey);
               const isEven = rIdx % 2 === 0;
+              const isClickable = Boolean(onRowClick);
+
               return (
                 <tr
-                  key={rIdx}
-                  style={{
-                    background: isEven ? "var(--hv-bg-surface, #FFFFFF)" : "var(--hv-bg-page, #F8FAFC)",
-                    transition: "background 0.12s ease"
-                  }}
+                  key={rKey}
+                  onClick={isClickable ? () => onRowClick(row) : undefined}
                   className="datatable-row"
+                  style={{
+                    background: isSelected
+                      ? "var(--color-bg-soft-blue, #EAF0F5)"
+                      : isEven
+                      ? "var(--color-bg-surface, #ffffff)"
+                      : "var(--color-bg-subtle, #EEEFE9)",
+                    cursor: isClickable ? "pointer" : "default",
+                    transition: "background 0.12s ease",
+                  }}
                 >
-                  {/* Sticky Source Row Index Cell */}
-                  <td
-                    style={{
-                      position: "sticky",
-                      left: 0,
-                      zIndex: 2,
-                      background: isEven ? "var(--hv-bg-surface, #FFFFFF)" : "var(--hv-bg-page, #F8FAFC)",
-                      padding: "8px 12px",
-                      textAlign: "center",
-                      borderBottom: "1px solid var(--hv-border-subtle, #F1F5F9)",
-                      borderRight: "1px solid var(--hv-border, #E2E8F0)",
-                      color: "var(--hv-text-secondary, #334155)",
-                      fontFamily: "monospace",
-                      fontSize: "0.75rem",
-                      whiteSpace: "nowrap"
-                    }}
-                  >
-                    {row.number}
-                  </td>
+                  {/* Optional Sticky Source Row Index Cell */}
+                  {showRowIndex && (
+                    <td
+                      style={{
+                        position: "sticky",
+                        left: 0,
+                        zIndex: 2,
+                        background: isSelected
+                          ? "var(--color-bg-soft-blue, #EAF0F5)"
+                          : isEven
+                          ? "var(--color-bg-surface, #ffffff)"
+                          : "var(--color-bg-subtle, #EEEFE9)",
+                        padding: "9px 12px",
+                        textAlign: "center",
+                        borderBottom: "1px solid var(--color-divider, #E5E9E3)",
+                        borderRight: "1px solid var(--color-border, #D4DDD6)",
+                        color: "var(--color-text-secondary, #334B57)",
+                        fontFamily: "monospace",
+                        fontSize: "0.75rem",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {row.__row_index || row.number || rIdx + 1}
+                    </td>
+                  )}
 
                   {/* Data Cells */}
                   {displayedCols.map((col, cIdx) => {
-                    const val = row.values ? row.values[col] : undefined;
-                    const isNull = val === undefined || val === null || val === "";
+                    const colDef = getColDef(col);
+                    const colKey = colDef.key;
+                    const val = getRowVal(row, colKey);
+                    const align = colDef.align || (colDef.type === "number" || colDef.type === "currency" || colDef.type === "percentage" ? "right" : "left");
 
+                    if (colDef.render) {
+                      return (
+                        <td
+                          key={colKey || cIdx}
+                          style={{
+                            padding: "9px 12px",
+                            borderBottom: "1px solid var(--color-divider, #E5E9E3)",
+                            borderRight: "1px solid var(--color-divider, #E5E9E3)",
+                            textAlign: align,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {colDef.render(val, row, rIdx)}
+                        </td>
+                      );
+                    }
+
+                    const isNull = val === undefined || val === null || val === "";
                     let displayVal = "—";
                     let tooltipVal = "";
 
@@ -172,13 +315,19 @@ export default function DataTableGrid({
                       const num = Number(val);
                       const isNumeric = !isDate && Number.isFinite(num);
 
-                      if (isNumeric && !Number.isInteger(num)) {
-                        // Floating point decimal: curate to at most 2 decimal places
+                      if (colDef.type === "currency") {
+                        displayVal = isNumeric
+                          ? `$${num.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`
+                          : strVal;
+                        tooltipVal = `Exact value: ${val}`;
+                      } else if (colDef.type === "percentage") {
+                        displayVal = isNumeric ? `${num}%` : strVal;
+                        tooltipVal = `Exact: ${val}`;
+                      } else if (isNumeric && !Number.isInteger(num)) {
                         displayVal = formatCuratedNumber(num, 2);
-                        // Complete unrounded decimal on mouseover
                         tooltipVal = `Complete: ${formatCompleteNumber(val)}`;
                       } else if (isNumeric && Number.isInteger(num)) {
-                        displayVal = num.toLocaleString('en-US');
+                        displayVal = num.toLocaleString("en-US");
                         tooltipVal = String(val);
                       } else {
                         displayVal = strVal;
@@ -186,22 +335,27 @@ export default function DataTableGrid({
                       }
                     }
 
-                    const isHoverableDecimal = tooltipVal && tooltipVal.startsWith('Complete:');
+                    const isHoverable = tooltipVal && (tooltipVal.startsWith("Complete:") || tooltipVal.startsWith("Exact:"));
 
                     return (
                       <td
-                        key={cIdx}
+                        key={colKey || cIdx}
                         style={{
-                          padding: "8px 12px",
-                          borderBottom: "1px solid var(--hv-border-subtle, #F1F5F9)",
-                          borderRight: "1px solid var(--hv-border-subtle, #F1F5F9)",
-                          color: isNull ? "var(--hv-text-muted, #64748B)" : "var(--hv-text-secondary, #334155)",
+                          padding: "9px 12px",
+                          borderBottom: "1px solid var(--color-divider, #E5E9E3)",
+                          borderRight: "1px solid var(--color-divider, #E5E9E3)",
+                          textAlign: align,
+                          color: isNull ? "var(--color-text-muted, #3C5059)" : "var(--color-text-primary, #172B3A)",
                           fontStyle: isNull ? "italic" : "normal",
+                          fontFamily:
+                            colDef.type === "identifier" || colDef.type === "number" || colDef.type === "currency"
+                              ? "monospace"
+                              : "inherit",
                           whiteSpace: "nowrap",
-                          maxWidth: "280px",
+                          maxWidth: "320px",
                           overflow: "hidden",
                           textOverflow: "ellipsis",
-                          cursor: isHoverableDecimal ? "help" : "default"
+                          cursor: isHoverable ? "help" : undefined,
                         }}
                         title={tooltipVal}
                       >

@@ -1,42 +1,32 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { getExplorerRelationships } from "../../../api/client";
 import StatusBadge from "../common/StatusBadge";
+import DataTable from "../../DataTable";
 import {
   GitMerge,
   ShieldCheck,
-  ShieldAlert,
   AlertTriangle,
-  ArrowRight,
-  Filter,
-  CheckCircle2,
-  XCircle,
   Layers,
-  Zap,
-  AlertCircle,
-  Eye,
   Table,
   Network,
   X,
-  Info,
+  Eye,
+  AlertCircle,
 } from "lucide-react";
 
 /**
  * HighView Data Explorer — Relationships
- * "Cards summarize. Tables compare. Drawers explain."
- * Primary representation is a clean data table with an optional Graph toggle.
- * Clicking a row opens a drawer explaining how tables connect.
+ * Governed cross-sheet connections, verified key integrity, and safe aggregation rules.
+ * Uses shared Enterprise DataTable with type-aware sorting, governed status ranking,
+ * compact search, column visibility, and detail drawer.
  */
-export default function RelationshipsMode({
-  datasetId,
-  themeTokens,
-  isDark = false,
-}) {
+export default function RelationshipsMode({ datasetId, themeTokens, isDark = false }) {
   const [relData, setRelData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [viewMode, setViewMode] = useState("table"); // 'table' | 'graph'
   const [selectedRel, setSelectedRel] = useState(null);
   const [safetyFilter, setSafetyFilter] = useState("ALL"); // 'ALL' | 'SAFE' | 'AGG' | 'UNSAFE'
+  const [viewMode, setViewMode] = useState("table"); // 'table' | 'graph'
 
   const bgSurface = themeTokens?.colors?.surface || "var(--color-bg-surface)";
   const bgSubtle = themeTokens?.colors?.surfaceHover || "var(--color-bg-subtle)";
@@ -44,7 +34,6 @@ export default function RelationshipsMode({
   const borderStrong = themeTokens?.colors?.border || "var(--color-border)";
   const textPrimary = themeTokens?.colors?.textPrimary || "var(--color-text-primary)";
   const textSecondary = themeTokens?.colors?.textSecondary || "var(--color-text-secondary)";
-  const textMuted = themeTokens?.colors?.textMuted || "var(--color-text-muted)";
   const brandPrimary = themeTokens?.colors?.brandPrimary || "var(--color-brand-primary)";
   const brandSoftBg = themeTokens?.colors?.softBlue || "var(--color-bg-soft-blue)";
 
@@ -62,7 +51,7 @@ export default function RelationshipsMode({
         }
       } catch (err) {
         if (!isCancelled) {
-          setError(err.message || "Failed to load relationship model");
+          setError(err.message || "Failed to load relationships");
         }
       } finally {
         if (!isCancelled) {
@@ -79,19 +68,271 @@ export default function RelationshipsMode({
 
   const allRelationships = relData?.relationships || [];
 
-  const filteredRelationships = allRelationships.filter((rel) => {
-    if (safetyFilter === "ALL") return true;
-    if (safetyFilter === "SAFE") return rel.safety_status_raw === "SAFE";
-    if (safetyFilter === "AGG") return String(rel.safety_status_raw || "").includes("PREAGGREGATION");
-    if (safetyFilter === "UNSAFE") return rel.safety_status_raw === "UNSAFE";
-    return true;
-  });
+  // Filter based on safety pill
+  const pillFilteredRelationships = useMemo(() => {
+    if (safetyFilter === "SAFE") {
+      return allRelationships.filter((r) => r.safety_status_raw === "SAFE");
+    }
+    if (safetyFilter === "AGG") {
+      return allRelationships.filter((r) => r.safety_status_raw === "AGGREGATION_REQUIRED");
+    }
+    if (safetyFilter === "UNSAFE") {
+      return allRelationships.filter(
+        (r) =>
+          r.safety_status_raw === "UNSAFE_FANOUT" ||
+          r.safety_status_raw === "UNSAFE_GRAIN_MISMATCH" ||
+          r.safety_status_raw === "NEEDS_REVIEW"
+      );
+    }
+    return allRelationships;
+  }, [allRelationships, safetyFilter]);
 
-  const totalValidated = relData?.total_validated ?? allRelationships.filter(r => r.is_validated).length;
+  const summary = relData?.summary || {
+    total_relationships: allRelationships.length,
+    safe_joins: allRelationships.filter((r) => r.safety_status_raw === "SAFE").length,
+    aggregation_required: allRelationships.filter((r) => r.safety_status_raw === "AGGREGATION_REQUIRED").length,
+    unsafe_blocked: allRelationships.filter((r) => r.safety_status_raw?.startsWith("UNSAFE")).length,
+  };
+
+  // DataTable column definitions
+  const relationshipColumns = useMemo(
+    () => [
+      {
+        key: "left_sheet",
+        label: "From Sheet",
+        type: "text",
+        sortable: true,
+        defaultVisible: true,
+        render: (val) => <strong style={{ color: textPrimary }}>{val}</strong>,
+      },
+      {
+        key: "left_columns",
+        label: "From Key",
+        type: "text",
+        sortable: true,
+        defaultVisible: false,
+        render: (val) => (
+          <span style={{ fontFamily: "monospace", color: textSecondary }}>
+            {Array.isArray(val) ? val.join(", ") : String(val ?? "—")}
+          </span>
+        ),
+      },
+      {
+        key: "right_sheet",
+        label: "To Sheet",
+        type: "text",
+        sortable: true,
+        defaultVisible: true,
+        render: (val) => <strong style={{ color: textPrimary }}>{val}</strong>,
+      },
+      {
+        key: "right_columns",
+        label: "To Key",
+        type: "text",
+        sortable: true,
+        defaultVisible: false,
+        render: (val) => (
+          <span style={{ fontFamily: "monospace", color: textSecondary }}>
+            {Array.isArray(val) ? val.join(", ") : String(val ?? "—")}
+          </span>
+        ),
+      },
+      {
+        key: "cardinality",
+        label: "Cardinality",
+        type: "text",
+        sortable: true,
+        defaultVisible: true,
+        render: (val) => <span style={{ color: textSecondary }}>{val}</span>,
+      },
+      {
+        key: "coverage_left_pct",
+        label: "Coverage",
+        type: "percentage",
+        sortable: true,
+        defaultVisible: true,
+        render: (val, row) => (
+          <span style={{ color: textSecondary }}>{row.coverage_summary || `${val}%`}</span>
+        ),
+      },
+      {
+        key: "safety_status",
+        label: "Safety",
+        type: "status",
+        sortable: true,
+        defaultVisible: true,
+        statusRankOrder: ["Safe to join", "Safe after aggregation", "Needs review", "Unsafe to join"],
+        render: (val) => <StatusBadge status={val} />,
+      },
+      {
+        key: "actions",
+        label: "Action",
+        sortable: false,
+        align: "right",
+        defaultVisible: true,
+        render: (_, row) => (
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={(e) => {
+              e.stopPropagation();
+              setSelectedRel(row);
+            }}
+            aria-label={`View details for connection ${row.left_sheet} to ${row.right_sheet}`}
+            style={{
+              padding: "4px 8px",
+              fontSize: "0.74rem",
+              fontWeight: 600,
+              borderRadius: "6px",
+              cursor: "pointer",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "4px",
+              minHeight: "unset",
+              lineHeight: 1.25,
+            }}
+          >
+            <Eye size={12} />
+            Details
+          </button>
+        ),
+      },
+    ],
+    [textPrimary, textSecondary]
+  );
+
+  // DataTable filter definitions
+  const relationshipFilters = useMemo(
+    () => [
+      {
+        key: "safety_status",
+        label: "Safety",
+        options: ["Safe to join", "Safe after aggregation", "Needs review", "Unsafe to join"],
+      },
+      {
+        key: "cardinality",
+        label: "Cardinality",
+      },
+      {
+        key: "left_sheet",
+        label: "From Sheet",
+      },
+      {
+        key: "right_sheet",
+        label: "To Sheet",
+      },
+    ],
+    []
+  );
 
   return (
     <div className="sdr-relationships-mode-container" style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-      {/* Header & Controls */}
+      {/* Overview Cards (KPIs) */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+          gap: "12px",
+        }}
+      >
+        <div
+          style={{
+            background: bgSurface,
+            border: `1px solid ${borderCol}`,
+            borderRadius: "10px",
+            padding: "14px 16px",
+            display: "flex",
+            alignItems: "center",
+            gap: "12px",
+          }}
+        >
+          <div style={{ width: "36px", height: "36px", borderRadius: "8px", background: brandSoftBg, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <GitMerge size={18} color={brandPrimary} />
+          </div>
+          <div>
+            <div style={{ fontSize: "1.2rem", fontWeight: 700, color: textPrimary }}>
+              {summary.total_relationships}
+            </div>
+            <div style={{ fontSize: "0.75rem", color: textSecondary }}>
+              Validated Connections
+            </div>
+          </div>
+        </div>
+
+        <div
+          style={{
+            background: bgSurface,
+            border: `1px solid ${borderCol}`,
+            borderRadius: "10px",
+            padding: "14px 16px",
+            display: "flex",
+            alignItems: "center",
+            gap: "12px",
+          }}
+        >
+          <div style={{ width: "36px", height: "36px", borderRadius: "8px", background: "var(--color-bg-soft-teal, #E7F3ED)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <ShieldCheck size={18} color="var(--color-success, #075443)" />
+          </div>
+          <div>
+            <div style={{ fontSize: "1.2rem", fontWeight: 700, color: textPrimary }}>
+              {summary.safe_joins}
+            </div>
+            <div style={{ fontSize: "0.75rem", color: textSecondary }}>
+              Direct Safe Joins
+            </div>
+          </div>
+        </div>
+
+        <div
+          style={{
+            background: bgSurface,
+            border: `1px solid ${borderCol}`,
+            borderRadius: "10px",
+            padding: "14px 16px",
+            display: "flex",
+            alignItems: "center",
+            gap: "12px",
+          }}
+        >
+          <div style={{ width: "36px", height: "36px", borderRadius: "8px", background: "var(--color-bg-soft-gold, #F6EDDA)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <Layers size={18} color="var(--color-warning, #65470C)" />
+          </div>
+          <div>
+            <div style={{ fontSize: "1.2rem", fontWeight: 700, color: textPrimary }}>
+              {summary.aggregation_required}
+            </div>
+            <div style={{ fontSize: "0.75rem", color: textSecondary }}>
+              Preaggregation Required
+            </div>
+          </div>
+        </div>
+
+        <div
+          style={{
+            background: bgSurface,
+            border: `1px solid ${borderCol}`,
+            borderRadius: "10px",
+            padding: "14px 16px",
+            display: "flex",
+            alignItems: "center",
+            gap: "12px",
+          }}
+        >
+          <div style={{ width: "36px", height: "36px", borderRadius: "8px", background: "var(--color-bg-soft-error, #FAEAEE)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <AlertTriangle size={18} color="var(--color-error, #8E1938)" />
+          </div>
+          <div>
+            <div style={{ fontSize: "1.2rem", fontWeight: 700, color: textPrimary }}>
+              {summary.unsafe_blocked}
+            </div>
+            <div style={{ fontSize: "0.75rem", color: textSecondary }}>
+              Unsafe Joins Blocked
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Header and View Mode Switch */}
       <div
         style={{
           background: bgSurface,
@@ -107,19 +348,19 @@ export default function RelationshipsMode({
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
             <GitMerge size={18} color={brandPrimary} aria-hidden="true" />
             <h2 style={{ margin: 0, fontSize: "1.1rem", fontWeight: 700, color: textPrimary }}>
-              Relationships
+              Relationships & Join Intelligence
             </h2>
           </div>
 
-          {/* View Mode Toggle: Table | Graph (Default Table) */}
-          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            {/* View Mode Toggle: Table (default) vs Graph */}
             <div
               style={{
                 display: "inline-flex",
                 background: bgSubtle,
-                border: `1px solid ${borderCol}`,
-                borderRadius: "8px",
                 padding: "2px",
+                borderRadius: "8px",
+                border: `1px solid ${borderCol}`,
               }}
             >
               <button
@@ -216,10 +457,10 @@ export default function RelationshipsMode({
         <div
           style={{
             padding: "16px",
-            background: themeTokens?.colors?.softError || "var(--color-bg-soft-error)",
-            border: `1px solid ${themeTokens?.colors?.statusError || "var(--color-error)"}`,
+            background: "var(--color-bg-soft-error, #FAEAEE)",
+            border: "1px solid var(--color-error, #8E1938)",
             borderRadius: "8px",
-            color: themeTokens?.colors?.statusError || "var(--color-error)",
+            color: "var(--color-error, #8E1938)",
             display: "flex",
             alignItems: "center",
             gap: "8px",
@@ -283,101 +524,24 @@ export default function RelationshipsMode({
         </div>
       ) : (
         /* PRIMARY DATA TABLE VIEW */
-        <div style={{ background: bgSurface, border: `1px solid ${borderCol}`, borderRadius: "10px", overflow: "hidden" }}>
-          <div style={{ padding: "12px 16px", borderBottom: `1px solid ${borderCol}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <h3 style={{ margin: 0, fontSize: "0.9rem", fontWeight: 700, color: textPrimary, display: "flex", alignItems: "center", gap: "6px" }}>
-              <Table size={15} color={brandPrimary} />
-              Validated Relationships Table ({filteredRelationships.length})
-            </h3>
-            <span style={{ fontSize: "0.75rem", color: textSecondary }}>
-              Click any row or "Details" to examine join methods and key mappings
-            </span>
-          </div>
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.82rem", textAlign: "left" }}>
-              <thead>
-                <tr style={{ background: bgSubtle, borderBottom: `2px solid ${borderCol}` }}>
-                  <th style={{ padding: "10px 12px", color: textPrimary, fontWeight: 700 }}>From Sheet</th>
-                  <th style={{ padding: "10px 12px", color: textPrimary, fontWeight: 700 }}>From Key</th>
-                  <th style={{ padding: "10px 12px", color: textPrimary, fontWeight: 700 }}>To Sheet</th>
-                  <th style={{ padding: "10px 12px", color: textPrimary, fontWeight: 700 }}>To Key</th>
-                  <th style={{ padding: "10px 12px", color: textPrimary, fontWeight: 700 }}>Cardinality</th>
-                  <th style={{ padding: "10px 12px", color: textPrimary, fontWeight: 700 }}>Coverage</th>
-                  <th style={{ padding: "10px 12px", color: textPrimary, fontWeight: 700 }}>Safety</th>
-                  <th style={{ padding: "10px 12px", color: textSecondary, fontWeight: 700, textAlign: "right" }}>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredRelationships.length > 0 ? (
-                  filteredRelationships.map((rel, idx) => (
-                    <tr
-                      key={rel.relationship_id || idx}
-                      onClick={() => setSelectedRel(rel)}
-                      style={{
-                        borderBottom: `1px solid ${borderCol}`,
-                        background: idx % 2 === 1 ? bgSubtle : "transparent",
-                        cursor: "pointer",
-                      }}
-                    >
-                      <td style={{ padding: "10px 12px", fontWeight: 700, color: textPrimary }}>
-                        {rel.left_sheet}
-                      </td>
-                      <td style={{ padding: "10px 12px", color: textSecondary, fontFamily: "monospace" }}>
-                        {rel.left_columns?.join(", ")}
-                      </td>
-                      <td style={{ padding: "10px 12px", fontWeight: 700, color: textPrimary }}>
-                        {rel.right_sheet}
-                      </td>
-                      <td style={{ padding: "10px 12px", color: textSecondary, fontFamily: "monospace" }}>
-                        {rel.right_columns?.join(", ")}
-                      </td>
-                      <td style={{ padding: "10px 12px", color: textSecondary }}>
-                        {rel.cardinality}
-                      </td>
-                      <td style={{ padding: "10px 12px", color: textSecondary }}>
-                        {rel.coverage_summary || `${rel.coverage_left_pct}%`}
-                      </td>
-                      <td style={{ padding: "10px 12px" }}>
-                        <StatusBadge status={rel.safety_status} />
-                      </td>
-                      <td style={{ padding: "10px 12px", textAlign: "right" }}>
-                        <button
-                          type="button"
-                          className="btn-secondary"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedRel(rel);
-                          }}
-                          style={{
-                            padding: "4px 8px",
-                            fontSize: "0.74rem",
-                            fontWeight: 600,
-                            borderRadius: "6px",
-                            cursor: "pointer",
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: "4px",
-                            minHeight: "unset",
-                            lineHeight: 1.25,
-                          }}
-                        >
-                          <Eye size={12} />
-                          Details
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={8} style={{ padding: "20px", textAlign: "center", color: textSecondary }}>
-                      No relationships match the selected filter.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <DataTable
+          columns={relationshipColumns}
+          rows={pillFilteredRelationships}
+          rowKeyProp="relationship_id"
+          onRowClick={(row) => setSelectedRel(row)}
+          selectedRowKey={selectedRel?.relationship_id}
+          defaultSortCol="safety_status"
+          defaultSortDir="asc"
+          secondarySortCol="left_sheet"
+          secondarySortDir="asc"
+          filters={relationshipFilters}
+          searchFields={["left_sheet", "right_sheet", "cardinality", "safety_status"]}
+          searchPlaceholder="Search sheets, keys, or cardinality..."
+          pageSize={25}
+          enableColumnVisibility={true}
+          tableAriaLabel="Validated relationships table"
+          emptyMessage="No relationships match the selected filters."
+        />
       )}
 
       {/* Connection Details Drawer (Progressive Disclosure) */}

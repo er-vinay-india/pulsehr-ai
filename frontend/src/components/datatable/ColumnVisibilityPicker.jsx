@@ -2,38 +2,45 @@ import React from "react";
 import { formatDisplayLabel } from "../../utils/displayFormatters";
 
 export default function ColumnVisibilityPicker({
-  columns,
-  visibleColumns,
-  colSearchQuery,
-  setColSearchQuery,
-  onToggleColumn,
-  onSelectAll,
-  onSelectFirstN,
-  onDeselectAllExceptFirst,
+  columns = [],
+  visibleColumns = new Set(),
+  colSearchQuery = "",
+  setColSearchQuery = () => {},
+  onToggleColumn = () => {},
+  onSelectAll = () => {},
+  onSelectFirstN = () => {},
+  onDeselectAllExceptFirst = () => {},
 }) {
-  const filteredCols = columns.filter(c =>
-    c.toLowerCase().includes(colSearchQuery.toLowerCase()) ||
-    formatDisplayLabel(c).toLowerCase().includes(colSearchQuery.toLowerCase())
-  );
+  const getColKey = (c) => (typeof c === "string" ? c : c.key);
+  const getColLabel = (c) => (typeof c === "string" ? formatDisplayLabel(c) : c.label || formatDisplayLabel(c.key));
+
+  const filteredCols = columns.filter((c) => {
+    const key = getColKey(c).toLowerCase();
+    const label = getColLabel(c).toLowerCase();
+    const q = colSearchQuery.toLowerCase();
+    return key.includes(q) || label.includes(q);
+  });
 
   return (
     <div
       className="col-picker-content"
       style={{
-        width: "300px",
-        maxHeight: "380px",
+        width: "280px",
+        maxHeight: "360px",
         display: "flex",
         flexDirection: "column",
-        overflow: "hidden"
+        overflow: "hidden",
+        background: "var(--color-bg-surface, #ffffff)",
+        color: "var(--color-text-primary, #172B3A)",
       }}
     >
       {/* Popover Header */}
-      <div style={{ padding: "0.65rem 0.85rem", borderBottom: "1px solid var(--color-border)", background: "var(--color-bg-subtle)" }}>
+      <div style={{ padding: "0.65rem 0.85rem", borderBottom: "1px solid var(--color-border, #D4DDD6)", background: "var(--color-bg-subtle, #EEEFE9)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
-          <span style={{ fontSize: "0.8rem", fontWeight: 700, color: "var(--color-text-primary)" }}>
+          <span style={{ fontSize: "0.8rem", fontWeight: 700, color: "var(--color-text-primary, #172B3A)" }}>
             Column Visibility
           </span>
-          <span style={{ fontSize: "0.72rem", color: "var(--color-text-muted)" }}>
+          <span style={{ fontSize: "0.72rem", color: "var(--color-text-muted, #3C5059)" }}>
             {visibleColumns.size} of {columns.length} visible
           </span>
         </div>
@@ -42,17 +49,19 @@ export default function ColumnVisibilityPicker({
         <input
           type="text"
           value={colSearchQuery}
-          onChange={e => setColSearchQuery(e.target.value)}
-          placeholder="Filter column names..."
+          onChange={(e) => setColSearchQuery(e.target.value)}
+          placeholder="Filter columns..."
+          aria-label="Filter columns"
           style={{
             width: "100%",
             padding: "0.35rem 0.55rem",
             fontSize: "0.75rem",
             borderRadius: "6px",
-            border: "1px solid var(--color-border)",
-            background: "var(--color-bg-surface)",
-            color: "var(--color-text-primary)",
-            boxSizing: "border-box"
+            border: "1px solid var(--color-border, #D4DDD6)",
+            background: "var(--color-bg-surface, #ffffff)",
+            color: "var(--color-text-primary, #172B3A)",
+            boxSizing: "border-box",
+            outline: "none",
           }}
         />
 
@@ -60,24 +69,27 @@ export default function ColumnVisibilityPicker({
         <div style={{ display: "flex", gap: "0.4rem", marginTop: "6px" }}>
           <button
             type="button"
+            className="btn-secondary"
             onClick={onSelectAll}
-            style={{ fontSize: "0.7rem", padding: "2px 6px", borderRadius: "4px", border: "1px solid var(--color-border)", background: "var(--color-bg-surface)", color: "var(--color-text-secondary)", cursor: "pointer" }}
+            style={{ fontSize: "0.7rem", padding: "2px 6px", minHeight: "unset", lineHeight: 1.2 }}
           >
             All
           </button>
-          {columns.length > 10 && (
+          {columns.length > 5 && (
             <button
               type="button"
-              onClick={() => onSelectFirstN(10)}
-              style={{ fontSize: "0.7rem", padding: "2px 6px", borderRadius: "4px", border: "1px solid var(--color-border)", background: "var(--color-bg-surface)", color: "var(--color-text-secondary)", cursor: "pointer" }}
+              className="btn-secondary"
+              onClick={() => onSelectFirstN(5)}
+              style={{ fontSize: "0.7rem", padding: "2px 6px", minHeight: "unset", lineHeight: 1.2 }}
             >
-              First 10
+              First 5
             </button>
           )}
           <button
             type="button"
+            className="btn-secondary"
             onClick={onDeselectAllExceptFirst}
-            style={{ fontSize: "0.7rem", padding: "2px 6px", borderRadius: "4px", border: "1px solid var(--color-border)", background: "var(--color-bg-surface)", color: "var(--color-text-secondary)", cursor: "pointer" }}
+            style={{ fontSize: "0.7rem", padding: "2px 6px", minHeight: "unset", lineHeight: 1.2 }}
           >
             Min
           </button>
@@ -85,12 +97,14 @@ export default function ColumnVisibilityPicker({
       </div>
 
       {/* Column Checklist */}
-      <div style={{ overflowY: "auto", padding: "0.5rem", flex: 1, maxHeight: "240px" }}>
-        {filteredCols.map(col => {
-          const isChecked = visibleColumns.has(col);
+      <div style={{ overflowY: "auto", padding: "0.5rem", flex: 1, maxHeight: "220px" }}>
+        {filteredCols.map((c) => {
+          const key = getColKey(c);
+          const label = getColLabel(c);
+          const isChecked = visibleColumns.has(key);
           return (
             <label
-              key={col}
+              key={key}
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -98,20 +112,18 @@ export default function ColumnVisibilityPicker({
                 padding: "5px 6px",
                 borderRadius: "4px",
                 cursor: "pointer",
-                fontSize: "0.76rem",
-                color: isChecked ? "var(--color-text-primary)" : "var(--color-text-muted)",
-                background: isChecked ? "var(--color-bg-soft-teal)" : "transparent"
+                fontSize: "0.78rem",
+                userSelect: "none",
+                color: "var(--color-text-primary, #172B3A)",
               }}
             >
               <input
                 type="checkbox"
                 checked={isChecked}
-                onChange={() => onToggleColumn(col)}
-                style={{ accentColor: "var(--color-brand-secondary)" }}
+                onChange={() => onToggleColumn(key)}
+                style={{ cursor: "pointer" }}
               />
-              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={col}>
-                {formatDisplayLabel(col)}
-              </span>
+              <span>{label}</span>
             </label>
           );
         })}

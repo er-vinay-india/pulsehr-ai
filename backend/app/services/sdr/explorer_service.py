@@ -188,6 +188,8 @@ class SDRExplorerService:
         page: int = 1,
         page_size: int = 50,
         search: str | None = None,
+        sort_by: str | None = None,
+        sort_direction: str | None = None,
     ) -> dict[str, Any]:
         """Returns exact source rows with zero derived columns and no altered types."""
         sdr_dir = self._get_sdr_dir(dataset_id)
@@ -245,13 +247,44 @@ class SDRExplorerService:
             columns = list(records[0].keys())
 
         # Filter by search string if provided
-        filtered_records = records
+        filtered_records = list(records)
         if search and search.strip():
             query = search.strip().lower()
             filtered_records = [
-                r for r in records
+                r for r in filtered_records
                 if any(query in str(v).lower() for v in r.values() if v is not None)
             ]
+
+        # Full-dataset server-side type-aware sorting
+        if sort_by and sort_by in columns:
+            is_desc = str(sort_direction or "").lower() == "desc"
+
+            def _parse_sort_val(v: Any) -> tuple[int, Any]:
+                if isinstance(v, (int, float)):
+                    return (0, float(v))
+                if isinstance(v, bool):
+                    return (0, 1.0 if v else 0.0)
+                s = str(v).strip()
+                # Check pure numeric string
+                try:
+                    num = float(s.replace(",", ""))
+                    return (0, num)
+                except (ValueError, TypeError):
+                    pass
+                # Check date ISO string
+                if len(s) >= 8 and ("-" in s or "/" in s):
+                    try:
+                        from datetime import datetime
+                        clean_dt = s.replace("/", "-")
+                        return (1, datetime.fromisoformat(clean_dt).timestamp())
+                    except Exception:
+                        pass
+                return (2, s.lower())
+
+            valid_records = [r for r in filtered_records if r.get(sort_by) not in (None, "")]
+            empty_records = [r for r in filtered_records if r.get(sort_by) in (None, "")]
+            valid_records.sort(key=lambda r: _parse_sort_val(r.get(sort_by)), reverse=is_desc)
+            filtered_records = valid_records + empty_records
 
         total_rows = len(filtered_records)
         start_idx = max(0, (page - 1) * page_size)
@@ -272,6 +305,8 @@ class SDRExplorerService:
             "total_rows": total_rows,
             "page": page,
             "page_size": page_size,
+            "sort_by": sort_by,
+            "sort_direction": sort_direction,
             "columns": columns,
             "rows": rows_with_idx,
             "is_source_truth": True,

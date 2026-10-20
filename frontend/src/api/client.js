@@ -861,7 +861,7 @@ export async function getExplorerSummary(datasetId) {
   return res.json();
 }
 
-export async function getExplorerSourceRows(datasetId, sheetId, page = 1, pageSize = 50, search = null) {
+export async function getExplorerSourceRows(datasetId, sheetId, page = 1, pageSize = 50, search = null, sortBy = null, sortDir = null) {
   const params = new URLSearchParams({
     sheet_id: sheetId,
     page: String(page),
@@ -869,6 +869,12 @@ export async function getExplorerSourceRows(datasetId, sheetId, page = 1, pageSi
   });
   if (search && search.trim()) {
     params.set("search", search.trim());
+  }
+  if (sortBy) {
+    params.set("sort_by", sortBy);
+  }
+  if (sortDir) {
+    params.set("sort_direction", sortDir);
   }
   const res = await fetch(`${API_BASE}/datasets/${datasetId}/explorer/source-rows?${params.toString()}`);
   if (!res.ok) {
