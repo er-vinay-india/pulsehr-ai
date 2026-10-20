@@ -1,5 +1,6 @@
 import React from "react";
 import { ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { RefetchBadge } from "../loaders";
 import {
   formatDisplayLabel,
   formatCuratedNumber,
@@ -63,25 +64,22 @@ export default function DataTableGrid({
     >
       {loading && (
         <div
+          role="status"
+          aria-live="polite"
           style={{
             position: "absolute",
             inset: 0,
-            background: "rgba(255, 255, 255, 0.75)",
+            background: "var(--color-bg-subtle, rgba(0, 0, 0, 0.04))",
+            backdropFilter: "blur(1.5px)",
+            WebkitBackdropFilter: "blur(1.5px)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
             zIndex: 10,
+            pointerEvents: "none",
           }}
         >
-          <span
-            style={{
-              fontSize: "0.85rem",
-              color: "var(--color-brand-primary, #183B56)",
-              fontWeight: 600,
-            }}
-          >
-            Loading records…
-          </span>
+          <RefetchBadge active={true} label="Updating records…" />
         </div>
       )}
 

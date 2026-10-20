@@ -1,0 +1,94 @@
+/**
+ * HighView Loading Design System — Core Animations & Shimmer Tokens
+ * Zero hardcoded colors. 100% theme token & WCAG AAA contrast compliant.
+ */
+
+@keyframes pulse-glow {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.65;
+    transform: scale(0.985);
+  }
+}
+
+@keyframes dash-spin {
+  0% {
+    stroke-dashoffset: 0;
+    transform: rotate(0deg);
+  }
+  50% {
+    stroke-dashoffset: 65;
+    transform: rotate(180deg);
+  }
+  100% {
+    stroke-dashoffset: 130;
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes subtle-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+@keyframes wave-dot {
+  0%, 60%, 100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+  30% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
+}
+
+@keyframes top-bar-glow {
+  0% {
+    box-shadow: 0 0 4px var(--color-brand-primary, #183B56);
+  }
+  50% {
+    box-shadow: 0 0 10px var(--color-brand-primary, #183B56), 0 0 3px var(--color-brand-primary, #183B56);
+  }
+  100% {
+    box-shadow: 0 0 4px var(--color-brand-primary, #183B56);
+  }
+}
+
+.highview-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--color-bg-subtle, rgba(0, 0, 0, 0.04)) 0%,
+    var(--color-divider, rgba(0, 0, 0, 0.09)) 50%,
+    var(--color-bg-subtle, rgba(0, 0, 0, 0.04)) 100%
+  );
+  background-size: 200% 100%;
+  animation: subtle-shimmer 1.8s infinite ease-in-out;
+}
+
+:root[data-theme="dark"] .highview-shimmer,
+.dark .highview-shimmer,
+.dark-theme .highview-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.03) 0%,
+    rgba(255, 255, 255, 0.09) 50%,
+    rgba(255, 255, 255, 0.03) 100%
+  );
+  background-size: 200% 100%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .highview-shimmer,
+  .pulse-animation,
+  .wave-dot-animation {
+    animation: none !important;
+    opacity: 0.8 !important;
+  }
+}

@@ -43,6 +43,7 @@ import SourceMode from '../components/explorer/sdr/SourceMode';
 import SemanticsMode from '../components/explorer/sdr/SemanticsMode';
 import RelationshipsMode from '../components/explorer/sdr/RelationshipsMode';
 import AnalyticalViewsMode from '../components/explorer/sdr/AnalyticalViewsMode';
+import { PageShellSkeleton } from '../components/loaders';
 
 export function getCombinedUrlParam(key) {
   const searchParams = new URLSearchParams(window.location.search);
@@ -700,7 +701,7 @@ export default function DataExplorerPage() {
       </header>
 
       {notice && <div className="explorer-feedback" role="status">{notice}</div>}
-      {catalogLoading && <div className="explorer-loading" role="status">Loading workbooks…</div>}
+      {catalogLoading && <PageShellSkeleton layout="explorer" />}
       {!catalogLoading && !catalogLoaded && (
         <section className="explorer-empty-state">
           <div className="explorer-empty-icon"><FileSpreadsheet size={28} /></div>

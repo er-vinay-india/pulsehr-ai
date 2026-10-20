@@ -10,6 +10,7 @@ import UploadModal from "./components/ingestion/UploadModal.jsx";
 import { activateUploadedSheet } from "./components/hriday/datasetScope.js";
 import { NOTIFICATION_DISMISS_DELAY_MS } from "./config/env.js";
 import { CheckCircle2, X, Table } from "lucide-react";
+import { TopRouteBar } from "./components/loaders";
 
 function parseHash() {
   const hash = window.location.hash.replace(/^#\/?/, "").split("?")[0].trim();
@@ -39,6 +40,7 @@ export default function App() {
   // Background Ingestion State & Notification Toast
   const [isUploadingBackground, setIsUploadingBackground] = useState(false);
   const [bgNotification, setBgNotification] = useState(null);
+  const [isNavigating, setIsNavigating] = useState(false);
 
   // Presentation Pipeline Job & Deck State
   const [activePresentationJob, setActivePresentationJob] = useState(null);
@@ -85,6 +87,8 @@ export default function App() {
       } catch {}
 
       const h = window.location.hash.replace(/^#\/?/, "").split("?")[0].trim();
+      setIsNavigating(true);
+      setTimeout(() => setIsNavigating(false), 380);
       if (h === "copilot") {
         setCopilotOpen(true);
         setActiveTab("adaptive");
@@ -117,6 +121,8 @@ export default function App() {
       setUploadModalOpen(true);
       return;
     }
+    setIsNavigating(true);
+    setTimeout(() => setIsNavigating(false), 380);
     window.location.hash = tab;
     setActiveTab(tab);
     // Re-tapping the current navigation item should return to the page start too.
@@ -146,6 +152,7 @@ export default function App() {
 
   return (
     <div className="app">
+      <TopRouteBar isAnimating={isNavigating} />
       <a className="skip-link" href="#main-content" onClick={e => { e.preventDefault(); document.getElementById("main-content")?.focus(); }}>Skip to content</a>
       <Header
         activeTab={activeTab}

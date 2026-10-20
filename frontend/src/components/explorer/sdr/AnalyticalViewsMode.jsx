@@ -3,6 +3,7 @@ import { getExplorerAnalyticalViews, getExplorerAnalyticalFacts } from "../../..
 import LineageDrawer from "./LineageDrawer";
 import StatusBadge from "../common/StatusBadge";
 import DataTable from "../../DataTable";
+import { SkeletonBlock } from "../../loaders";
 import {
   LineChart,
   Table,
@@ -382,8 +383,29 @@ export default function AnalyticalViewsMode({
       </div>
 
       {loading ? (
-        <div style={{ padding: "40px", textAlign: "center", color: textSecondary, fontSize: "0.9rem" }}>
-          Loading analytical views…
+        <div
+          role="status"
+          aria-label="Loading analytical views"
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: "16px",
+          }}
+        >
+          <SkeletonBlock variant="card" count={3} />
+          <div
+            style={{
+              background: bgSurface,
+              border: `1px solid ${borderCol}`,
+              borderRadius: "10px",
+              padding: "16px",
+              display: "flex",
+              flexDirection: "column",
+              gap: "12px",
+            }}
+          >
+            <SkeletonBlock variant="table-row" count={6} columns={6} />
+          </div>
         </div>
       ) : error ? (
         <div

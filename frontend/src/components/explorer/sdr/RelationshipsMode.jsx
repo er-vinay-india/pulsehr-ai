@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import { getExplorerRelationships } from "../../../api/client";
 import StatusBadge from "../common/StatusBadge";
 import DataTable from "../../DataTable";
+import { SkeletonBlock } from "../../loaders";
 import {
   GitMerge,
   ShieldCheck,
@@ -450,8 +451,25 @@ export default function RelationshipsMode({ datasetId, themeTokens, isDark = fal
       </div>
 
       {loading ? (
-        <div style={{ padding: "40px", textAlign: "center", color: textSecondary, fontSize: "0.9rem" }}>
-          Loading relationship intelligence…
+        <div
+          role="status"
+          aria-label="Loading relationship intelligence"
+          style={{
+            background: bgSurface,
+            border: `1px solid ${borderCol}`,
+            borderRadius: "10px",
+            padding: "16px",
+            display: "flex",
+            flexDirection: "column",
+            gap: "12px",
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span style={{ fontSize: "0.82rem", fontWeight: 600, color: textSecondary }}>
+              Loading relationship intelligence…
+            </span>
+          </div>
+          <SkeletonBlock variant="table-row" count={6} columns={6} />
         </div>
       ) : error ? (
         <div

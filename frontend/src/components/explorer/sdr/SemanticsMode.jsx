@@ -3,6 +3,7 @@ import { getExplorerSemantics } from "../../../api/client";
 import ColumnDetailDrawer from "./ColumnDetailDrawer";
 import StatusBadge from "../common/StatusBadge";
 import DataTable from "../../DataTable";
+import { SkeletonBlock } from "../../loaders";
 import {
   Sparkles,
   Layers,
@@ -1019,8 +1020,25 @@ export default function SemanticsMode({
       )}
 
       {loading ? (
-        <div style={{ padding: "40px", textAlign: "center", color: textSecondary, fontSize: "0.9rem" }}>
-          Loading semantic intelligence…
+        <div
+          role="status"
+          aria-label="Loading semantic intelligence"
+          style={{
+            background: bgSurface,
+            border: `1px solid ${borderCol}`,
+            borderRadius: "10px",
+            padding: "16px",
+            display: "flex",
+            flexDirection: "column",
+            gap: "12px",
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span style={{ fontSize: "0.82rem", fontWeight: 600, color: textSecondary }}>
+              Loading semantic intelligence…
+            </span>
+          </div>
+          <SkeletonBlock variant="table-row" count={8} columns={7} />
         </div>
       ) : error ? (
         <div
