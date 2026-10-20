@@ -28,7 +28,8 @@ try {
     jobStage: 'recovering', jobProgress: 0,
     jobStageLabel: 'Server reconnected. Rebuilding your presentation automatically…',
   });
-  assert.ok(recovery.includes('Phase 1 of 13: Objective &amp; Brief Setup'));
+  assert.ok(recovery.includes('Phase 1: Objective &amp; Brief Setup'));
+  assert.ok(!recovery.includes('generating-header-card'), 'active jobs must not show a duplicate loader panel');
   assert.ok(recovery.includes('Rebuilding your presentation automatically'));
   assert.ok(!recovery.includes('Generation Interrupted'));
   assert.ok(!recovery.includes('Open in Studio'));
@@ -47,7 +48,12 @@ try {
   assert.ok(failed.includes('Back to setup') && failed.includes('Try again'));
 
   const pending = render({ jobStage: 'export_qa', jobProgress: 100 });
-  assert.ok(pending.includes('99% Complete'), '100 percent is reserved for a ready deck');
+  assert.ok(pending.includes('Running · 99%'), '100 percent is reserved for a ready deck');
+  const starting = render({ jobStage: 'brief_setup', jobProgress: 3, jobStageLabel: 'Phase 0: Validating presentation brief' });
+  assert.ok(starting.includes('Running · 3%'));
+  assert.ok(!starting.includes('Phase 0:'), 'phase numbering must agree with the list');
+  assert.equal((starting.match(/Validating presentation brief/g) || []).length, 1);
+  assert.ok(!starting.includes('pipeline-spinner-badge'));
   const lastSlide = render({ jobStage: 'headlines', jobProgress: 45, slideProgressData: { current_slide: 3, total_slides: 3 } });
   assert.ok(lastSlide.includes('slide-step-pill building'), 'the last slide remains active until its phase finishes');
 

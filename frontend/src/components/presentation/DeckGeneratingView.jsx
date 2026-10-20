@@ -109,11 +109,12 @@ export default function DeckGeneratingView({
     index = Math.min(stages.length - 1, Math.max(0, Math.floor((jobProgress / 100) * stages.length)));
   }
   const currentStage = stages[index] || stages[0];
+  const stageDetail = jobStageLabel.replace(/^Phase\s+\d+:\s*/i, "");
 
   return (
     <div className="pres-generating-body" aria-busy={!isFailed && !isReady}>
-      {/* Top Header Card */}
-      <div className="generating-header-card" role="status" aria-live="polite">
+      {/* Terminal outcomes only; active progress belongs to the phase list. */}
+      {(isFailed || isReady) && <div className="generating-header-card" role="status" aria-live="polite">
         <div className="pipeline-spinner-badge" aria-hidden="true">
           {isFailed ? <AlertTriangle size={26} /> : isReady ? <CheckCircle2 size={26} /> : <RotateCw size={26} className="spin-icon" />}
         </div>
@@ -181,9 +182,9 @@ export default function DeckGeneratingView({
             )}
           </div>
         )}
-      </div>
+      </div>}
 
-      {/* 8-Phase Sequential Stepper List */}
+      {/* Sequential generation phases */}
       {!isFailed && <div className="pipeline-stages-list" role="list" aria-label="Presentation generation phases">
         {stages.map((st, idx) => {
           const isPassed = !jobError && (index > idx || jobStage === "ready");
@@ -210,7 +211,7 @@ export default function DeckGeneratingView({
                   <span className="stage-title">Phase {idx + 1}: {st.label}</span>
                 </div>
                 <span className="stage-desc">
-                  {isCurrent && jobStageLabel ? jobStageLabel : (st.desc || st.label)}
+                  {isCurrent && stageDetail ? stageDetail : (st.desc || st.label)}
                 </span>
 
                 {/* Unified, compact SlideTrain across active and completed phases */}
@@ -224,7 +225,7 @@ export default function DeckGeneratingView({
                 )}
               </div>
 
-              {isCurrent && <span className="stage-active-pulse">Running</span>}
+              {isCurrent && !isReady && <span className="stage-active-pulse" role="status" aria-live="polite">Running · {progress}%</span>}
             </div>
           );
         })}
