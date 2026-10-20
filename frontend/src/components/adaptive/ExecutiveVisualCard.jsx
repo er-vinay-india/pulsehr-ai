@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import VisualSpecRenderer from "./VisualSpecRenderer";
 import SemanticIcon from "./SemanticIcon";
 import ActionIconButton from "../../design-system/components/ActionIconButton";
@@ -19,6 +19,20 @@ export default function ExecutiveVisualCard({
   onInspect,
 }) {
   if (!topic) return null;
+
+  const [selectedMetricId, setSelectedMetricId] = useState(null);
+  const [isRankingDrawerOpen, setIsRankingDrawerOpen] = useState(false);
+
+  useEffect(() => {
+    if (!isRankingDrawerOpen) return;
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") {
+        setIsRankingDrawerOpen(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isRankingDrawerOpen]);
 
   const intentColor = {
     RANKING: themeTokens?.colors?.brandBlue || "var(--color-brand-blue, var(--action-primary-bg))",
@@ -166,30 +180,64 @@ export default function ExecutiveVisualCard({
 
   // Synchronized chart height based on row height class
   const chartHeight = useMemo(() => {
-    if (isGeospatial) return "380px";
+    if (isGeospatial) return "440px";
     if (isHero) return "320px";
     if (heightClass === "tall") return "320px";
     if (heightClass === "short") return "190px";
     return "230px";
   }, [heightClass, isHero, isGeospatial]);
 
+  const availableMetrics = useMemo(() => {
+    if (!isGeospatial) return [];
+    return compactVisualSpec?.available_metrics || [];
+  }, [isGeospatial, compactVisualSpec]);
+
+  const activeMetric = useMemo(() => {
+    if (!availableMetrics || availableMetrics.length === 0) return null;
+    if (selectedMetricId) {
+      return availableMetrics.find((m) => m.metric_id === selectedMetricId) || availableMetrics[0];
+    }
+    return availableMetrics[0];
+  }, [availableMetrics, selectedMetricId]);
+
+  const activeVisualSpec = useMemo(() => {
+    if (!isGeospatial || !activeMetric) return compactVisualSpec;
+    return {
+      ...compactVisualSpec,
+      chart_type: activeMetric.map_type || compactVisualSpec.chart_type,
+      map_type: activeMetric.map_type || compactVisualSpec.map_type,
+      measure_label: activeMetric.label,
+      primary_measure: activeMetric.label,
+      unit: activeMetric.unit,
+      categories: activeMetric.categories || compactVisualSpec.categories,
+      values: activeMetric.values || compactVisualSpec.values,
+      map_data: activeMetric.map_data || compactVisualSpec.map_data,
+      table_data: activeMetric.table_data || compactVisualSpec.table_data,
+      key_metric: activeMetric.key_metric || compactVisualSpec.key_metric,
+    };
+  }, [isGeospatial, activeMetric, compactVisualSpec]);
+
   const geoTableColumns = useMemo(() => {
-    const hasDensity = compactVisualSpec?.table_data?.some((r) => r.density != null);
-    const hasGrowth = compactVisualSpec?.table_data?.some((r) => r.growth != null);
-    const hasPop = compactVisualSpec?.table_data?.some((r) => r.population != null);
-    const primaryLabel = compactVisualSpec?.measure_label || compactVisualSpec?.primary_measure || compactVisualSpec?.primary_label || "Metric Value";
+    const tblData = activeVisualSpec?.table_data || [];
+    const hasDensity = tblData.some((r) => r.density != null);
+    const hasGrowth = tblData.some((r) => r.growth != null);
+    const hasPop = tblData.some((r) => r.population != null);
+    const primaryLabel = activeVisualSpec?.measure_label || activeVisualSpec?.primary_measure || "Metric Value";
 
     const cols = [
-      { key: "rank", label: "Rank", sortable: true, align: "center", width: "65px" },
-      { key: "location", label: compactVisualSpec?.geo_dimension || "Territory", sortable: true, filterable: true },
+      { key: "rank", label: "Rank", sortable: true, align: "center", width: "70px" },
+      { key: "location", label: activeVisualSpec?.geo_dimension || "Territory", sortable: true, filterable: true },
       { key: "value", label: primaryLabel, sortable: true, align: "right" },
     ];
 
-    if (hasGrowth) {
-      cols.push({ key: "growth", label: "Growth (2001-2011)", sortable: true, align: "right", width: "140px" });
+    if (hasGrowth && !primaryLabel.toLowerCase().includes("growth")) {
+      cols.push({ key: "growth", label: "Growth (2001-2011)", sortable: true, align: "right", width: "150px" });
     }
-    if (hasPop) {
-      cols.push({ key: "population", label: "Population 2011", sortable: true, align: "right", width: "140px" });
+    if (hasPop && !primaryLabel.toLowerCase().includes("pop")) {
+      cols.push({ key: "population", label: "Population 2011", sortable: true, align: "right", width: "150px" });
+    }
+    if (hasDensity && !primaryLabel.toLowerCase().includes("density")) {
+      cols.push({ key: "density", label: "Population Density", sortable: true, align: "right", width: "160px" });
     }
 
     cols.push({
@@ -197,7 +245,7 @@ export default function ExecutiveVisualCard({
       label: "Lineage",
       sortable: true,
       align: "center",
-      width: "100px",
+      width: "110px",
       render: (val) => (
         <span
           style={{
@@ -215,12 +263,12 @@ export default function ExecutiveVisualCard({
     });
 
     return cols;
-  }, [compactVisualSpec, isDark]);
+  }, [activeVisualSpec, isDark]);
 
   const geoTableRows = useMemo(() => {
-    if (!compactVisualSpec || !isGeospatial) return [];
-    if (compactVisualSpec.table_data && compactVisualSpec.table_data.length > 0) {
-      return compactVisualSpec.table_data.map((r, i) => ({
+    if (!activeVisualSpec || !isGeospatial) return [];
+    if (activeVisualSpec.table_data && activeVisualSpec.table_data.length > 0) {
+      return activeVisualSpec.table_data.map((r, i) => ({
         id: `geo-row-${i}`,
         rank: r.rank != null ? r.rank : i + 1,
         location: r.location || "-",
@@ -229,12 +277,12 @@ export default function ExecutiveVisualCard({
         growth: r.growth || "-",
         population: r.population || "-",
         density: r.density || "-",
-        lineage: r.lineage || compactVisualSpec.geo_source || "OBSERVED",
+        lineage: r.lineage || activeVisualSpec.geo_source || "OBSERVED",
       }));
     }
-    const cats = compactVisualSpec.categories || [];
-    const vals = compactVisualSpec.values || [];
-    const unit = compactVisualSpec.unit || "";
+    const cats = activeVisualSpec.categories || [];
+    const vals = activeVisualSpec.values || [];
+    const unit = activeVisualSpec.unit || "";
     return cats.map((cat, idx) => ({
       id: `geo-row-${idx}`,
       rank: idx + 1,
@@ -244,11 +292,23 @@ export default function ExecutiveVisualCard({
       growth: "-",
       population: "-",
       density: "-",
-      lineage: compactVisualSpec.geo_source || "OBSERVED",
+      lineage: activeVisualSpec.geo_source || "OBSERVED",
     }));
-  }, [compactVisualSpec, isGeospatial]);
+  }, [activeVisualSpec, isGeospatial]);
 
   const accessibleChartDescription = topic.primary_takeaway || topic.takeaway || topic.title || "Visual analytics chart.";
+
+  const activePrimaryNumber = isGeospatial && activeMetric?.key_metric
+    ? activeMetric.key_metric
+    : microcopy.primary_number;
+
+  const activeTakeaway = isGeospatial && activeMetric?.takeaway
+    ? activeMetric.takeaway
+    : (topic.primary_takeaway || topic.takeaway || microcopy.short_finding);
+
+  const activeAccessibleSummary = isGeospatial && (activeMetric?.accessible_summary || activeVisualSpec?.accessible_summary)
+    ? (activeMetric?.accessible_summary || activeVisualSpec?.accessible_summary)
+    : accessibleChartDescription;
 
   return (
     <article
@@ -335,7 +395,7 @@ export default function ExecutiveVisualCard({
         </header>
 
         {/* Metric / Context sub-strip: Primary metric number + Short context sentence */}
-        {(microcopy.primary_number || microcopy.short_context) && (
+        {(activePrimaryNumber || microcopy.short_context) && (
           <div
             className="visual-card__metric-context card-metric-context"
             style={{
@@ -346,7 +406,7 @@ export default function ExecutiveVisualCard({
               fontSize: "0.78rem",
             }}
           >
-            {microcopy.primary_number && (
+            {activePrimaryNumber && (
               <span
                 className="visual-card__metric card-primary-number"
                 style={{
@@ -355,7 +415,7 @@ export default function ExecutiveVisualCard({
                   color: intentColor,
                 }}
               >
-                {microcopy.primary_number}
+                {activePrimaryNumber}
               </span>
             )}
             {microcopy.short_context && (
@@ -375,6 +435,62 @@ export default function ExecutiveVisualCard({
           </div>
         )}
 
+        {/* Governed Compact Metric Selector above Map */}
+        {isGeospatial && availableMetrics.length > 1 && (
+          <div
+            className="geo-metric-selector"
+            role="tablist"
+            aria-label="Select geographic metric to visualize on map"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              margin: "6px 0 10px 0",
+              flexWrap: "wrap",
+            }}
+          >
+            {availableMetrics.map((m) => {
+              const isSelected = m.metric_id === (activeMetric?.metric_id || availableMetrics[0].metric_id);
+              return (
+                <button
+                  key={m.metric_id}
+                  type="button"
+                  role="tab"
+                  aria-selected={isSelected}
+                  onClick={() => setSelectedMetricId(m.metric_id)}
+                  style={{
+                    padding: "4px 10px",
+                    fontSize: "0.74rem",
+                    fontWeight: isSelected ? 700 : 500,
+                    borderRadius: "6px",
+                    border: isSelected
+                      ? `1px solid ${isDark ? "#38bdf8" : "#2563eb"}`
+                      : `1px solid ${isDark ? "#334155" : "#e2e8f0"}`,
+                    backgroundColor: isSelected
+                      ? isDark
+                        ? "rgba(56, 189, 248, 0.15)"
+                        : "rgba(37, 99, 235, 0.08)"
+                      : isDark
+                      ? "#1e293b"
+                      : "#f8fafc",
+                    color: isSelected
+                      ? isDark
+                        ? "#38bdf8"
+                        : "#1d4ed8"
+                      : isDark
+                      ? "#94a3b8"
+                      : "#475569",
+                    cursor: "pointer",
+                    transition: "all 0.15s ease",
+                  }}
+                >
+                  {m.label}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         {/* 2. FIGURE ("What is happening?"): ECharts Visual Spec Renderer with accessible fallback */}
         <figure
           className="visual-card__figure"
@@ -387,78 +503,243 @@ export default function ExecutiveVisualCard({
           }}
         >
           <p className="sr-only">
-            {accessibleChartDescription}
+            {activeAccessibleSummary}
           </p>
           <VisualSpecRenderer
-            visualSpec={compactVisualSpec}
+            visualSpec={activeVisualSpec}
             themeTokens={themeTokens}
             isDark={isDark}
-            height={isGeospatial ? "380px" : chartHeight}
+            height={isGeospatial ? "440px" : chartHeight}
           />
-          {/* Map + Ranked Geographic DataTable */}
-          {isGeospatial && geoTableRows.length > 0 && (
-            <div style={{ marginTop: "14px", width: "100%" }}>
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  marginBottom: "8px",
-                  padding: "0 2px",
-                }}
-              >
-                <span
-                  style={{
-                    fontSize: "0.74rem",
-                    fontWeight: 700,
-                    color: themeTokens?.colors?.textSecondary,
-                    textTransform: "uppercase",
-                    letterSpacing: "0.04em",
-                  }}
-                >
-                  Ranked Geographic DataTable ({geoTableRows.length} territories)
-                </span>
-                <span style={{ fontSize: "0.72rem", color: themeTokens?.colors?.textMuted }}>
-                  Lineage: <strong>{compactVisualSpec.geo_source || "OBSERVED"}</strong>
-                </span>
-              </div>
-              <DataTable
-                columns={geoTableColumns}
-                rows={geoTableRows}
-                pageSize={6}
-                pageSizeOptions={[6, 12, 25]}
-                defaultSortCol="rank"
-                defaultSortDir="asc"
-                searchPlaceholder="Search locations..."
-                emptyMessage="No geographic records match."
-                tableAriaLabel={`${displayTitle} ranked geographic comparison table`}
-              />
-            </div>
-          )}
-          {/* 3. FIGCAPTION ("What can I do next?"): Compressed finding + Deep dive link */}
+          {/* Note: Full DataTable permanently removed from default figure; accessible on-demand via "View ranking →" drawer */}
           <figcaption
             className="visual-card__figcaption card-short-insight"
             style={{
-              paddingTop: "8px",
-              marginTop: "4px",
+              paddingTop: "10px",
+              marginTop: "6px",
               borderTop: `1px solid ${themeTokens?.colors?.borderSubtle || "var(--color-border)"}`,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: "12px",
+              flexWrap: "wrap",
             }}
           >
             <p
               className="visual-card__finding"
               style={{
                 margin: 0,
-                fontSize: "0.78rem",
+                fontSize: "0.80rem",
                 fontWeight: 500,
                 color: themeTokens?.colors?.textPrimary,
-                lineHeight: 1.35,
+                lineHeight: 1.4,
+                flex: "1 1 300px",
               }}
             >
-              {microcopy.short_finding}
+              {activeTakeaway}
             </p>
+            {isGeospatial && (
+              <button
+                type="button"
+                onClick={() => setIsRankingDrawerOpen(true)}
+                className="geo-view-ranking-btn"
+                aria-haspopup="dialog"
+                aria-expanded={isRankingDrawerOpen}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "5px",
+                  background: isDark ? "rgba(56, 189, 248, 0.1)" : "rgba(37, 99, 235, 0.06)",
+                  border: `1px solid ${isDark ? "rgba(56, 189, 248, 0.25)" : "rgba(37, 99, 235, 0.18)"}`,
+                  borderRadius: "6px",
+                  padding: "5px 10px",
+                  color: isDark ? "#38bdf8" : "#2563eb",
+                  fontSize: "0.75rem",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  whiteSpace: "nowrap",
+                  transition: "all 0.15s ease",
+                }}
+              >
+                View ranking →
+              </button>
+            )}
           </figcaption>
         </figure>
       </div>
+
+      {/* Ranking Drawer for Detailed Tabular Exploration */}
+      {isRankingDrawerOpen && (
+        <div
+          className="drawer-overlay"
+          onClick={() => setIsRankingDrawerOpen(false)}
+          role="presentation"
+          style={{ zIndex: 1200 }}
+        >
+          <div
+            className="drawer-panel"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={`geo-drawer-title-${topic.topic_id}`}
+            style={{
+              width: "min(100%, 720px)",
+              backgroundColor: isDark ? "#0f172a" : "#ffffff",
+              color: isDark ? "#f8fafc" : "#0f172a",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div
+              className="drawer-header"
+              style={{
+                padding: "16px 20px",
+                borderBottom: `1px solid ${isDark ? "#334155" : "#e2e8f0"}`,
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "flex-start",
+                backgroundColor: isDark ? "#1e293b" : "#f8fafc",
+              }}
+            >
+              <div>
+                <h2
+                  id={`geo-drawer-title-${topic.topic_id}`}
+                  style={{
+                    margin: 0,
+                    fontSize: "1.15rem",
+                    fontWeight: 700,
+                    color: isDark ? "#f8fafc" : "#0f172a",
+                  }}
+                >
+                  {activeMetric?.label || "Territory"} Ranking
+                </h2>
+                <div
+                  style={{
+                    fontSize: "0.78rem",
+                    color: isDark ? "#94a3b8" : "#64748b",
+                    marginTop: "3px",
+                  }}
+                >
+                  {geoTableRows.length} observed territories across {activeVisualSpec.geo_scope || "India"}
+                </div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                {contextualTarget && (
+                  <a
+                    href={contextualTarget.url}
+                    className="drawer-explorer-link"
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "4px",
+                      fontSize: "0.75rem",
+                      fontWeight: 600,
+                      color: isDark ? "#38bdf8" : "#2563eb",
+                      textDecoration: "none",
+                      padding: "4px 8px",
+                      borderRadius: "4px",
+                      border: `1px solid ${isDark ? "rgba(56, 189, 248, 0.3)" : "rgba(37, 99, 235, 0.2)"}`,
+                    }}
+                  >
+                    <span>Explore in Data Explorer</span>
+                    <span>→</span>
+                  </a>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setIsRankingDrawerOpen(false)}
+                  aria-label="Close ranking drawer"
+                  style={{
+                    background: "none",
+                    border: "none",
+                    color: isDark ? "#94a3b8" : "#64748b",
+                    fontSize: "1.2rem",
+                    cursor: "pointer",
+                    padding: "4px 8px",
+                    borderRadius: "4px",
+                    lineHeight: 1,
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            <div
+              className="drawer-body"
+              style={{
+                padding: "20px",
+                overflowY: "auto",
+                flex: 1,
+                display: "flex",
+                flexDirection: "column",
+                gap: "16px",
+              }}
+            >
+              {availableMetrics.length > 1 && (
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <span style={{ fontSize: "0.75rem", fontWeight: 600, color: isDark ? "#94a3b8" : "#64748b", marginRight: "4px" }}>
+                    Metric:
+                  </span>
+                  {availableMetrics.map((m) => {
+                    const isSelected = m.metric_id === (activeMetric?.metric_id || availableMetrics[0].metric_id);
+                    return (
+                      <button
+                        key={`drawer-m-${m.metric_id}`}
+                        type="button"
+                        onClick={() => setSelectedMetricId(m.metric_id)}
+                        style={{
+                          padding: "3px 8px",
+                          fontSize: "0.72rem",
+                          fontWeight: isSelected ? 700 : 500,
+                          borderRadius: "5px",
+                          border: isSelected
+                            ? `1px solid ${isDark ? "#38bdf8" : "#2563eb"}`
+                            : `1px solid ${isDark ? "#334155" : "#e2e8f0"}`,
+                          backgroundColor: isSelected
+                            ? isDark
+                              ? "rgba(56, 189, 248, 0.15)"
+                              : "rgba(37, 99, 235, 0.08)"
+                            : isDark
+                            ? "#1e293b"
+                            : "#f8fafc",
+                          color: isSelected
+                            ? isDark
+                              ? "#38bdf8"
+                              : "#1d4ed8"
+                            : isDark
+                            ? "#94a3b8"
+                            : "#475569",
+                          cursor: "pointer",
+                        }}
+                      >
+                        {m.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              <DataTable
+                columns={geoTableColumns}
+                rows={geoTableRows}
+                pageSize={10}
+                pageSizeOptions={[10, 20, 36]}
+                defaultSortCol="rank"
+                defaultSortDir="asc"
+                searchPlaceholder="Search territories..."
+                emptyMessage="No territories match search."
+                tableAriaLabel={`${activeMetric?.label || "Territory"} ranking table`}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </article>
   );
 }

@@ -1271,58 +1271,138 @@ class AnalyticalStoryBuilder:
 
                 clean_meas_label = meas_name.replace(" - 2001-2011", "").replace(" - 2011", "").replace(" (per sq.km)", "").strip()
 
-                # Deduplicate by location and average if multiple entries exist
-                loc_map = collections.defaultdict(list)
-                for loc, val in location_val_pairs:
-                    loc_map[loc].append(val)
+                scope_label = geo_scope.title() if geo_scope in ("india", "usa") else "Regions"
 
-                sorted_items = []
-                for loc, v_list in loc_map.items():
-                    avg_v = sum(v_list) / len(v_list)
-                    sorted_items.append((loc, round(avg_v, 2)))
-
-                sorted_items.sort(key=lambda x: x[1], reverse=True)
-
-                def _fmt_measure(v_num: float) -> str:
-                    if unit == "%":
+                def _fmt_measure(v_num: float, u_str: str) -> str:
+                    if u_str == "%":
                         return f"{v_num:.1f}%"
-                    if "people" in unit or "per sq" in unit:
-                        return f"{int(v_num):,} {unit}" if v_num == int(v_num) else f"{v_num:,.1f} {unit}"
+                    if "people" in u_str or "per sq" in u_str:
+                        return f"{int(v_num):,} {u_str}" if v_num == int(v_num) else f"{v_num:,.1f} {u_str}"
                     if v_num >= 1000 and v_num == int(v_num):
                         return f"{int(v_num):,}"
-                    return f"{v_num:,.1f} {unit}".strip() if unit else f"{v_num:,.1f}"
+                    return f"{v_num:,.1f} {u_str}".strip() if u_str else f"{v_num:,.1f}"
 
-                top_loc, top_val = sorted_items[0]
-                bot_loc, bot_val = sorted_items[-1]
+                # Assemble available governed metrics for multi-metric switching
+                available_metrics = []
+                # Ensure selected_measure is evaluated first in the list
+                ordered_measures = [selected_measure] + [m for m in candidate_measures if m[0] != selected_measure[0]]
 
-                table_data = []
-                map_data = []
-                for idx, (loc, val) in enumerate(sorted_items):
-                    t_meta = territory_meta.get(loc, {})
-                    fmt_v = _fmt_measure(val)
-                    row_entry = {
-                        "rank": idx + 1,
-                        "location": loc,
-                        "value": val,
-                        "formatted_value": fmt_v,
-                        "population": t_meta.get("population"),
-                        "growth": t_meta.get("growth"),
-                        "density": t_meta.get("density") or (fmt_v if "density" in m_low else None),
-                        "lineage": "OBSERVED",
-                        "geo_level": geo_level,
-                    }
-                    table_data.append(row_entry)
-                    map_data.append({
-                        "name": loc,
-                        "value": val,
-                        "formatted_value": fmt_v,
-                        "population": t_meta.get("population"),
-                        "growth": t_meta.get("growth"),
-                        "density": t_meta.get("density") or (fmt_v if "density" in m_low else None),
+                for m_col, _ in ordered_measures:
+                    m_clow = m_col.lower()
+                    m_is_norm = any(k in m_clow for k in ("rate", "ratio", "pct", "%", "percent", "growth", "density", "score", "index", "average", "avg"))
+                    m_map_type = "choropleth" if (m_is_norm and geo_level in ("STATE", "COUNTRY")) else "bubble_map"
+
+                    if "density" in m_clow:
+                        m_u = "people/sq. km" if ("pop" in m_clow or "people" in m_clow) else "per sq. km"
+                    elif any(k in m_clow for k in ("rate", "growth", "%", "pct")):
+                        m_u = "%"
+                    elif any(k in m_clow for k in ("pop", "count", "headcount")):
+                        m_u = "people"
+                    else:
+                        m_u = "units"
+
+                    raw_label = m_col.replace(" - 2001-2011", "").replace(" - 2011", "").replace(" (per sq.km)", "").strip()
+                    if raw_label.lower() in ("population", "population 2011"):
+                        m_label = "Population 2011"
+                    elif "growth" in raw_label.lower() and "decadal" not in raw_label.lower():
+                        m_label = "Population Growth"
+                    else:
+                        m_label = raw_label
+
+                    m_pairs = []
+                    for r in rows:
+                        loc_val = r.get(geo_col)
+                        if loc_val is None or str(loc_val).strip() == "" or str(loc_val).lower() in ("india", "total", "all", "overall", "national", "grand total", "summary"):
+                            continue
+                        loc_str = str(loc_val).strip()
+                        raw_v = r.get(m_col)
+                        if raw_v is not None:
+                            try:
+                                num_v = float(str(raw_v).replace(",", "").replace("%", "").strip())
+                                m_pairs.append((loc_str, num_v))
+                            except (ValueError, TypeError):
+                                pass
+
+                    if len(m_pairs) < 3:
+                        continue
+
+                    m_loc_map = collections.defaultdict(list)
+                    for loc, val in m_pairs:
+                        m_loc_map[loc].append(val)
+
+                    m_sorted = []
+                    for loc, v_list in m_loc_map.items():
+                        avg_v = sum(v_list) / len(v_list)
+                        m_sorted.append((loc, round(avg_v, 2)))
+                    m_sorted.sort(key=lambda x: x[1], reverse=True)
+
+                    m_top_loc, m_top_val = m_sorted[0]
+                    m_bot_loc, m_bot_val = m_sorted[-1]
+
+                    m_tbl_data = []
+                    m_map_data = []
+                    for idx, (loc, val) in enumerate(m_sorted):
+                        t_meta = territory_meta.get(loc, {})
+                        fmt_v = _fmt_measure(val, m_u)
+                        m_tbl_data.append({
+                            "rank": idx + 1,
+                            "location": loc,
+                            "value": val,
+                            "formatted_value": fmt_v,
+                            "population": t_meta.get("population"),
+                            "growth": t_meta.get("growth"),
+                            "density": t_meta.get("density") or (fmt_v if "density" in m_clow else None),
+                            "lineage": "OBSERVED",
+                            "geo_level": geo_level,
+                        })
+                        m_map_data.append({
+                            "name": loc,
+                            "value": val,
+                            "formatted_value": fmt_v,
+                            "population": t_meta.get("population"),
+                            "growth": t_meta.get("growth"),
+                            "density": t_meta.get("density") or (fmt_v if "density" in m_clow else None),
+                        })
+
+                    if "density" in m_clow:
+                        m_nat_takeaway = f"{m_top_loc} has the highest observed population density at {_fmt_measure(m_top_val, m_u)}."
+                    elif any(k in m_clow for k in ("rate", "growth")):
+                        m_nat_takeaway = f"{m_top_loc} leads observed decadal population growth at {_fmt_measure(m_top_val, m_u)}."
+                    elif any(k in m_clow for k in ("pop", "count")):
+                        m_nat_takeaway = f"{m_top_loc} has the highest observed population at {_fmt_measure(m_top_val, m_u)}."
+                    else:
+                        m_nat_takeaway = f"{m_top_loc} records the highest observed {m_label.lower()} at {_fmt_measure(m_top_val, m_u)}."
+
+                    m_min = min(p[1] for p in m_sorted)
+                    m_max = max(p[1] for p in m_sorted)
+
+                    available_metrics.append({
+                        "metric_id": m_col,
+                        "label": m_label,
+                        "unit": m_u,
+                        "map_type": m_map_type,
+                        "title": f"{m_label} Across {scope_label}",
+                        "key_metric": f"Top: {m_top_loc} ({_fmt_measure(m_top_val, m_u)})",
+                        "takeaway": m_nat_takeaway,
+                        "accessible_summary": f"{m_label} ranges from {_fmt_measure(m_min, m_u)} to {_fmt_measure(m_max, m_u)} across {len(m_sorted)} states and union territories. {m_top_loc} is highest.",
+                        "categories": [p[0] for p in m_sorted],
+                        "values": [p[1] for p in m_sorted],
+                        "map_data": m_map_data,
+                        "table_data": m_tbl_data,
+                        "min_val": m_min,
+                        "max_val": m_max,
                     })
 
-                scope_label = geo_scope.title() if geo_scope in ("india", "usa") else "Regions"
-                story_title = f"{clean_meas_label} Across {scope_label}"
+                # Default to primary prioritized metric
+                primary_metric = available_metrics[0]
+                story_title = primary_metric["title"]
+                story_takeaway = primary_metric["takeaway"]
+                story_key_metric = primary_metric["key_metric"]
+                table_data = primary_metric["table_data"]
+                map_data = primary_metric["map_data"]
+                unit = primary_metric["unit"]
+                map_type = primary_metric["map_type"]
+                clean_meas_label = primary_metric["label"]
 
                 return AnalyticalStory(
                     story_id=f"STORY-GEO-{story_idx:03d}",
@@ -1331,8 +1411,8 @@ class AnalyticalStoryBuilder:
                     business_question=f"How does {clean_meas_label.lower()} vary geographically across regional territories?",
                     intent="GEOSPATIAL",
                     periods=["2011" if "2011" in meas_name else "Reporting Period"],
-                    key_metric=f"Top: {top_loc} ({_fmt_measure(top_val)})",
-                    takeaway=f"Geographic analysis identifies significant spatial variance in {clean_meas_label.lower()}, led by {top_loc} ({_fmt_measure(top_val)}) and trailing at {bot_loc} ({_fmt_measure(bot_val)}).",
+                    key_metric=story_key_metric,
+                    takeaway=story_takeaway,
                     recommended_action="Prioritize regional resource allocation and localized policy reviews for variance leaders.",
                     importance_score=0.96,
                     business_value=0.95,
@@ -1342,8 +1422,8 @@ class AnalyticalStoryBuilder:
                     tokens={
                         "chart_archetype": map_type,
                         "layout_hint": "LARGE",
-                        "categories": [p[0] for p in sorted_items],
-                        "values": [p[1] for p in sorted_items],
+                        "categories": primary_metric["categories"],
+                        "values": primary_metric["values"],
                         "unit": unit,
                         "geo_dimension": geo_col,
                         "geo_level": geo_level,
@@ -1361,6 +1441,8 @@ class AnalyticalStoryBuilder:
                         "is_unsafe_relationship": False,
                         "unresolved_count": unresolved_count,
                         "ambiguous_count": ambiguous_count,
+                        "available_metrics": available_metrics,
+                        "accessible_summary": primary_metric["accessible_summary"],
                     },
                 )
             finally:

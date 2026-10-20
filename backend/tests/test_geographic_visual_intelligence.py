@@ -275,6 +275,31 @@ def test_dataset_99795_dashboard_contract(tmp_path):
         assert "growth" in first_tbl
         assert "density" in first_tbl
         assert first_tbl["lineage"] == "OBSERVED"
+
+        # Verify multi-metric switching contract
+        available_m = tokens.get("available_metrics", [])
+        assert len(available_m) >= 3
+        metric_labels = [m["label"] for m in available_m]
+        assert "Population Density" in metric_labels
+        assert "Population 2011" in metric_labels
+        assert "Decadal Population Growth Rate" in metric_labels
+
+        # Verify each metric has complete precomputed artifacts
+        for m in available_m:
+            assert m["metric_id"]
+            assert m["label"]
+            assert m["unit"]
+            assert m["map_type"] in ("choropleth", "bubble_map")
+            assert len(m["categories"]) == 36
+            assert len(m["values"]) == 36
+            assert len(m["map_data"]) == 36
+            assert len(m["table_data"]) == 36
+            assert m["takeaway"]
+            assert m["key_metric"]
+
+        # Verify accessible summary
+        assert "accessible_summary" in tokens
+        assert "Delhi is highest" in tokens["accessible_summary"]
     finally:
         conn.close()
 

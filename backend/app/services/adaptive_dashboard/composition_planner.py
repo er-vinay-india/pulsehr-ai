@@ -1372,6 +1372,10 @@ class ExecutiveCompositionPlanner:
                     v_spec["ambiguous_count"] = tokens.get("ambiguous_count", 0)
                     if "geo_points" in tokens:
                         v_spec["geo_points"] = tokens["geo_points"]
+                    if "available_metrics" in tokens:
+                        v_spec["available_metrics"] = tokens["available_metrics"]
+                    if "accessible_summary" in tokens:
+                        v_spec["accessible_summary"] = tokens["accessible_summary"]
 
             # Grounded fallback for Hero or Capacity Composition
             if is_hero_story and gov_metrics.get("hero") and chart_type != "podium_top_3" and intent != "GEOSPATIAL":

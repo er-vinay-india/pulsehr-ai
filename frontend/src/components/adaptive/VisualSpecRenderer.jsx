@@ -74,6 +74,44 @@ const INDIA_STATE_ALIASES = {
 };
 
 /**
+ * Computes polygon/multipolygon centroids dynamically from GeoJSON features.
+ * Guarantees every single state and union territory has an exact geometric pin coordinate.
+ */
+function extractGeoCentroids(geoJson) {
+  if (!geoJson || !geoJson.features) return {};
+  const centroids = {};
+  geoJson.features.forEach((feature) => {
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    function walk(coords) {
+      if (typeof coords[0] === "number") {
+        const [x, y] = coords;
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      } else if (Array.isArray(coords)) {
+        coords.forEach(walk);
+      }
+    }
+    if (feature.geometry && feature.geometry.coordinates) {
+      walk(feature.geometry.coordinates);
+    }
+    if (minX !== Infinity) {
+      const name = (feature.properties?.name || feature.properties?.state_name || "").toLowerCase().trim();
+      if (name) {
+        centroids[name] = [
+          Number(((minX + maxX) / 2).toFixed(4)),
+          Number(((minY + maxY) / 2).toFixed(4)),
+        ];
+      }
+    }
+  });
+  return centroids;
+}
+
+const INDIA_GEO_CENTROIDS = extractGeoCentroids(indiaMap);
+
+/**
  * Executive Podium Top 3 Renderer.
  * Olympic-style gold (1st, center), silver (2nd, left), bronze (3rd, right) pedestals.
  * Strictly adheres to <= 20 char / 2-line label wrapping with full label accessible on hover.
@@ -905,14 +943,25 @@ export default function VisualSpecRenderer({
       const maxVal = numericVals.length ? Math.max(...numericVals) : 100;
 
       if (isBubble) {
-        // City / Location Point Map
-        const bubblePoints = rawCategories.map((cat, idx) => {
+        // City / Location Point Map (Proportional Symbol Bubble Map)
+        const bubblePoints = mapData.map((item) => {
+          const cat = item.name;
           const low = String(cat).toLowerCase().trim();
-          const coords = CITY_STATE_CENTROIDS[low] || [78.9629, 20.5937];
-          const val = rawValues[idx] != null ? rawValues[idx] : 0;
+          const aliased = INDIA_STATE_ALIASES[low] ? INDIA_STATE_ALIASES[low].toLowerCase() : low;
+          const coords =
+            CITY_STATE_CENTROIDS[low] ||
+            CITY_STATE_CENTROIDS[aliased] ||
+            INDIA_GEO_CENTROIDS[low] ||
+            INDIA_GEO_CENTROIDS[aliased] ||
+            [78.9629, 20.5937];
+          const val = item.value != null ? item.value : 0;
           return {
             name: cat,
             value: [coords[0], coords[1], val],
+            formatted_value: item.formatted_value,
+            population: item.population,
+            growth: item.growth,
+            density: item.density,
           };
         });
 
@@ -925,14 +974,33 @@ export default function VisualSpecRenderer({
             borderColor: isDark ? "#334155" : "#e2e8f0",
             textStyle: { color: isDark ? "#f1f5f9" : "#0f172a", fontSize: 12 },
             formatter: (p) => {
+              const d = p.data || {};
+              const territoryName = p.name || d.name || "Territory";
               const val = Array.isArray(p.value) ? p.value[2] : p.value;
-              const unitSuffix = unit ? ` ${unit}` : "";
-              return `<strong>${p.name}</strong><br/>${visualSpec.primary_label || "Metric"}: <strong>${val}${unitSuffix}</strong>`;
+              const valFormatted = d.formatted_value || (val != null ? `${val}${unit ? ' ' + unit : ''}` : "N/A");
+              const measLabel = visualSpec.measure_label || visualSpec.primary_label || "Metric";
+              
+              let html = `<div style="padding: 2px 4px; font-family: sans-serif; font-size: 12px; line-height: 1.45;">`;
+              html += `<div style="font-weight: 700; font-size: 13px; margin-bottom: 5px; border-bottom: 1px solid ${isDark ? '#334155' : '#e2e8f0'}; padding-bottom: 3px;">${territoryName}</div>`;
+              html += `<div style="display: flex; justify-content: space-between; gap: 12px; margin-bottom: 2px;"><span style="color: ${isDark ? '#94a3b8' : '#64748b'};">${measLabel}:</span><span style="font-weight: 700;">${valFormatted}</span></div>`;
+              if (d.density && !measLabel.toLowerCase().includes("density")) {
+                html += `<div style="display: flex; justify-content: space-between; gap: 12px; margin-bottom: 2px;"><span style="color: ${isDark ? '#94a3b8' : '#64748b'};">Density:</span><span style="font-weight: 600;">${d.density}</span></div>`;
+              }
+              if (d.growth && !measLabel.toLowerCase().includes("growth")) {
+                html += `<div style="display: flex; justify-content: space-between; gap: 12px; margin-bottom: 2px;"><span style="color: ${isDark ? '#94a3b8' : '#64748b'};">Decadal Growth:</span><span style="font-weight: 600;">${d.growth}</span></div>`;
+              }
+              if (d.population && !measLabel.toLowerCase().includes("pop")) {
+                html += `<div style="display: flex; justify-content: space-between; gap: 12px;"><span style="color: ${isDark ? '#94a3b8' : '#64748b'};">Population:</span><span style="font-weight: 600;">${d.population}</span></div>`;
+              }
+              html += `</div>`;
+              return html;
             },
           },
           geo: {
             map: scope,
             roam: true,
+            layoutCenter: ['50%', '46%'],
+            layoutSize: '88%',
             scaleLimit: { min: 0.8, max: 4 },
             itemStyle: {
               areaColor: isDark ? "#1e293b" : "#f1f5f9",
@@ -952,7 +1020,7 @@ export default function VisualSpecRenderer({
               symbolSize: (val) => {
                 const spread = Math.max(1, maxVal - minVal);
                 const ratio = ((val[2] || 0) - minVal) / spread;
-                return Math.max(8, Math.min(30, 8 + ratio * 22));
+                return Math.max(10, Math.min(36, 10 + ratio * 26));
               },
               itemStyle: {
                 color: isDark ? "#38bdf8" : "#2563eb",
@@ -1019,6 +1087,8 @@ export default function VisualSpecRenderer({
             type: "map",
             map: scope,
             roam: true,
+            layoutCenter: ['50%', '46%'],
+            layoutSize: '88%',
             scaleLimit: { min: 0.8, max: 4 },
             label: {
               show: false,
