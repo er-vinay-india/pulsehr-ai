@@ -130,6 +130,17 @@ function minimalOptions(option, isDark = false) {
   }
 
   const sanitizedSeries = (option.series || []).map((s, index) => {
+    if (s.type === 'map') {
+      return {
+        ...s,
+        // Map series must preserve exact feature names and visualMap gradient coloring
+        itemStyle: {
+          ...s.itemStyle,
+          borderColor: sanitizeColor(s.itemStyle?.borderColor, tokens.colors.surface),
+        },
+      };
+    }
+
     const fallbackColor = activePalette[index % activePalette.length];
     const seriesColor = sanitizeColor(s.itemStyle?.color, fallbackColor);
     const seriesName = s.name ? humanizeLabel(s.name) : s.name;

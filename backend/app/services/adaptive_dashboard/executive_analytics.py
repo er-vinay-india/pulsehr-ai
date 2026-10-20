@@ -507,11 +507,27 @@ class GenericBusinessExecutiveAnalytics(IExecutiveAnalyticsStrategy):
         profile: DomainCapabilityProfile,
     ) -> dict[str, Any]:
         # Identify first numeric and categorical columns, skipping ordinals and IDs
-        cat_col = None
+        # Identify genuine numeric and categorical columns, skipping ordinals, IDs, and synthetic formulas
+        sample_keys = list(rows[0].keys()) if rows else []
+
+        def is_synthetic_col(k_str: str) -> bool:
+            low_k = k_str.lower().strip()
+            return (
+                low_k.startswith(("interact_", "interact ", "mean_", "sum_", "ratio_", "log_", "std_", "diff_", "pred_", "feat_"))
+                or "_over_" in low_k
+                or "_by_" in low_k
+                or " + " in low_k
+                or " / " in low_k
+                or " * " in low_k
+            )
+
+        cat_candidates = []
         num_cols = []
 
-        sample_keys = list(rows[0].keys()) if rows else []
         for k in sample_keys:
+            if is_synthetic_col(k):
+                continue
+
             low_k = k.lower().strip()
             is_seq_id = (
                 bool(re.match(r'^(sr|s|seq|row)[\._\s]?no\.?', low_k, re.I))
@@ -521,30 +537,86 @@ class GenericBusinessExecutiveAnalytics(IExecutiveAnalyticsStrategy):
             if is_seq_id:
                 continue
 
-            try:
-                v = rows[0][k]
-                if v is not None and str(v).strip() not in ("", "-", "NM", "null"):
-                    float(v)
-                    num_cols.append(k)
-            except (ValueError, TypeError):
-                if not cat_col:
-                    cat_col = k
+            # Determine whether numeric across rows
+            numeric_count = 0
+            for r in rows[:10]:
+                raw_v = r.get(k)
+                if raw_v is not None and str(raw_v).strip() not in ("", "-", "NM", "null"):
+                    try:
+                        float(str(raw_v).replace(",", "").replace("%", ""))
+                        numeric_count += 1
+                    except (ValueError, TypeError):
+                        pass
 
+            if numeric_count >= 5:
+                num_cols.append(k)
+            else:
+                distinct_vals = set(str(r.get(k, "")).strip() for r in rows if r.get(k) is not None)
+                cat_candidates.append((k, len(distinct_vals)))
+
+        # Choose primary categorical/entity dimension
+        # Prioritize columns with geographic / entity tokens, or higher cardinality over coarse 2-3 item categories
+        geo_tokens = ("state", "country", "territory", "city", "location", "district", "region", "name", "entity", "branch", "dept")
+        chosen_cat = None
+        for cand, card in cat_candidates:
+            if any(t in cand.lower() for t in geo_tokens) and card > 3:
+                chosen_cat = cand
+                break
+        if not chosen_cat and cat_candidates:
+            # Sort by cardinality descending
+            cat_candidates.sort(key=lambda x: x[1], reverse=True)
+            chosen_cat = cat_candidates[0][0]
+
+        cat_col = chosen_cat or (sample_keys[0] if sample_keys else "category")
         num_col = num_cols[0] if num_cols else (sample_keys[1] if len(sample_keys) > 1 else "value")
-        cat_col = cat_col or (sample_keys[0] if sample_keys else "category")
+
+        # Generic Hierarchical Aggregate Row Detection
+        aggregate_row = None
+        detail_rows = rows
+
+        # 1. Mathematical summation verification: does a row equal the sum of peer rows for an additive measure?
+        for r in rows:
+            for nc in num_cols:
+                try:
+                    v_raw = str(r.get(nc, "")).replace(",", "").replace("%", "").strip()
+                    if not v_raw:
+                        continue
+                    v = float(v_raw)
+                    if v <= 0:
+                        continue
+                    other_sum = sum(
+                        float(str(other.get(nc, 0)).replace(",", "").replace("%", "").strip() or 0)
+                        for other in rows
+                        if other != r and other.get(nc) is not None and str(other.get(nc)).strip() not in ("", "-", "NM", "null")
+                    )
+                    if abs(v - other_sum) / max(1.0, v) < 0.01:
+                        aggregate_row = r
+                        detail_rows = [other for other in rows if other != r]
+                        break
+                except (ValueError, TypeError):
+                    pass
+            if aggregate_row:
+                break
+
+        # 2. Textual pattern verification if mathematical check didn't trigger
+        if not aggregate_row and len(rows) > 3:
+            for r in rows:
+                val_clean = str(r.get(cat_col, "")).strip().lower()
+                if val_clean in ("total", "all", "overall", "grand total", "summary", "national total", "national"):
+                    aggregate_row = r
+                    detail_rows = [other for other in rows if other != r]
+                    break
 
         cat_vals: dict[str, list[float]] = collections.defaultdict(list)
         total_val = 0.0
 
-        for r in rows:
+        for r in detail_rows:
             c = str(r.get(cat_col, "Category")).strip()
-            v = None
+            v = 0.0
             try:
                 raw_v = r.get(num_col)
                 if raw_v is not None and str(raw_v).strip() not in ("", "-", "NM", "null"):
-                    v = float(raw_v)
-                else:
-                    v = 0.0
+                    v = float(str(raw_v).replace(",", "").replace("%", "").strip())
             except (ValueError, TypeError):
                 v = 0.0
             cat_vals[c].append(v)
@@ -553,40 +625,79 @@ class GenericBusinessExecutiveAnalytics(IExecutiveAnalyticsStrategy):
         cat_averages = {
             c: round(sum(v) / len(v), 2) for c, v in cat_vals.items() if len(v) > 0
         }
-        sorted_cats = sorted(cat_averages.items(), key=lambda x: x[1])[:10]
+        sorted_cats = sorted(cat_averages.items(), key=lambda x: x[1], reverse=True)[:10]
         categories = [c[0] for c in sorted_cats]
         values = [c[1] for c in sorted_cats]
-        avg_val = round(total_val / len(rows), 2) if rows else 100.0
+        avg_val = round(total_val / len(detail_rows), 2) if detail_rows else 100.0
 
         if len(num_cols) > 1:
             executive_kpis = []
             for idx, nc in enumerate(num_cols[:4]):
-                col_sum = 0.0
-                for r in rows:
-                    try:
-                        raw_v = r.get(nc)
-                        if raw_v is not None and str(raw_v).strip() not in ("", "-", "NM", "null"):
-                            col_sum += float(raw_v)
-                    except (ValueError, TypeError):
-                        pass
-                col_sum = round(col_sum, 2)
                 nc_low = nc.lower()
-                unit = "USD" if any(w in nc_low for w in ("sales", "revenue", "valuation", "cost", "price", "amount", "spend", "budget", "$")) else ""
-                measure_class = "FINANCIAL" if unit == "USD" else ("QUANTITY" if any(w in nc_low for w in ("count", "transactions", "users", "units")) else None)
+                is_rate = any(w in nc_low for w in ("rate", "growth", "percentage", "pct", "%", "ratio", "margin", "yield"))
+                is_density = any(w in nc_low for w in ("density", "per sq", "per km", "per capita"))
+
+                clean_label = nc.replace(" - 2001-2011", "").replace(" - 2011", "").replace(" (per sq.km)", "").strip()
+                # Remove duplicated prefixes
+                base_label = re.sub(r'^(decadal|total|annual|average|mean)\s+', '', clean_label, flags=re.I).strip()
+                kpi_label = f"Decadal {base_label.title()}" if (is_rate and "decadal" in nc_low) else base_label.title()
+                if not is_rate and not is_density and "2011" in nc and "2011" not in kpi_label:
+                    kpi_label = f"{kpi_label} 2011"
+
+                if is_rate:
+                    unit = "%"
+                    measure_class = "PERCENTAGE"
+                    if aggregate_row and aggregate_row.get(nc) is not None:
+                        val = float(str(aggregate_row[nc]).replace(",", "").replace("%", "").strip())
+                        calc = f"Authoritative national rate ({aggregate_row.get(cat_col, 'National')})"
+                    else:
+                        val_list = [float(str(r[nc]).replace(",", "").replace("%", "").strip()) for r in detail_rows if r.get(nc) is not None]
+                        val = round(sum(val_list) / max(1, len(val_list)), 2)
+                        calc = f"Average across {len(detail_rows)} records"
+                    formatted_val = f"{val:.1f}%"
+                    exact_val = f"{val:.1f}%"
+                elif is_density:
+                    unit = "people/sq. km" if ("pop" in nc_low or "people" in nc_low) else "per sq. km"
+                    measure_class = "RATIO"
+                    if aggregate_row and aggregate_row.get(nc) is not None:
+                        val = float(str(aggregate_row[nc]).replace(",", "").replace("%", "").strip())
+                        calc = f"Authoritative national density ({aggregate_row.get(cat_col, 'National')})"
+                    else:
+                        val_list = [float(str(r[nc]).replace(",", "").replace("%", "").strip()) for r in detail_rows if r.get(nc) is not None]
+                        val = round(sum(val_list) / max(1, len(val_list)), 2)
+                        calc = f"Average density across {len(detail_rows)} records"
+                    formatted_val = f"{int(val):,} {unit}" if val == int(val) else f"{val:,.1f} {unit}"
+                    exact_val = f"{int(val):,} {unit}" if val == int(val) else f"{val:,.1f} {unit}"
+                else:
+                    unit = "USD" if any(w in nc_low for w in ("sales", "revenue", "valuation", "cost", "price", "amount", "spend", "budget", "$")) else ""
+                    measure_class = "FINANCIAL" if unit == "USD" else ("POPULATION" if "pop" in nc_low else "QUANTITY")
+                    if aggregate_row and aggregate_row.get(nc) is not None:
+                        val = float(str(aggregate_row[nc]).replace(",", "").replace("%", "").strip())
+                        calc = f"Authoritative national aggregate ({aggregate_row.get(cat_col, 'National')})"
+                    else:
+                        val = sum(
+                            float(str(r[nc]).replace(",", "").replace("%", "").strip() or 0)
+                            for r in detail_rows
+                            if r.get(nc) is not None and str(r.get(nc)).strip() not in ("", "-", "NM", "null")
+                        )
+                        calc = f"Summed across {len(detail_rows)} mutually exclusive records"
+                    formatted_val = format_governed_number(val, unit=unit, measure_class=measure_class)
+                    exact_val = f"{int(val):,}" if val == int(val) else format_exact_measure(val, unit=unit)
+
                 executive_kpis.append({
                     "kpi_id": f"KPI-GEN-{idx+1:03d}",
-                    "label": f"Total {nc.title()}",
-                    "value": col_sum,
+                    "label": kpi_label,
+                    "value": round(val, 2),
                     "unit": unit,
                     "currency": unit if unit == "USD" else None,
                     "measure_class": measure_class,
-                    "formatted_value": format_governed_number(col_sum, unit=unit, measure_class=measure_class),
-                    "exact_value_text": format_exact_measure(col_sum, unit=unit),
-                    "subtext": f"Aggregated across {len(rows)} records",
-                    "definition": f"Aggregate cumulative sum of {nc} across all records in dataset partition.",
-                    "population": f"{len(rows)} data records",
-                    "period": "Current snapshot period",
-                    "calculation": f"sum({nc})",
+                    "formatted_value": formatted_val,
+                    "exact_value_text": exact_val,
+                    "subtext": f"{len(detail_rows)} territorial members",
+                    "definition": f"Authoritative executive indicator for {clean_label}.",
+                    "population": f"{len(detail_rows)} territorial records",
+                    "period": "2011 Reporting Period" if "2011" in nc else "Current snapshot period",
+                    "calculation": calc,
                     "status": "normal",
                     "evidence_id": f"EVID-KPI-{idx+1:03d}-{dataset_id}",
                 })

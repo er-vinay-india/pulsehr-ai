@@ -996,6 +996,7 @@ class AnalyticalStoryBuilder:
         gov_metrics: dict[str, Any],
         domain: str,
         story_idx: int,
+        conn=None,
     ) -> AnalyticalStory | None:
         """Derives a governed geographic/spatial visual story if a verified geographic dimension exists."""
         if not dataset_id:
@@ -1006,7 +1007,10 @@ class AnalyticalStoryBuilder:
             from ..sdr.geo.resolver import GeoResolutionEngine
             from ..sdr.geo.contracts import GeoResolutionStatus, GeoLevel
 
-            conn = get_connection()
+            close_conn = False
+            if conn is None:
+                conn = get_connection()
+                close_conn = True
             try:
                 # 1. Fetch sheets for dataset
                 sheets = conn.execute(
@@ -1071,10 +1075,22 @@ class AnalyticalStoryBuilder:
                 # 2. Check Candidate Measures
                 all_cols = list(rows[0].keys())
                 candidate_measures = []
+
+                def _is_synthetic_col(k_str: str) -> bool:
+                    cl = k_str.lower().strip()
+                    return (
+                        cl.startswith(("interact_", "interact ", "mean_", "sum_", "ratio_", "log_", "std_", "diff_", "pred_", "feat_"))
+                        or "_over_" in cl
+                        or "_by_" in cl
+                        or " + " in cl
+                        or " / " in cl
+                        or " * " in cl
+                    )
+
                 for c in all_cols:
                     if c == geo_col or str(c).lower() in ("id", "sr_no", "sno", "row_num", "category"):
                         continue
-                    if any(c.lower().startswith(p) for p in ("interact_", "ratio_")):
+                    if _is_synthetic_col(c):
                         continue
                     # Check if numeric
                     vals = []
@@ -1092,13 +1108,18 @@ class AnalyticalStoryBuilder:
                 if not candidate_measures:
                     return None
 
-                # Prioritize growth rate / rate / density / percentage for choropleth, or count for bubble map
+                # Prioritize density for choropleth area shading, then growth rate, then counts
                 selected_measure = None
                 for c, vals in candidate_measures:
-                    c_low = c.lower()
-                    if any(k in c_low for k in ("rate", "growth", "density", "score", "percentage", "pct", "%", "ratio")):
+                    if "density" in c.lower():
                         selected_measure = (c, vals)
                         break
+                if not selected_measure:
+                    for c, vals in candidate_measures:
+                        c_low = c.lower()
+                        if any(k in c_low for k in ("rate", "growth", "score", "percentage", "pct", "%", "ratio")):
+                            selected_measure = (c, vals)
+                            break
                 if not selected_measure:
                     for c, vals in candidate_measures:
                         c_low = c.lower()
@@ -1118,9 +1139,18 @@ class AnalyticalStoryBuilder:
                 geo_entities = []
 
                 location_val_pairs = []
+                # Also extract secondary metrics for rich map tooltips
+                territory_meta = {}
+
+                # Look for companion columns (population, growth, density)
+                pop_col = next((c for c in all_cols if "pop" in c.lower() and not _is_synthetic_col(c) and "rate" not in c.lower() and "density" not in c.lower()), None)
+                growth_col = next((c for c in all_cols if any(k in c.lower() for k in ("growth", "rate", "%")) and not _is_synthetic_col(c)), None)
+                density_col = next((c for c in all_cols if "density" in c.lower() and not _is_synthetic_col(c)), None)
+
                 for r in rows:
                     loc_val = r.get(geo_col)
-                    if loc_val is None or str(loc_val).strip() == "" or str(loc_val).lower() == "india":
+                    # Filter out parent national aggregate rows generically
+                    if loc_val is None or str(loc_val).strip() == "" or str(loc_val).lower() in ("india", "total", "all", "overall", "national", "grand total", "summary"):
                         continue
                     loc_str = str(loc_val).strip()
                     meas_raw = r.get(meas_name)
@@ -1132,6 +1162,32 @@ class AnalyticalStoryBuilder:
                             pass
                     if num_val is not None:
                         location_val_pairs.append((loc_str, num_val))
+
+                        # Save companion metrics
+                        p_val = None
+                        if pop_col and r.get(pop_col) is not None:
+                            try:
+                                p_val = float(str(r[pop_col]).replace(",", "").replace("%", "").strip())
+                            except Exception:
+                                pass
+                        g_val = None
+                        if growth_col and r.get(growth_col) is not None:
+                            try:
+                                g_val = float(str(r[growth_col]).replace(",", "").replace("%", "").strip())
+                            except Exception:
+                                pass
+                        d_val = None
+                        if density_col and r.get(density_col) is not None:
+                            try:
+                                d_val = float(str(r[density_col]).replace(",", "").replace("%", "").strip())
+                            except Exception:
+                                pass
+
+                        territory_meta[loc_str] = {
+                            "population": f"{int(p_val):,}" if p_val is not None else None,
+                            "growth": f"{g_val:.1f}%" if g_val is not None else None,
+                            "density": f"{int(d_val):,} people/sq. km" if (d_val is not None and d_val == int(d_val)) else (f"{d_val:,.1f} people/sq. km" if d_val is not None else None),
+                        }
 
                 if len(location_val_pairs) < 3:
                     return None
@@ -1204,7 +1260,16 @@ class AnalyticalStoryBuilder:
                 is_normalized = any(k in m_low for k in ("rate", "ratio", "pct", "%", "percent", "growth", "density", "score", "index", "average", "avg"))
                 map_type = "choropleth" if (is_normalized and geo_level in ("STATE", "COUNTRY")) else "bubble_map"
 
-                unit = "%" if ("rate" in m_low or "growth" in m_low or "%" in m_low) else ("per sq.km" if "density" in m_low else "units")
+                if "density" in m_low:
+                    unit = "people/sq. km" if ("pop" in m_low or "people" in m_low) else "per sq. km"
+                elif any(k in m_low for k in ("rate", "growth", "%", "pct")):
+                    unit = "%"
+                elif any(k in m_low for k in ("pop", "count", "headcount")):
+                    unit = ""
+                else:
+                    unit = "units"
+
+                clean_meas_label = meas_name.replace(" - 2001-2011", "").replace(" - 2011", "").replace(" (per sq.km)", "").strip()
 
                 # Deduplicate by location and average if multiple entries exist
                 loc_map = collections.defaultdict(list)
@@ -1218,32 +1283,56 @@ class AnalyticalStoryBuilder:
 
                 sorted_items.sort(key=lambda x: x[1], reverse=True)
 
+                def _fmt_measure(v_num: float) -> str:
+                    if unit == "%":
+                        return f"{v_num:.1f}%"
+                    if "people" in unit or "per sq" in unit:
+                        return f"{int(v_num):,} {unit}" if v_num == int(v_num) else f"{v_num:,.1f} {unit}"
+                    if v_num >= 1000 and v_num == int(v_num):
+                        return f"{int(v_num):,}"
+                    return f"{v_num:,.1f} {unit}".strip() if unit else f"{v_num:,.1f}"
+
                 top_loc, top_val = sorted_items[0]
                 bot_loc, bot_val = sorted_items[-1]
 
-                table_data = [
-                    {
+                table_data = []
+                map_data = []
+                for idx, (loc, val) in enumerate(sorted_items):
+                    t_meta = territory_meta.get(loc, {})
+                    fmt_v = _fmt_measure(val)
+                    row_entry = {
                         "rank": idx + 1,
                         "location": loc,
                         "value": val,
-                        "formatted_value": f"{val:,.1f} {unit}".strip(),
+                        "formatted_value": fmt_v,
+                        "population": t_meta.get("population"),
+                        "growth": t_meta.get("growth"),
+                        "density": t_meta.get("density") or (fmt_v if "density" in m_low else None),
                         "lineage": "OBSERVED",
                         "geo_level": geo_level,
                     }
-                    for idx, (loc, val) in enumerate(sorted_items)
-                ]
+                    table_data.append(row_entry)
+                    map_data.append({
+                        "name": loc,
+                        "value": val,
+                        "formatted_value": fmt_v,
+                        "population": t_meta.get("population"),
+                        "growth": t_meta.get("growth"),
+                        "density": t_meta.get("density") or (fmt_v if "density" in m_low else None),
+                    })
 
-                clean_meas_label = meas_name.replace(" - 2001-2011", "").replace(" - 2011", "").strip()
+                scope_label = geo_scope.title() if geo_scope in ("india", "usa") else "Regions"
+                story_title = f"{clean_meas_label} Across {scope_label}"
 
                 return AnalyticalStory(
                     story_id=f"STORY-GEO-{story_idx:03d}",
                     semantic_family="geographic_spatial_distribution",
-                    title=f"Regional {clean_meas_label} Spatial Pattern",
+                    title=story_title,
                     business_question=f"How does {clean_meas_label.lower()} vary geographically across regional territories?",
                     intent="GEOSPATIAL",
                     periods=["2011" if "2011" in meas_name else "Reporting Period"],
-                    key_metric=f"Top: {top_loc} ({top_val} {unit})",
-                    takeaway=f"Geographic analysis identifies significant spatial variance in {clean_meas_label.lower()}, led by {top_loc} ({top_val} {unit}) and trailing at {bot_loc} ({bot_val} {unit}).",
+                    key_metric=f"Top: {top_loc} ({_fmt_measure(top_val)})",
+                    takeaway=f"Geographic analysis identifies significant spatial variance in {clean_meas_label.lower()}, led by {top_loc} ({_fmt_measure(top_val)}) and trailing at {bot_loc} ({_fmt_measure(bot_val)}).",
                     recommended_action="Prioritize regional resource allocation and localized policy reviews for variance leaders.",
                     importance_score=0.96,
                     business_value=0.95,
@@ -1263,8 +1352,10 @@ class AnalyticalStoryBuilder:
                         "geo_source": "OBSERVED",
                         "geo_coverage": round(coverage, 2),
                         "table_data": table_data,
+                        "map_data": map_data,
                         "primary_dimension": geo_col,
                         "primary_measure": clean_meas_label,
+                        "measure_label": clean_meas_label,
                         "is_geographic": True,
                         "has_ambiguous_locations": False,
                         "is_unsafe_relationship": False,
@@ -1273,7 +1364,8 @@ class AnalyticalStoryBuilder:
                     },
                 )
             finally:
-                conn.close()
+                if close_conn:
+                    conn.close()
         except Exception as exc:
             logger.warning("Failed to derive governed geographic story: %s", exc)
             return None

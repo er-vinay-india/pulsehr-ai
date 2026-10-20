@@ -148,9 +148,20 @@ class AnalyticalOpportunityPlanner:
                 tracker.eligible_group_relationships = total_group_evals
 
                 # 2.5 TemporalStoryAggregationIntegrity & Pre-Scoring Family Aggregation
-                # Filter out synthetic interaction columns from combinatorial pairing
-                clean_measures = [m for m in measures if not m["column"].lower().startswith("interact_")]
-                clean_dimensions = [d for d in dimensions if not d["column"].lower().startswith("interact_")]
+                # Filter out synthetic interaction and formula columns from combinatorial pairing
+                def _is_synthetic(c_name: str) -> bool:
+                    cl = c_name.lower().strip()
+                    return (
+                        cl.startswith(("interact_", "interact ", "mean_", "sum_", "ratio_", "log_", "std_", "diff_", "pred_", "feat_"))
+                        or "_over_" in cl
+                        or "_by_" in cl
+                        or " + " in cl
+                        or " / " in cl
+                        or " * " in cl
+                    )
+
+                clean_measures = [m for m in measures if not _is_synthetic(m["column"])]
+                clean_dimensions = [d for d in dimensions if not _is_synthetic(d["column"])]
 
                 temporal_families = SemanticFamilyAggregator.aggregate_temporal_measures(
                     measures=clean_measures,

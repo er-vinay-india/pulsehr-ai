@@ -200,6 +200,85 @@ def test_low_coverage_downgrades_or_blocks_map():
     assert "LOW_GEOGRAPHIC_COVERAGE" in block_reason
 
 
+def test_dataset_99795_dashboard_contract(tmp_path):
+    """Verifies that dataset 99795 executive dashboard satisfies all metric & visual contracts:
+    1. Population = 1,210,854,977 (1.21B), no double counting.
+    2. Growth Rate = 17.7%, non-additive, not summed.
+    3. Density = 368 people/sq. km, non-additive, not summed.
+    4. Zero synthetic interaction features in KPIs.
+    5. Primary visual is India Choropleth map of Population Density across 36 territories.
+    """
+    from app.services.adaptive_dashboard.executive_analytics import compute_governed_executive_metrics
+    from app.services.adaptive_dashboard.story_builder import AnalyticalStoryBuilder
+    import shutil
+    import sqlite3
+
+    baseline_path = Path(__file__).resolve().parent.parent / "data" / "db_backups_safety" / "pulsehr.sqlite3.pristine_i8_3_baseline"
+    test_db_copy = tmp_path / "dataset_99795_test.sqlite3"
+    shutil.copy2(baseline_path, test_db_copy)
+
+    conn = sqlite3.connect(test_db_copy)
+    conn.row_factory = sqlite3.Row
+    try:
+        gov_metrics = compute_governed_executive_metrics(99795, conn=conn)
+        kpis = gov_metrics.get("kpis", [])
+        kpi_map = {k["label"]: k for k in kpis}
+
+        # Verify no synthetic features
+        for label in kpi_map.keys():
+            assert "interact_" not in label.lower()
+            assert "_by_" not in label.lower()
+
+        # Verify authoritative values
+        pop_kpi = kpi_map.get("Population 2011")
+        assert pop_kpi is not None
+        assert abs(pop_kpi["value"] - 1210854977.0) < 1.0
+        assert pop_kpi["formatted_value"] == "1.21B"
+
+        growth_kpi = kpi_map.get("Decadal Population Growth Rate")
+        assert growth_kpi is not None
+        assert abs(growth_kpi["value"] - 17.7) < 0.1
+        assert "%" in growth_kpi["formatted_value"]
+
+        density_kpi = kpi_map.get("Population Density")
+        assert density_kpi is not None
+        assert abs(density_kpi["value"] - 368.0) < 1.0
+        assert "people/sq. km" in density_kpi["unit"]
+
+        # Verify Geospatial Story
+        geo_story = AnalyticalStoryBuilder._derive_governed_geographic_story(
+            dataset_id=99795,
+            gov_metrics=gov_metrics,
+            domain="demographics",
+            story_idx=1,
+            conn=conn,
+        )
+        assert geo_story is not None
+        assert geo_story.intent == "GEOSPATIAL"
+        assert "Across India" in geo_story.title
+
+        tokens = geo_story.tokens
+        assert tokens.get("chart_archetype") == "choropleth"
+        assert tokens.get("geo_scope") == "india"
+        assert tokens.get("geo_level") == "STATE"
+        assert "Density" in tokens.get("primary_measure", "")
+
+        # Must contain exactly 36 component territories (national India excluded from map & table data)
+        assert len(tokens.get("categories", [])) == 36
+        assert len(tokens.get("map_data", [])) == 36
+        assert len(tokens.get("table_data", [])) == 36
+
+        # Verify first ranked territory has companion metrics
+        first_tbl = tokens["table_data"][0]
+        assert first_tbl["rank"] == 1
+        assert "population" in first_tbl
+        assert "growth" in first_tbl
+        assert "density" in first_tbl
+        assert first_tbl["lineage"] == "OBSERVED"
+    finally:
+        conn.close()
+
+
 def test_p0_database_invariant():
     """Verifies that pulsehr.sqlite3 file size and SHA-256 remain pristine."""
     db_path = Path(__file__).resolve().parent.parent / "data" / "db" / "pulsehr.sqlite3"

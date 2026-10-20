@@ -62,11 +62,15 @@ const INDIA_STATE_ALIASES = {
   "uttaranchal": "Uttarakhand",
   "pondicherry": "Puducherry",
   "andaman & nicobar islands": "Andaman and Nicobar Islands",
+  "andaman & nicobar island": "Andaman and Nicobar Islands",
   "andaman and nicobar": "Andaman and Nicobar Islands",
+  "andaman and nicobar islands": "Andaman and Nicobar Islands",
+  "andaman and nicobar island": "Andaman and Nicobar Islands",
   "dadra & nagar haveli": "Dadra and Nagar Haveli",
   "daman & diu": "Daman and Diu",
   "nct of delhi": "Delhi",
   "jammu & kashmir": "Jammu and Kashmir",
+  "jammu and kashmir": "Jammu and Kashmir",
 };
 
 /**
@@ -869,18 +873,34 @@ export default function VisualSpecRenderer({
       const rawCategories = visualSpec.categories || [];
       const rawValues = visualSpec.values || [];
 
-      // Normalize names for India or World
-      const mapData = rawCategories.map((cat, idx) => {
-        let cleanName = String(cat).trim();
-        const low = cleanName.toLowerCase();
-        if (scope === "india" && INDIA_STATE_ALIASES[low]) {
-          cleanName = INDIA_STATE_ALIASES[low];
-        }
-        const val = rawValues[idx] != null ? rawValues[idx] : 0;
-        return { name: cleanName, value: val };
-      });
+      // Prefer rich map_data if provided, fallback to raw categories & values
+      let mapData = [];
+      if (visualSpec.map_data && Array.isArray(visualSpec.map_data) && visualSpec.map_data.length > 0) {
+        mapData = visualSpec.map_data.map((item) => {
+          let cleanName = String(item.name || "").trim();
+          const low = cleanName.toLowerCase();
+          if (scope === "india" && INDIA_STATE_ALIASES[low]) {
+            cleanName = INDIA_STATE_ALIASES[low];
+          }
+          return {
+            ...item,
+            name: cleanName,
+            value: item.value != null ? item.value : 0,
+          };
+        });
+      } else {
+        mapData = rawCategories.map((cat, idx) => {
+          let cleanName = String(cat).trim();
+          const low = cleanName.toLowerCase();
+          if (scope === "india" && INDIA_STATE_ALIASES[low]) {
+            cleanName = INDIA_STATE_ALIASES[low];
+          }
+          const val = rawValues[idx] != null ? rawValues[idx] : 0;
+          return { name: cleanName, value: val };
+        });
+      }
 
-      const numericVals = rawValues.filter((v) => v != null && !isNaN(v));
+      const numericVals = mapData.map((d) => d.value).filter((v) => v != null && !isNaN(v));
       const minVal = numericVals.length ? Math.min(...numericVals) : 0;
       const maxVal = numericVals.length ? Math.max(...numericVals) : 100;
 
@@ -955,9 +975,26 @@ export default function VisualSpecRenderer({
           borderColor: isDark ? "#334155" : "#e2e8f0",
           textStyle: { color: isDark ? "#f1f5f9" : "#0f172a", fontSize: 12 },
           formatter: (p) => {
-            const val = p.value != null && !isNaN(p.value) ? p.value : "N/A";
-            const unitSuffix = unit ? ` ${unit}` : "";
-            return `<strong>${p.name}</strong><br/>${visualSpec.primary_label || "Metric"}: <strong>${val}${unitSuffix}</strong>`;
+            const d = p.data || {};
+            const territoryName = p.name || d.name || "Territory";
+            const val = p.value != null && !isNaN(p.value) ? p.value : null;
+            const valFormatted = d.formatted_value || (val != null ? `${val}${unit ? ' ' + unit : ''}` : "N/A");
+            const measLabel = visualSpec.measure_label || visualSpec.primary_label || "Metric";
+            
+            let html = `<div style="padding: 2px 4px; font-family: sans-serif; font-size: 12px; line-height: 1.45;">`;
+            html += `<div style="font-weight: 700; font-size: 13px; margin-bottom: 5px; border-bottom: 1px solid ${isDark ? '#334155' : '#e2e8f0'}; padding-bottom: 3px;">${territoryName}</div>`;
+            html += `<div style="display: flex; justify-content: space-between; gap: 12px; margin-bottom: 2px;"><span style="color: ${isDark ? '#94a3b8' : '#64748b'};">${measLabel}:</span><span style="font-weight: 700;">${valFormatted}</span></div>`;
+            if (d.density && !measLabel.toLowerCase().includes("density")) {
+              html += `<div style="display: flex; justify-content: space-between; gap: 12px; margin-bottom: 2px;"><span style="color: ${isDark ? '#94a3b8' : '#64748b'};">Density:</span><span style="font-weight: 600;">${d.density}</span></div>`;
+            }
+            if (d.growth) {
+              html += `<div style="display: flex; justify-content: space-between; gap: 12px; margin-bottom: 2px;"><span style="color: ${isDark ? '#94a3b8' : '#64748b'};">Decadal Growth:</span><span style="font-weight: 600;">${d.growth}</span></div>`;
+            }
+            if (d.population) {
+              html += `<div style="display: flex; justify-content: space-between; gap: 12px;"><span style="color: ${isDark ? '#94a3b8' : '#64748b'};">Population:</span><span style="font-weight: 600;">${d.population}</span></div>`;
+            }
+            html += `</div>`;
+            return html;
           },
         },
         visualMap: {

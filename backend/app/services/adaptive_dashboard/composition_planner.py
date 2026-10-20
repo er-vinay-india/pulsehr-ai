@@ -1249,7 +1249,7 @@ class ExecutiveCompositionPlanner:
 
             # Suppress non-entity scalar stories that merely restate KPI strip numbers
             cats_raw = tokens.get("categories") or getattr(story, "periods", None) or []
-            if is_hero_story and gov_metrics.get("hero"):
+            if is_hero_story and gov_metrics.get("hero") and intent != "GEOSPATIAL":
                 cats_raw = gov_metrics["hero"].get("categories") or cats_raw
 
             if intent == "RANKING" and (len(cats_raw) < 3 or all(str(c) in ("Annual Average", "Annual Monitoring Cycle", "Reporting Cycle") for c in cats_raw)) and not tokens.get("series") and not tokens.get("chart_archetype"):
@@ -1365,13 +1365,16 @@ class ExecutiveCompositionPlanner:
                     v_spec["geo_source"] = tokens.get("geo_source", "OBSERVED")
                     v_spec["geo_coverage"] = tokens.get("geo_coverage", 1.0)
                     v_spec["table_data"] = tokens.get("table_data", [])
+                    v_spec["map_data"] = tokens.get("map_data", [])
+                    v_spec["measure_label"] = tokens.get("measure_label") or tokens.get("primary_measure") or "Metric"
+                    v_spec["primary_measure"] = tokens.get("primary_measure") or v_spec["measure_label"]
                     v_spec["unresolved_count"] = tokens.get("unresolved_count", 0)
                     v_spec["ambiguous_count"] = tokens.get("ambiguous_count", 0)
                     if "geo_points" in tokens:
                         v_spec["geo_points"] = tokens["geo_points"]
 
             # Grounded fallback for Hero or Capacity Composition
-            if is_hero_story and gov_metrics.get("hero") and chart_type != "podium_top_3":
+            if is_hero_story and gov_metrics.get("hero") and chart_type != "podium_top_3" and intent != "GEOSPATIAL":
                 hero_gov = gov_metrics["hero"]
                 v_spec["categories"] = hero_gov.get("categories", v_spec.get("categories", []))
                 v_spec["values"] = hero_gov.get("values", v_spec.get("values", []))
@@ -1381,6 +1384,42 @@ class ExecutiveCompositionPlanner:
                     v_spec["measure_column"] = hero_gov["measure_column"]
                 if hero_gov.get("entity_column"):
                     v_spec["entity_column"] = hero_gov["entity_column"]
+
+            # Hierarchical Aggregate Grain Purge: Never compare parent aggregate against component groups in diagnostics
+            has_parent_agg = any(str(c).lower().strip() in ("india", "total", "national", "grand total", "overall", "all") for c in (v_spec.get("categories") or []))
+            if has_parent_agg and gov_metrics.get("hero") and intent != "GEOSPATIAL":
+                hero_gov = gov_metrics["hero"]
+                hero_cats = hero_gov.get("categories") or []
+                hero_vals = hero_gov.get("values") or []
+                if hero_cats and hero_vals:
+                    v_spec["categories"] = hero_cats[:6]
+                    v_spec["values"] = hero_vals[:6]
+                    bench_val = round(sum(hero_vals) / len(hero_vals), 2)
+                    v_spec["benchmark"] = hero_gov.get("benchmark", bench_val)
+                    tokens["categories"] = v_spec["categories"]
+                    tokens["values"] = v_spec["values"]
+                    tokens["benchmark"] = v_spec["benchmark"]
+                    if hasattr(story, "tokens") and story.tokens:
+                        story.tokens["categories"] = v_spec["categories"]
+                        story.tokens["values"] = v_spec["values"]
+                        story.tokens["benchmark"] = v_spec["benchmark"]
+                    top_e = hero_cats[0]
+                    top_v = hero_vals[0]
+                    clean_u = unit if unit else ""
+                    if intent == "ANOMALY":
+                        new_km = f"Top: {top_e} ({top_v:,.0f} {clean_u})".replace("  ", " ").strip()
+                        setattr(story, "title", f"{m_name} Territorial Variance")
+                        setattr(story, "takeaway", f"Highest observed variance in {top_e} ({top_v:,.0f} {clean_u}).".replace("  ", " ").strip())
+                        setattr(story, "key_metric", new_km)
+                        v_spec["key_metric"] = new_km
+                        tokens["key_metric"] = new_km
+                    elif intent in ("TARGET_VS_ACTUAL", "TARGET_GAP"):
+                        new_km = f"Target: {v_spec['benchmark']:,.0f} {clean_u}".replace("  ", " ").strip()
+                        setattr(story, "title", f"{m_name} vs Benchmark")
+                        setattr(story, "takeaway", f"{top_e} leads performance against the {v_spec['benchmark']:,.0f} {clean_u} cohort benchmark.".replace("  ", " ").strip())
+                        setattr(story, "key_metric", new_km)
+                        v_spec["key_metric"] = new_km
+                        tokens["key_metric"] = new_km
 
             if intent == "COMPOSITION" and gov_metrics.get("reconciliation") and is_workforce:
                 recon_gov = gov_metrics["reconciliation"]

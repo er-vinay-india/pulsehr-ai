@@ -38,7 +38,14 @@ export default function ExecutiveVisualCard({
     ? "rgba(255, 255, 255, 0.06)"
     : "rgba(0, 0, 0, 0.04)";
 
-  const isRankingStory = topic.analytical_intent === "RANKING" || topic.visual_spec?.is_ranking_story;
+  const isGeospatial =
+    topic.visual_spec?.chart_type === "map" ||
+    topic.visual_spec?.chart_type === "choropleth" ||
+    topic.visual_spec?.chart_type === "bubble_map" ||
+    topic.visual_spec?.chart_type === "point_map" ||
+    topic.analytical_intent === "GEOSPATIAL";
+
+  const isRankingStory = (topic.analytical_intent === "RANKING" || topic.visual_spec?.is_ranking_story) && !isGeospatial;
 
   // Contextual Data Explorer Target
   const contextualTarget = useMemo(() => getContextualExplorerTarget(topic, datasetId), [topic, datasetId]);
@@ -46,7 +53,7 @@ export default function ExecutiveVisualCard({
   // Executive Dashboard Ranking Constraint: Exactly Top 3 + Bottom 3 only (never more than 6 unique entities)
   const compactVisualSpec = useMemo(() => {
     if (!topic.visual_spec) return null;
-    if (topic.visual_spec.chart_type === "podium_top_3") return topic.visual_spec;
+    if (isGeospatial || topic.visual_spec.chart_type === "podium_top_3") return topic.visual_spec;
     if (!isRankingStory) return topic.visual_spec;
 
     const spec = { ...topic.visual_spec };
@@ -152,13 +159,6 @@ export default function ExecutiveVisualCard({
   }, [microcopy.short_title, topic.title, topic.visual_spec, topic.analytical_intent]);
 
   // Server-driven Spatial Placement (SpatialCompositionOptimizer)
-  const isGeospatial =
-    compactVisualSpec?.chart_type === "map" ||
-    compactVisualSpec?.chart_type === "choropleth" ||
-    compactVisualSpec?.chart_type === "bubble_map" ||
-    compactVisualSpec?.chart_type === "point_map" ||
-    topic.analytical_intent === "GEOSPATIAL";
-
   const colSpan = topic.spatial_placement?.column_span || (isHero ? 12 : isGeospatial ? 12 : topic.layout_hint === "LARGE" ? 8 : topic.layout_hint === "COMPACT" ? 4 : 6);
   const heightClass = topic.spatial_placement?.height_class || (isHero ? "standard" : "standard");
   const layoutHint = (topic.layout_hint || topic.visual_spec?.layout_hint || (isHero ? "HERO" : isGeospatial ? "LARGE" : "MEDIUM")).toLowerCase();
@@ -166,17 +166,33 @@ export default function ExecutiveVisualCard({
 
   // Synchronized chart height based on row height class
   const chartHeight = useMemo(() => {
+    if (isGeospatial) return "380px";
     if (isHero) return "320px";
     if (heightClass === "tall") return "320px";
     if (heightClass === "short") return "190px";
     return "230px";
-  }, [heightClass, isHero]);
+  }, [heightClass, isHero, isGeospatial]);
 
-  const geoTableColumns = useMemo(() => [
-    { key: "rank", label: "Rank", sortable: true, align: "center", width: "65px" },
-    { key: "location", label: compactVisualSpec?.geo_dimension || "Territory", sortable: true, filterable: true },
-    { key: "value", label: compactVisualSpec?.primary_measure || compactVisualSpec?.key_metric || "Metric Value", sortable: true, align: "right" },
-    {
+  const geoTableColumns = useMemo(() => {
+    const hasDensity = compactVisualSpec?.table_data?.some((r) => r.density != null);
+    const hasGrowth = compactVisualSpec?.table_data?.some((r) => r.growth != null);
+    const hasPop = compactVisualSpec?.table_data?.some((r) => r.population != null);
+    const primaryLabel = compactVisualSpec?.measure_label || compactVisualSpec?.primary_measure || compactVisualSpec?.primary_label || "Metric Value";
+
+    const cols = [
+      { key: "rank", label: "Rank", sortable: true, align: "center", width: "65px" },
+      { key: "location", label: compactVisualSpec?.geo_dimension || "Territory", sortable: true, filterable: true },
+      { key: "value", label: primaryLabel, sortable: true, align: "right" },
+    ];
+
+    if (hasGrowth) {
+      cols.push({ key: "growth", label: "Growth (2001-2011)", sortable: true, align: "right", width: "140px" });
+    }
+    if (hasPop) {
+      cols.push({ key: "population", label: "Population 2011", sortable: true, align: "right", width: "140px" });
+    }
+
+    cols.push({
       key: "lineage",
       label: "Lineage",
       sortable: true,
@@ -196,8 +212,10 @@ export default function ExecutiveVisualCard({
           {val || "OBSERVED"}
         </span>
       ),
-    },
-  ], [compactVisualSpec, isDark]);
+    });
+
+    return cols;
+  }, [compactVisualSpec, isDark]);
 
   const geoTableRows = useMemo(() => {
     if (!compactVisualSpec || !isGeospatial) return [];
@@ -208,6 +226,9 @@ export default function ExecutiveVisualCard({
         location: r.location || "-",
         value: r.formatted_value || `${r.value ?? "-"}`,
         raw_value: r.value != null ? r.value : 0,
+        growth: r.growth || "-",
+        population: r.population || "-",
+        density: r.density || "-",
         lineage: r.lineage || compactVisualSpec.geo_source || "OBSERVED",
       }));
     }
@@ -220,6 +241,9 @@ export default function ExecutiveVisualCard({
       location: cat,
       value: vals[idx] != null ? `${vals[idx]} ${unit}`.trim() : "-",
       raw_value: vals[idx] != null ? vals[idx] : 0,
+      growth: "-",
+      population: "-",
+      density: "-",
       lineage: compactVisualSpec.geo_source || "OBSERVED",
     }));
   }, [compactVisualSpec, isGeospatial]);
@@ -369,7 +393,7 @@ export default function ExecutiveVisualCard({
             visualSpec={compactVisualSpec}
             themeTokens={themeTokens}
             isDark={isDark}
-            height={isGeospatial ? "280px" : chartHeight}
+            height={isGeospatial ? "380px" : chartHeight}
           />
           {/* Map + Ranked Geographic DataTable */}
           {isGeospatial && geoTableRows.length > 0 && (
