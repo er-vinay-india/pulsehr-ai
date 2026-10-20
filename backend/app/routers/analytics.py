@@ -105,6 +105,113 @@ def api_overview_evidence_package(sheet_id: int | None = Query(None)):
         conn.close()
 
 
+@router.get('/overview/evidence')
+def api_overview_related_evidence(
+    sheet_id: int | None = Query(None),
+    dataset_id: int | None = Query(None),
+    topic_id: str | None = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(25, ge=1, le=100),
+    search: str | None = Query(None),
+):
+    """Returns paginated related evidence with bounded payloads and search filtering."""
+    clean_sheet_id = int(sheet_id) if sheet_id is not None and not hasattr(sheet_id, 'default') else None
+    clean_dataset_id = int(dataset_id) if dataset_id is not None and not hasattr(dataset_id, 'default') else None
+    clean_topic_id = str(topic_id) if topic_id is not None and not hasattr(topic_id, 'default') else None
+    clean_search = str(search) if search is not None and not hasattr(search, 'default') else None
+
+    conn = get_connection()
+    try:
+        from ..services.evidence.evidence_retrieval import get_paginated_related_evidence
+        return get_paginated_related_evidence(
+            conn,
+            sheet_id=clean_sheet_id,
+            dataset_id=clean_dataset_id,
+            topic_id=clean_topic_id,
+            page=page,
+            page_size=page_size,
+            search=clean_search,
+        )
+    finally:
+        conn.close()
+
+
+@router.get('/overview/evidence/{evidence_id}')
+def api_overview_targeted_evidence(
+    evidence_id: str,
+    dataset_id: int | None = Query(None),
+    sheet_id: int | None = Query(None),
+    topic_id: str | None = Query(None),
+):
+    """Instant targeted retrieval of a single evidence item (<15ms, bounded payload)."""
+    clean_sheet_id = int(sheet_id) if sheet_id is not None and not hasattr(sheet_id, 'default') else None
+    clean_dataset_id = int(dataset_id) if dataset_id is not None and not hasattr(dataset_id, 'default') else None
+    clean_topic_id = str(topic_id) if topic_id is not None and not hasattr(topic_id, 'default') else None
+
+    conn = get_connection()
+    try:
+        from ..services.evidence.evidence_retrieval import get_targeted_evidence
+        ev = get_targeted_evidence(
+            conn,
+            evidence_id=evidence_id,
+            dataset_id=clean_dataset_id,
+            sheet_id=clean_sheet_id,
+            topic_id=clean_topic_id,
+        )
+        if not ev:
+            raise HTTPException(status_code=404, detail=f"Evidence '{evidence_id}' not found.")
+        return ev
+    finally:
+        conn.close()
+
+
+@router.get('/overview/evidence/{evidence_id}/lineage')
+def api_overview_evidence_lineage(
+    evidence_id: str,
+    dataset_id: int | None = Query(None),
+    sheet_id: int | None = Query(None),
+):
+    """Deferred on-demand lineage trace for a specific evidence item."""
+    clean_sheet_id = int(sheet_id) if sheet_id is not None and not hasattr(sheet_id, 'default') else None
+    clean_dataset_id = int(dataset_id) if dataset_id is not None and not hasattr(dataset_id, 'default') else None
+
+    conn = get_connection()
+    try:
+        from ..services.evidence.evidence_retrieval import get_targeted_lineage
+        return get_targeted_lineage(
+            conn,
+            evidence_id=evidence_id,
+            dataset_id=clean_dataset_id,
+            sheet_id=clean_sheet_id,
+        )
+    finally:
+        conn.close()
+
+
+@router.get('/overview/evidence/{evidence_id}/source-context')
+def api_overview_evidence_source_context(
+    evidence_id: str,
+    sheet_id: int | None = Query(None),
+    limit: int = Query(10, ge=1, le=50),
+    offset: int = Query(0, ge=0),
+):
+    """Bounded source data sample backing the requested evidence item."""
+    clean_sheet_id = int(sheet_id) if sheet_id is not None and not hasattr(sheet_id, 'default') else None
+
+    conn = get_connection()
+    try:
+        from ..services.evidence.evidence_retrieval import get_targeted_source_context
+        return get_targeted_source_context(
+            conn,
+            evidence_id=evidence_id,
+            sheet_id=clean_sheet_id,
+            limit=limit,
+            offset=offset,
+        )
+    finally:
+        conn.close()
+
+
 @router.get('/investigate')
 def api_analytics_investigate(
     entity_type: str = Query('department'),

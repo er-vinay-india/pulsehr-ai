@@ -46,6 +46,62 @@ export async function getOverviewEvidencePackage(sheetId = null) {
   return res.json();
 }
 
+export async function getTargetedEvidence(evidenceId, { datasetId = null, sheetId = null, topicId = null } = {}, signal = null) {
+  const params = new URLSearchParams();
+  if (datasetId) params.set("dataset_id", datasetId);
+  if (sheetId) params.set("sheet_id", sheetId);
+  if (topicId) params.set("topic_id", topicId);
+  const qs = params.toString() ? `?${params.toString()}` : "";
+  const res = await fetch(`${API_BASE}/analytics/overview/evidence/${encodeURIComponent(evidenceId)}${qs}`, { signal });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Failed to load targeted evidence");
+  }
+  return res.json();
+}
+
+export async function getEvidenceLineage(evidenceId, { datasetId = null, sheetId = null } = {}, signal = null) {
+  const params = new URLSearchParams();
+  if (datasetId) params.set("dataset_id", datasetId);
+  if (sheetId) params.set("sheet_id", sheetId);
+  const qs = params.toString() ? `?${params.toString()}` : "";
+  const res = await fetch(`${API_BASE}/analytics/overview/evidence/${encodeURIComponent(evidenceId)}/lineage${qs}`, { signal });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Failed to load evidence lineage");
+  }
+  return res.json();
+}
+
+export async function getEvidenceSourceContext(evidenceId, { sheetId = null, limit = 10, offset = 0 } = {}, signal = null) {
+  const params = new URLSearchParams();
+  if (sheetId) params.set("sheet_id", sheetId);
+  params.set("limit", limit);
+  params.set("offset", offset);
+  const res = await fetch(`${API_BASE}/analytics/overview/evidence/${encodeURIComponent(evidenceId)}/source-context?${params.toString()}`, { signal });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Failed to load source context");
+  }
+  return res.json();
+}
+
+export async function getPaginatedEvidence({ sheetId = null, datasetId = null, topicId = null, page = 1, pageSize = 25, search = null } = {}, signal = null) {
+  const params = new URLSearchParams();
+  if (sheetId) params.set("sheet_id", sheetId);
+  if (datasetId) params.set("dataset_id", datasetId);
+  if (topicId) params.set("topic_id", topicId);
+  params.set("page", page);
+  params.set("page_size", pageSize);
+  if (search) params.set("search", search);
+  const res = await fetch(`${API_BASE}/analytics/overview/evidence?${params.toString()}`, { signal });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Failed to load related evidence");
+  }
+  return res.json();
+}
+
 
 export async function refreshOverviewStory(sheetId = null, model = null) {
   const params = new URLSearchParams();
