@@ -299,25 +299,63 @@ def execute_presentation_pipeline_async(
                     job_id
                 )
 
-                # PPT-L2 Invariant Boundary:
-                # Layered mode stops strictly after a validated DeckStoryPlan.
-                # 0 coordinates, 0 physical slide numbers, 0 SlideExpansion, 0 layout work, 0 legacy StoryPlanner calls.
+                # PPT-L3: Slide Expansion + Presentation Preflight
+                from .preflight_engine import PresentationPreflightEngine
+                from .expansion_engine import SlideExpansionEngine
+                preflight_engine = PresentationPreflightEngine()
+                preflight_result = preflight_engine.preflight(
+                    story_plan=deck_story_plan,
+                    content_pkg=layered_content_package,
+                    target_slide_count=scope.get("target_slides") or scope.get("slide_count"),
+                    metadata={"job_id": job_id, "scope": scope}
+                )
+                workspace_evidence["preflight_result"] = preflight_result.model_dump()
+                logger.info(
+                    "PresentationPreflightEngine completed with status %s (estimated %d physical slides) for job %s",
+                    preflight_result.status.value,
+                    preflight_result.estimated_physical_slide_count,
+                    job_id
+                )
+
+                expansion_engine = SlideExpansionEngine(preflight_engine=preflight_engine)
+                physical_manifest = expansion_engine.expand(
+                    story_plan=deck_story_plan,
+                    content_pkg=layered_content_package,
+                    preflight_result=preflight_result,
+                    target_slide_count=scope.get("target_slides") or scope.get("slide_count"),
+                    metadata={"job_id": job_id, "scope": scope}
+                )
+                workspace_evidence["physical_manifest"] = physical_manifest.model_dump()
+                logger.info(
+                    "SlideExpansionEngine generated PhysicalSlideManifest %s (%d physical slides, fingerprint=%s) for job %s",
+                    physical_manifest.manifest_id,
+                    len(physical_manifest.slides),
+                    physical_manifest.manifest_fingerprint[:12],
+                    job_id
+                )
+
+                # PPT-L3 Invariant Boundary:
+                # Layered mode stops strictly after a validated PhysicalSlideManifest.
+                # 0 coordinates, 0 physical slide numbers, 0 zones, 0 layers, 0 typography font sizes, 0 layout templates, 0 PPTX rendering.
                 deck_id = f"DECK-{deck_story_plan.plan_id}"
                 layered_deck_spec = {
                     "id": deck_id,
                     "title": deck_story_plan.deck_title,
-                    "slides": [],  # PPT-L2: 0 physical slides, 0 coordinates, 0 layouts
+                    "slides": [],  # PPT-L3: 0 layout coordinates, 0 zones, 0 layers
                     "metadata": {
                         "pipeline_mode": PresentationPipelineMode.LAYERED.value,
                         "content_package": layered_content_package.model_dump(),
                         "story_plan": deck_story_plan.model_dump(),
                         "deck_story_plan": deck_story_plan.model_dump(),
-                        "story_fingerprint": deck_story_plan.story_fingerprint,
+                        "preflight_result": preflight_result.model_dump(),
+                        "physical_manifest": physical_manifest.model_dump(),
+                        "manifest_fingerprint": physical_manifest.manifest_fingerprint,
                         "target_audience": deck_story_plan.target_audience,
                         "user_objective": deck_story_plan.user_objective,
                         "total_logical_slides": len(deck_story_plan.logical_slides),
+                        "total_physical_slides": len(physical_manifest.slides),
                         "total_excluded_items": len(deck_story_plan.excluded_content),
-                        "status": "STORY_PLAN_VALIDATED",
+                        "status": "PHYSICAL_MANIFEST_VALIDATED",
                     },
                     "evidence_ledger": primary_ctx.get("evidence_ledger", []) or workspace_evidence.get("evidence_ledger", []),
                 }
@@ -325,13 +363,14 @@ def execute_presentation_pipeline_async(
                 mgr.update_stage(
                     job_id,
                     "ready",
-                    f"Phase 2 Complete: Validated DeckStoryPlan generated ({len(deck_story_plan.logical_slides)} logical units). Ready for PPT-L3 Preflight.",
+                    f"Phase 3 Complete: Validated PhysicalSlideManifest generated ({len(physical_manifest.slides)} physical slides). Ready for PPT-L4.",
                     100,
                     deck_id=deck_id,
                     extra={
-                        "current_slide": len(deck_story_plan.logical_slides),
-                        "total_slides": len(deck_story_plan.logical_slides),
-                        "active_phase": "story_plan_validated",
+                        "current_slide": len(physical_manifest.slides),
+                        "total_slides": len(physical_manifest.slides),
+                        "active_phase": "physical_manifest_validated",
+                        "physical_manifest": physical_manifest.model_dump(),
                         "deck_story_plan": deck_story_plan.model_dump(),
                         "content_package": layered_content_package.model_dump(),
                     }

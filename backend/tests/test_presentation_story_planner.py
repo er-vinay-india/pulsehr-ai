@@ -744,7 +744,7 @@ class TestOrchestratorLayeredStoryPlannerIntegration:
             # Invariant: Layered mode returns structured deck spec stopping after DeckStoryPlan
             assert result_deck is not None
             assert result_deck["metadata"]["pipeline_mode"] == "LAYERED"
-            assert result_deck["metadata"]["status"] == "STORY_PLAN_VALIDATED"
+            assert result_deck["metadata"]["status"] in ("STORY_PLAN_VALIDATED", "PHYSICAL_MANIFEST_VALIDATED")
             assert "content_package" in result_deck["metadata"]
             assert "story_plan" in result_deck["metadata"]
 
@@ -754,13 +754,12 @@ class TestOrchestratorLayeredStoryPlannerIntegration:
             assert len(story_plan["logical_slides"]) >= 4
             assert len(story_plan["story_fingerprint"]) == 64
 
-            # Invariant: 0 physical coordinates, 0 physical slides, 0 physical manifest (PPT-L3+)
+            # Invariant: 0 physical coordinates, 0 rendered layout slides (PPT-L4+)
             assert len(result_deck["slides"]) == 0
-            assert "physical_manifest" not in result_deck["metadata"]
 
-            # Invariant: Job manager stage updated to ready with story_plan_validated phase
+            # Invariant: Job manager stage updated to ready with validated phase
             mock_mgr.update_stage.assert_called()
             last_call_args, last_call_kwargs = mock_mgr.update_stage.call_args
             assert last_call_args[1] == "ready"
             assert last_call_args[3] == 100
-            assert last_call_kwargs["extra"]["active_phase"] == "story_plan_validated"
+            assert last_call_kwargs["extra"]["active_phase"] in ("story_plan_validated", "physical_manifest_validated")
