@@ -259,8 +259,9 @@ def execute_presentation_pipeline_async(
         if mgr.is_cancelled(job_id):
             return
 
-        # PPT-L1: Layered Pipeline Content Hub Assembly
+        # PPT-L1 & PPT-L2: Layered Pipeline Execution (Content Hub -> Story Planner)
         layered_content_package = None
+        deck_story_plan = None
         if pipeline_mode == PresentationPipelineMode.LAYERED:
             try:
                 from .content_hub import PresentationContentHub
@@ -278,8 +279,67 @@ def execute_presentation_pipeline_async(
                     len(layered_content_package.global_kpis),
                     job_id
                 )
+
+                # PPT-L2: Story Planner & Logical SlideTags
+                from .story_planner import StoryPlanner
+                planner = StoryPlanner(use_ai=False)
+                deck_story_plan = planner.plan_story(
+                    content_pkg=layered_content_package,
+                    user_objective=scope.get("objective", ""),
+                    target_audience=scope.get("audience", "Executive Leadership"),
+                    metadata={"job_id": job_id, "scope": scope}
+                )
+                workspace_evidence["deck_story_plan"] = deck_story_plan.model_dump()
+                logger.info(
+                    "StoryPlanner generated DeckStoryPlan %s (%d logical slides, %d exclusions, fingerprint=%s) for job %s",
+                    deck_story_plan.plan_id,
+                    len(deck_story_plan.logical_slides),
+                    len(deck_story_plan.excluded_content),
+                    deck_story_plan.story_fingerprint[:12],
+                    job_id
+                )
+
+                # PPT-L2 Invariant Boundary:
+                # Layered mode stops strictly after a validated DeckStoryPlan.
+                # 0 coordinates, 0 physical slide numbers, 0 SlideExpansion, 0 layout work, 0 legacy StoryPlanner calls.
+                deck_id = f"DECK-{deck_story_plan.plan_id}"
+                layered_deck_spec = {
+                    "id": deck_id,
+                    "title": deck_story_plan.deck_title,
+                    "slides": [],  # PPT-L2: 0 physical slides, 0 coordinates, 0 layouts
+                    "metadata": {
+                        "pipeline_mode": PresentationPipelineMode.LAYERED.value,
+                        "content_package": layered_content_package.model_dump(),
+                        "story_plan": deck_story_plan.model_dump(),
+                        "deck_story_plan": deck_story_plan.model_dump(),
+                        "story_fingerprint": deck_story_plan.story_fingerprint,
+                        "target_audience": deck_story_plan.target_audience,
+                        "user_objective": deck_story_plan.user_objective,
+                        "total_logical_slides": len(deck_story_plan.logical_slides),
+                        "total_excluded_items": len(deck_story_plan.excluded_content),
+                        "status": "STORY_PLAN_VALIDATED",
+                    },
+                    "evidence_ledger": primary_ctx.get("evidence_ledger", []) or workspace_evidence.get("evidence_ledger", []),
+                }
+
+                mgr.update_stage(
+                    job_id,
+                    "ready",
+                    f"Phase 2 Complete: Validated DeckStoryPlan generated ({len(deck_story_plan.logical_slides)} logical units). Ready for PPT-L3 Preflight.",
+                    100,
+                    deck_id=deck_id,
+                    extra={
+                        "current_slide": len(deck_story_plan.logical_slides),
+                        "total_slides": len(deck_story_plan.logical_slides),
+                        "active_phase": "story_plan_validated",
+                        "deck_story_plan": deck_story_plan.model_dump(),
+                        "content_package": layered_content_package.model_dump(),
+                    }
+                )
+                return layered_deck_spec
             except Exception as exc:
-                logger.warning("PresentationContentHub encountered issue for job %s: %s", job_id, exc)
+                logger.exception("Layered presentation pipeline encountered issue for job %s: %s", job_id, exc)
+                raise
 
         # PHASE 2 & 3: Narrative Architecture, Slide Sequence, Headlines & Wireframes (15% -> 48%)
         mgr.update_stage(

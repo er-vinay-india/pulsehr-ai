@@ -252,29 +252,29 @@ class TestLayeredScopeBoundary:
                 }],
             }
             mock_col.return_value = {"primary_ctx": mock_ctx}
-            mock_deck = {
-                "id": "DECK-LAYERED",
-                "slides": [{"title": "On-Time Delivery", "category": "Operations"}],
-                "metadata": {"title": "Layered Deck", "theme_id": "executive_dark"},
-                "evidence_ledger": []
-            }
-            mock_gen.return_value = mock_deck
 
-            execute_presentation_pipeline_async("job-lay-01", scope, manager=mock_mgr)
+            result_deck = execute_presentation_pipeline_async("job-lay-01", scope, manager=mock_mgr)
 
-            # Layered mode attaches content package
-            assert mock_deck["metadata"]["pipeline_mode"] == "LAYERED"
-            assert "content_package" in mock_deck["metadata"]
-            pkg_data = mock_deck["metadata"]["content_package"]
+            # Invariant: Zero legacy generator calls in layered mode
+            mock_gen.assert_not_called()
+
+            # Layered mode returns structured deck spec stopping after DeckStoryPlan
+            assert result_deck is not None
+            assert result_deck["metadata"]["pipeline_mode"] == "LAYERED"
+            assert "content_package" in result_deck["metadata"]
+            pkg_data = result_deck["metadata"]["content_package"]
             assert pkg_data["domain"] == "Logistics"
             assert len(pkg_data["items"]) >= 1
 
-            # Invariant: NO PPT-L2 StoryPlanner or SlideTags in deck
-            assert "story_plan" not in mock_deck["metadata"]
-            assert "slide_tags" not in mock_deck["metadata"]
-            # Invariant: NO PPT-L3+ physical slide manifest or zones in deck
-            assert "physical_manifest" not in mock_deck["metadata"]
-            assert "zones" not in mock_deck["slides"][0]
+            # PPT-L2: Story plan is attached with logical slide tags
+            assert "story_plan" in result_deck["metadata"]
+            story_plan = result_deck["metadata"]["story_plan"]
+            assert len(story_plan["logical_slides"]) >= 1
+            assert len(story_plan["story_fingerprint"]) == 64
+
+            # Invariant: NO PPT-L3+ physical slide manifest, coordinates, or zones in deck
+            assert "physical_manifest" not in result_deck["metadata"]
+            assert len(result_deck["slides"]) == 0  # 0 physical slides created in PPT-L2
 
 
 # ==============================================================================
