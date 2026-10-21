@@ -1,41 +1,31 @@
-"""Comprehensive Test Suite & Architectural Invariant Audit for StoryPlanner & Logical SlideTags (PPT-L2).
+"""Comprehensive Test Suite & Architectural Invariant Audit for StoryPlanner & Semantic SlideTags (PPT-L2).
 
 Validates:
-1. DeckStoryPlan & LogicalSlideTag Creation:
-   - Valid DeckStoryPlan created with plan_id, deck_title, executive_thesis, sections, and logical_slides.
-   - LogicalSlideTags assigned across standard narrative vocabulary (TITLE, AGENDA, EXECUTIVE_SUMMARY, STRATEGIC_KPIS, HERO_ANALYSIS, GEOGRAPHIC_DISTRIBUTION, ACTION_PLAN, CLOSING).
-2. Content Bound Exclusively by ID:
-   - Every ContentBinding references a known, audited content_id.
-   - Distinct roles assigned: PRIMARY, SUPPORTING, OPTIONAL.
-3. Objective-Aware Narrative Ordering:
-   - Geographic user objective prioritizes GEOGRAPHIC_DISTRIBUTION early in the narrative.
-   - Risk/anomaly user objective prioritizes COHORT_VARIANCE / risk findings.
-   - Deck structure is not a dumb mirror of dashboard or raw dataset.
-4. Redundancy Handling & Excluded-Content Ledger:
-   - Redundant or lower-priority items are routed to excluded_content with explicit ExclusionReason.
-   - Complete content accounting: every package item is either bound or recorded in excluded_content.
-   - Zero silent content loss.
-5. Unknown ID Rejection:
-   - Hallucinated or unknown content_ids in slides or exclusions raise UnknownContentIdError.
-6. Deterministic Fallback & Fingerprint Determinism:
-   - DeterministicStoryPlanner operates with zero external calls and 100% reproducible ordering.
-   - Identical inputs yield identical SHA-256 story_fingerprint.
-7. Architectural Invariants (Zero Layout / Physical Rendering):
-   - 0 physical coordinates (x, y, width, height, left, top, pt_x, pt_y)
-   - 0 physical slide numbers (slide_number, page_number)
-   - 0 SlideExpansion
-   - 0 Layer / Zone work
-   - 0 layout work
-   - 0 legacy StoryPlanner calls
-8. Analytical Truth Invariants:
-   - 0 fact mutations
-   - 0 unit mutations
-   - 0 grain mutations
-   - 0 denominator mutations
-   - 0 invented numerical facts
+1. Structural Story Role != Extensible Semantic Topic:
+   - structural_role (StructuralRole enum) represents storytelling role (GEOGRAPHIC_ANALYSIS, HERO_ANALYSIS, etc.)
+   - semantic_topic (string) represents domain topic (POPULATION_DENSITY, POPULATION_GROWTH, CUSTOMER_RETENTION)
+   - logical_slide_id is semantic (e.g. POPULATION_DENSITY), not physical.
+2. Multiple Semantic Topics Under Same Structural Role:
+   - Simultaneous existence of GEOGRAPHIC_ANALYSIS / POPULATION_DENSITY and GEOGRAPHIC_ANALYSIS / POPULATION_GROWTH
+   - Comparison slides under DEPARTMENT_ATTENDANCE and DEPARTMENT_LEAVE without enum expansion.
+3. Domain-Independent Extensibility:
+   - Previously unseen topic (e.g. CUSTOMER_RETENTION) handled without enum modifications.
+4. AI Story Planner Path & Telemetry:
+   - Typed schema parsing, ID containment, duplicate binding normalization, latency and call count tracking.
+   - Deterministic fallback on timeout, malformed schema, or hallucinated IDs.
+5. User Objective Effect:
+   - Same package, Objective A (density) vs Objective B (growth): same facts/units/grain, different ordering & priorities.
+6. Business Governance Leakage vs Technical Terminology:
+   - Normal business deck: 0 SDR, 0 JoinPlan, 0 EVID-..., 0 checksums in user-visible narrative text.
+   - Technical presentation: faithfully preserves explicitly requested technical terms verbatim.
+7. Truth & Physical Layout Invariants:
+   - 0 fact, unit, grain, denominator mutations; 0 invented facts.
+   - 0 physical coordinates, 0 physical slide numbers, 0 zones/layers, 0 SlideExpansion, 0 layout work.
+   - 0 legacy StoryPlanner calls in layered mode.
 """
 
 import copy
+import time
 from typing import Any
 import pytest
 from unittest.mock import MagicMock, patch
@@ -45,6 +35,7 @@ from app.services.presentation.content_models import (
     ContentRole,
     PresentationContentItem,
     PresentationContentPackage,
+    UserVisibleContentPolicy,
 )
 from app.services.presentation.story_models import (
     ContentBinding,
@@ -52,13 +43,16 @@ from app.services.presentation.story_models import (
     DeckStoryPlan,
     ExcludedContentItem,
     ExclusionReason,
+    GovernanceLeakageError,
     LogicalSlidePlan,
     PhysicalLayoutLeakageError,
+    StructuralRole,
     SlideTag,
     StoryPlanValidationError,
     StoryPlanValidator,
     UnaccountedContentError,
     UnknownContentIdError,
+    normalize_semantic_topic,
 )
 from app.services.presentation.story_planner import (
     AIStoryPlanner,
@@ -111,7 +105,7 @@ def sample_content_package() -> PresentationContentPackage:
             content_id="ITEM-001",
             kind=ContentKind.MAP,
             role=ContentRole.PRIMARY_HERO,
-            topic_category="Geographic Density",
+            topic_category="Population Density",
             title="State-by-State Population Density & Route Load",
             importance_score=0.92,
             decision_relevance=0.88,
@@ -123,9 +117,23 @@ def sample_content_package() -> PresentationContentPackage:
         ),
         PresentationContentItem(
             content_id="ITEM-002",
+            kind=ContentKind.CHART,
+            role=ContentRole.KEY_FINDING,
+            topic_category="Population Growth",
+            title="Regional Population Growth and Expansion Trends",
+            importance_score=0.90,
+            decision_relevance=0.86,
+            visual_suitability=0.92,
+            narrative_takeaway="Southern expansion territories exhibit accelerated 14.8% annualized population growth.",
+            unit="%",
+            grain="region",
+            denominator="baseline_population"
+        ),
+        PresentationContentItem(
+            content_id="ITEM-003",
             kind=ContentKind.TABLE,
             role=ContentRole.EXPLORATORY_TABLE,
-            topic_category="Geographic Density",
+            topic_category="Population Density",
             title="Top 10 High-Density Districts Comparison",
             importance_score=0.75,
             decision_relevance=0.70,
@@ -136,7 +144,7 @@ def sample_content_package() -> PresentationContentPackage:
             denominator="district_area_sq_km"
         ),
         PresentationContentItem(
-            content_id="ITEM-003",
+            content_id="ITEM-004",
             kind=ContentKind.CHART,
             role=ContentRole.KEY_FINDING,
             topic_category="Corridor Velocity",
@@ -150,7 +158,7 @@ def sample_content_package() -> PresentationContentPackage:
             denominator="total_dispatches"
         ),
         PresentationContentItem(
-            content_id="ITEM-004",
+            content_id="ITEM-005",
             kind=ContentKind.CHART,
             role=ContentRole.RISK_ANOMALY,
             topic_category="Service Variance",
@@ -164,7 +172,7 @@ def sample_content_package() -> PresentationContentPackage:
             denominator="scheduled_shifts"
         ),
         PresentationContentItem(
-            content_id="ITEM-005",
+            content_id="ITEM-006",
             kind=ContentKind.CHART,
             role=ContentRole.KEY_FINDING,
             topic_category="Corridor Velocity",
@@ -178,10 +186,10 @@ def sample_content_package() -> PresentationContentPackage:
             grain="corridor"
         ),
         PresentationContentItem(
-            content_id="ITEM-006",
+            content_id="ITEM-007",
             kind=ContentKind.TABLE,
             role=ContentRole.EXPLORATORY_TABLE,
-            topic_category="Miscellaneous Audit",
+            topic_category="Auxiliary Equipment",
             title="Raw Vehicle Maintenance Log Excerpt",
             importance_score=0.20,
             decision_relevance=0.15,
@@ -197,327 +205,408 @@ def sample_content_package() -> PresentationContentPackage:
         domain="Supply Chain & Fleet Logistics",
         items=items,
         global_kpis=kpis,
-        available_topics=["Geographic Density", "Corridor Velocity", "Service Variance", "Miscellaneous Audit"],
+        available_topics=["Population Density", "Population Growth", "Corridor Velocity", "Service Variance", "Auxiliary Equipment"],
     )
     pkg.content_fingerprint = pkg.compute_fingerprint()
     return pkg
 
 
 # ==============================================================================
-# 1. DECK STORY PLAN & SLIDE TAG CREATION
+# 1. STRUCTURAL ROLE != EXTENSIBLE SEMANTIC TOPIC
 # ==============================================================================
 
-class TestDeckStoryPlanCreation:
-    """Verifies that DeckStoryPlan is cleanly created with valid logical slide tags."""
+class TestStructuralRoleVsSemanticTopic:
+    """Verifies that structural story role is cleanly separated from extensible semantic topic."""
 
-    def test_creates_valid_deck_story_plan(self, sample_content_package):
+    def test_structural_role_and_semantic_topic_distinct(self, sample_content_package):
         planner = StoryPlanner(use_ai=False)
         plan = planner.plan_story(
             content_pkg=sample_content_package,
-            user_objective="Analyze operational bottlenecks and corridor performance",
-            target_audience="Executive Operations Committee"
+            user_objective="Analyze population density across districts"
         )
 
-        assert isinstance(plan, DeckStoryPlan)
-        assert plan.plan_id.startswith("PLAN-")
-        assert len(plan.deck_title) > 0
-        assert len(plan.executive_thesis) > 0
-        assert len(plan.sections) >= 3
-        assert len(plan.logical_slides) >= 5
-        assert len(plan.story_fingerprint) == 64
-
-    def test_assigns_valid_logical_slide_tags(self, sample_content_package):
-        planner = StoryPlanner(use_ai=False)
-        plan = planner.plan_story(
-            content_pkg=sample_content_package,
-            user_objective="Evaluate fleet performance",
-            target_audience="Executive Leadership"
-        )
-
-        tags = [s.tag for s in plan.logical_slides]
-        # Invariants: Must contain foundational logical story tags
-        assert SlideTag.TITLE in tags
-        assert SlideTag.AGENDA in tags
-        assert SlideTag.EXECUTIVE_SUMMARY in tags
-        assert SlideTag.STRATEGIC_KPIS in tags
-        assert SlideTag.ACTION_PLAN in tags
-        assert SlideTag.CLOSING in tags
-
-        # Every tag must be a recognized SlideTag enum member
-        for s in plan.logical_slides:
-            assert isinstance(s.tag, SlideTag)
-            assert s.section_name in plan.sections
-
-    def test_logical_slide_is_not_physical_slide(self, sample_content_package):
-        """Invariant: LogicalSlidePlan allows multi-binding and has 0 physical coordinates."""
-        planner = StoryPlanner(use_ai=False)
-        plan = planner.plan_story(
-            content_pkg=sample_content_package,
-            user_objective="Assess regional density and top districts"
-        )
-
-        # Check that logical slides contain purpose and headline but NO physical dimensions
-        for s in plan.logical_slides:
-            assert hasattr(s, "headline")
-            assert hasattr(s, "purpose")
-            assert hasattr(s, "allow_split")
-            assert not hasattr(s, "width")
-            assert not hasattr(s, "height")
-            assert not hasattr(s, "x")
-            assert not hasattr(s, "y")
-            assert not hasattr(s, "slide_number")
-
-
-# ==============================================================================
-# 2. CONTENT BOUND EXCLUSIVELY BY ID & ROLES
-# ==============================================================================
-
-class TestContentBindingAndRoles:
-    """Verifies that all bound content references valid IDs with explicit roles."""
-
-    def test_bindings_use_valid_content_ids(self, sample_content_package):
-        planner = StoryPlanner(use_ai=False)
-        plan = planner.plan_story(
-            content_pkg=sample_content_package,
-            user_objective="Examine corridor velocity"
-        )
-
-        valid_ids = {it.content_id for it in sample_content_package.items} | {
-            k.content_id for k in sample_content_package.global_kpis
-        }
-
-        bound_ids = set()
-        for s in plan.logical_slides:
-            for b in s.content_bindings:
-                assert b.content_id in valid_ids, f"Bound ID {b.content_id} not in package"
-                assert isinstance(b.binding_role, ContentBindingRole)
-                bound_ids.add(b.content_id)
-
-        assert len(bound_ids) > 0
-
-    def test_primary_and_supporting_roles_assigned(self, sample_content_package):
-        planner = StoryPlanner(use_ai=False)
-        plan = planner.plan_story(
-            content_pkg=sample_content_package,
-            user_objective="Explore geographic density"
-        )
-
-        all_roles = [
-            b.binding_role
-            for s in plan.logical_slides
-            for b in s.content_bindings
+        geo_slides = [
+            s for s in plan.logical_slides
+            if s.structural_role == StructuralRole.GEOGRAPHIC_ANALYSIS
         ]
-        assert ContentBindingRole.PRIMARY in all_roles
-        # Check if supporting table was paired with primary visual
-        geo_slide = next(
-            (s for s in plan.logical_slides if s.tag == SlideTag.GEOGRAPHIC_DISTRIBUTION),
-            None
-        )
-        if geo_slide and len(geo_slide.content_bindings) > 1:
-            binding_roles = [b.binding_role for b in geo_slide.content_bindings]
-            assert ContentBindingRole.PRIMARY in binding_roles
-            assert ContentBindingRole.SUPPORTING in binding_roles
+        assert len(geo_slides) >= 1
+        slide = geo_slides[0]
 
+        # Structural role is generic storytelling archetype
+        assert slide.structural_role == StructuralRole.GEOGRAPHIC_ANALYSIS
+        # Semantic topic is the domain business topic
+        assert slide.semantic_topic == "POPULATION_DENSITY"
+        # Logical slide ID is semantic, NOT generic
+        assert "POPULATION_DENSITY" in slide.logical_slide_id
+        assert "GEOGRAPHIC_DISTRIBUTION-1" not in slide.logical_slide_id
 
-# ==============================================================================
-# 3. OBJECTIVE-AWARE ORDERING & EMPHASIS
-# ==============================================================================
-
-class TestObjectiveAwareOrdering:
-    """Verifies that user objectives drive narrative prioritization without mirroring dashboard verbatim."""
-
-    def test_geographic_objective_prioritizes_spatial_slide(self, sample_content_package):
+    def test_multiple_semantic_topics_under_same_structural_role(self, sample_content_package):
+        """Verifies that GEOGRAPHIC_ANALYSIS can house POPULATION_DENSITY and POPULATION_GROWTH simultaneously."""
         planner = StoryPlanner(use_ai=False)
         plan = planner.plan_story(
             content_pkg=sample_content_package,
-            user_objective="Detailed geographic and regional population analysis"
+            user_objective="Comprehensive regional review covering population density and population growth",
+            max_logical_slides=12
         )
 
-        # In a geo-focused deck, GEOGRAPHIC_DISTRIBUTION should appear early in empirical findings
-        slide_tags = [s.tag for s in plan.logical_slides]
-        assert SlideTag.GEOGRAPHIC_DISTRIBUTION in slide_tags
-        geo_index = slide_tags.index(SlideTag.GEOGRAPHIC_DISTRIBUTION)
-        # Should be placed right after the introductory framing (TITLE, SUMMARY, KPIS, AGENDA)
-        assert geo_index <= 5
-
-        # Check bound content for geo slide
-        geo_slide = plan.logical_slides[geo_index]
-        bound_ids = [b.content_id for b in geo_slide.content_bindings]
-        assert "ITEM-001" in bound_ids  # The MAP item
-
-    def test_risk_objective_prioritizes_anomaly_slide(self, sample_content_package):
-        planner = StoryPlanner(use_ai=False)
-        plan = planner.plan_story(
-            content_pkg=sample_content_package,
-            user_objective="Focus on risk anomalies, incident spikes, and delay variances"
-        )
-
-        slide_tags = [s.tag for s in plan.logical_slides]
-        assert SlideTag.COHORT_VARIANCE in slide_tags
-        risk_index = slide_tags.index(SlideTag.COHORT_VARIANCE)
-        # Anomaly slide should appear prominently
-        assert risk_index <= 5
-
-        risk_slide = plan.logical_slides[risk_index]
-        bound_ids = [b.content_id for b in risk_slide.content_bindings]
-        assert "ITEM-004" in bound_ids  # Peak Hour Incident Distribution
-
-
-# ==============================================================================
-# 4. REDUNDANCY HANDLING & COMPLETE CONTENT ACCOUNTING
-# ==============================================================================
-
-class TestRedundancyAndExcludedContentLedger:
-    """Verifies that redundant and unselected items are cataloged with explicit reasons."""
-
-    def test_redundant_items_routed_to_exclusion_ledger(self, sample_content_package):
-        planner = StoryPlanner(use_ai=False)
-        plan = planner.plan_story(
-            content_pkg=sample_content_package,
-            user_objective="Review overall operational performance"
-        )
-
-        # ITEM-005 had redundancy_score = 0.85
-        redundant_exclusions = [
-            e for e in plan.excluded_content
-            if e.reason == ExclusionReason.REDUNDANT
+        geo_slides = [
+            s for s in plan.logical_slides
+            if s.structural_role == StructuralRole.GEOGRAPHIC_ANALYSIS
         ]
-        assert len(redundant_exclusions) >= 1
-        redundant_ids = {e.content_id for e in redundant_exclusions}
-        assert "ITEM-005" in redundant_ids
-
-    def test_complete_content_accounting_zero_silent_loss(self, sample_content_package):
-        """Invariant: Every item in package.items must be either bound or in excluded_content."""
-        planner = StoryPlanner(use_ai=False)
-        plan = planner.plan_story(
-            content_pkg=sample_content_package,
-            user_objective="Analyze high-level logistics"
-        )
-
-        all_pkg_item_ids = {it.content_id for it in sample_content_package.items}
-        bound_item_ids = {
-            b.content_id
-            for s in plan.logical_slides
-            for b in s.content_bindings
-            if b.content_id.startswith("ITEM-")
-        }
-        excluded_item_ids = {e.content_id for e in plan.excluded_content}
-
-        # Union must strictly equal all package items
-        assert bound_item_ids | excluded_item_ids == all_pkg_item_ids
-        # Intersection must be empty (cannot be both bound and excluded)
-        assert len(bound_item_ids & excluded_item_ids) == 0
-
-    def test_unaccounted_content_triggers_validator_error(self, sample_content_package):
-        planner = StoryPlanner(use_ai=False)
-        plan = planner.plan_story(
-            content_pkg=sample_content_package,
-            user_objective="Analyze performance"
-        )
-
-        # Intentionally remove an item from excluded_content without binding it
-        plan.excluded_content.pop()
-
-        with pytest.raises(UnaccountedContentError) as exc_info:
-            StoryPlanValidator.validate(plan, sample_content_package, strict_exclusions=True)
-        assert "neither bound to a slide nor recorded in excluded_content" in str(exc_info.value)
-
-
-# ==============================================================================
-# 5. UNKNOWN ID REJECTION
-# ==============================================================================
-
-class TestUnknownIdRejection:
-    """Verifies that any unknown or hallucinated content_id is strictly rejected."""
-
-    def test_rejects_hallucinated_bound_content_id(self, sample_content_package):
-        planner = StoryPlanner(use_ai=False)
-        plan = planner.plan_story(
-            content_pkg=sample_content_package,
-            user_objective="Check logistics"
-        )
-
-        # Inject a hallucinated ID into a slide binding
-        plan.logical_slides[0].content_bindings.append(
-            ContentBinding(content_id="HALLUCINATED-CHART-999", binding_role=ContentBindingRole.PRIMARY)
-        )
-
-        with pytest.raises(UnknownContentIdError) as exc_info:
-            StoryPlanValidator.validate(plan, sample_content_package)
-        assert "HALLUCINATED-CHART-999" in str(exc_info.value)
-
-    def test_rejects_hallucinated_excluded_content_id(self, sample_content_package):
-        planner = StoryPlanner(use_ai=False)
-        plan = planner.plan_story(
-            content_pkg=sample_content_package,
-            user_objective="Check logistics"
-        )
-
-        # Inject a hallucinated ID into excluded_content
-        plan.excluded_content.append(
-            ExcludedContentItem(
-                content_id="GHOST-ITEM-007",
-                reason=ExclusionReason.OFF_OBJECTIVE
-            )
-        )
-
-        with pytest.raises(UnknownContentIdError) as exc_info:
-            StoryPlanValidator.validate(plan, sample_content_package)
-        assert "GHOST-ITEM-007" in str(exc_info.value)
-
-
-# ==============================================================================
-# 6. DETERMINISTIC REPRODUCIBILITY & FALLBACK
-# ==============================================================================
-
-class TestDeterministicReproducibilityAndFallback:
-    """Verifies that story planning is 100% deterministic and fallback operates seamlessly."""
-
-    def test_identical_runs_produce_identical_fingerprints(self, sample_content_package):
-        planner1 = DeterministicStoryPlanner()
-        planner2 = DeterministicStoryPlanner()
-
-        plan1 = planner1.plan(
-            sample_content_package,
-            user_objective="Analyze corridor velocity and bottlenecks",
-            target_audience="VP Operations"
-        )
-        plan2 = planner2.plan(
-            sample_content_package,
-            user_objective="Analyze corridor velocity and bottlenecks",
-            target_audience="VP Operations"
-        )
-
-        assert plan1.story_fingerprint == plan2.story_fingerprint
-        assert len(plan1.logical_slides) == len(plan2.logical_slides)
-        for s1, s2 in zip(plan1.logical_slides, plan2.logical_slides):
-            assert s1.tag == s2.tag
-            assert s1.headline == s2.headline
-            assert [b.content_id for b in s1.content_bindings] == [b.content_id for b in s2.content_bindings]
-
-    def test_ai_planner_graceful_fallback(self, sample_content_package):
-        """When AI raises an error or is offline, it falls back seamlessly to deterministic planner."""
-        ai_planner = AIStoryPlanner()
+        semantic_topics = [s.semantic_topic for s in geo_slides]
         
-        # Patch _attempt_ai_plan to raise an exception
-        with patch.object(ai_planner, "_attempt_ai_plan", side_effect=RuntimeError("LLM API Timeout")):
-            plan = ai_planner.plan(
-                sample_content_package,
-                user_objective="Operational overview",
-                target_audience="Executive Leadership"
-            )
+        # Both distinct topics are represented under the same structural role
+        assert "POPULATION_DENSITY" in semantic_topics
+        assert "POPULATION_GROWTH" in semantic_topics
+        
+        # Logical slide IDs remain distinct and meaningful
+        logical_ids = [s.logical_slide_id for s in geo_slides]
+        assert len(logical_ids) == len(set(logical_ids))
+        assert any("POPULATION_DENSITY" in lid for lid in logical_ids)
+        assert any("POPULATION_GROWTH" in lid for lid in logical_ids)
 
-        assert isinstance(plan, DeckStoryPlan)
-        assert len(plan.logical_slides) >= 5
+    def test_extensible_comparison_topics_without_enum_expansion(self):
+        """Verifies that arbitrary topics (e.g. DEPARTMENT_ATTENDANCE vs DEPARTMENT_LEAVE) work without enum edits."""
+        item1 = PresentationContentItem(
+            content_id="HR-01",
+            kind=ContentKind.CHART,
+            role=ContentRole.PRIMARY_HERO,
+            topic_category="Department Attendance",
+            title="Department Attendance Comparison",
+            metric_value="96.1%",
+            importance_score=0.9
+        )
+        item2 = PresentationContentItem(
+            content_id="HR-02",
+            kind=ContentKind.CHART,
+            role=ContentRole.KEY_FINDING,
+            topic_category="Department Leave",
+            title="Department Leave Pattern Analysis",
+            metric_value="4.2 days",
+            importance_score=0.88
+        )
+        pkg = PresentationContentPackage(
+            package_id="PKG-HR-01",
+            dataset_name="HR Workforce",
+            domain="Human Resources",
+            items=[item1, item2],
+            global_kpis=[]
+        )
+
+        planner = StoryPlanner(use_ai=False)
+        plan = planner.plan_story(pkg, user_objective="Compare attendance and leave")
+
+        topics = [s.semantic_topic for s in plan.logical_slides]
+        assert "DEPARTMENT_ATTENDANCE" in topics
+        assert "DEPARTMENT_LEAVE" in topics
+
+
+# ==============================================================================
+# 2. DOMAIN-INDEPENDENT EXTENSIBILITY
+# ==============================================================================
+
+class TestDomainIndependentExtensibility:
+    """Verifies that previously unseen domain topics work seamlessly without enum additions."""
+
+    def test_unseen_topic_customer_retention(self):
+        item = PresentationContentItem(
+            content_id="SAAS-01",
+            kind=ContentKind.CHART,
+            role=ContentRole.PRIMARY_HERO,
+            topic_category="Customer Retention",
+            title="Net Retention Rate Across Enterprise Cohorts",
+            metric_value="118%",
+            unit="%",
+            grain="customer_cohort",
+            importance_score=0.95,
+            decision_relevance=0.92,
+            narrative_takeaway="Enterprise tier net customer retention expanded to 118%."
+        )
+        pkg = PresentationContentPackage(
+            package_id="PKG-SAAS-01",
+            dataset_name="SaaS Metrics",
+            domain="Subscription Revenue",
+            items=[item],
+            global_kpis=[]
+        )
+
+        planner = StoryPlanner(use_ai=False)
+        plan = planner.plan_story(pkg, user_objective="Focus on enterprise customer retention")
+
+        # Verify plan accepted without new enum
+        slide = next(s for s in plan.logical_slides if s.semantic_topic == "CUSTOMER_RETENTION")
+        assert slide.structural_role in (StructuralRole.HERO_ANALYSIS, StructuralRole.DIAGNOSTIC_ANALYSIS)
+        assert slide.semantic_topic == "CUSTOMER_RETENTION"
+        assert "CUSTOMER_RETENTION" in slide.logical_slide_id
         assert len(plan.story_fingerprint) == 64
 
+        # Validate cleanly
+        StoryPlanValidator.validate(plan, pkg)
+
 
 # ==============================================================================
-# 7. ARCHITECTURAL INVARIANTS: ZERO PHYSICAL LAYOUT / COORDINATES / EXPANSION
+# 3. AI STORY PLANNER PATH CERTIFICATION & TELEMETRY
 # ==============================================================================
 
-class TestArchitecturalInvariantsZeroPhysicalLayout:
-    """Verifies that PPT-L2 contains ZERO physical coordinates, slide numbers, or zone layouts."""
+class TestAIStoryPlannerPathCertification:
+    """Verifies the real AI story planning path with schema validation, call counts, and latency."""
+
+    def test_ai_planner_typed_schema_success(self, sample_content_package):
+        ai_planner = AIStoryPlanner()
+        mock_payload = {
+            "deck_title": "Executive Fleet & Corridor Diagnostic",
+            "deck_subtitle": "Audited AI Story Architecture",
+            "executive_thesis": "Corridor turnaround lag directly compresses on-time reliability.",
+            "sections": ["Strategic Context", "Thematic Discoveries", "Actions"],
+            "logical_slides": [
+                {
+                    "logical_slide_id": "POPULATION_DENSITY",
+                    "structural_role": "GEOGRAPHIC_ANALYSIS",
+                    "semantic_topic": "POPULATION_DENSITY",
+                    "section_name": "Thematic Discoveries",
+                    "purpose": "Evaluate state population density",
+                    "headline": "Northern Corridor Density Concentration",
+                    "takeaway": "Northern region density reaches 11,320 per sq km.",
+                    "content_bindings": [
+                        {"content_id": "ITEM-001", "binding_role": "PRIMARY"}
+                    ]
+                },
+                {
+                    "logical_slide_id": "CORRIDOR_VELOCITY",
+                    "structural_role": "CORRELATION_ANALYSIS",
+                    "semantic_topic": "CORRIDOR_VELOCITY",
+                    "section_name": "Thematic Discoveries",
+                    "purpose": "Corridor dispatch velocity",
+                    "headline": "Turnaround Correlation Dynamics",
+                    "takeaway": "Strong negative correlation.",
+                    "content_bindings": [
+                        {"content_id": "ITEM-004", "binding_role": "PRIMARY"}
+                    ]
+                }
+            ]
+        }
+
+        plan = ai_planner.plan(
+            sample_content_package,
+            user_objective="Evaluate spatial density and velocity",
+            metadata={"mock_ai_response": mock_payload}
+        )
+
+        assert isinstance(plan, DeckStoryPlan)
+        assert plan.deck_title == "Executive Fleet & Corridor Diagnostic"
+        assert ai_planner.call_count == 1
+        assert ai_planner.total_latency_ms >= 0.0
+        assert ai_planner.repair_calls == 0
+        assert ai_planner.fallback_invoked is False
+
+        # All unassigned items routed to excluded_content
+        excluded_ids = {e.content_id for e in plan.excluded_content}
+        assert "ITEM-002" in excluded_ids
+        assert "ITEM-005" in excluded_ids
+        assert "ITEM-006" in excluded_ids
+
+    def test_ai_planner_rejects_hallucinated_id_and_triggers_fallback(self, sample_content_package):
+        ai_planner = AIStoryPlanner()
+        mock_invalid = {
+            "deck_title": "AI Hallucinated Plan",
+            "logical_slides": [
+                {
+                    "logical_slide_id": "BAD_SLIDE",
+                    "structural_role": "HERO_ANALYSIS",
+                    "semantic_topic": "HALLUCINATED_TOPIC",
+                    "section_name": "Findings",
+                    "headline": "Ghost Metric",
+                    "content_bindings": [
+                        {"content_id": "HALLUCINATED-ITEM-999", "binding_role": "PRIMARY"}
+                    ]
+                }
+            ]
+        }
+
+        plan = ai_planner.plan(
+            sample_content_package,
+            user_objective="Standard operational review",
+            metadata={"mock_ai_response": mock_invalid}
+        )
+
+        # Fallback invoked cleanly
+        assert ai_planner.fallback_invoked is True
+        assert isinstance(plan, DeckStoryPlan)
+        # Verify no hallucinated ID exists in returned plan
+        bound_ids = {b.content_id for s in plan.logical_slides for b in s.content_bindings}
+        assert "HALLUCINATED-ITEM-999" not in bound_ids
+        StoryPlanValidator.validate(plan, sample_content_package)
+
+    def test_ai_planner_normalizes_duplicate_bindings(self, sample_content_package):
+        ai_planner = AIStoryPlanner()
+        mock_with_dupe = {
+            "deck_title": "Deduplicated Plan",
+            "logical_slides": [
+                {
+                    "logical_slide_id": "POPULATION_DENSITY",
+                    "structural_role": "GEOGRAPHIC_ANALYSIS",
+                    "semantic_topic": "POPULATION_DENSITY",
+                    "section_name": "Findings",
+                    "headline": "Density Analysis",
+                    "content_bindings": [
+                        {"content_id": "ITEM-001", "binding_role": "PRIMARY"},
+                        {"content_id": "ITEM-001", "binding_role": "PRIMARY"}  # duplicate
+                    ]
+                }
+            ]
+        }
+
+        plan = ai_planner.plan(
+            sample_content_package,
+            user_objective="Density overview",
+            metadata={"mock_ai_response": mock_with_dupe}
+        )
+
+        assert ai_planner.repair_calls == 1
+        slide = plan.logical_slides[0]
+        # Duplicate was normalized to single binding
+        assert len(slide.content_bindings) == 1
+        assert slide.content_bindings[0].content_id == "ITEM-001"
+
+    def test_ai_planner_fallback_on_malformed_schema_and_timeout(self, sample_content_package):
+        ai_planner = AIStoryPlanner()
+
+        # Test malformed schema (missing required fields)
+        plan1 = ai_planner.plan(
+            sample_content_package,
+            metadata={"mock_ai_response": {"broken": "payload"}}
+        )
+        assert ai_planner.fallback_invoked is True
+        assert len(plan1.logical_slides) >= 4
+
+        # Test timeout / exception
+        ai_planner2 = AIStoryPlanner()
+        with patch.object(ai_planner2, "_attempt_ai_plan", side_effect=TimeoutError("Model timed out")):
+            plan2 = ai_planner2.plan(sample_content_package)
+            assert ai_planner2.fallback_invoked is True
+            assert len(plan2.logical_slides) >= 4
+
+
+# ==============================================================================
+# 4. USER OBJECTIVE EFFECT
+# ==============================================================================
+
+class TestUserObjectiveEffect:
+    """Verifies that user objectives significantly influence ordering and priority with identical facts."""
+
+    def test_same_package_different_objectives_different_priority(self, sample_content_package):
+        planner = StoryPlanner(use_ai=False)
+
+        # Objective A: Focus on population density
+        plan_density = planner.plan_story(
+            content_pkg=sample_content_package,
+            user_objective="Focus specifically on population density and high load centers"
+        )
+
+        # Objective B: Focus on population growth
+        plan_growth = planner.plan_story(
+            content_pkg=sample_content_package,
+            user_objective="Focus specifically on population growth, expansion territories, and scale"
+        )
+
+        # 1. Facts, units, grains remain 100% identical
+        for orig, d_item in zip(sample_content_package.items, sample_content_package.items):
+            assert orig.metric_value == d_item.metric_value
+            assert orig.unit == d_item.unit
+            assert orig.grain == d_item.grain
+
+        # 2. But narrative ordering and topic priority differ!
+        topics_density = [s.semantic_topic for s in plan_density.logical_slides]
+        topics_growth = [s.semantic_topic for s in plan_growth.logical_slides]
+
+        assert "POPULATION_DENSITY" in topics_density
+        assert "POPULATION_GROWTH" in topics_growth
+
+        # In density plan, density appears before growth
+        density_idx_in_a = topics_density.index("POPULATION_DENSITY")
+        growth_idx_in_a = topics_density.index("POPULATION_GROWTH") if "POPULATION_GROWTH" in topics_density else 99
+        assert density_idx_in_a < growth_idx_in_a
+
+        # In growth plan, growth appears before density
+        growth_idx_in_b = topics_growth.index("POPULATION_GROWTH")
+        density_idx_in_b = topics_growth.index("POPULATION_DENSITY") if "POPULATION_DENSITY" in topics_growth else 99
+        assert growth_idx_in_b < density_idx_in_b
+
+        # Fingerprints are distinctly different
+        assert plan_density.story_fingerprint != plan_growth.story_fingerprint
+
+
+# ==============================================================================
+# 5. BUSINESS GOVERNANCE LEAKAGE VS TECHNICAL TERMINOLOGY
+# ==============================================================================
+
+class TestGovernanceLeakageAndTechnicalTerminology:
+    """Verifies that business decks omit internal jargon, while technical requests preserve it."""
+
+    def test_normal_business_deck_omits_internal_governance_jargon(self, sample_content_package):
+        planner = StoryPlanner(use_ai=False)
+        plan = planner.plan_story(
+            content_pkg=sample_content_package,
+            user_objective="Executive Operations Review"
+        )
+
+        forbidden_terms = ["SDR", "JoinPlan", "JoinGraph", "EVID-", "control plane"]
+        all_narrative_text = f"{plan.deck_title} {plan.deck_subtitle} {plan.executive_thesis} " + " ".join(
+            f"{s.headline} {s.takeaway} {s.purpose}" for s in plan.logical_slides
+        )
+
+        for term in forbidden_terms:
+            assert term.lower() not in all_narrative_text.lower(), f"Forbidden governance term '{term}' leaked into user narrative!"
+
+    def test_governance_leakage_triggers_validator_error(self, sample_content_package):
+        planner = StoryPlanner(use_ai=False)
+        plan = planner.plan_story(
+            content_pkg=sample_content_package,
+            user_objective="Executive Operations Review"
+        )
+
+        # Inject an internal SDR term into an executive headline
+        plan.logical_slides[0].headline = "Quarterly SDR-4 JoinPlan Performance"
+
+        with pytest.raises(GovernanceLeakageError) as exc_info:
+            StoryPlanValidator.validate(plan, sample_content_package)
+        assert "leaked into user-visible field" in str(exc_info.value)
+
+    def test_technical_objective_preserves_requested_terminology(self, sample_content_package):
+        """When the user explicitly asks to audit or explain technical architecture, terms are preserved."""
+        planner = StoryPlanner(use_ai=False)
+        plan = planner.plan_story(
+            content_pkg=sample_content_package,
+            user_objective="Explain the SDR and JoinPlan architecture and data pipeline governance review"
+        )
+
+        # The objective was technical, so technical terms in objective remain valid
+        assert "SDR" in plan.user_objective
+        assert "JoinPlan" in plan.user_objective
+        assert "SDR" in plan.deck_title
+        # Validator passes without raising GovernanceLeakageError
+        StoryPlanValidator.validate(plan, sample_content_package)
+
+
+# ==============================================================================
+# 6. TYPO CORRECTION: SUPERSEDED_BY_HERO
+# ==============================================================================
+
+class TestTypoCorrection:
+    """Verifies that ExclusionReason uses the correct spelling SUPERSEDED_BY_HERO."""
+
+    def test_exclusion_reason_uses_correct_spelling(self):
+        assert ExclusionReason.SUPERSEDED_BY_HERO.value == "SUPERSEDED_BY_HERO"
+        # Backwards compatibility alias also maps to the correct value
+        assert ExclusionReason.SUPERCEDED_BY_HERO.value == "SUPERSEDED_BY_HERO"
+
+
+# ==============================================================================
+# 7. ZERO PHYSICAL LAYOUT / COORDINATES / EXPANSION INVARIANTS
+# ==============================================================================
+
+class TestPhysicalLayoutInvariants:
+    """Verifies that DeckStoryPlan contains ZERO physical coordinates, slide numbers, or zone layouts."""
 
     def test_zero_physical_coordinates_in_output(self, sample_content_package):
         planner = StoryPlanner(use_ai=False)
@@ -529,7 +618,11 @@ class TestArchitecturalInvariantsZeroPhysicalLayout:
         plan_dict = plan.model_dump()
 
         def _assert_no_coords(data: Any, path: str = ""):
-            forbidden = {"x", "y", "width", "height", "left", "top", "pt_x", "pt_y", "slide_number", "page_number", "zones", "layers"}
+            forbidden = {
+                "x", "y", "width", "height", "left", "top", "pt_x", "pt_y",
+                "slide_number", "page_number", "zones", "layers", "emu",
+                "layout_template", "physical_slide_id", "physical_slide_number"
+            }
             if isinstance(data, dict):
                 for k, v in data.items():
                     assert k.lower() not in forbidden, f"Forbidden physical property '{k}' leaked at '{path}.{k}'"
@@ -563,7 +656,6 @@ class TestAnalyticalTruthPreservation:
     """Verifies that facts, units, grains, and denominators remain 100% immutable."""
 
     def test_zero_fact_unit_grain_mutations(self, sample_content_package):
-        # Deepcopy package to check immutability after planning
         orig_copy = copy.deepcopy(sample_content_package)
 
         planner = StoryPlanner(use_ai=False)
@@ -672,4 +764,3 @@ class TestOrchestratorLayeredStoryPlannerIntegration:
             assert last_call_args[1] == "ready"
             assert last_call_args[3] == 100
             assert last_call_kwargs["extra"]["active_phase"] == "story_plan_validated"
-

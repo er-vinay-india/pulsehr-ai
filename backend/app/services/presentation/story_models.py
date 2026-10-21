@@ -1,21 +1,27 @@
-"""Logical Story Planning & SlideTag Models (PPT-L2).
+"""Logical Story Planning & Semantic SlideTag Models (PPT-L2).
 
 Establishes the non-negotiable architectural boundaries:
-1. LogicalSlideTag != physical slide:
-   Logical slide plans represent coherent narrative chapters/units.
-   They do NOT map 1:1 to physical slides or enforce slide boundaries.
-2. Content Truth != Presentation Narrative:
-   StoryPlanner selects, groups, orders, summarizes, and frames content items,
+1. Structural Story Role != Semantic Topic:
+   Logical slide plans cleanly separate:
+     - structural_role: Generic narrative storytelling role (e.g. GEOGRAPHIC_ANALYSIS, HERO_ANALYSIS, DIAGNOSTIC_ANALYSIS).
+     - semantic_topic: Extensible, domain-derived business topic (e.g. POPULATION_DENSITY, POPULATION_GROWTH, CUSTOMER_RETENTION).
+   Zero enum bloat required for new datasets or domains.
+2. Stable Logical Semantic Identity:
+   Logical slide identity (logical_slide_id) derives directly from the meaningful semantic topic
+   (e.g. POPULATION_DENSITY), never from generic structural roles like 'GEOGRAPHIC_DISTRIBUTION-1'.
+   Physical slide IDs and physical layouts remain strictly for PPT-L3+.
+3. Content Truth != Presentation Narrative:
+   StoryPlanner selects, groups, orders, summarizes, and frames audited content items,
    but CANNOT mutate facts, units, grain, denominators, or invent facts.
-3. Zero physical layout / geometry / rendering:
-   0 coordinates (x, y, width, height, left, top), 0 physical slide numbers,
-   0 SlideExpansion, 0 Layer/Zone calculations, 0 PPTX/DrawingML rendering.
-4. Schema-bound content binding:
+4. Schema-Bound Content Binding:
    Every bound item references an audited content_id in PresentationContentPackage.
    Hallucinated or unknown IDs are strictly rejected.
-5. Complete content accounting:
+5. Complete Content Accounting:
    Every item in the PresentationContentPackage is either bound to a logical slide
    or cataloged in the excluded_content ledger with an explicit ExclusionReason.
+6. UserVisibleContentPolicy Enforcement:
+   User-visible presentation fields omit internal pipeline jargon (SDR, JoinPlan, EVID-...)
+   in normal business decks, while faithfully preserving requested terms in technical decks.
 """
 
 from __future__ import annotations
@@ -23,38 +29,48 @@ from __future__ import annotations
 from enum import Enum
 import hashlib
 import json
+import re
 from typing import Any
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.services.presentation.content_models import (
     ContentKind,
     ContentRole,
     PresentationContentItem,
     PresentationContentPackage,
+    UserVisibleContentPolicy,
 )
 
 
-class SlideTag(str, Enum):
-    """Categorical semantic classification of a logical narrative slide unit.
+class StructuralRole(str, Enum):
+    """Categorical semantic classification of a logical narrative slide's structural role.
     
-    A SlideTag defines the executive purpose of a story unit, independent of physical layout.
+    Defines the executive purpose/archetype in the storytelling arc, independent of domain topic.
     """
     TITLE = "TITLE"
     AGENDA = "AGENDA"
     EXECUTIVE_SUMMARY = "EXECUTIVE_SUMMARY"
     STRATEGIC_KPIS = "STRATEGIC_KPIS"
     HERO_ANALYSIS = "HERO_ANALYSIS"
-    DEEP_DIVE_EXPLORATION = "DEEP_DIVE_EXPLORATION"
-    GEOGRAPHIC_DISTRIBUTION = "GEOGRAPHIC_DISTRIBUTION"
-    RELATIONAL_CORRELATION = "RELATIONAL_CORRELATION"
-    COHORT_VARIANCE = "COHORT_VARIANCE"
+    DIAGNOSTIC_ANALYSIS = "DIAGNOSTIC_ANALYSIS"
+    GEOGRAPHIC_ANALYSIS = "GEOGRAPHIC_ANALYSIS"
+    CORRELATION_ANALYSIS = "CORRELATION_ANALYSIS"
+    COHORT_ANALYSIS = "COHORT_ANALYSIS"
+    DEEP_DIVE = "DEEP_DIVE"
     ACTION_PLAN = "ACTION_PLAN"
     CLOSING = "CLOSING"
     THANK_YOU = "THANK_YOU"
 
+    # Backwards compatibility aliases for PPT-L1 / early PPT-L2 tags
+    GEOGRAPHIC_DISTRIBUTION = "GEOGRAPHIC_ANALYSIS"
+    RELATIONAL_CORRELATION = "CORRELATION_ANALYSIS"
+    COHORT_VARIANCE = "COHORT_ANALYSIS"
+    DEEP_DIVE_EXPLORATION = "DEEP_DIVE"
 
-# Alias for explicit logical architectural distinction
-LogicalSlideTag = SlideTag
+
+# Aliases for backwards compatibility
+SlideTag = StructuralRole
+LogicalSlideTag = StructuralRole
 
 
 class ContentBindingRole(str, Enum):
@@ -77,7 +93,10 @@ class ExclusionReason(str, Enum):
     LOW_RELEVANCE_FOR_OBJECTIVE = "LOW_RELEVANCE_FOR_OBJECTIVE"
     CAPACITY_LIMIT = "CAPACITY_LIMIT"
     OFF_OBJECTIVE = "OFF_OBJECTIVE"
-    SUPERCEDED_BY_HERO = "SUPERCEDED_BY_HERO"
+    SUPERSEDED_BY_HERO = "SUPERSEDED_BY_HERO"
+    
+    # Backwards compatibility alias for typo fix
+    SUPERCEDED_BY_HERO = "SUPERSEDED_BY_HERO"
 
 
 class ExcludedContentItem(BaseModel):
@@ -88,16 +107,35 @@ class ExcludedContentItem(BaseModel):
     importance_score: float | None = Field(default=None, description="Original importance score from ranker")
 
 
+def normalize_semantic_topic(topic: str) -> str:
+    """Normalizes an arbitrary domain topic category into a canonical semantic identifier.
+    
+    Examples:
+      'Population Density' -> 'POPULATION_DENSITY'
+      'Customer Retention' -> 'CUSTOMER_RETENTION'
+      'attendance_compliance' -> 'ATTENDANCE_COMPLIANCE'
+    """
+    if not topic or not topic.strip():
+        return "GENERAL_TOPIC"
+    cleaned = re.sub(r"[^\w\s-]", "", topic.strip())
+    slug = re.sub(r"[\s-]+", "_", cleaned).upper()
+    return slug or "GENERAL_TOPIC"
+
+
 class LogicalSlidePlan(BaseModel):
     """A logical narrative chapter or story unit.
     
-    CRITICAL INVARIANT:
-    A LogicalSlidePlan is NOT a physical slide. It may contain multiple content bindings
-    that a downstream preflight/capacity pass (PPT-L3/L4) can split across multiple
-    physical slide instances if required by layout constraints.
+    CRITICAL INVARIANTS:
+    1. A LogicalSlidePlan is NOT a physical slide.
+    2. structural_role represents the generic storytelling archetype (e.g. GEOGRAPHIC_ANALYSIS).
+    3. semantic_topic represents the extensible business topic (e.g. POPULATION_DENSITY).
+    4. logical_slide_id is derived from semantic_topic, NOT generic role numbers.
+    5. Zero physical coordinates, zero physical slide numbers, zero zone layouts.
     """
-    tag: SlideTag = Field(description="Logical slide tag classifying narrative intent")
-    section_name: str = Field(description="High-level presentation section, e.g. Executive Overview")
+    logical_slide_id: str = Field(description="Semantic logical identity derived from topic, e.g. POPULATION_DENSITY")
+    structural_role: StructuralRole = Field(description="Narrative structural role (e.g. GEOGRAPHIC_ANALYSIS)")
+    semantic_topic: str = Field(description="Extensible business topic (e.g. POPULATION_DENSITY)")
+    section_name: str = Field(description="High-level presentation section, e.g. Thematic Analysis")
     purpose: str = Field(description="Executive objective or question this slide unit answers")
     headline: str = Field(description="Action-oriented executive headline")
     takeaway: str = Field(default="", description="Key strategic takeaway")
@@ -105,6 +143,27 @@ class LogicalSlidePlan(BaseModel):
     preferred_archetype: str | None = Field(default=None, description="Suggested visual archetype (e.g. CHART_WITH_INSIGHT)")
     allow_split: bool = Field(default=True, description="Whether preflight is permitted to split this unit")
     logical_order: int = Field(default=0, description="Logical story order (1-indexed sequence)")
+
+    # Backwards compatibility property for code expecting .tag
+    @property
+    def tag(self) -> StructuralRole:
+        return self.structural_role
+
+    @model_validator(mode="before")
+    @classmethod
+    def _backwards_compatible_tag(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            # If tag was supplied instead of structural_role
+            if "tag" in data and "structural_role" not in data:
+                data["structural_role"] = data["tag"]
+            # If semantic_topic was not supplied, infer from tag or headline
+            if "semantic_topic" not in data:
+                inferred = data.get("topic_category") or data.get("headline") or str(data.get("structural_role") or "TOPIC")
+                data["semantic_topic"] = normalize_semantic_topic(inferred)
+            # If logical_slide_id was not supplied, infer from semantic_topic
+            if "logical_slide_id" not in data:
+                data["logical_slide_id"] = data["semantic_topic"]
+        return data
 
 
 class DeckStoryPlan(BaseModel):
@@ -124,10 +183,12 @@ class DeckStoryPlan(BaseModel):
     def compute_story_fingerprint(self) -> str:
         """Computes a deterministic SHA-256 fingerprint over canonical story plan properties."""
         canonical_slides = []
-        for s in sorted(self.logical_slides, key=lambda x: (x.logical_order, x.tag.value, x.headline)):
+        for s in sorted(self.logical_slides, key=lambda x: (x.logical_order, x.logical_slide_id, x.structural_role.value)):
             sorted_bindings = sorted(s.content_bindings, key=lambda b: (b.content_id, b.binding_role.value))
             canonical_slides.append({
-                "tag": s.tag.value,
+                "logical_slide_id": s.logical_slide_id,
+                "structural_role": s.structural_role.value,
+                "semantic_topic": s.semantic_topic,
                 "section": s.section_name,
                 "headline": s.headline,
                 "purpose": s.purpose,
@@ -183,6 +244,11 @@ class PhysicalLayoutLeakageError(StoryPlanValidationError):
     pass
 
 
+class GovernanceLeakageError(StoryPlanValidationError):
+    """Raised when internal governance jargon leaks into normal business presentations."""
+    pass
+
+
 class StoryPlanValidator:
     """Validates DeckStoryPlan compliance against PresentationContentPackage and PPT-L2 invariants."""
 
@@ -190,8 +256,20 @@ class StoryPlanValidator:
         "x", "y", "width", "height", "left", "top",
         "slide_number", "page_number", "zones", "layers",
         "bounding_box", "coordinate_space", "pt_x", "pt_y",
-        "canvas_width", "canvas_height", "font_size_pt"
+        "canvas_width", "canvas_height", "font_size_pt", "emu",
+        "layout_template", "physical_slide_id", "physical_slide_number"
     }
+
+    FORBIDDEN_GOVERNANCE_PATTERNS = [
+        r"\bSDR\b",
+        r"\bSDR-\d+\b",
+        r"\bJoinPlan\b",
+        r"\bJoinGraph\b",
+        r"\bEVID-[A-Za-z0-9_\-]+\b",
+        r"\b[a-f0-9]{32,64}\b",  # Checksums / hashes
+        r"\bcontrol\s+plane\b",
+        r"\borchestrator\s+task\b",
+    ]
 
     @classmethod
     def validate(
@@ -213,14 +291,29 @@ class StoryPlanValidator:
         known_kpi_ids = {it.content_id: it for it in package.global_kpis}
         all_known_ids = set(known_item_ids.keys()) | set(known_kpi_ids.keys())
 
-        # 2. Collect bound content IDs and check for unknown / hallucinated IDs
+        # 2. Check each logical slide
         bound_ids: set[str] = set()
+        seen_logical_ids: set[str] = set()
+
         for idx, slide in enumerate(plan.logical_slides):
-            # Check slide tag validity
-            if not isinstance(slide.tag, SlideTag):
+            # Check structural role validity
+            if not isinstance(slide.structural_role, StructuralRole):
                 raise StoryPlanValidationError(
-                    f"Slide {idx} has invalid tag type: {type(slide.tag)} (value: {slide.tag})"
+                    f"Slide {idx} has invalid structural_role type: {type(slide.structural_role)} (value: {slide.structural_role})"
                 )
+
+            # Check semantic topic presence
+            if not slide.semantic_topic or not slide.semantic_topic.strip():
+                raise StoryPlanValidationError(
+                    f"Slide {idx} ('{slide.headline}') has empty semantic_topic. Extensible topic is required."
+                )
+
+            # Check logical_slide_id
+            if not slide.logical_slide_id or not slide.logical_slide_id.strip():
+                raise StoryPlanValidationError(
+                    f"Slide {idx} has empty logical_slide_id. Semantic logical identity is required."
+                )
+            seen_logical_ids.add(slide.logical_slide_id)
 
             # Check section registration
             if slide.section_name and slide.section_name not in plan.sections:
@@ -259,14 +352,16 @@ class StoryPlanValidator:
                     f"Silent content loss is strictly prohibited."
                 )
 
-        # 5. Invariant: Truth preservation (verify that bound items preserve exact metrics)
+        # 5. Truth preservation: verify that bound items preserve exact metrics
         for b_id in bound_ids:
             pkg_item = known_item_ids.get(b_id) or known_kpi_ids.get(b_id)
             if pkg_item is None:
                 continue
-            # Ensure fundamental analytical properties exist and have not been destroyed
             if pkg_item.metric_value is not None and not str(pkg_item.metric_value).strip():
                 raise StoryPlanValidationError(f"Bound item {b_id} has blank metric value")
+
+        # 6. Governance leakage audit for normal business decks
+        cls._check_governance_leakage(plan)
 
     @classmethod
     def _check_no_physical_layout_leakage(cls, plan: DeckStoryPlan) -> None:
@@ -287,3 +382,35 @@ class StoryPlanValidator:
                     _scan(item, f"{path}[{i}]")
 
         _scan(plan_dict)
+
+    @classmethod
+    def _check_governance_leakage(cls, plan: DeckStoryPlan) -> None:
+        """Audits user-visible narrative text for unwanted internal engineering jargon."""
+        # Check if technical terms are explicitly requested in objective
+        obj_lower = (plan.user_objective or "").lower()
+        is_technical_request = any(
+            kw in obj_lower
+            for kw in ["sdr", "joinplan", "joingraph", "technical architecture", "governance review", "pipeline audit"]
+        )
+        if is_technical_request:
+            return  # Explicit technical terminology is permitted when requested
+
+        # Check user-visible fields in normal business presentations
+        visible_texts: list[tuple[str, str]] = [
+            ("deck_title", plan.deck_title),
+            ("deck_subtitle", plan.deck_subtitle),
+            ("executive_thesis", plan.executive_thesis),
+        ]
+        for s in plan.logical_slides:
+            visible_texts.extend([
+                (f"slide[{s.logical_slide_id}].headline", s.headline),
+                (f"slide[{s.logical_slide_id}].purpose", s.purpose),
+                (f"slide[{s.logical_slide_id}].takeaway", s.takeaway),
+            ])
+
+        for field_path, text in visible_texts:
+            for pattern in cls.FORBIDDEN_GOVERNANCE_PATTERNS:
+                if re.search(pattern, text, re.IGNORECASE):
+                    raise GovernanceLeakageError(
+                        f"Internal governance term matching '{pattern}' leaked into user-visible field '{field_path}': '{text}'"
+                    )
