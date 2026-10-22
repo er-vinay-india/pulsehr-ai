@@ -93,6 +93,26 @@ from .manifest_models import (
 )
 from .preflight_engine import PresentationPreflightEngine
 from .expansion_engine import SlideExpansionEngine
+from .layer_zone_models import (
+    LayerRole,
+    CoordinateSpace,
+    ZoneType,
+    EditabilityPolicy,
+    StructureStatus,
+    SafeAreaSpec,
+    SlideObjectSpec,
+    ZoneSpec,
+    LayeredSlideSpec,
+    LayeredDeckStructureSpec,
+    StructureValidationError,
+    StructureReplanRequiredError,
+    OrphanObjectError,
+    UnmappedPrimaryContentError,
+    CrossSlideMovementError,
+    PhysicalGeometryLeakageError,
+    LayeredSlideStructureValidator,
+)
+from .structure_builder import LayeredSlideStructureBuilder
 
 __all__ = [
     "PresentationPipelineMode",
@@ -147,6 +167,24 @@ __all__ = [
     "ManifestContentMismatchError",
     "PresentationPreflightEngine",
     "SlideExpansionEngine",
+    "LayerRole",
+    "CoordinateSpace",
+    "ZoneType",
+    "EditabilityPolicy",
+    "StructureStatus",
+    "SafeAreaSpec",
+    "SlideObjectSpec",
+    "ZoneSpec",
+    "LayeredSlideSpec",
+    "LayeredDeckStructureSpec",
+    "StructureValidationError",
+    "StructureReplanRequiredError",
+    "OrphanObjectError",
+    "UnmappedPrimaryContentError",
+    "CrossSlideMovementError",
+    "PhysicalGeometryLeakageError",
+    "LayeredSlideStructureValidator",
+    "LayeredSlideStructureBuilder",
     "THEMES",
     "PresentationJobManager",
     "job_manager",

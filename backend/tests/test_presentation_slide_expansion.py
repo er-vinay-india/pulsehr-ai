@@ -660,8 +660,8 @@ class TestOrchestratorLayeredPPTL3Integration:
             # Invariant: Zero legacy generator calls
             mock_gen.assert_not_called()
 
-            # Invariant: Must terminate with status PHYSICAL_MANIFEST_VALIDATED
-            assert res["metadata"]["status"] == "PHYSICAL_MANIFEST_VALIDATED"
+            # Invariant: Must terminate with validated status (PPT-L3 physical manifest or PPT-L4 structure)
+            assert res["metadata"]["status"] in ("PHYSICAL_MANIFEST_VALIDATED", "STRUCTURE_VALIDATED")
             assert "physical_manifest" in res["metadata"]
             manifest_data = res["metadata"]["physical_manifest"]
             assert len(manifest_data["slides"]) >= 4

@@ -334,14 +334,32 @@ def execute_presentation_pipeline_async(
                     job_id
                 )
 
-                # PPT-L3 Invariant Boundary:
-                # Layered mode stops strictly after a validated PhysicalSlideManifest.
-                # 0 coordinates, 0 physical slide numbers, 0 zones, 0 layers, 0 typography font sizes, 0 layout templates, 0 PPTX rendering.
+                # PPT-L4: Layer/Zone Contracts + Stable Object Identity
+                from .structure_builder import LayeredSlideStructureBuilder
+                structure_builder = LayeredSlideStructureBuilder()
+                deck_structure = structure_builder.build_structure(
+                    manifest=physical_manifest,
+                    content_pkg=layered_content_package,
+                    is_technical_deck=scope.get("is_technical_deck", False),
+                    metadata={"job_id": job_id, "scope": scope}
+                )
+                workspace_evidence["layered_deck_structure"] = deck_structure.model_dump()
+                logger.info(
+                    "LayeredSlideStructureBuilder generated LayeredDeckStructureSpec (%d slides, %d objects, fingerprint=%s) for job %s",
+                    len(deck_structure.slides),
+                    len(deck_structure.object_registry),
+                    deck_structure.structure_fingerprint[:12],
+                    job_id
+                )
+
+                # PPT-L4 Invariant Boundary:
+                # Layered mode stops strictly after a validated LayeredDeckStructureSpec.
+                # 0 layout coordinates (x/y/w/h, pct bounds), 0 EMUs, 0 typography font sizes, 0 colors/themes, 0 PPTX rendering.
                 deck_id = f"DECK-{deck_story_plan.plan_id}"
                 layered_deck_spec = {
                     "id": deck_id,
                     "title": deck_story_plan.deck_title,
-                    "slides": [],  # PPT-L3: 0 layout coordinates, 0 zones, 0 layers
+                    "slides": [],  # PPT-L4: 0 layout coordinates, 0 font sizes, 0 themes, 0 PPTX rendering
                     "metadata": {
                         "pipeline_mode": PresentationPipelineMode.LAYERED.value,
                         "content_package": layered_content_package.model_dump(),
@@ -350,12 +368,16 @@ def execute_presentation_pipeline_async(
                         "preflight_result": preflight_result.model_dump(),
                         "physical_manifest": physical_manifest.model_dump(),
                         "manifest_fingerprint": physical_manifest.manifest_fingerprint,
+                        "layered_deck_structure": deck_structure.model_dump(),
+                        "structure_fingerprint": deck_structure.structure_fingerprint,
                         "target_audience": deck_story_plan.target_audience,
                         "user_objective": deck_story_plan.user_objective,
                         "total_logical_slides": len(deck_story_plan.logical_slides),
-                        "total_physical_slides": len(physical_manifest.slides),
+                        "total_physical_slides": len(deck_structure.slides),
+                        "total_zones": sum(len(s.zones) for s in deck_structure.slides),
+                        "total_objects": len(deck_structure.object_registry),
                         "total_excluded_items": len(deck_story_plan.excluded_content),
-                        "status": "PHYSICAL_MANIFEST_VALIDATED",
+                        "status": "STRUCTURE_VALIDATED" if not deck_structure.replan_required else "STRUCTURE_REPLAN_REQUIRED",
                     },
                     "evidence_ledger": primary_ctx.get("evidence_ledger", []) or workspace_evidence.get("evidence_ledger", []),
                 }
@@ -363,13 +385,14 @@ def execute_presentation_pipeline_async(
                 mgr.update_stage(
                     job_id,
                     "ready",
-                    f"Phase 3 Complete: Validated PhysicalSlideManifest generated ({len(physical_manifest.slides)} physical slides). Ready for PPT-L4.",
+                    f"Phase 4 Complete: Validated LayeredDeckStructureSpec generated ({len(deck_structure.slides)} slides, {len(deck_structure.object_registry)} objects). Ready for PPT-L5.",
                     100,
                     deck_id=deck_id,
                     extra={
-                        "current_slide": len(physical_manifest.slides),
-                        "total_slides": len(physical_manifest.slides),
-                        "active_phase": "physical_manifest_validated",
+                        "current_slide": len(deck_structure.slides),
+                        "total_slides": len(deck_structure.slides),
+                        "active_phase": "structure_validated",
+                        "layered_deck_structure": deck_structure.model_dump(),
                         "physical_manifest": physical_manifest.model_dump(),
                         "deck_story_plan": deck_story_plan.model_dump(),
                         "content_package": layered_content_package.model_dump(),

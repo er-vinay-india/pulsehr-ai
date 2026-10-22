@@ -744,7 +744,7 @@ class TestOrchestratorLayeredStoryPlannerIntegration:
             # Invariant: Layered mode returns structured deck spec stopping after DeckStoryPlan
             assert result_deck is not None
             assert result_deck["metadata"]["pipeline_mode"] == "LAYERED"
-            assert result_deck["metadata"]["status"] in ("STORY_PLAN_VALIDATED", "PHYSICAL_MANIFEST_VALIDATED")
+            assert result_deck["metadata"]["status"] in ("STORY_PLAN_VALIDATED", "PHYSICAL_MANIFEST_VALIDATED", "STRUCTURE_VALIDATED")
             assert "content_package" in result_deck["metadata"]
             assert "story_plan" in result_deck["metadata"]
 
@@ -762,4 +762,4 @@ class TestOrchestratorLayeredStoryPlannerIntegration:
             last_call_args, last_call_kwargs = mock_mgr.update_stage.call_args
             assert last_call_args[1] == "ready"
             assert last_call_args[3] == 100
-            assert last_call_kwargs["extra"]["active_phase"] in ("story_plan_validated", "physical_manifest_validated")
+            assert last_call_kwargs["extra"]["active_phase"] in ("story_plan_validated", "physical_manifest_validated", "structure_validated")
