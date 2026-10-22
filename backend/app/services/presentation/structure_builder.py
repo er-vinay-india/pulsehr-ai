@@ -27,6 +27,7 @@ from .story_models import ContentBinding, ContentBindingRole
 from .layer_zone_models import (
     CoordinateSpace,
     EditabilityPolicy,
+    FrameInheritancePolicy,
     LayeredDeckStructureSpec,
     LayeredSlideSpec,
     LayeredSlideStructureValidator,
@@ -50,7 +51,36 @@ class LayeredSlideStructureBuilder:
     MAX_TABLE_ROWS_PER_SLIDE = 25
 
     def __init__(self) -> None:
-        pass
+        self._used_object_names: set[str] = set()
+
+    def _build_selection_pane_name(
+        self,
+        physical_slide_id: str,
+        descriptor: str,
+        discriminator: str = "",
+    ) -> str:
+        """Constructs a deterministic, unique PowerPoint Selection-Pane friendly object name.
+        
+        Format: HV_{CLEAN_SLIDE_ID}_{CLEAN_DESCRIPTOR}[_{CLEAN_DISCRIMINATOR}]
+        Strictly unique across the entire deck and distinct from HighView semantic object_id.
+        """
+        clean_slide = re.sub(r"[^A-Za-z0-9]+", "_", physical_slide_id).strip("_").upper()
+        clean_desc = re.sub(r"[^A-Za-z0-9]+", "_", descriptor).strip("_").upper()
+        parts = ["HV", clean_slide, clean_desc]
+        if discriminator:
+            clean_disc = re.sub(r"[^A-Za-z0-9]+", "_", discriminator).strip("_").upper()
+            if clean_disc:
+                parts.append(clean_disc)
+
+        base_name = "_".join(parts)
+        candidate = base_name
+        counter = 2
+        while candidate in self._used_object_names:
+            candidate = f"{base_name}_{counter:02d}"
+            counter += 1
+
+        self._used_object_names.add(candidate)
+        return candidate
 
     def build_structure(
         self,
@@ -70,6 +100,7 @@ class LayeredSlideStructureBuilder:
         Returns:
             LayeredDeckStructureSpec adhering to all PPT-L4 contracts.
         """
+        self._used_object_names = set()
         item_lookup: dict[str, PresentationContentItem] = {
             item.content_id: item for item in content_pkg.items
         }
@@ -142,12 +173,14 @@ class LayeredSlideStructureBuilder:
         # 1. Title Zone (Master chrome / Body title)
         title_obj = SlideObjectSpec(
             object_id=f"{m_slide.physical_slide_id}__OBJ_TITLE",
+            object_name=self._build_selection_pane_name(m_slide.physical_slide_id, "TITLE"),
             name="Slide Title",
             content_id=f"{m_slide.physical_slide_id}__TITLE",
             binding_role=ContentBindingRole.PRIMARY,
             kind=ContentKind.NARRATIVE_INSIGHT,
             semantic_topic=m_slide.semantic_topic,
-            editability=EditabilityPolicy.NATIVE_EDITABLE,
+            editability=EditabilityPolicy.NATIVE_REQUIRED,
+            inheritance_policy=FrameInheritancePolicy.PER_SLIDE,
             headline=clean_headline,
             narrative_text="",
             data_summary={},
@@ -158,6 +191,7 @@ class LayeredSlideStructureBuilder:
             zone_type=ZoneType.TITLE,
             layer_role=LayerRole.BODY,
             coordinate_space=CoordinateSpace.BODY_SPACE,
+            inheritance_policy=FrameInheritancePolicy.PER_SLIDE,
             objects=[title_obj],
             allowed_kinds=[ContentKind.NARRATIVE_INSIGHT],
             z_index=1,
@@ -309,12 +343,14 @@ class LayeredSlideStructureBuilder:
 
         footnote_obj = SlideObjectSpec(
             object_id=f"{m_slide.physical_slide_id}__OBJ_FOOTNOTE",
+            object_name=self._build_selection_pane_name(m_slide.physical_slide_id, "FOOTNOTE"),
             name="Slide Footnote",
             content_id=f"{m_slide.physical_slide_id}__FOOTNOTE",
             binding_role=ContentBindingRole.SUPPORTING,
             kind=ContentKind.NARRATIVE_INSIGHT,
             semantic_topic=m_slide.semantic_topic,
-            editability=EditabilityPolicy.NATIVE_EDITABLE,
+            editability=EditabilityPolicy.NATIVE_REQUIRED,
+            inheritance_policy=FrameInheritancePolicy.MASTER_PREFERRED,
             headline="",
             narrative_text=clean_footnote,
             data_summary={},
@@ -325,6 +361,7 @@ class LayeredSlideStructureBuilder:
             zone_type=ZoneType.FOOTNOTE,
             layer_role=LayerRole.MASTER_FRAME,
             coordinate_space=CoordinateSpace.MASTER_FRAME_SPACE,
+            inheritance_policy=FrameInheritancePolicy.MASTER_PREFERRED,
             objects=[footnote_obj],
             allowed_kinds=[ContentKind.NARRATIVE_INSIGHT],
             z_index=7,
@@ -361,17 +398,27 @@ class LayeredSlideStructureBuilder:
         is_technical_deck: bool,
     ) -> SlideObjectSpec:
         """Instantiates a stable, truthful SlideObjectSpec from a PresentationContentItem."""
-        # Truthful editability classification
+        # Truthful editability policy: defines renderer expectations, not actual rendering outcome
         if item.kind == ContentKind.MAP:
             # Maps are raster/composite geographic representations in PowerPoint
-            editability = EditabilityPolicy.STATIC_IMAGE_FALLBACK
-        elif item.kind in (ContentKind.CHART, ContentKind.TABLE, ContentKind.KPI_METRIC, ContentKind.NARRATIVE_INSIGHT):
-            editability = EditabilityPolicy.NATIVE_EDITABLE
+            editability = EditabilityPolicy.RASTER_ALLOWED
+        elif item.kind == ContentKind.IMAGE:
+            editability = EditabilityPolicy.RASTER_ALLOWED
+        elif item.kind == ContentKind.VIDEO:
+            editability = EditabilityPolicy.MEDIA_REFERENCE
+        elif item.kind == ContentKind.CHART:
+            editability = EditabilityPolicy.NATIVE_PREFERRED
+        elif item.kind in (ContentKind.TABLE, ContentKind.KPI_METRIC, ContentKind.NARRATIVE_INSIGHT):
+            editability = EditabilityPolicy.NATIVE_REQUIRED
         else:
-            editability = EditabilityPolicy.PARTIALLY_EDITABLE
+            editability = EditabilityPolicy.NATIVE_REQUIRED
 
-        # Deterministic object ID
+        # Deterministic HighView semantic object ID
         object_id = f"{m_slide.physical_slide_id}__OBJ_{item.kind.value.upper()}_{item.content_id}"
+
+        # Deterministic, unique Selection-Pane friendly object name
+        desc = f"{item.kind.value}_{item.content_id}"
+        object_name = self._build_selection_pane_name(m_slide.physical_slide_id, desc)
 
         clean_headline = self._cleanse_text(item.narrative_takeaway or item.metric_label or item.content_id, is_technical_deck)
         bullets_text = "\n".join(item.supporting_bullets) if item.supporting_bullets else ""
@@ -410,12 +457,14 @@ class LayeredSlideStructureBuilder:
 
         return SlideObjectSpec(
             object_id=object_id,
+            object_name=object_name,
             name=f"{item.kind.value.capitalize()} Object ({item.content_id})",
             content_id=item.content_id,
             binding_role=binding.binding_role,
             kind=item.kind,
             semantic_topic=m_slide.semantic_topic,
             editability=editability,
+            inheritance_policy=FrameInheritancePolicy.PER_SLIDE,
             headline=clean_headline,
             narrative_text=clean_narrative,
             data_summary=data_summary,

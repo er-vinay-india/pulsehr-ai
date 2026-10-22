@@ -4,24 +4,33 @@ Verifies:
 1. Architectural Separation: Structure and identity, NOT position or geometry.
 2. LayerRole & CoordinateSpace ownership (SLIDE_SPACE, BODY_SPACE, MASTER_FRAME_SPACE).
 3. Conceptual SafeAreaSpec (0 numeric coordinates, 0 margins in pt/pct/emu).
-4. Stable deterministic SlideObjectSpec IDs that survive regeneration and layout changes.
-5. Truthful EditabilityPolicy:
-   - ContentKind.MAP is strictly STATIC_IMAGE_FALLBACK or PARTIALLY_EDITABLE (never NATIVE_EDITABLE).
-   - ContentKind.CHART, TABLE, KPI, TEXT are NATIVE_EDITABLE.
-6. SlideExpansionEngine is the SOLE owner of physical slide creation (physical slide creation in PPT-L4 = 0).
-7. Zero cross-slide content movement (content stays on its allocated physical slide).
-8. Zero unmapped primary items and zero orphan objects.
-9. Global object_registry accurately indexes all slide objects.
-10. Deterministic structure_fingerprint (SHA-256).
-11. Governance leakage protection in normal business decks (SDR, JoinPlan, EVID-*, hashes stripped/cleansed);
-    preservation in technical decks (is_technical_deck=True).
-12. Feasibility and Replan Contract: STRUCTURE_REPLAN_REQUIRED when capacity exceeded.
-13. Absolute exclusion of physical layout geometry, EMUs, font sizes, colors, and PPTX objects.
-14. Full pipeline integration via execute_presentation_pipeline_async in LAYERED mode.
-15. Zero AI structure calls (fully deterministic) and zero calls in legacy mode.
+4. Stable deterministic SlideObjectSpec IDs and renderer-facing Selection-Pane object_name.
+5. Three identities remain distinct:
+   - HighView semantic object_id
+   - Renderer-facing Selection-Pane object_name
+   - Future PowerPoint internal shape ID (PPTX shape IDs created in PPT-L4: 0)
+6. Canonical EditabilityPolicy:
+   - NATIVE_REQUIRED (TITLE, TEXT, TABLE, KPI)
+   - NATIVE_PREFERRED (standard supported CHART)
+   - RASTER_ALLOWED (MAP, IMAGE)
+   - MEDIA_REFERENCE (VIDEO / external media)
+   - Backward compatibility aliases preserved.
+7. Truthful editability: MAP is RASTER_ALLOWED; fails validation if marked NATIVE_REQUIRED or NATIVE_PREFERRED.
+8. SlideExpansionEngine is the SOLE owner of physical slide creation (physical slide creation in PPT-L4 = 0).
+9. Zero cross-slide content movement (content stays on its allocated physical slide).
+10. Zero unmapped primary items and zero orphan objects.
+11. Global object_registry accurately indexes all slide objects.
+12. Deterministic structure_fingerprint (SHA-256).
+13. Frame/master inheritance intent (MASTER_PREFERRED, PER_SLIDE) with 0 actual master creations.
+14. Object-name stability and multi-object discriminator support (no collisions).
+15. Governance leakage protection in normal business decks; accurate preservation in technical decks.
+16. Feasibility and Replan Contract: STRUCTURE_REPLAN_REQUIRED when capacity exceeded.
+17. Full pipeline integration via execute_presentation_pipeline_async in LAYERED mode.
+18. Zero AI structure calls (fully deterministic) and zero calls in legacy mode.
 """
 
 import copy
+import re
 import pytest
 from typing import Any
 
@@ -36,6 +45,7 @@ from app.services.presentation.layer_zone_models import (
     CoordinateSpace,
     CrossSlideMovementError,
     EditabilityPolicy,
+    FrameInheritancePolicy,
     GovernanceLeakageError,
     LayeredDeckStructureSpec,
     LayeredSlideSpec,
@@ -205,20 +215,31 @@ class TestLayerZoneEnumsAndModels:
         assert CoordinateSpace.MASTER_FRAME_SPACE == "MASTER_FRAME_SPACE"
         assert CoordinateSpace.BODY_SPACE == "BODY_SPACE"
 
+    def test_canonical_editability_policy_values_and_aliases(self):
+        """Verify canonical semantic editability policy values and backward compatibility aliases."""
+        assert EditabilityPolicy.NATIVE_REQUIRED == "NATIVE_REQUIRED"
+        assert EditabilityPolicy.NATIVE_PREFERRED == "NATIVE_PREFERRED"
+        assert EditabilityPolicy.RASTER_ALLOWED == "RASTER_ALLOWED"
+        assert EditabilityPolicy.MEDIA_REFERENCE == "MEDIA_REFERENCE"
+
+        # Verify backward compatibility aliases
+        assert EditabilityPolicy.NATIVE_EDITABLE == EditabilityPolicy.NATIVE_REQUIRED
+        assert EditabilityPolicy.PARTIALLY_EDITABLE == EditabilityPolicy.NATIVE_PREFERRED
+        assert EditabilityPolicy.STATIC_IMAGE_FALLBACK == EditabilityPolicy.RASTER_ALLOWED
+        assert EditabilityPolicy.NON_EDITABLE == EditabilityPolicy.RASTER_ALLOWED
+
+    def test_frame_inheritance_policy_values(self):
+        """Verify frame inheritance intent values (master vs per-slide)."""
+        assert FrameInheritancePolicy.MASTER_PREFERRED == "MASTER_PREFERRED"
+        assert FrameInheritancePolicy.PER_SLIDE == "PER_SLIDE"
+
     def test_safe_area_spec_zero_geometry(self):
-        """Verify SafeAreaSpec is purely policy-driven with zero numeric coordinates."""
+        """Verify SafeAreaSpec is purely policy-driven with zero numeric coordinates or margins."""
         safe_area = SafeAreaSpec()
         dumped = safe_area.model_dump()
-        for forbidden in ["x", "y", "width", "height", "top", "left", "pt", "emu", "margin_pt"]:
+        for forbidden in ["x", "y", "width", "height", "top", "left", "pt", "emu", "margin_pt", "margin_pct"]:
             assert forbidden not in dumped
         assert safe_area.policy_name == "standard_executive_safe_area"
-
-    def test_editability_policy_truthfulness(self):
-        """Verify editability policy classifications."""
-        assert EditabilityPolicy.NATIVE_EDITABLE == "NATIVE_EDITABLE"
-        assert EditabilityPolicy.PARTIALLY_EDITABLE == "PARTIALLY_EDITABLE"
-        assert EditabilityPolicy.STATIC_IMAGE_FALLBACK == "STATIC_IMAGE_FALLBACK"
-        assert EditabilityPolicy.NON_EDITABLE == "NON_EDITABLE"
 
 
 class TestLayeredSlideStructureBuilder:
@@ -263,7 +284,7 @@ class TestLayeredSlideStructureBuilder:
         sample_manifest: PhysicalSlideManifest,
         sample_package: PresentationContentPackage,
     ):
-        """Verify zone IDs and object IDs are strictly deterministic and unique."""
+        """Verify zone IDs, object IDs, and object names are strictly deterministic and unique."""
         builder = LayeredSlideStructureBuilder()
         structure1 = builder.build_structure(sample_manifest, sample_package)
         structure2 = builder.build_structure(sample_manifest, sample_package)
@@ -275,13 +296,74 @@ class TestLayeredSlideStructureBuilder:
             assert obj_id in structure2.object_registry
             assert structure2.object_registry[obj_id].content_id == obj.content_id
             assert structure2.object_registry[obj_id].editability == obj.editability
+            assert structure2.object_registry[obj_id].object_name == obj.object_name
+
+    def test_selection_pane_object_naming_and_identity_separation(
+        self,
+        sample_manifest: PhysicalSlideManifest,
+        sample_package: PresentationContentPackage,
+    ):
+        """Verify Selection-Pane friendly object_name is distinct from HighView object_id and unique across deck."""
+        builder = LayeredSlideStructureBuilder()
+        structure = builder.build_structure(sample_manifest, sample_package)
+
+        all_names = set()
+        for obj in structure.object_registry.values():
+            # Object name must be present and start with HV_
+            assert obj.object_name != "", f"Empty object_name for {obj.object_id}"
+            assert obj.object_name.startswith("HV_"), f"Object name {obj.object_name} must start with HV_"
+
+            # Invariant: Three identities remain distinct (object_id != object_name)
+            assert obj.object_name != obj.object_id, f"object_id and object_name must be distinct for {obj.object_id}"
+
+            # Invariant: Selection-Pane friendly (letters, numbers, underscores)
+            assert re.match(r"^HV_[A-Za-z0-9_]+$", obj.object_name), f"Malformed selection pane name {obj.object_name}"
+
+            # Invariant: Deck-wide uniqueness (0 collisions)
+            assert obj.object_name not in all_names, f"Duplicate object_name collision: {obj.object_name}"
+            all_names.add(obj.object_name)
+
+            # Invariant: PPTX shape IDs created in PPT-L4: 0
+            assert "shape_id" not in obj.metadata
+            assert "pptx_id" not in obj.metadata
+
+    def test_object_name_stability_across_theme_and_layout(
+        self,
+        sample_manifest: PhysicalSlideManifest,
+        sample_package: PresentationContentPackage,
+    ):
+        """Verify object names and IDs remain stable across runs and theme changes."""
+        builder = LayeredSlideStructureBuilder()
+        structure_theme_a = builder.build_structure(sample_manifest, sample_package, metadata={"theme": "dark"})
+        structure_theme_b = builder.build_structure(sample_manifest, sample_package, metadata={"theme": "light"})
+
+        names_a = {obj.object_id: obj.object_name for obj in structure_theme_a.object_registry.values()}
+        names_b = {obj.object_id: obj.object_name for obj in structure_theme_b.object_registry.values()}
+        assert names_a == names_b, "Theme changes must not alter object identities or selection pane names"
+
+    def test_canonical_editability_matrix(
+        self,
+        sample_manifest: PhysicalSlideManifest,
+        sample_package: PresentationContentPackage,
+    ):
+        """Verify editability policy matrix: TITLE/TEXT/TABLE=NATIVE_REQUIRED, CHART=NATIVE_PREFERRED, MAP=RASTER_ALLOWED."""
+        builder = LayeredSlideStructureBuilder()
+        structure = builder.build_structure(sample_manifest, sample_package)
+
+        for obj in structure.object_registry.values():
+            if obj.kind == ContentKind.MAP:
+                assert obj.editability == EditabilityPolicy.RASTER_ALLOWED
+            elif obj.kind == ContentKind.CHART:
+                assert obj.editability == EditabilityPolicy.NATIVE_PREFERRED
+            elif obj.kind in (ContentKind.TABLE, ContentKind.KPI_METRIC, ContentKind.NARRATIVE_INSIGHT):
+                assert obj.editability == EditabilityPolicy.NATIVE_REQUIRED
 
     def test_truthful_map_editability(
         self,
         sample_manifest: PhysicalSlideManifest,
         sample_package: PresentationContentPackage,
     ):
-        """Verify maps are strictly classified as STATIC_IMAGE_FALLBACK, never NATIVE_EDITABLE."""
+        """Verify maps are strictly classified as RASTER_ALLOWED, never NATIVE_REQUIRED or NATIVE_PREFERRED."""
         builder = LayeredSlideStructureBuilder()
         structure = builder.build_structure(sample_manifest, sample_package)
 
@@ -291,33 +373,29 @@ class TestLayeredSlideStructureBuilder:
         ]
         assert len(map_objects) > 0, "Expected at least one MAP object in test package"
         for map_obj in map_objects:
-            assert map_obj.editability == EditabilityPolicy.STATIC_IMAGE_FALLBACK
-            assert map_obj.editability != EditabilityPolicy.NATIVE_EDITABLE
+            assert map_obj.editability == EditabilityPolicy.RASTER_ALLOWED
+            assert map_obj.editability != EditabilityPolicy.NATIVE_REQUIRED
+            assert map_obj.editability != EditabilityPolicy.NATIVE_PREFERRED
 
-    def test_truthful_chart_and_table_editability(
+    def test_frame_master_inheritance_intent(
         self,
         sample_manifest: PhysicalSlideManifest,
         sample_package: PresentationContentPackage,
     ):
-        """Verify charts and tables are classified as NATIVE_EDITABLE."""
+        """Verify frame objects express MASTER_PREFERRED inheritance intent while body objects use PER_SLIDE."""
         builder = LayeredSlideStructureBuilder()
         structure = builder.build_structure(sample_manifest, sample_package)
 
-        chart_objects = [
-            obj for obj in structure.object_registry.values()
-            if obj.kind == ContentKind.CHART
-        ]
-        assert len(chart_objects) > 0
-        for chart_obj in chart_objects:
-            assert chart_obj.editability == EditabilityPolicy.NATIVE_EDITABLE
-
-        table_objects = [
-            obj for obj in structure.object_registry.values()
-            if obj.kind == ContentKind.TABLE
-        ]
-        assert len(table_objects) > 0
-        for table_obj in table_objects:
-            assert table_obj.editability == EditabilityPolicy.NATIVE_EDITABLE
+        for slide in structure.slides:
+            for zone in slide.zones:
+                if zone.zone_type == ZoneType.FOOTNOTE:
+                    assert zone.inheritance_policy == FrameInheritancePolicy.MASTER_PREFERRED
+                    for obj in zone.objects:
+                        assert obj.inheritance_policy == FrameInheritancePolicy.MASTER_PREFERRED
+                elif zone.zone_type in (ZoneType.PRIMARY_VISUAL, ZoneType.DATA_TABLE, ZoneType.TITLE):
+                    assert zone.inheritance_policy == FrameInheritancePolicy.PER_SLIDE
+                    for obj in zone.objects:
+                        assert obj.inheritance_policy == FrameInheritancePolicy.PER_SLIDE
 
     def test_source_traceability_preservation(
         self,
@@ -367,6 +445,20 @@ class TestLayeredSlideStructureValidator:
 
         # Inject forbidden font size
         structure.slides[0].metadata["font_size_pt"] = 24
+        with pytest.raises(PhysicalGeometryLeakageError, match="forbidden geometry/styling fields"):
+            LayeredSlideStructureValidator.validate(structure, sample_manifest, sample_package)
+
+    def test_validator_detects_forbidden_pptx_shape_ids(
+        self,
+        sample_manifest: PhysicalSlideManifest,
+        sample_package: PresentationContentPackage,
+    ):
+        """Verify validator raises PhysicalGeometryLeakageError if PPTX shape IDs are injected."""
+        builder = LayeredSlideStructureBuilder()
+        structure = builder.build_structure(sample_manifest, sample_package)
+
+        # Inject forbidden PPTX shape ID
+        structure.slides[0].zones[0].objects[0].metadata["shape_id"] = 1002
         with pytest.raises(PhysicalGeometryLeakageError, match="forbidden geometry/styling fields"):
             LayeredSlideStructureValidator.validate(structure, sample_manifest, sample_package)
 
@@ -427,21 +519,51 @@ class TestLayeredSlideStructureValidator:
         sample_manifest: PhysicalSlideManifest,
         sample_package: PresentationContentPackage,
     ):
-        """Verify validator strictly rejects MAP marked as NATIVE_EDITABLE."""
+        """Verify validator strictly rejects MAP marked as NATIVE_REQUIRED or NATIVE_PREFERRED."""
         builder = LayeredSlideStructureBuilder()
         structure = builder.build_structure(sample_manifest, sample_package)
 
-        # Corrupt map object editability
+        # Corrupt map object editability to NATIVE_REQUIRED
         for obj in structure.object_registry.values():
             if obj.kind == ContentKind.MAP:
-                obj.editability = EditabilityPolicy.NATIVE_EDITABLE
+                obj.editability = EditabilityPolicy.NATIVE_REQUIRED
                 for s in structure.slides:
                     for z in s.zones:
                         for zo in z.objects:
                             if zo.object_id == obj.object_id:
-                                zo.editability = EditabilityPolicy.NATIVE_EDITABLE
+                                zo.editability = EditabilityPolicy.NATIVE_REQUIRED
 
-        with pytest.raises(StructureValidationError, match="MAP but is marked NATIVE_EDITABLE"):
+        with pytest.raises(StructureValidationError, match="MAP but is marked NATIVE_REQUIRED"):
+            LayeredSlideStructureValidator.validate(structure, sample_manifest, sample_package)
+
+    def test_validator_detects_duplicate_object_names(
+        self,
+        sample_manifest: PhysicalSlideManifest,
+        sample_package: PresentationContentPackage,
+    ):
+        """Verify validator rejects duplicate Selection-Pane object_name values."""
+        builder = LayeredSlideStructureBuilder()
+        structure = builder.build_structure(sample_manifest, sample_package)
+
+        # Force a duplicate object name on two objects
+        objs = list(structure.object_registry.values())
+        if len(objs) >= 2:
+            objs[1].object_name = objs[0].object_name
+            with pytest.raises(StructureValidationError, match="Duplicate object_name detected"):
+                LayeredSlideStructureValidator.validate(structure, sample_manifest, sample_package)
+
+    def test_validator_detects_identical_object_name_and_id(
+        self,
+        sample_manifest: PhysicalSlideManifest,
+        sample_package: PresentationContentPackage,
+    ):
+        """Verify validator enforces separation between HighView object_id and Selection-Pane object_name."""
+        builder = LayeredSlideStructureBuilder()
+        structure = builder.build_structure(sample_manifest, sample_package)
+
+        objs = list(structure.object_registry.values())
+        objs[0].object_name = objs[0].object_id
+        with pytest.raises(StructureValidationError, match="must remain distinct"):
             LayeredSlideStructureValidator.validate(structure, sample_manifest, sample_package)
 
     def test_validator_detects_governance_leakage_in_normal_deck(

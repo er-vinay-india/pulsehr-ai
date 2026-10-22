@@ -72,11 +72,27 @@ class ZoneType(str, enum.Enum):
 
 
 class EditabilityPolicy(str, enum.Enum):
-    """Truthful editability capability of a slide object when rendered in native PowerPoint."""
-    NATIVE_EDITABLE = "NATIVE_EDITABLE"            # Native editable PowerPoint DrawingML (charts, tables, text)
-    PARTIALLY_EDITABLE = "PARTIALLY_EDITABLE"      # Composite object (e.g. native table paired with static visual)
-    STATIC_IMAGE_FALLBACK = "STATIC_IMAGE_FALLBACK"# Static raster/vector image (e.g. maps, complex diagrams, screenshots)
-    NON_EDITABLE = "NON_EDITABLE"                  # Locked background or master chrome elements
+    """Truthful editability capability of a slide object when rendered in native PowerPoint.
+    
+    Expresses downstream renderer policy expectations rather than rendering outcome results.
+    """
+    NATIVE_REQUIRED = "NATIVE_REQUIRED"    # Mandatory native PowerPoint DrawingML (titles, text, tables)
+    NATIVE_PREFERRED = "NATIVE_PREFERRED"  # Prefer native chart DrawingML, graceful fallback permitted
+    RASTER_ALLOWED = "RASTER_ALLOWED"      # Static raster/vector image allowed (maps, complex diagrams, photos)
+    MEDIA_REFERENCE = "MEDIA_REFERENCE"    # External or embedded media pointer (audio/video/linked documents)
+
+
+# Backward compatibility aliases for transition
+EditabilityPolicy.NATIVE_EDITABLE = EditabilityPolicy.NATIVE_REQUIRED  # type: ignore[attr-defined]
+EditabilityPolicy.PARTIALLY_EDITABLE = EditabilityPolicy.NATIVE_PREFERRED  # type: ignore[attr-defined]
+EditabilityPolicy.STATIC_IMAGE_FALLBACK = EditabilityPolicy.RASTER_ALLOWED  # type: ignore[attr-defined]
+EditabilityPolicy.NON_EDITABLE = EditabilityPolicy.RASTER_ALLOWED  # type: ignore[attr-defined]
+
+
+class FrameInheritancePolicy(str, enum.Enum):
+    """Inheritance intent for master frame chrome objects and structural zones."""
+    MASTER_PREFERRED = "MASTER_PREFERRED"  # Prefer inheritance from PowerPoint slide master
+    PER_SLIDE = "PER_SLIDE"                # Explicitly bound per physical slide
 
 
 class StructureStatus(str, enum.Enum):
@@ -121,12 +137,17 @@ class SafeAreaSpec(BaseModel):
 class SlideObjectSpec(BaseModel):
     """Stable, geometry-free structural specification of a single object on a slide.
     
-    Carries permanent semantic identity, source traceability, and editability policy.
-    Zero coordinates, zero font sizes, zero colors.
+    Carries permanent semantic identity (object_id), Selection-Pane friendly name (object_name),
+    source traceability, and editability policy.
+    Zero coordinates, zero font sizes, zero colors, zero PPTX shape IDs.
     """
     object_id: str = Field(
         ...,
-        description="Deterministic semantic object identity, e.g. POPULATION_DENSITY-01__OBJ_MAP_ITEM-GEO-01"
+        description="Deterministic HighView semantic object identity, e.g. POPULATION_DENSITY-01__OBJ_MAP_ITEM-GEO-01"
+    )
+    object_name: str = Field(
+        default="",
+        description="Renderer-facing Selection Pane friendly label, e.g. HV_POPULATION_DENSITY_01_PRIMARY_VISUAL"
     )
     name: str = Field(..., description="Human-readable semantic object label")
     content_id: str = Field(..., description="Linked PresentationContentItem ID from content package")
@@ -136,6 +157,10 @@ class SlideObjectSpec(BaseModel):
     editability: EditabilityPolicy = Field(
         ...,
         description="Truthful editability classification in PowerPoint"
+    )
+    inheritance_policy: FrameInheritancePolicy = Field(
+        default=FrameInheritancePolicy.PER_SLIDE,
+        description="Inheritance intent for master frame vs slide level"
     )
     headline: str = Field(default="", description="Object headline or title")
     narrative_text: str = Field(default="", description="Object body narrative or takeaway")
@@ -164,6 +189,10 @@ class ZoneSpec(BaseModel):
     coordinate_space: CoordinateSpace = Field(
         default=CoordinateSpace.BODY_SPACE,
         description="Logical coordinate space owner"
+    )
+    inheritance_policy: FrameInheritancePolicy = Field(
+        default=FrameInheritancePolicy.PER_SLIDE,
+        description="Inheritance intent for this zone"
     )
     objects: list[SlideObjectSpec] = Field(
         default_factory=list,
@@ -229,10 +258,12 @@ class LayeredDeckStructureSpec(BaseModel):
                 for o in sorted(z.objects, key=lambda x: x.object_id):
                     canonical_objects.append({
                         "object_id": o.object_id,
+                        "object_name": o.object_name,
                         "content_id": o.content_id,
                         "kind": o.kind.value,
                         "role": o.binding_role.value,
                         "editability": o.editability.value,
+                        "inheritance_policy": o.inheritance_policy.value,
                         "headline": o.headline,
                     })
                 canonical_zones.append({
@@ -240,6 +271,7 @@ class LayeredDeckStructureSpec(BaseModel):
                     "zone_type": z.zone_type.value,
                     "layer": z.layer_role.value,
                     "coord_space": z.coordinate_space.value,
+                    "inheritance_policy": z.inheritance_policy.value,
                     "objects": canonical_objects
                 })
             canonical_slides.append({
@@ -312,7 +344,7 @@ class LayeredSlideStructureValidator:
         "font_size", "font_size_pt", "font_family", "line_height", "line_height_pt",
         "color", "theme_color", "background_color", "hex", "palette", "fill",
         "layout_template", "layout_proportions", "grid_columns", "column_proportions",
-        "shape", "drawingml", "pptx"
+        "shape", "drawingml", "pptx", "shape_id", "pptx_id", "pptx_shape_id", "shape_type"
     }
 
     FORBIDDEN_GOVERNANCE_PATTERNS = [
@@ -408,9 +440,10 @@ class LayeredSlideStructureValidator:
                     f"Physical slide '{s_slide.physical_slide_id}' left primary content unmapped: {sorted(unmapped_primaries)}"
                 )
 
-        # 5. Invariant: Stable unique object IDs and zone IDs
+        # 5. Invariant: Stable unique object IDs, zone IDs, and Selection-Pane object names
         seen_zone_ids: set[str] = set()
         seen_object_ids: set[str] = set()
+        seen_object_names: set[str] = set()
 
         for s_slide in deck_structure.slides:
             for zone in s_slide.zones:
@@ -427,12 +460,24 @@ class LayeredSlideStructureValidator:
                         raise StructureValidationError(f"Duplicate object_id detected: '{obj.object_id}'")
                     seen_object_ids.add(obj.object_id)
 
+                    # Invariant: Selection-Pane friendly object_name must be distinct and unique
+                    if not obj.object_name or not obj.object_name.strip():
+                        raise StructureValidationError(f"Object '{obj.object_id}' has empty object_name")
+                    if obj.object_name == obj.object_id:
+                        raise StructureValidationError(
+                            f"Object '{obj.object_id}' has identical object_name and object_id. "
+                            f"HighView semantic object_id and Selection-Pane object_name must remain distinct."
+                        )
+                    if obj.object_name in seen_object_names:
+                        raise StructureValidationError(f"Duplicate object_name detected: '{obj.object_name}'")
+                    seen_object_names.add(obj.object_name)
+
                     # Invariant: Truthful map editability
                     if obj.kind == ContentKind.MAP:
-                        if obj.editability == EditabilityPolicy.NATIVE_EDITABLE:
+                        if obj.editability in (EditabilityPolicy.NATIVE_REQUIRED, EditabilityPolicy.NATIVE_PREFERRED):
                             raise StructureValidationError(
-                                f"Object '{obj.object_id}' is a MAP but is marked NATIVE_EDITABLE. "
-                                f"Raster/composite maps must use STATIC_IMAGE_FALLBACK or PARTIALLY_EDITABLE."
+                                f"Object '{obj.object_id}' is a MAP but is marked {obj.editability.value}. "
+                                f"Raster/composite maps must use RASTER_ALLOWED."
                             )
 
         # 6. Object Registry verification
