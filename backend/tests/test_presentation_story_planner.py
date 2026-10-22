@@ -762,4 +762,9 @@ class TestOrchestratorLayeredStoryPlannerIntegration:
             last_call_args, last_call_kwargs = mock_mgr.update_stage.call_args
             assert last_call_args[1] == "ready"
             assert last_call_args[3] == 100
-            assert last_call_kwargs["extra"]["active_phase"] in ("story_plan_validated", "physical_manifest_validated", "structure_validated")
+            assert last_call_kwargs["extra"]["active_phase"] in (
+                "story_plan_validated",
+                "physical_manifest_validated",
+                "structure_validated",
+                "layout_resolved",
+            )

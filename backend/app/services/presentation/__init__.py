@@ -114,6 +114,40 @@ from .layer_zone_models import (
     LayeredSlideStructureValidator,
 )
 from .structure_builder import LayeredSlideStructureBuilder
+from .layout_models import (
+    Box2D,
+    LayoutStatus,
+    SlideFitStatus,
+    ZoneFitStatus,
+    ObjectFitStatus,
+    ImageFitMode,
+    ImageQualityWarning,
+    TextRole,
+    LateSplitRequest,
+    ResolvedObjectLayout,
+    ResolvedZoneLayout,
+    ResolvedSafeArea,
+    ResolvedSlideLayout,
+    ResolvedDeckLayout,
+    compute_layout_fingerprint,
+)
+from .layout_config import (
+    TypographyPolicy,
+    CentralLayoutConfig,
+    DEFAULT_LAYOUT_CONFIG,
+)
+from .fit_engines import (
+    TextFitEngine,
+    ImageFitEngine,
+    TableFitEngine,
+    ChartFitPolicy,
+)
+from .layout_engine import (
+    ZoneLayoutEngine,
+    LayoutConstraintEngine,
+    LayoutValidator,
+    LayoutValidationError,
+)
 
 __all__ = [
     "PresentationPipelineMode",
@@ -187,6 +221,32 @@ __all__ = [
     "PhysicalGeometryLeakageError",
     "LayeredSlideStructureValidator",
     "LayeredSlideStructureBuilder",
+    "Box2D",
+    "LayoutStatus",
+    "SlideFitStatus",
+    "ZoneFitStatus",
+    "ObjectFitStatus",
+    "ImageFitMode",
+    "ImageQualityWarning",
+    "TextRole",
+    "LateSplitRequest",
+    "ResolvedObjectLayout",
+    "ResolvedZoneLayout",
+    "ResolvedSafeArea",
+    "ResolvedSlideLayout",
+    "ResolvedDeckLayout",
+    "compute_layout_fingerprint",
+    "TypographyPolicy",
+    "CentralLayoutConfig",
+    "DEFAULT_LAYOUT_CONFIG",
+    "TextFitEngine",
+    "ImageFitEngine",
+    "TableFitEngine",
+    "ChartFitPolicy",
+    "ZoneLayoutEngine",
+    "LayoutConstraintEngine",
+    "LayoutValidator",
+    "LayoutValidationError",
     "THEMES",
     "PresentationJobManager",
     "job_manager",

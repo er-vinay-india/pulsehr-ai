@@ -352,14 +352,34 @@ def execute_presentation_pipeline_async(
                     job_id
                 )
 
-                # PPT-L4 Invariant Boundary:
-                # Layered mode stops strictly after a validated LayeredDeckStructureSpec.
-                # 0 layout coordinates (x/y/w/h, pct bounds), 0 EMUs, 0 typography font sizes, 0 colors/themes, 0 PPTX rendering.
+                # PPT-L5: Constraint Layout + Text / Image / Table Fit
+                from .layout_engine import LayoutConstraintEngine, LayoutValidator
+                layout_engine = LayoutConstraintEngine()
+                layout_validator = LayoutValidator()
+
+                resolved_deck = layout_engine.resolve_deck_layout(
+                    deck_structure=deck_structure,
+                    metadata={"job_id": job_id, "scope": scope}
+                )
+                layout_validator.validate_deck_layout(resolved_deck, original_spec=deck_structure)
+
+                workspace_evidence["resolved_deck_layout"] = resolved_deck.model_dump()
+                logger.info(
+                    "LayoutConstraintEngine generated ResolvedDeckLayout (%d slides, %d objects, fingerprint=%s) for job %s",
+                    len(resolved_deck.slides),
+                    resolved_deck.total_objects,
+                    resolved_deck.deck_fingerprint[:12],
+                    job_id
+                )
+
+                # PPT-L5 Invariant Boundary:
+                # Layered mode stops strictly after a validated ResolvedDeckLayout / ResolvedSlideLayout[].
+                # PPT-L5 owns geometry and fit, but ZERO brand colors, ZERO theme styling, ZERO PPTX rendering.
                 deck_id = f"DECK-{deck_story_plan.plan_id}"
                 layered_deck_spec = {
                     "id": deck_id,
                     "title": deck_story_plan.deck_title,
-                    "slides": [],  # PPT-L4: 0 layout coordinates, 0 font sizes, 0 themes, 0 PPTX rendering
+                    "slides": [],  # PPT-L5: 0 PPTX rendered slides (concrete geometry stored in resolved_deck_layout)
                     "metadata": {
                         "pipeline_mode": PresentationPipelineMode.LAYERED.value,
                         "content_package": layered_content_package.model_dump(),
@@ -370,14 +390,17 @@ def execute_presentation_pipeline_async(
                         "manifest_fingerprint": physical_manifest.manifest_fingerprint,
                         "layered_deck_structure": deck_structure.model_dump(),
                         "structure_fingerprint": deck_structure.structure_fingerprint,
+                        "resolved_deck_layout": resolved_deck.model_dump(),
+                        "layout_fingerprint": resolved_deck.deck_fingerprint,
                         "target_audience": deck_story_plan.target_audience,
                         "user_objective": deck_story_plan.user_objective,
                         "total_logical_slides": len(deck_story_plan.logical_slides),
-                        "total_physical_slides": len(deck_structure.slides),
-                        "total_zones": sum(len(s.zones) for s in deck_structure.slides),
-                        "total_objects": len(deck_structure.object_registry),
+                        "total_physical_slides": len(resolved_deck.slides),
+                        "total_zones": sum(len(s.zones) for s in resolved_deck.slides),
+                        "total_objects": resolved_deck.total_objects,
                         "total_excluded_items": len(deck_story_plan.excluded_content),
                         "status": "STRUCTURE_VALIDATED" if not deck_structure.replan_required else "STRUCTURE_REPLAN_REQUIRED",
+                        "layout_status": "LAYOUT_RESOLVED" if not resolved_deck.replan_required else "LATE_SPLIT_REQUIRED",
                     },
                     "evidence_ledger": primary_ctx.get("evidence_ledger", []) or workspace_evidence.get("evidence_ledger", []),
                 }
@@ -385,13 +408,14 @@ def execute_presentation_pipeline_async(
                 mgr.update_stage(
                     job_id,
                     "ready",
-                    f"Phase 4 Complete: Validated LayeredDeckStructureSpec generated ({len(deck_structure.slides)} slides, {len(deck_structure.object_registry)} objects). Ready for PPT-L5.",
+                    f"Phase 5 Complete: Validated ResolvedSlideLayout generated ({len(resolved_deck.slides)} slides, {resolved_deck.total_objects} objects). Ready for PPT-L6.",
                     100,
                     deck_id=deck_id,
                     extra={
-                        "current_slide": len(deck_structure.slides),
-                        "total_slides": len(deck_structure.slides),
-                        "active_phase": "structure_validated",
+                        "current_slide": len(resolved_deck.slides),
+                        "total_slides": len(resolved_deck.slides),
+                        "active_phase": "layout_resolved",
+                        "resolved_deck_layout": resolved_deck.model_dump(),
                         "layered_deck_structure": deck_structure.model_dump(),
                         "physical_manifest": physical_manifest.model_dump(),
                         "deck_story_plan": deck_story_plan.model_dump(),
