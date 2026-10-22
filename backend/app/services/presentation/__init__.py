@@ -148,6 +148,30 @@ from .layout_engine import (
     LayoutValidator,
     LayoutValidationError,
 )
+from .render_models import (
+    RenderStatus,
+    ShapeType,
+    RenderedObjectRecord,
+    RenderedSlideRecord,
+    RenderManifest,
+    compute_rendered_slide_fingerprint,
+    compute_render_manifest_fingerprint,
+)
+from .renderer_adapters import (
+    BaseRendererAdapter,
+    TextRendererAdapter,
+    TableRendererAdapter,
+    ChartRendererAdapter,
+    RasterRendererAdapter,
+    RendererAdapterRegistry,
+    RendererError,
+    RenderDegradationError,
+)
+from .pptx_compiler import PPTXCompiler
+from .renderer_validator import (
+    RendererValidator,
+    RendererValidationError,
+)
 
 __all__ = [
     "PresentationPipelineMode",
@@ -247,6 +271,24 @@ __all__ = [
     "LayoutConstraintEngine",
     "LayoutValidator",
     "LayoutValidationError",
+    "RenderStatus",
+    "ShapeType",
+    "RenderedObjectRecord",
+    "RenderedSlideRecord",
+    "RenderManifest",
+    "compute_rendered_slide_fingerprint",
+    "compute_render_manifest_fingerprint",
+    "BaseRendererAdapter",
+    "TextRendererAdapter",
+    "TableRendererAdapter",
+    "ChartRendererAdapter",
+    "RasterRendererAdapter",
+    "RendererAdapterRegistry",
+    "RendererError",
+    "RenderDegradationError",
+    "PPTXCompiler",
+    "RendererValidator",
+    "RendererValidationError",
     "THEMES",
     "PresentationJobManager",
     "job_manager",

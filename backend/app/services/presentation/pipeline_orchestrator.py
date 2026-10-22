@@ -372,14 +372,43 @@ def execute_presentation_pipeline_async(
                     job_id
                 )
 
-                # PPT-L5 Invariant Boundary:
-                # Layered mode stops strictly after a validated ResolvedDeckLayout / ResolvedSlideLayout[].
-                # PPT-L5 owns geometry and fit, but ZERO brand colors, ZERO theme styling, ZERO PPTX rendering.
+                # PPT-L6: Native Editable Renderer Adapters
+                from .pptx_compiler import PPTXCompiler
+                from .renderer_validator import RendererValidator
+                pptx_compiler = PPTXCompiler()
+                renderer_validator = RendererValidator()
+
+                render_manifest, pptx_path = pptx_compiler.compile_deck(
+                    resolved_deck=resolved_deck,
+                    deck_structure=deck_structure,
+                    content_package=layered_content_package,
+                    metadata={"job_id": job_id, "scope": scope},
+                )
+                renderer_validator.validate_manifest_and_package(
+                    manifest=render_manifest,
+                    resolved_deck=resolved_deck,
+                    deck_structure=deck_structure,
+                )
+
+                workspace_evidence["render_manifest"] = render_manifest.model_dump()
+                logger.info(
+                    "PPTXCompiler generated RenderManifest (%d slides, %d objects, %d native editable, fingerprint=%s) at %s for job %s",
+                    render_manifest.total_slides,
+                    render_manifest.total_objects_rendered,
+                    render_manifest.total_native_editable,
+                    render_manifest.semantic_render_fingerprint[:12],
+                    pptx_path,
+                    job_id,
+                )
+
+                # PPT-L6 Invariant Boundary:
+                # Layered mode stops strictly after validated RenderManifest and compiled PPTX artifact.
+                # PPT-L6 realizes objects; it does ZERO brand colors, ZERO theme styling, ZERO font styling.
                 deck_id = f"DECK-{deck_story_plan.plan_id}"
                 layered_deck_spec = {
                     "id": deck_id,
                     "title": deck_story_plan.deck_title,
-                    "slides": [],  # PPT-L5: 0 PPTX rendered slides (concrete geometry stored in resolved_deck_layout)
+                    "slides": [],  # PPT-L6: 0 legacy slides (compiled DrawingML slides stored in render_manifest and pptx_path)
                     "metadata": {
                         "pipeline_mode": PresentationPipelineMode.LAYERED.value,
                         "content_package": layered_content_package.model_dump(),
@@ -392,15 +421,22 @@ def execute_presentation_pipeline_async(
                         "structure_fingerprint": deck_structure.structure_fingerprint,
                         "resolved_deck_layout": resolved_deck.model_dump(),
                         "layout_fingerprint": resolved_deck.deck_fingerprint,
+                        "render_manifest": render_manifest.model_dump(),
+                        "render_fingerprint": render_manifest.semantic_render_fingerprint,
+                        "rendered_slides": [s.model_dump() for s in render_manifest.slides],
+                        "pptx_path": str(pptx_path),
                         "target_audience": deck_story_plan.target_audience,
                         "user_objective": deck_story_plan.user_objective,
                         "total_logical_slides": len(deck_story_plan.logical_slides),
                         "total_physical_slides": len(resolved_deck.slides),
                         "total_zones": sum(len(s.zones) for s in resolved_deck.slides),
                         "total_objects": resolved_deck.total_objects,
+                        "total_native_editable": render_manifest.total_native_editable,
+                        "total_fallbacks": render_manifest.total_fallbacks,
                         "total_excluded_items": len(deck_story_plan.excluded_content),
                         "status": "STRUCTURE_VALIDATED" if not deck_structure.replan_required else "STRUCTURE_REPLAN_REQUIRED",
                         "layout_status": "LAYOUT_RESOLVED" if not resolved_deck.replan_required else "LATE_SPLIT_REQUIRED",
+                        "render_status": "RENDER_VALIDATED" if not render_manifest.replan_required else "RENDER_REPLAN_REQUIRED",
                     },
                     "evidence_ledger": primary_ctx.get("evidence_ledger", []) or workspace_evidence.get("evidence_ledger", []),
                 }
@@ -408,13 +444,15 @@ def execute_presentation_pipeline_async(
                 mgr.update_stage(
                     job_id,
                     "ready",
-                    f"Phase 5 Complete: Validated ResolvedSlideLayout generated ({len(resolved_deck.slides)} slides, {resolved_deck.total_objects} objects). Ready for PPT-L6.",
+                    f"Phase 6 Complete: Validated RenderManifest and PPTX artifact generated ({len(resolved_deck.slides)} slides, {resolved_deck.total_objects} objects, {render_manifest.total_native_editable} editable). Ready for PPT-L7.",
                     100,
                     deck_id=deck_id,
                     extra={
                         "current_slide": len(resolved_deck.slides),
                         "total_slides": len(resolved_deck.slides),
-                        "active_phase": "layout_resolved",
+                        "active_phase": "render_compiled",
+                        "pptx_path": str(pptx_path),
+                        "render_manifest": render_manifest.model_dump(),
                         "resolved_deck_layout": resolved_deck.model_dump(),
                         "layered_deck_structure": deck_structure.model_dump(),
                         "physical_manifest": physical_manifest.model_dump(),

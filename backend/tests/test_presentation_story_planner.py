@@ -767,4 +767,5 @@ class TestOrchestratorLayeredStoryPlannerIntegration:
                 "physical_manifest_validated",
                 "structure_validated",
                 "layout_resolved",
+                "render_compiled",
             )
