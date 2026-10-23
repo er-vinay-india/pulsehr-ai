@@ -442,14 +442,38 @@ def execute_presentation_pipeline_async(
                     job_id,
                 )
 
-                # PPT-L7 Invariant Boundary:
-                # Layered mode stops strictly after validated StyleManifest and styled PPTX artifact.
-                # PPT-L7 styles objects; it does ZERO layout recomputations, ZERO physical slide creations, ZERO AI calls.
+                # PPT-L8: Deterministic Post-Style Validation
+                from .deterministic_validation_engine import DeterministicValidationEngine
+
+                validation_manifest = DeterministicValidationEngine.validate(
+                    prs=prs,
+                    style_manifest=style_manifest,
+                    render_manifest=render_manifest,
+                    resolved_deck=resolved_deck,
+                    deck_structure=deck_structure,
+                    content_package=layered_content_package,
+                    raw_pptx_bytes=styled_bytes,
+                    is_technical_deck=scope.get("is_technical_deck", False),
+                )
+
+                workspace_evidence["validation_manifest"] = validation_manifest.model_dump()
+                logger.info(
+                    "DeterministicValidationEngine completed with status %s (%d issues, %d critical, fingerprint=%s) for job %s",
+                    validation_manifest.status.value,
+                    len(validation_manifest.issues),
+                    validation_manifest.counts_by_severity.get("CRITICAL", 0),
+                    validation_manifest.validation_fingerprint[:12],
+                    job_id,
+                )
+
+                # PPT-L8 Invariant Boundary:
+                # Layered mode stops strictly after validated ValidationManifest.
+                # PPT-L8 performs zero mutations on content, geometry, theme, or slide count, and makes zero AI calls.
                 deck_id = f"DECK-{deck_story_plan.plan_id}"
                 layered_deck_spec = {
                     "id": deck_id,
                     "title": deck_story_plan.deck_title,
-                    "slides": [],  # PPT-L7: 0 legacy slides (compiled DrawingML slides stored in render_manifest and styled_pptx_path)
+                    "slides": [],  # PPT-L8: 0 legacy slides (compiled DrawingML slides stored in render_manifest and styled_pptx_path)
                     "metadata": {
                         "pipeline_mode": PresentationPipelineMode.LAYERED.value,
                         "content_package": layered_content_package.model_dump(),
@@ -473,6 +497,9 @@ def execute_presentation_pipeline_async(
                         "style_manifest": style_manifest.model_dump(),
                         "style_fingerprint": style_manifest.style_fingerprint,
                         "style_report": style_report.model_dump(),
+                        "validation_manifest": validation_manifest.model_dump(),
+                        "validation_fingerprint": validation_manifest.validation_fingerprint,
+                        "validation_status": validation_manifest.status.value,
                         "target_audience": deck_story_plan.target_audience,
                         "user_objective": deck_story_plan.user_objective,
                         "total_logical_slides": len(deck_story_plan.logical_slides),
@@ -493,7 +520,7 @@ def execute_presentation_pipeline_async(
                 mgr.update_stage(
                     job_id,
                     "ready",
-                    f"Phase 7 Complete: Validated StyleManifest and styled PPTX artifact generated ({len(resolved_deck.slides)} slides, {len(style_manifest.object_styles)} objects styled, theme={requested_theme.theme_id}). Ready for PPT-L8.",
+                    f"Phase 8 Complete: Deterministic Post-Style Validation completed with status {validation_manifest.status.value} ({len(resolved_deck.slides)} slides, {validation_manifest.counts_by_severity.get('CRITICAL', 0)} critical issues). Ready for PPT-L9.",
                     100,
                     deck_id=deck_id,
                     extra={

@@ -210,6 +210,24 @@ from .style_validator import (
     StyleValidationIssue,
     StyleValidationReport,
 )
+from .validation_models_l8 import (
+    ValidationSeverity,
+    DeckValidationStatus,
+    ValidationCategory,
+    RepairAction,
+    RepairOwner,
+    ValidationIssue,
+    RepairRecommendation,
+    ZoneValidationResult,
+    SlideValidationResult,
+    ValidationManifest,
+    compute_validation_manifest_fingerprint,
+)
+from .deterministic_validation_engine import (
+    ValidationIssueClassifier,
+    RepairRecommendationBuilder,
+    DeterministicValidationEngine,
+)
 
 __all__ = [
     "PresentationPipelineMode",
@@ -359,6 +377,20 @@ __all__ = [
     "StyleValidator",
     "StyleValidationIssue",
     "StyleValidationReport",
+    "ValidationSeverity",
+    "DeckValidationStatus",
+    "ValidationCategory",
+    "RepairAction",
+    "RepairOwner",
+    "ValidationIssue",
+    "RepairRecommendation",
+    "ZoneValidationResult",
+    "SlideValidationResult",
+    "ValidationManifest",
+    "compute_validation_manifest_fingerprint",
+    "ValidationIssueClassifier",
+    "RepairRecommendationBuilder",
+    "DeterministicValidationEngine",
     "THEMES",
     "PresentationJobManager",
     "job_manager",
