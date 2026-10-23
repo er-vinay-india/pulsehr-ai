@@ -170,6 +170,7 @@ class TextRendererAdapter(BaseRendererAdapter):
             fallback_reason=None,
             applied_bounds=obj_layout.bounds,
             metadata={
+                "actual_render_mode": "NATIVE_DRAWINGML_TEXT",
                 "font_size_pt": font_size_pt,
                 "line_count": len(text_lines),
             },
@@ -267,6 +268,7 @@ class TableRendererAdapter(BaseRendererAdapter):
             fallback_reason=None,
             applied_bounds=obj_layout.bounds,
             metadata={
+                "actual_render_mode": "NATIVE_DRAWINGML_TABLE",
                 "num_rows": num_rows,
                 "num_cols": num_cols,
                 "headers": headers,
@@ -338,6 +340,7 @@ class ChartRendererAdapter(BaseRendererAdapter):
                 fallback_reason=None,
                 applied_bounds=obj_layout.bounds,
                 metadata={
+                    "actual_render_mode": "NATIVE_DRAWINGML_CHART",
                     "chart_type": chart_type_str,
                     "categories_count": len(categories),
                     "series_count": len(series_list),
@@ -413,6 +416,7 @@ class RasterRendererAdapter(BaseRendererAdapter):
             fallback_reason=None,
             applied_bounds=obj_layout.bounds,
             metadata={
+                "actual_render_mode": "RASTER_IMAGE",
                 "image_path": str(img_path),
                 "is_map": obj_layout.kind == ContentKind.MAP,
             },

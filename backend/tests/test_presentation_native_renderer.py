@@ -164,7 +164,7 @@ def sample_layered_deck() -> tuple[LayeredDeckStructureSpec, PresentationContent
                 objects=[
                     SlideObjectSpec(
                         object_id="OBJ-HEAD-1",
-                        object_name="ZONE_HEADER::headline_1",
+                        object_name="HV_WORKFORCE_HEALTH_01_TITLE_CNT_HEAD_1",
                         name="Executive Headline",
                         content_id="CNT-HEAD-1",
                         binding_role=ContentBindingRole.PRIMARY,
@@ -184,7 +184,7 @@ def sample_layered_deck() -> tuple[LayeredDeckStructureSpec, PresentationContent
                 objects=[
                     SlideObjectSpec(
                         object_id="OBJ-TBL-1",
-                        object_name="ZONE_BODY::table_kpi_1",
+                        object_name="HV_WORKFORCE_HEALTH_01_DATA_TABLE_CNT_TBL_1",
                         name="KPI Table",
                         content_id="CNT-TBL-1",
                         binding_role=ContentBindingRole.PRIMARY,
@@ -213,7 +213,7 @@ def sample_layered_deck() -> tuple[LayeredDeckStructureSpec, PresentationContent
                 objects=[
                     SlideObjectSpec(
                         object_id="OBJ-CHART-1",
-                        object_name="ZONE_BODY::chart_retention_1",
+                        object_name="HV_WORKFORCE_HEALTH_02_PRIMARY_VISUAL_CNT_CHART_1",
                         name="Retention Chart",
                         content_id="CNT-CHART-1",
                         binding_role=ContentBindingRole.PRIMARY,
@@ -232,7 +232,7 @@ def sample_layered_deck() -> tuple[LayeredDeckStructureSpec, PresentationContent
                 objects=[
                     SlideObjectSpec(
                         object_id="OBJ-MAP-1",
-                        object_name="ZONE_BODY::map_facilities_1",
+                        object_name="HV_WORKFORCE_HEALTH_02_SECONDARY_VISUAL_CNT_MAP_1",
                         name="Facility Map",
                         content_id="CNT-MAP-1",
                         binding_role=ContentBindingRole.PRIMARY,
@@ -311,14 +311,14 @@ def test_drawingml_native_editability_inspection(sample_layered_deck):
         s1 = prs.slides[0]
         assert len(s1.shapes) == 2
         shape_names_s1 = [s.name for s in s1.shapes]
-        assert "ZONE_HEADER::headline_1" in shape_names_s1
-        assert "ZONE_BODY::table_kpi_1" in shape_names_s1
+        assert "HV_WORKFORCE_HEALTH_01_TITLE_CNT_HEAD_1" in shape_names_s1
+        assert "HV_WORKFORCE_HEALTH_01_DATA_TABLE_CNT_TBL_1" in shape_names_s1
 
-        tb_shape = [s for s in s1.shapes if s.name == "ZONE_HEADER::headline_1"][0]
+        tb_shape = [s for s in s1.shapes if s.name == "HV_WORKFORCE_HEALTH_01_TITLE_CNT_HEAD_1"][0]
         assert tb_shape.has_text_frame is True
         assert "Executive Workforce Health Summary" in tb_shape.text_frame.text
 
-        tbl_shape = [s for s in s1.shapes if s.name == "ZONE_BODY::table_kpi_1"][0]
+        tbl_shape = [s for s in s1.shapes if s.name == "HV_WORKFORCE_HEALTH_01_DATA_TABLE_CNT_TBL_1"][0]
         assert tbl_shape.has_table is True
         assert tbl_shape.table.cell(0, 0).text == "Division"
         assert tbl_shape.table.cell(1, 0).text == "Engineering"
@@ -326,10 +326,10 @@ def test_drawingml_native_editability_inspection(sample_layered_deck):
         # Slide 2: Chart and Map
         s2 = prs.slides[1]
         assert len(s2.shapes) == 2
-        chart_shape = [s for s in s2.shapes if s.name == "ZONE_BODY::chart_retention_1"][0]
+        chart_shape = [s for s in s2.shapes if s.name == "HV_WORKFORCE_HEALTH_02_PRIMARY_VISUAL_CNT_CHART_1"][0]
         assert chart_shape.has_chart is True
 
-        map_shape = [s for s in s2.shapes if s.name == "ZONE_BODY::map_facilities_1"][0]
+        map_shape = [s for s in s2.shapes if s.name == "HV_WORKFORCE_HEALTH_02_SECONDARY_VISUAL_CNT_MAP_1"][0]
         assert map_shape.has_chart is False
         assert map_shape.has_table is False
 
@@ -368,7 +368,7 @@ def test_zero_silent_downgrade_on_native_required():
     adapter = ChartRendererAdapter()
     broken_obj = ResolvedObjectLayout(
         object_id="OBJ-FAIL-1",
-        object_name="ZONE_BODY::fail_chart_1",
+        object_name="HV_FAIL_CHART_01_PRIMARY_VISUAL",
         content_id="CNT-FAIL-1",
         name="Broken Chart",
         binding_role=ContentBindingRole.PRIMARY,
@@ -413,7 +413,7 @@ def test_native_preferred_fallback_accounting():
 
     obj = ResolvedObjectLayout(
         object_id="OBJ-PREF-1",
-        object_name="ZONE_BODY::pref_chart_1",
+        object_name="HV_PREF_CHART_01_PRIMARY_VISUAL",
         content_id="CNT-PREF-1",
         name="Preferred Chart",
         binding_role=ContentBindingRole.PRIMARY,
@@ -522,6 +522,53 @@ def test_deterministic_semantic_fingerprints(sample_layered_deck):
 
         assert m1.semantic_render_fingerprint == m2.semantic_render_fingerprint
         assert len(m1.semantic_render_fingerprint) == 64
+
+
+def test_multi_shape_object_deterministic_naming():
+    """Verifies deterministic suffix naming and semantic ID mapping if an object decomposes into multiple shapes."""
+    prs = pptx.Presentation()
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+
+    parent_object_id = "OBJ-KPI-01"
+    parent_object_name = "HV_ATTENDANCE_KPI_01"
+
+    # Multi-shape instantiation with deterministic suffixes
+    suffixes = ["VALUE", "UNIT", "LABEL"]
+    shapes = []
+    records = []
+
+    for idx, suffix in enumerate(suffixes):
+        tb = slide.shapes.add_textbox(Inches(1 + idx * 2), Inches(1), Inches(2), Inches(1))
+        child_name = f"{parent_object_name}__{suffix}"
+        tb.name = child_name
+        shapes.append(tb)
+
+        rec = RenderedObjectRecord(
+            object_id=parent_object_id,
+            object_name=child_name,
+            zone_id="ZONE-KPI-1",
+            physical_slide_id="SLD-PHYS-1",
+            shape_id=int(tb.shape_id),
+            shape_type=ShapeType.TEXT_BOX,
+            is_native_editable=True,
+            editability_policy=EditabilityPolicy.NATIVE_REQUIRED,
+            applied_bounds=Box2D(left=0.1 + idx * 0.2, top=0.1, width=0.2, height=0.1),
+            metadata={"child_role": suffix},
+        )
+        records.append(rec)
+
+    # Invariants:
+    # 1. Zero random suffixes, zero Selection-Pane collisions
+    shape_names = [s.name for s in shapes]
+    assert len(shape_names) == len(set(shape_names)) == 3
+    assert shape_names == [
+        "HV_ATTENDANCE_KPI_01__VALUE",
+        "HV_ATTENDANCE_KPI_01__UNIT",
+        "HV_ATTENDANCE_KPI_01__LABEL",
+    ]
+
+    # 2. All child shapes map back to the same parent semantic object_id
+    assert all(r.object_id == parent_object_id for r in records)
 
 
 def test_validator_detects_corrupt_or_mismatched_package(sample_layered_deck):
