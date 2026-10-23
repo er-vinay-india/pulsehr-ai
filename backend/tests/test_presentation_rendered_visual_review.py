@@ -23,6 +23,7 @@ from typing import Any
 import pptx
 from pptx.util import Inches, Pt
 import pytest
+from unittest.mock import MagicMock, patch
 
 from app.services.presentation.content_models import (
     ContentKind,
@@ -93,7 +94,10 @@ from app.services.presentation.slide_render_service import (
     DeterministicVisualPrecheck,
     SlideRenderService,
 )
-from app.services.presentation.visual_review_engine import VisualReviewEngine
+from app.services.presentation.visual_review_engine import (
+    MultimodalVisualReviewer,
+    VisualReviewEngine,
+)
 from app.services.presentation.bounded_repair_orchestrator import (
     BoundedRepairOrchestrator,
     RepairDecisionEngine,
@@ -930,20 +934,17 @@ def test_121_ai_structured_output(sample_l9_certified_deck):
     assert dumped["status"] == "VISUALLY_CERTIFIED"
 
 
-# --- Test 122 & 124: AI Timeout / Model Unavailable Safety ---
+# --- Test 122 & 124: AI Timeout / Model Unavailable / Schema Failure Safety ---
 def test_122_and_124_model_failure_safety(sample_l9_certified_deck, tmp_path):
     deck_structure, content_pkg, resolved_deck, style_manifest, l8_manifest, prs = sample_l9_certified_deck
 
     render_service = SlideRenderService(output_dir=tmp_path)
     artifacts = render_service.render_deck(prs=prs, deck_id="DECK-FAIL-SAFETY")
 
-    # Point critic to an unavailable host
-    from app.services.presentation.qa.gemma_critic import GemmaVisualCritic
-    unavailable_critic = GemmaVisualCritic(base_url="http://127.0.0.1:99999", timeout_seconds=0.1)
-    engine = VisualReviewEngine(critic=unavailable_critic)
-
-    # Engine must execute deterministically without raising unhandled exceptions or falsely certifying
-    manifest = engine.review_deck(
+    # 1. Point reviewer to an unavailable host: must NOT falsely certify as VISUALLY_CERTIFIED
+    unavailable_reviewer = MultimodalVisualReviewer(base_url="http://127.0.0.1:99999", timeout_seconds=0.1, enabled=True)
+    engine_unavail = VisualReviewEngine(reviewer=unavailable_reviewer)
+    manifest_unavail = engine_unavail.review_deck(
         artifacts=artifacts,
         validation_manifest=l8_manifest,
         resolved_deck=resolved_deck,
@@ -951,8 +952,42 @@ def test_122_and_124_model_failure_safety(sample_l9_certified_deck, tmp_path):
         style_manifest=style_manifest,
         prs=prs,
     )
-    assert manifest is not None
-    assert manifest.manifest_id != ""
+    assert manifest_unavail.status != VisualCertificationStatus.VISUALLY_CERTIFIED
+    assert any(i.severity == VisualSeverity.CRITICAL for i in manifest_unavail.issues)
+
+    # 2. Test call timeout: must NOT falsely certify
+    import httpx
+    with patch("httpx.Client.post", side_effect=httpx.TimeoutException("Visual review timed out")):
+        timeout_reviewer = MultimodalVisualReviewer(timeout_seconds=0.01, enabled=True)
+        engine_timeout = VisualReviewEngine(reviewer=timeout_reviewer)
+        manifest_timeout = engine_timeout.review_deck(
+            artifacts=artifacts,
+            validation_manifest=l8_manifest,
+            resolved_deck=resolved_deck,
+            deck_structure=deck_structure,
+            style_manifest=style_manifest,
+            prs=prs,
+        )
+        assert manifest_timeout.status != VisualCertificationStatus.VISUALLY_CERTIFIED
+        assert any("timed out" in i.description.lower() for i in manifest_timeout.issues)
+
+    # 3. Test invalid schema returned by model: must NOT falsely certify
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {"response": "CORRUPTED NOT JSON {"}
+    with patch("httpx.Client.post", return_value=mock_resp):
+        invalid_reviewer = MultimodalVisualReviewer(enabled=True)
+        engine_invalid = VisualReviewEngine(reviewer=invalid_reviewer)
+        manifest_invalid = engine_invalid.review_deck(
+            artifacts=artifacts,
+            validation_manifest=l8_manifest,
+            resolved_deck=resolved_deck,
+            deck_structure=deck_structure,
+            style_manifest=style_manifest,
+            prs=prs,
+        )
+        assert manifest_invalid.status != VisualCertificationStatus.VISUALLY_CERTIFIED
+        assert any("schema" in i.description.lower() for i in manifest_invalid.issues)
 
 
 # --- Test 123: Render Failure Safety ---
@@ -1062,6 +1097,106 @@ def test_128_real_pptx_rendered_and_reviewed(sample_l9_certified_deck, tmp_path)
     for art in artifacts:
         assert Path(art.image_path).exists()
         assert art.width_px >= 1600
+
+
+# --- Test 129: Pixel-Derived Defect Detection (Rendered Pixels Outrank Metadata) ---
+def test_129_pixel_derived_defect_detection(sample_l9_certified_deck, tmp_path):
+    """Proves visual review derives defects directly from rendered pixels, not merely metadata."""
+    deck_structure, content_pkg, resolved_deck, style_manifest, l8_manifest, prs = sample_l9_certified_deck
+
+    render_service = SlideRenderService(output_dir=tmp_path)
+    artifacts = render_service.render_deck(prs=prs, deck_id="DECK-PIXEL-TEST")
+    slide_2_art = next(a for a in artifacts if a.physical_slide_id == "SLD-PHYS-2")
+
+    # The PPTX shapes, ResolvedSlideLayout, and PPT-L8 metadata remain 100% untouched and certified.
+    # We now directly manipulate the rendered PNG pixels on disk: stamp an opaque black block over the chart viewport
+    from PIL import Image, ImageDraw
+    img = Image.open(slide_2_art.image_path)
+    draw = ImageDraw.Draw(img)
+    # Chart is on left half: bounds left=0.05, top=0.15, width=0.42, height=0.75
+    w, h = img.size
+    box = (int(0.05 * w), int(0.15 * h), int(0.47 * w), int(0.90 * h))
+    draw.rectangle(box, fill=(0, 0, 0))
+    img.save(slide_2_art.image_path)
+
+    engine = VisualReviewEngine()
+    manifest = engine.review_deck(
+        artifacts=artifacts,
+        validation_manifest=l8_manifest,
+        resolved_deck=resolved_deck,
+        deck_structure=deck_structure,
+        style_manifest=style_manifest,
+        prs=prs,
+    )
+
+    # Pixel inspection must detect PRIMARY_VISUAL_OBSCURED directly from rendered PNG image pixels
+    pixel_obscured = [i for i in manifest.issues if i.category == VisualCategory.PRIMARY_VISUAL_OBSCURED]
+    assert len(pixel_obscured) > 0
+    assert pixel_obscured[0].severity == VisualSeverity.CRITICAL
+    assert "pixels" in pixel_obscured[0].visual_evidence.lower()
+
+
+# --- Test 130: Multimodal Visual Review Chain with Real Rendered PNG ---
+def test_130_multimodal_visual_review_chain(sample_l9_certified_deck, tmp_path):
+    """Proves the full multimodal visual review chain with real rendered PNG passed to visual model."""
+    import json as json_lib
+    deck_structure, content_pkg, resolved_deck, style_manifest, l8_manifest, prs = sample_l9_certified_deck
+
+    render_service = SlideRenderService(output_dir=tmp_path)
+    artifacts = render_service.render_deck(prs=prs, deck_id="DECK-MM-CHAIN")
+
+    captured_payloads = []
+
+    def mock_post(url, json=None, **kwargs):
+        captured_payloads.append(json)
+        mock_r = MagicMock()
+        mock_r.status_code = 200
+        # Return valid structured schema with no issues (clean slide)
+        mock_r.json.return_value = {
+            "response": json_lib.dumps({
+                "status": "PASS",
+                "issues": []
+            })
+        }
+        return mock_r
+
+    reviewer = MultimodalVisualReviewer(model_name="gemma4:12b", enabled=True)
+    engine = VisualReviewEngine(reviewer=reviewer)
+
+    with patch("httpx.Client.post", side_effect=mock_post):
+        manifest = engine.review_deck(
+            artifacts=artifacts,
+            validation_manifest=l8_manifest,
+            resolved_deck=resolved_deck,
+            deck_structure=deck_structure,
+            style_manifest=style_manifest,
+            prs=prs,
+        )
+
+    # Verify visual model was actually invoked
+    assert reviewer.calls_count == len(artifacts)
+    assert len(captured_payloads) == len(artifacts)
+
+    # Verify image passed as base64 in payload
+    first_payload = captured_payloads[0]
+    assert "images" in first_payload
+    assert len(first_payload["images"]) == 1
+    assert len(first_payload["images"][0]) > 1000  # valid base64 PNG
+
+    # Verify structured semantic context was passed without raw database records
+    prompt = first_payload["prompt"]
+    assert "Slide Context:" in prompt
+    assert "SLD-PHYS-1" in prompt
+    assert "WORKFORCE_HEALTH" in prompt
+    # Strict Invariant: raw dataset rows or table data is NOT dumped to model prompt
+    assert "Operating KPI Ledger" not in prompt
+    assert "Retention: 94.2%" not in prompt
+
+    # Verify clean slide certification
+    assert manifest.status == VisualCertificationStatus.VISUALLY_CERTIFIED
+    assert manifest.stats["visual_model_calls"] == len(artifacts)
+    assert manifest.stats["council_calls"] == 0
+    assert manifest.review_backend == "MULTIMODAL_SPECIALIST"
 
 
 # --- Test 131: Legacy Pipeline Isolation ---

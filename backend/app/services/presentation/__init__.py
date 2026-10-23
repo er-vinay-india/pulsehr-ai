@@ -245,7 +245,7 @@ from .slide_render_service import (
     SlideRenderService,
     DeterministicVisualPrecheck,
 )
-from .visual_review_engine import VisualReviewEngine
+from .visual_review_engine import VisualReviewEngine, MultimodalVisualReviewer
 from .bounded_repair_orchestrator import (
     MAX_VISUAL_REPAIR_ATTEMPTS,
     RepairDecisionEngine,
@@ -427,6 +427,7 @@ __all__ = [
     "compute_visual_manifest_fingerprint",
     "SlideRenderService",
     "DeterministicVisualPrecheck",
+    "MultimodalVisualReviewer",
     "VisualReviewEngine",
     "MAX_VISUAL_REPAIR_ATTEMPTS",
     "RepairDecisionEngine",
