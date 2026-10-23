@@ -466,14 +466,62 @@ def execute_presentation_pipeline_async(
                     job_id,
                 )
 
-                # PPT-L8 Invariant Boundary:
-                # Layered mode stops strictly after validated ValidationManifest.
-                # PPT-L8 performs zero mutations on content, geometry, theme, or slide count, and makes zero AI calls.
+                # PPT-L9: Rendered Visual Review + Bounded Repair
+                from .slide_render_service import SlideRenderService
+                from .visual_review_engine import VisualReviewEngine
+                from .bounded_repair_orchestrator import BoundedRepairOrchestrator
+
                 deck_id = f"DECK-{deck_story_plan.plan_id}"
+
+                render_service = SlideRenderService()
+                slide_artifacts = render_service.render_deck(
+                    prs=prs,
+                    deck_id=deck_id,
+                    source_pptx_fingerprint=style_manifest.style_fingerprint,
+                )
+
+                review_engine = VisualReviewEngine()
+                initial_visual_manifest = review_engine.review_deck(
+                    artifacts=slide_artifacts,
+                    validation_manifest=validation_manifest,
+                    resolved_deck=resolved_deck,
+                    deck_structure=deck_structure,
+                    style_manifest=style_manifest,
+                    prs=prs,
+                    is_technical_deck=scope.get("is_technical_deck", False),
+                )
+
+                repair_orchestrator = BoundedRepairOrchestrator(render_service=render_service)
+                final_visual_manifest, final_validation_manifest, repair_history = repair_orchestrator.execute_bounded_repairs(
+                    initial_manifest=initial_visual_manifest,
+                    initial_l8_manifest=validation_manifest,
+                    prs=prs,
+                    resolved_deck=resolved_deck,
+                    deck_structure=deck_structure,
+                    style_manifest=style_manifest,
+                    content_package=layered_content_package,
+                    review_engine=review_engine,
+                    is_technical_deck=scope.get("is_technical_deck", False),
+                )
+
+                workspace_evidence["visual_review_manifest"] = final_visual_manifest.model_dump()
+                workspace_evidence["slide_artifacts"] = [a.model_dump() for a in slide_artifacts]
+                logger.info(
+                    "VisualReviewEngine completed with status %s (%d visual issues, %d critical, fingerprint=%s) for job %s",
+                    final_visual_manifest.status.value,
+                    len(final_visual_manifest.issues),
+                    final_visual_manifest.counts_by_severity.get("CRITICAL", 0),
+                    final_visual_manifest.visual_fingerprint[:12],
+                    job_id,
+                )
+
+                # PPT-L9 Invariant Boundary:
+                # Layered mode stops strictly after VisualReviewManifest and visual certification.
+                # PPT-L9 performs zero content/numeric mutations, zero slide creations, and routes bounded repairs to upstream owners.
                 layered_deck_spec = {
                     "id": deck_id,
                     "title": deck_story_plan.deck_title,
-                    "slides": [],  # PPT-L8: 0 legacy slides (compiled DrawingML slides stored in render_manifest and styled_pptx_path)
+                    "slides": [],  # PPT-L9: 0 legacy slides (compiled DrawingML slides stored in render_manifest and styled_pptx_path)
                     "metadata": {
                         "pipeline_mode": PresentationPipelineMode.LAYERED.value,
                         "content_package": layered_content_package.model_dump(),
@@ -497,9 +545,14 @@ def execute_presentation_pipeline_async(
                         "style_manifest": style_manifest.model_dump(),
                         "style_fingerprint": style_manifest.style_fingerprint,
                         "style_report": style_report.model_dump(),
-                        "validation_manifest": validation_manifest.model_dump(),
-                        "validation_fingerprint": validation_manifest.validation_fingerprint,
-                        "validation_status": validation_manifest.status.value,
+                        "validation_manifest": final_validation_manifest.model_dump(),
+                        "validation_fingerprint": final_validation_manifest.validation_fingerprint,
+                        "validation_status": final_validation_manifest.status.value,
+                        "visual_review_manifest": final_visual_manifest.model_dump(),
+                        "visual_fingerprint": final_visual_manifest.visual_fingerprint,
+                        "visual_status": final_visual_manifest.status.value,
+                        "slide_artifacts": [a.model_dump() for a in slide_artifacts],
+                        "repair_history": [r.model_dump() for r in repair_history],
                         "target_audience": deck_story_plan.target_audience,
                         "user_objective": deck_story_plan.user_objective,
                         "total_logical_slides": len(deck_story_plan.logical_slides),
@@ -520,13 +573,13 @@ def execute_presentation_pipeline_async(
                 mgr.update_stage(
                     job_id,
                     "ready",
-                    f"Phase 8 Complete: Deterministic Post-Style Validation completed with status {validation_manifest.status.value} ({len(resolved_deck.slides)} slides, {validation_manifest.counts_by_severity.get('CRITICAL', 0)} critical issues). Ready for PPT-L9.",
+                    f"Phase 9 Complete: Rendered Visual Review completed with status {final_visual_manifest.status.value} ({len(resolved_deck.slides)} slides, {final_visual_manifest.counts_by_severity.get('CRITICAL', 0)} critical visual issues).",
                     100,
                     deck_id=deck_id,
                     extra={
                         "current_slide": len(resolved_deck.slides),
                         "total_slides": len(resolved_deck.slides),
-                        "active_phase": "render_compiled",
+                        "active_phase": "visual_reviewed",
                         "pptx_path": str(pptx_path),
                         "render_manifest": render_manifest.model_dump(),
                         "resolved_deck_layout": resolved_deck.model_dump(),

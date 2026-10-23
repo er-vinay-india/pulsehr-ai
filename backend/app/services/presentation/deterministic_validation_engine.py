@@ -533,56 +533,57 @@ class DeterministicValidationEngine:
         # -------------------------------------------------------------
         # 6. Native DrawingML Editability Preservation
         # -------------------------------------------------------------
-        for s_idx, r_slide in enumerate(render_manifest.slides):
-            if s_idx >= len(prs.slides):
-                break
-            slide = prs.slides[s_idx]
-            for obj_rec in r_slide.objects:
-                matching = next((sh for sh in slide.shapes if sh.name == obj_rec.object_name), None)
-                if not matching:
-                    continue
+        if render_manifest and getattr(render_manifest, "slides", None):
+            for s_idx, r_slide in enumerate(render_manifest.slides):
+                if s_idx >= len(prs.slides):
+                    break
+                slide = prs.slides[s_idx]
+                for obj_rec in r_slide.objects:
+                    matching = next((sh for sh in slide.shapes if sh.name == obj_rec.object_name), None)
+                    if not matching:
+                        continue
 
-                shape_type_val = obj_rec.shape_type.value if hasattr(obj_rec.shape_type, "value") else str(obj_rec.shape_type)
+                    shape_type_val = obj_rec.shape_type.value if hasattr(obj_rec.shape_type, "value") else str(obj_rec.shape_type)
 
-                if obj_rec.is_native_editable:
-                    if shape_type_val in ("TEXT", "TEXT_BOX") and not matching.has_text_frame:
-                        _add_issue(
-                            ValidationCategory.EDITABILITY_PRESERVATION,
-                            ValidationSeverity.CRITICAL,
-                            f"Object '{obj_rec.object_name}' lost native text frame.",
-                            slide_id=obj_rec.physical_slide_id,
-                            object_id=obj_rec.object_id,
-                            object_name=obj_rec.object_name,
-                        )
-                    elif shape_type_val == "TABLE" and not matching.has_table:
-                        _add_issue(
-                            ValidationCategory.EDITABILITY_PRESERVATION,
-                            ValidationSeverity.CRITICAL,
-                            f"Object '{obj_rec.object_name}' lost native table frame.",
-                            slide_id=obj_rec.physical_slide_id,
-                            object_id=obj_rec.object_id,
-                            object_name=obj_rec.object_name,
-                        )
-                    elif shape_type_val == "CHART" and not matching.has_chart:
-                        _add_issue(
-                            ValidationCategory.EDITABILITY_PRESERVATION,
-                            ValidationSeverity.CRITICAL,
-                            f"Object '{obj_rec.object_name}' lost native chart frame.",
-                            slide_id=obj_rec.physical_slide_id,
-                            object_id=obj_rec.object_id,
-                            object_name=obj_rec.object_name,
-                        )
-                elif obj_rec.metadata.get("actual_render_mode") in ("RASTER_IMAGE", "PICTURE") or shape_type_val in ("RASTER_IMAGE", "PICTURE"):
-                    # Maps must be truthfully non-native
                     if obj_rec.is_native_editable:
-                        _add_issue(
-                            ValidationCategory.EDITABILITY_PRESERVATION,
-                            ValidationSeverity.CRITICAL,
-                            f"Raster map '{obj_rec.object_name}' falsely claimed as native editable.",
-                            slide_id=obj_rec.physical_slide_id,
-                            object_id=obj_rec.object_id,
-                            object_name=obj_rec.object_name,
-                        )
+                        if shape_type_val in ("TEXT", "TEXT_BOX") and not matching.has_text_frame:
+                            _add_issue(
+                                ValidationCategory.EDITABILITY_PRESERVATION,
+                                ValidationSeverity.CRITICAL,
+                                f"Object '{obj_rec.object_name}' lost native text frame.",
+                                slide_id=obj_rec.physical_slide_id,
+                                object_id=obj_rec.object_id,
+                                object_name=obj_rec.object_name,
+                            )
+                        elif shape_type_val == "TABLE" and not matching.has_table:
+                            _add_issue(
+                                ValidationCategory.EDITABILITY_PRESERVATION,
+                                ValidationSeverity.CRITICAL,
+                                f"Object '{obj_rec.object_name}' lost native table frame.",
+                                slide_id=obj_rec.physical_slide_id,
+                                object_id=obj_rec.object_id,
+                                object_name=obj_rec.object_name,
+                            )
+                        elif shape_type_val == "CHART" and not matching.has_chart:
+                            _add_issue(
+                                ValidationCategory.EDITABILITY_PRESERVATION,
+                                ValidationSeverity.CRITICAL,
+                                f"Object '{obj_rec.object_name}' lost native chart frame.",
+                                slide_id=obj_rec.physical_slide_id,
+                                object_id=obj_rec.object_id,
+                                object_name=obj_rec.object_name,
+                            )
+                    elif obj_rec.metadata.get("actual_render_mode") in ("RASTER_IMAGE", "PICTURE") or shape_type_val in ("RASTER_IMAGE", "PICTURE"):
+                        # Maps must be truthfully non-native
+                        if obj_rec.is_native_editable:
+                            _add_issue(
+                                ValidationCategory.EDITABILITY_PRESERVATION,
+                                ValidationSeverity.CRITICAL,
+                                f"Raster map '{obj_rec.object_name}' falsely claimed as native editable.",
+                                slide_id=obj_rec.physical_slide_id,
+                                object_id=obj_rec.object_id,
+                                object_name=obj_rec.object_name,
+                            )
 
         # -------------------------------------------------------------
         # 7. Layer Order & Collision Detection

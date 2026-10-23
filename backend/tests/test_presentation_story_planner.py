@@ -768,4 +768,7 @@ class TestOrchestratorLayeredStoryPlannerIntegration:
                 "structure_validated",
                 "layout_resolved",
                 "render_compiled",
+                "theme_styled",
+                "deterministic_validated",
+                "visual_reviewed",
             )

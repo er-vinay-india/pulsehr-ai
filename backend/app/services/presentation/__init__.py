@@ -228,6 +228,29 @@ from .deterministic_validation_engine import (
     RepairRecommendationBuilder,
     DeterministicValidationEngine,
 )
+from .visual_models_l9 import (
+    VisualSeverity,
+    VisualCategory,
+    VisualConfidence,
+    VisualCertificationStatus,
+    RepairApprovalLevel,
+    RenderedSlideArtifact,
+    VisualIssue,
+    SlideVisualReviewResult,
+    VisualRepairHistory,
+    VisualReviewManifest,
+    compute_visual_manifest_fingerprint,
+)
+from .slide_render_service import (
+    SlideRenderService,
+    DeterministicVisualPrecheck,
+)
+from .visual_review_engine import VisualReviewEngine
+from .bounded_repair_orchestrator import (
+    MAX_VISUAL_REPAIR_ATTEMPTS,
+    RepairDecisionEngine,
+    BoundedRepairOrchestrator,
+)
 
 __all__ = [
     "PresentationPipelineMode",
@@ -391,6 +414,23 @@ __all__ = [
     "ValidationIssueClassifier",
     "RepairRecommendationBuilder",
     "DeterministicValidationEngine",
+    "VisualSeverity",
+    "VisualCategory",
+    "VisualConfidence",
+    "VisualCertificationStatus",
+    "RepairApprovalLevel",
+    "RenderedSlideArtifact",
+    "VisualIssue",
+    "SlideVisualReviewResult",
+    "VisualRepairHistory",
+    "VisualReviewManifest",
+    "compute_visual_manifest_fingerprint",
+    "SlideRenderService",
+    "DeterministicVisualPrecheck",
+    "VisualReviewEngine",
+    "MAX_VISUAL_REPAIR_ATTEMPTS",
+    "RepairDecisionEngine",
+    "BoundedRepairOrchestrator",
     "THEMES",
     "PresentationJobManager",
     "job_manager",
