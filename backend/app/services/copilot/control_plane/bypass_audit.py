@@ -52,6 +52,7 @@ class ControlPlaneBypassAuditor:
         "app/services/decision_engine/embedding_engine.py",
         "app/services/presentation/memory/embedding_service.py",
         "app/services/presentation/qa/gemma_critic.py",
+        "app/services/presentation/visual_review_engine.py",
         "app/services/sheet_catalog.py",  # Embedding generation only
         "app/services/rag_service.py",     # Vector embedding only
         "app/services/ai_copilot.py",     # Legacy adapter governed at router entry
