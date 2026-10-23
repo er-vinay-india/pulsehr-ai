@@ -46,10 +46,8 @@ from app.services.presentation.visual.visual_validator import calculate_contrast
 
 logger = logging.getLogger(__name__)
 
-# Canonical canvas dimensions (16:9 widescreen in EMUs)
-CANVAS_WIDTH_EMU = 12192000   # 13.333 in
-CANVAS_HEIGHT_EMU = 6858000   # 7.5 in
-EMU_TOLERANCE = 2500          # ~0.002 inches bounding box tolerance
+# Bounding box tolerance (~0.002 inches)
+EMU_TOLERANCE = 2500
 
 
 class ValidationIssueClassifier:
@@ -150,6 +148,61 @@ class RepairRecommendationBuilder:
 
 class DeterministicValidationEngine:
     """The central PPT-L8 Post-Style Deterministic Validation Engine."""
+
+    @classmethod
+    def _is_authorized_overlap(
+        cls,
+        s1: Any,
+        s2: Any,
+        struct_slide: Optional[Any],
+        layout_slide: Optional[Any],
+    ) -> bool:
+        """Determines if the overlap between two shapes is an intentional, authorized composition.
+        
+        Authorized overlaps:
+        1. Grouped / multi-shape semantic components (shapes sharing same base object name or object_id).
+        2. Container / frame compositions (one shape is explicitly a container, frame, card background).
+        3. Intentional overlays and badges (shapes marked with OVERLAY, BADGE, CALLOUT).
+        
+        Forbidden collisions:
+        - Text covering chart data/labels, chart covering footer, table covering header/title,
+          image obscuring title, cross-zone blocking collisions.
+        """
+        n1 = (s1.name or "").upper()
+        n2 = (s2.name or "").upper()
+
+        # 1. Multi-shape child components of the same semantic object
+        base1 = s1.name.split("::")[0] if "::" in s1.name else s1.name
+        base2 = s2.name.split("::")[0] if "::" in s2.name else s2.name
+        if base1 == base2 and ("::" in s1.name or "::" in s2.name):
+            return True
+
+        # Check metadata from layout objects if present
+        if layout_slide:
+            objs_by_name = {o.object_name: o for o in layout_slide.object_layouts}
+            lo1 = objs_by_name.get(s1.name)
+            lo2 = objs_by_name.get(s2.name)
+            if lo1 and lo2 and lo1.object_id == lo2.object_id:
+                return True
+            if lo1 and (lo1.metadata.get("is_overlay") or lo1.metadata.get("is_container") or lo1.metadata.get("allow_overlap")):
+                return True
+            if lo2 and (lo2.metadata.get("is_overlay") or lo2.metadata.get("is_container") or lo2.metadata.get("allow_overlap")):
+                return True
+
+        # 2. Container or frame compositions (card container behind inner contents)
+        container_keywords = ("CONTAINER", "CARD_BG", "FRAME_BG", "BACKGROUND_SHAPE", "CONTAINER_BG")
+        if any(kw in n1 for kw in container_keywords) or any(kw in n2 for kw in container_keywords):
+            return True
+
+        # 3. Intentional overlay / badge / callout layering
+        overlay_keywords = ("OVERLAY", "BADGE", "CALLOUT", "TAG_PILL", "CHIP")
+        if any(kw in n1 for kw in overlay_keywords) or any(kw in n2 for kw in overlay_keywords):
+            # Overlays are authorized unless they obscure required header/title/footer
+            forbidden_for_overlay = ("TITLE", "HEADER", "FOOTER")
+            if not any(f in n1 for f in forbidden_for_overlay) and not any(f in n2 for f in forbidden_for_overlay):
+                return True
+
+        return False
 
     @classmethod
     def validate(
@@ -320,6 +373,25 @@ class DeterministicValidationEngine:
                 )
 
         # -------------------------------------------------------------
+        # Authoritative Slide Dimensions Resolution
+        # -------------------------------------------------------------
+        # Dimensions must come directly from upstream resolved deck layout / presentation.
+        # Zero hardcoded slide dimension assumptions.
+        deck_width_emu = (
+            resolved_deck.metadata.get("slide_width_emu")
+            or resolved_deck.metadata.get("slide_width")
+            or (int(prs.slide_width) if hasattr(prs, "slide_width") and prs.slide_width else None)
+        )
+        deck_height_emu = (
+            resolved_deck.metadata.get("slide_height_emu")
+            or resolved_deck.metadata.get("slide_height")
+            or (int(prs.slide_height) if hasattr(prs, "slide_height") and prs.slide_height else None)
+        )
+        if deck_width_emu is None or deck_height_emu is None:
+            deck_width_emu = int(prs.slide_width)
+            deck_height_emu = int(prs.slide_height)
+
+        # -------------------------------------------------------------
         # 4. Geometry & Safe Area Validation
         # -------------------------------------------------------------
         for slide_idx, prs_slide in enumerate(prs.slides):
@@ -329,10 +401,14 @@ class DeterministicValidationEngine:
             slide_id = layout_slide.physical_slide_id
             safe_bounds = layout_slide.safe_area.safe_area_bounds
 
-            min_safe_left = int(safe_bounds.left * CANVAS_WIDTH_EMU)
-            max_safe_right = int((safe_bounds.left + safe_bounds.width) * CANVAS_WIDTH_EMU)
-            min_safe_top = int(safe_bounds.top * CANVAS_HEIGHT_EMU)
-            max_safe_bottom = int((safe_bounds.top + safe_bounds.height) * CANVAS_HEIGHT_EMU)
+            # Authoritative slide dimension for this specific slide layout
+            slide_w_emu = layout_slide.metadata.get("slide_width_emu") or deck_width_emu
+            slide_h_emu = layout_slide.metadata.get("slide_height_emu") or deck_height_emu
+
+            min_safe_left = int(safe_bounds.left * slide_w_emu)
+            max_safe_right = int((safe_bounds.left + safe_bounds.width) * slide_w_emu)
+            min_safe_top = int(safe_bounds.top * slide_h_emu)
+            max_safe_bottom = int((safe_bounds.top + safe_bounds.height) * slide_h_emu)
 
             layout_objs = {o.object_name: o for o in layout_slide.object_layouts}
 
@@ -348,10 +424,10 @@ class DeterministicValidationEngine:
                 # Compare with PPT-L5 resolved geometry
                 if shape.name in layout_objs:
                     exp_obj = layout_objs[shape.name]
-                    exp_left = int(exp_obj.bounds.left * CANVAS_WIDTH_EMU)
-                    exp_top = int(exp_obj.bounds.top * CANVAS_HEIGHT_EMU)
-                    exp_width = int(exp_obj.bounds.width * CANVAS_WIDTH_EMU)
-                    exp_height = int(exp_obj.bounds.height * CANVAS_HEIGHT_EMU)
+                    exp_left = int(exp_obj.bounds.left * slide_w_emu)
+                    exp_top = int(exp_obj.bounds.top * slide_h_emu)
+                    exp_width = int(exp_obj.bounds.width * slide_w_emu)
+                    exp_height = int(exp_obj.bounds.height * slide_h_emu)
 
                     if (
                         abs(sh_left - exp_left) > EMU_TOLERANCE
@@ -512,7 +588,9 @@ class DeterministicValidationEngine:
         # 7. Layer Order & Collision Detection
         # -------------------------------------------------------------
         for slide_idx, prs_slide in enumerate(prs.slides):
-            slide_id = resolved_deck.slides[slide_idx].physical_slide_id if slide_idx < len(resolved_deck.slides) else f"SLD-{slide_idx+1}"
+            layout_slide = resolved_deck.slides[slide_idx] if slide_idx < len(resolved_deck.slides) else None
+            struct_slide = deck_structure.slides[slide_idx] if slide_idx < len(deck_structure.slides) else None
+            slide_id = layout_slide.physical_slide_id if layout_slide else f"SLD-{slide_idx+1}"
             shapes = [sh for sh in prs_slide.shapes if not (sh.name and sh.name.startswith("Theme background"))]
 
             for i in range(len(shapes)):
@@ -535,10 +613,14 @@ class DeterministicValidationEngine:
 
                         # Meaningful overlap > 5%
                         if overlap_ratio > 0.05:
+                            # Check if authorized intentional overlap
+                            if cls._is_authorized_overlap(s1, s2, struct_slide, layout_slide):
+                                continue
+
                             _add_issue(
                                 ValidationCategory.COLLISION,
                                 ValidationSeverity.CRITICAL,
-                                f"Forbidden collision between '{s1.name}' and '{s2.name}' (overlap {overlap_ratio:.1%}).",
+                                f"Unexpected blocking collision between '{s1.name}' and '{s2.name}' (overlap {overlap_ratio:.1%}).",
                                 slide_id=slide_id,
                                 object_name=s1.name,
                             )
@@ -688,6 +770,8 @@ class DeterministicValidationEngine:
                 "warnings": counts["WARNING"],
                 "info_issues": counts["INFO"],
                 "repair_requests": len(repair_requests),
+                "slide_width_emu": int(deck_width_emu),
+                "slide_height_emu": int(deck_height_emu),
             },
         )
         manifest.validation_fingerprint = compute_validation_manifest_fingerprint(manifest)

@@ -811,3 +811,177 @@ def test_126_zero_slides_created_by_validator(sample_certified_deck):
     slide_count_after = len(prs.slides)
 
     assert slide_count_before == slide_count_after
+
+
+# --- Test 127: Default 16:9 Dimension Validation ---
+def test_127_default_16_9_dimension_validation(sample_certified_deck):
+    deck_structure, content_pkg, resolved_deck, render_manifest, style_manifest, prs, raw_bytes = sample_certified_deck
+
+    manifest = DeterministicValidationEngine.validate(
+        prs=prs,
+        style_manifest=style_manifest,
+        render_manifest=render_manifest,
+        resolved_deck=resolved_deck,
+        deck_structure=deck_structure,
+        content_package=content_pkg,
+        raw_pptx_bytes=raw_bytes,
+    )
+
+    assert manifest.status == DeckValidationStatus.CERTIFIED
+    assert manifest.stats["slide_width_emu"] == int(prs.slide_width)
+    assert manifest.stats["slide_height_emu"] == int(prs.slide_height)
+
+
+# --- Test 128: Non-Default Synthetic Slide Dimension Validation ---
+def test_128_non_default_slide_dimensions_validation(sample_certified_deck):
+    deck_structure, content_pkg, resolved_deck, render_manifest, style_manifest, prs, raw_bytes = sample_certified_deck
+
+    # Create a synthetic 10.0" x 7.5" custom slide dimension (e.g. 4:3 variant)
+    synthetic_w_emu = int(Inches(10.0))
+    synthetic_h_emu = int(Inches(7.5))
+
+    buf = io.BytesIO()
+    prs.save(buf)
+    buf.seek(0)
+    prs_custom = pptx.Presentation(buf)
+    prs_custom.slide_width = Inches(10.0)
+    prs_custom.slide_height = Inches(7.5)
+
+    custom_resolved = resolved_deck.model_copy(deep=True)
+    custom_resolved.metadata["slide_width_emu"] = synthetic_w_emu
+    custom_resolved.metadata["slide_height_emu"] = synthetic_h_emu
+
+    # Adjust shape coordinates in prs_custom to match normalized bounds * synthetic_w_emu
+    for s_idx, s in enumerate(prs_custom.slides):
+        layout_slide = custom_resolved.slides[s_idx]
+        obj_map = {o.object_name: o for o in layout_slide.object_layouts}
+        for sh in s.shapes:
+            if sh.name in obj_map:
+                exp_obj = obj_map[sh.name]
+                sh.left = int(exp_obj.bounds.left * synthetic_w_emu)
+                sh.top = int(exp_obj.bounds.top * synthetic_h_emu)
+                sh.width = int(exp_obj.bounds.width * synthetic_w_emu)
+                sh.height = int(exp_obj.bounds.height * synthetic_h_emu)
+
+    manifest = DeterministicValidationEngine.validate(
+        prs=prs_custom,
+        style_manifest=style_manifest,
+        render_manifest=render_manifest,
+        resolved_deck=custom_resolved,
+        deck_structure=deck_structure,
+        content_package=content_pkg,
+        raw_pptx_bytes=raw_bytes,
+    )
+
+    assert manifest.stats["slide_width_emu"] == synthetic_w_emu
+    assert manifest.stats["slide_height_emu"] == synthetic_h_emu
+    # Confirm no false safe-area or geometry errors were triggered by hardcoded 13.333" assumption
+    geom_issues = [i for i in manifest.issues if i.category in (ValidationCategory.GEOMETRY, ValidationCategory.SAFE_AREA)]
+    assert len(geom_issues) == 0
+
+
+# --- Test 129: Intentional Overlay Passes Validation ---
+def test_129_intentional_overlay_pass(sample_certified_deck):
+    deck_structure, content_pkg, resolved_deck, render_manifest, style_manifest, prs, raw_bytes = sample_certified_deck
+
+    slide_1 = prs.slides[0]
+    base_shape = next(sh for sh in slide_1.shapes if "TABLE" in sh.name)
+
+    # Add an authorized overlay badge overlapping the table
+    badge = slide_1.shapes.add_shape(1, base_shape.left + 50000, base_shape.top + 50000, 300000, 150000)
+    badge.name = "OVERLAY_BADGE_STATUS_01"
+
+    manifest = DeterministicValidationEngine.validate(
+        prs=prs,
+        style_manifest=style_manifest,
+        render_manifest=render_manifest,
+        resolved_deck=resolved_deck,
+        deck_structure=deck_structure,
+        content_package=content_pkg,
+        raw_pptx_bytes=raw_bytes,
+    )
+
+    collision_issues = [i for i in manifest.issues if i.category == ValidationCategory.COLLISION and "OVERLAY_BADGE" in i.message]
+    assert len(collision_issues) == 0, "Intentional overlay was incorrectly flagged as collision"
+
+
+# --- Test 130: Grouped / Multi-shape Semantic Object Passes Validation ---
+def test_130_grouped_multi_shape_semantic_object_pass(sample_certified_deck):
+    deck_structure, content_pkg, resolved_deck, render_manifest, style_manifest, prs, raw_bytes = sample_certified_deck
+
+    slide_1 = prs.slides[0]
+    # Remove existing table from slide 1 to isolate multi-shape card validation
+    tbl_shape = next(sh for sh in slide_1.shapes if "TABLE" in sh.name)
+    tbl_shape._element.getparent().remove(tbl_shape._element)
+
+    # Add multi-shape semantic components belonging to the same object
+    container = slide_1.shapes.add_shape(1, Inches(1.0), Inches(2.0), Inches(3.0), Inches(2.0))
+    container.name = "HV_METRIC_CARD_01::card_bg"
+
+    label = slide_1.shapes.add_shape(1, Inches(1.2), Inches(2.2), Inches(2.0), Inches(1.0))
+    label.name = "HV_METRIC_CARD_01::text_val"
+
+    manifest = DeterministicValidationEngine.validate(
+        prs=prs,
+        style_manifest=style_manifest,
+        render_manifest=render_manifest,
+        resolved_deck=resolved_deck,
+        deck_structure=deck_structure,
+        content_package=content_pkg,
+        raw_pptx_bytes=raw_bytes,
+    )
+
+    card_collisions = [i for i in manifest.issues if i.category == ValidationCategory.COLLISION and "HV_METRIC_CARD_01" in i.message]
+    assert len(card_collisions) == 0, "Grouped multi-shape semantic object was incorrectly flagged as collision"
+
+
+# --- Test 131: Chart / Footer Collision is CRITICAL ---
+def test_131_chart_footer_collision_critical(sample_certified_deck):
+    deck_structure, content_pkg, resolved_deck, render_manifest, style_manifest, prs, raw_bytes = sample_certified_deck
+
+    slide_2 = prs.slides[1]
+    chart_shape = next(sh for sh in slide_2.shapes if sh.has_chart)
+
+    # Add a footer page number shape and make the chart overlap it
+    footer = slide_2.shapes.add_shape(1, chart_shape.left, chart_shape.top + chart_shape.height - 200000, 500000, 300000)
+    footer.name = "FOOTER_PAGE_NUM_01"
+
+    manifest = DeterministicValidationEngine.validate(
+        prs=prs,
+        style_manifest=style_manifest,
+        render_manifest=render_manifest,
+        resolved_deck=resolved_deck,
+        deck_structure=deck_structure,
+        content_package=content_pkg,
+        raw_pptx_bytes=raw_bytes,
+    )
+
+    collision_issues = [i for i in manifest.issues if i.category == ValidationCategory.COLLISION and "FOOTER_PAGE_NUM" in i.message]
+    assert len(collision_issues) > 0, "Blocking chart/footer collision was not detected"
+    assert collision_issues[0].severity == ValidationSeverity.CRITICAL
+
+
+# --- Test 132: Title / Image Collision is CRITICAL ---
+def test_132_title_image_collision_critical(sample_certified_deck):
+    deck_structure, content_pkg, resolved_deck, render_manifest, style_manifest, prs, raw_bytes = sample_certified_deck
+
+    slide_1 = prs.slides[0]
+    title_shape = next(sh for sh in slide_1.shapes if "TITLE" in sh.name)
+
+    # Add an image shape that collides directly with the title
+    img_shape = slide_1.shapes.add_shape(1, title_shape.left, title_shape.top, Inches(4.0), Inches(1.5))
+    img_shape.name = "HV_WORKFORCE_HEALTH_01_IMAGE_HERO"
+
+    manifest = DeterministicValidationEngine.validate(
+        prs=prs,
+        style_manifest=style_manifest,
+        render_manifest=render_manifest,
+        resolved_deck=resolved_deck,
+        deck_structure=deck_structure,
+        content_package=content_pkg,
+        raw_pptx_bytes=raw_bytes,
+    )
+
+    collision_issues = [i for i in manifest.issues if i.category == ValidationCategory.COLLISION and ("TITLE" in i.message or "IMAGE_HERO" in i.message)]
+    assert len(collision_issues) > 0, "Blocking title/image collision was not detected"
+    assert collision_issues[0].severity == ValidationSeverity.CRITICAL
