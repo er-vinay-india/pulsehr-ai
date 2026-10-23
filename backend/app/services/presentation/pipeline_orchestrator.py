@@ -401,14 +401,55 @@ def execute_presentation_pipeline_async(
                     job_id,
                 )
 
-                # PPT-L6 Invariant Boundary:
-                # Layered mode stops strictly after validated RenderManifest and compiled PPTX artifact.
-                # PPT-L6 realizes objects; it does ZERO brand colors, ZERO theme styling, ZERO font styling.
+                # PPT-L7: Theme / Style Engine
+                from .theme_engine import ThemeEngine
+                from .theme_applicator import ThemeApplicator
+                from .style_validator import StyleValidator
+                import pptx
+
+                requested_theme = ThemeEngine.get_theme(scope.get("theme") or scope.get("theme_id"))
+                prs = pptx.Presentation(str(pptx_path))
+                applicator = ThemeApplicator(theme=requested_theme)
+                prs, style_manifest = applicator.apply_theme(
+                    prs=prs,
+                    render_manifest=render_manifest,
+                    resolved_deck=resolved_deck,
+                    overrides=scope.get("theme_overrides"),
+                )
+
+                styled_pptx_path = pptx_path.parent / f"styled_{pptx_path.name}"
+                prs.save(str(styled_pptx_path))
+                with open(styled_pptx_path, "rb") as f:
+                    styled_bytes = f.read()
+
+                style_report = StyleValidator.validate(
+                    prs=prs,
+                    style_manifest=style_manifest,
+                    render_manifest=render_manifest,
+                    resolved_deck=resolved_deck,
+                    theme=requested_theme,
+                    raw_pptx_bytes=styled_bytes,
+                )
+
+                workspace_evidence["style_manifest"] = style_manifest.model_dump()
+                logger.info(
+                    "ThemeApplicator generated StyleManifest (%d slides, %d objects styled, theme=%s, fingerprint=%s) at %s for job %s",
+                    len(style_manifest.slide_styles),
+                    len(style_manifest.object_styles),
+                    requested_theme.theme_id,
+                    style_manifest.style_fingerprint[:12],
+                    styled_pptx_path,
+                    job_id,
+                )
+
+                # PPT-L7 Invariant Boundary:
+                # Layered mode stops strictly after validated StyleManifest and styled PPTX artifact.
+                # PPT-L7 styles objects; it does ZERO layout recomputations, ZERO physical slide creations, ZERO AI calls.
                 deck_id = f"DECK-{deck_story_plan.plan_id}"
                 layered_deck_spec = {
                     "id": deck_id,
                     "title": deck_story_plan.deck_title,
-                    "slides": [],  # PPT-L6: 0 legacy slides (compiled DrawingML slides stored in render_manifest and pptx_path)
+                    "slides": [],  # PPT-L7: 0 legacy slides (compiled DrawingML slides stored in render_manifest and styled_pptx_path)
                     "metadata": {
                         "pipeline_mode": PresentationPipelineMode.LAYERED.value,
                         "content_package": layered_content_package.model_dump(),
@@ -425,6 +466,13 @@ def execute_presentation_pipeline_async(
                         "render_fingerprint": render_manifest.semantic_render_fingerprint,
                         "rendered_slides": [s.model_dump() for s in render_manifest.slides],
                         "pptx_path": str(pptx_path),
+                        "styled_pptx_path": str(styled_pptx_path),
+                        "theme_id": requested_theme.theme_id,
+                        "theme_version": requested_theme.version,
+                        "theme_mode": requested_theme.mode.value,
+                        "style_manifest": style_manifest.model_dump(),
+                        "style_fingerprint": style_manifest.style_fingerprint,
+                        "style_report": style_report.model_dump(),
                         "target_audience": deck_story_plan.target_audience,
                         "user_objective": deck_story_plan.user_objective,
                         "total_logical_slides": len(deck_story_plan.logical_slides),
@@ -437,6 +485,7 @@ def execute_presentation_pipeline_async(
                         "status": "STRUCTURE_VALIDATED" if not deck_structure.replan_required else "STRUCTURE_REPLAN_REQUIRED",
                         "layout_status": "LAYOUT_RESOLVED" if not resolved_deck.replan_required else "LATE_SPLIT_REQUIRED",
                         "render_status": "RENDER_VALIDATED" if not render_manifest.replan_required else "RENDER_REPLAN_REQUIRED",
+                        "style_status": "STYLE_VALIDATED" if style_report.is_valid else "STYLE_INVALID",
                     },
                     "evidence_ledger": primary_ctx.get("evidence_ledger", []) or workspace_evidence.get("evidence_ledger", []),
                 }
@@ -444,7 +493,7 @@ def execute_presentation_pipeline_async(
                 mgr.update_stage(
                     job_id,
                     "ready",
-                    f"Phase 6 Complete: Validated RenderManifest and PPTX artifact generated ({len(resolved_deck.slides)} slides, {resolved_deck.total_objects} objects, {render_manifest.total_native_editable} editable). Ready for PPT-L7.",
+                    f"Phase 7 Complete: Validated StyleManifest and styled PPTX artifact generated ({len(resolved_deck.slides)} slides, {len(style_manifest.object_styles)} objects styled, theme={requested_theme.theme_id}). Ready for PPT-L8.",
                     100,
                     deck_id=deck_id,
                     extra={
