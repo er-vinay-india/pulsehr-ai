@@ -263,6 +263,10 @@ class ResolvedSlideLayout(BaseModel):
     layout_fingerprint: str = Field(default="", description="Deterministic SHA-256 fingerprint")
     metadata: dict[str, Any] = Field(default_factory=dict)
 
+    @property
+    def slide_id(self) -> str:
+        return self.physical_slide_id
+
 
 class ResolvedDeckLayout(BaseModel):
     """Complete layout specification for an entire deck across all physical slides."""

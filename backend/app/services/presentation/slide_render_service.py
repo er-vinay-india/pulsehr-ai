@@ -59,6 +59,7 @@ class SlideRenderService:
         force_rerender: bool = False,
         target_slide_ids: Optional[list[str]] = None,
         width_px: int = 1920,
+        physical_slide_ids: Optional[list[str]] = None,
     ) -> list[RenderedSlideArtifact]:
         """Renders all or targeted physical slides from PPTX to high-resolution PNGs."""
         deck_dir = self.output_dir / deck_id
@@ -74,8 +75,11 @@ class SlideRenderService:
         artifacts: list[RenderedSlideArtifact] = []
 
         for idx, slide in enumerate(prs.slides):
-            # Derive physical slide id from shapes or index
-            slide_id = self._extract_slide_id(slide, idx)
+            # Derive physical slide id from parameter, shapes or index
+            if physical_slide_ids and idx < len(physical_slide_ids):
+                slide_id = physical_slide_ids[idx]
+            else:
+                slide_id = self._extract_slide_id(slide, idx)
 
             if target_slide_ids and slide_id not in target_slide_ids:
                 # Reuse existing cached artifact if available

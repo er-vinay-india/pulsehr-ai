@@ -153,6 +153,26 @@ class PhysicalSlideInstance(BaseModel):
     )
     metadata: dict[str, Any] = Field(default_factory=dict)
 
+    @property
+    def title(self) -> str:
+        return self.headline or self.semantic_topic.replace("_", " ").title()
+
+    @property
+    def headline_text(self) -> str:
+        return self.headline
+
+    @property
+    def takeaway_text(self) -> str:
+        return self.metadata.get("takeaway", "") or self.slide_purpose or self.headline
+
+    @property
+    def planned_layout_family(self) -> str:
+        return self.metadata.get("planned_layout_family", "chart_narrative")
+
+    @property
+    def logical_tag(self) -> str:
+        return self.structural_role.value if hasattr(self.structural_role, "value") else str(self.structural_role)
+
 
 class LogicalTopicMapping(BaseModel):
     """Tracks the expansion mapping from one logical slide to one or more physical slides."""

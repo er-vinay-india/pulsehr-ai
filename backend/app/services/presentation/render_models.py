@@ -68,6 +68,14 @@ class RenderedSlideRecord(BaseModel):
     slide_fingerprint: str
     metadata: dict[str, Any] = Field(default_factory=dict)
 
+    @property
+    def slide_id(self) -> str:
+        return self.physical_slide_id
+
+    @property
+    def render_fingerprint(self) -> str:
+        return self.slide_fingerprint
+
 
 class RenderManifest(BaseModel):
     """Immutable audit manifest of a compiled PowerPoint presentation."""

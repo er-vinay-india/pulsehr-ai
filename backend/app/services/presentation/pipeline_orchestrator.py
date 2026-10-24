@@ -381,6 +381,42 @@ def execute_presentation_pipeline_async(
                     for idx, s in enumerate(physical_manifest.slides)
                 ]
 
+                # Insert initial deck record to satisfy presentation_jobs.deck_id FK constraint
+                initial_spec = {
+                    "id": deck_id,
+                    "title": deck_story_plan.deck_title,
+                    "slides": manifest_slides,
+                    "metadata": {
+                        "deck_revision": 1,
+                        "pipeline_mode": PresentationPipelineMode.LAYERED.value,
+                        "manifest_locked": True,
+                    }
+                }
+                now_str = datetime.datetime.now(datetime.timezone.utc).isoformat()
+                with session_scope() as conn:
+                    conn.execute(
+                        """
+                        INSERT INTO presentation_decks (id, title, dataset_id, sheet_id, theme_id, spec_json, pptx_filename, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(id) DO UPDATE SET
+                            title = excluded.title,
+                            spec_json = excluded.spec_json,
+                            updated_at = excluded.updated_at
+                        """,
+                        (
+                            deck_id,
+                            deck_story_plan.deck_title,
+                            scope.get("dataset_id") or (primary_ctx.get("target_sheet") or {}).get("dataset_id"),
+                            scope.get("sheet_id") or (primary_ctx.get("target_sheet") or {}).get("id"),
+                            scope.get("theme_id") or scope.get("theme") or "executive_dark",
+                            json.dumps(initial_spec),
+                            "",
+                            now_str,
+                            now_str,
+                        ),
+                    )
+                    conn.commit()
+
                 # Stage 3: Preparing slides (Manifest locked)
                 mgr.update_stage(
                     job_id,
@@ -438,7 +474,7 @@ def execute_presentation_pipeline_async(
                 # Update slide statuses to RENDERING and attach zones
                 for s_data in manifest_slides:
                     s_data["status"] = "RENDERING"
-                    res_s = next((s for s in resolved_deck.slides if s.slide_id == s_data["physical_slide_id"]), None)
+                    res_s = next((s for s in resolved_deck.slides if s.physical_slide_id == s_data["physical_slide_id"]), None)
                     if res_s:
                         s_data["zones"] = [z.zone_id for z in res_s.zones]
 
@@ -530,7 +566,7 @@ def execute_presentation_pipeline_async(
 
                 for s_data in manifest_slides:
                     s_data["status"] = "VALIDATING"
-                    rm_slide = next((s for s in render_manifest.slides if s.slide_id == s_data["physical_slide_id"]), None)
+                    rm_slide = next((s for s in render_manifest.slides if s.physical_slide_id == s_data["physical_slide_id"]), None)
                     if rm_slide:
                         s_data["render_fingerprint"] = rm_slide.render_fingerprint
 
@@ -605,6 +641,7 @@ def execute_presentation_pipeline_async(
                     prs=prs,
                     deck_id=deck_id,
                     source_pptx_fingerprint=style_manifest.style_fingerprint,
+                    physical_slide_ids=[s.physical_slide_id for s in physical_manifest.slides],
                 )
 
                 review_engine = VisualReviewEngine()
@@ -667,8 +704,8 @@ def execute_presentation_pipeline_async(
                 # Populate structured slides for Studio inspection, editing, and rendering
                 slides_spec = []
                 for idx, ps in enumerate(physical_manifest.slides):
-                    res_slide = next((s for s in resolved_deck.slides if s.slide_id == ps.physical_slide_id), None)
-                    rm_slide = next((s for s in render_manifest.slides if s.slide_id == ps.physical_slide_id), None)
+                    res_slide = next((s for s in resolved_deck.slides if s.physical_slide_id == ps.physical_slide_id), None)
+                    rm_slide = next((s for s in render_manifest.slides if s.physical_slide_id == ps.physical_slide_id), None)
                     slide_entry = {
                         "id": ps.physical_slide_id,
                         "physical_slide_id": ps.physical_slide_id,

@@ -137,6 +137,8 @@ class GeneratePresentationRequest(BaseModel):
     transition: Literal["none", "fade", "slide", "scale", "reveal"] = "none"
     animation: Literal["none", "fade"] = "none"
     enable_ai_planner: bool = True
+    pipeline_mode: str | None = None
+    use_layered_pipeline: bool | None = None
 
 
 class ReviewGateSignoffRequest(BaseModel):
@@ -268,6 +270,8 @@ def start_presentation_generation(req: GeneratePresentationRequest):
         "transition": req.transition,
         "animation": req.animation,
         "enable_ai_planner": req.enable_ai_planner,
+        "pipeline_mode": req.pipeline_mode,
+        "use_layered_pipeline": req.use_layered_pipeline,
     }
     job_id = start_presentation_job(scope)
 
@@ -414,14 +418,14 @@ def get_slide_thumbnail(deck_id: str, slide_id: str):
                     headers={"Cache-Control": "public, max-age=3600"},
                 )
 
-    # Check deck spec metadata slide_artifacts
+    # Check deck spec metadata slide_artifacts or slide list to map slide_id to index
     with session_scope() as conn:
         row = conn.execute("SELECT spec_json FROM presentation_decks WHERE id = ?", (deck_id,)).fetchone()
         if row:
             spec = json.loads(row["spec_json"])
             artifacts = spec.get("metadata", {}).get("slide_artifacts", [])
             for art in artifacts:
-                if art.get("slide_id") == slide_id and art.get("image_path"):
+                if (art.get("slide_id") == slide_id or art.get("physical_slide_id") == slide_id) and art.get("image_path"):
                     p = Path(art["image_path"])
                     if p.exists():
                         return FileResponse(
@@ -429,6 +433,28 @@ def get_slide_thumbnail(deck_id: str, slide_id: str):
                             media_type="image/png",
                             headers={"Cache-Control": "public, max-age=3600"},
                         )
+
+            # Match by slide index if slide_id matches a slide in spec
+            slides = spec.get("slides", [])
+            for idx, s in enumerate(slides):
+                if s.get("id") == slide_id or s.get("physical_slide_id") == slide_id:
+                    slide_order = s.get("slide_order") or (idx + 1)
+                    if rendered_dir.exists():
+                        for file in rendered_dir.glob(f"slide_{slide_order:03d}_*.png"):
+                            return FileResponse(
+                                path=str(file),
+                                media_type="image/png",
+                                headers={"Cache-Control": "public, max-age=3600"},
+                            )
+                    for art in artifacts:
+                        if art.get("slide_index") == slide_order and art.get("image_path"):
+                            p = Path(art["image_path"])
+                            if p.exists():
+                                return FileResponse(
+                                    path=str(p),
+                                    media_type="image/png",
+                                    headers={"Cache-Control": "public, max-age=3600"},
+                                )
 
     raise HTTPException(status_code=404, detail=f"Thumbnail for slide {slide_id} in deck {deck_id} not found.")
 
