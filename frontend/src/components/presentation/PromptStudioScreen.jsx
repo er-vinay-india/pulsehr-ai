@@ -116,6 +116,7 @@ export default function PromptStudioScreen({
   const [mainTakeaway, setMainTakeaway] = useState("");
   const [presentationTimeMinutes, setPresentationTimeMinutes] = useState(15);
   const [deliverable, setDeliverable] = useState("pptx");
+  const [pipelineMode, setPipelineMode] = useState("legacy");
   const [animation, setAnimation] = useState("none");
   const [sourceMode, setSourceMode] = useState("dashboard_truth"); // "dashboard_truth" | "custom_prompt"
   const [customPrompt, setCustomPrompt] = useState("");
@@ -170,6 +171,7 @@ export default function PromptStudioScreen({
       mainTakeaway,
       presentationTimeMinutes: Number(presentationTimeMinutes) || 15,
       deliverable,
+      pipelineMode,
       instructions,
       scopeType: sourceScope,
       customPrompt: sourceMode === "custom_prompt" ? customPrompt : null,
@@ -192,6 +194,7 @@ export default function PromptStudioScreen({
     mainTakeaway,
     presentationTimeMinutes,
     deliverable,
+    pipelineMode,
     instructions,
     sourceScope,
     customPrompt,
@@ -789,6 +792,27 @@ export default function PromptStudioScreen({
                     ]}
                     fullWidth
                   />
+                </div>
+
+                <div className="pres-form-group">
+                  <label htmlFor="pres-pipeline-select" className="pres-field-label">
+                    <Layers size={14} className="field-icon" aria-hidden="true" />
+                    <span>Presentation Architecture</span>
+                  </label>
+                  <Select
+                    id="pres-pipeline-select"
+                    className="pres-field-control"
+                    value={pipelineMode}
+                    onChange={(e) => setPipelineMode(e.target.value)}
+                    options={[
+                      { value: "legacy", label: "Standard Pipeline (Battle-tested Fallback Default)" },
+                      { value: "layered", label: "Layered Architecture (Next-Gen Native DrawingML + Bounded Review)" }
+                    ]}
+                    fullWidth
+                  />
+                  <span className="pres-field-hint">
+                    Safe dual-path architecture: defaults to battle-tested standard engine with zero-downtime layered support.
+                  </span>
                 </div>
               </div>
             </div>

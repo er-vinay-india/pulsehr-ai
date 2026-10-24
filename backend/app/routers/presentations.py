@@ -86,7 +86,10 @@ def preview_slide_layout(slide: dict[str, Any], theme_id: str | None = None):
     """Resolve one slide locally using the same geometry as PPTX/PDF exports."""
     from ..services.presentation.slide_layout import resolve_slide, SlideLayoutError
     try:
-        return {"plan": resolve_slide(slide, theme_id)}
+        clean_slide = dict(slide)
+        if clean_slide.get("zones") and not clean_slide.get("chart") and clean_slide.get("layout") in ("chart_narrative", "full_chart_takeaway", "two_charts"):
+            clean_slide["layout"] = "comparison_split"
+        return {"plan": resolve_slide(clean_slide, theme_id)}
     except SlideLayoutError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 

@@ -380,8 +380,8 @@ export function usePresentationWorkflow({
         scrim_opacity: options.scrimOpacity ?? 70,
         transition: options.transitionStyle || "none",
         animation: options.animation || "none",
-        pipeline_mode: options.pipelineMode || "layered",
-        use_layered_pipeline: options.useLayeredPipeline !== undefined ? options.useLayeredPipeline : true,
+        pipeline_mode: options.pipelineMode || undefined,
+        use_layered_pipeline: options.useLayeredPipeline !== undefined ? options.useLayeredPipeline : (options.pipelineMode === "layered" ? true : undefined),
       };
       const res = await startPresentationGeneration(scope);
       if (revision !== navigationRevisionRef.current) return;
