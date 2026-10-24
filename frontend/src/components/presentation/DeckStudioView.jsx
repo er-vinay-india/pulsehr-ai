@@ -68,7 +68,8 @@ export default function DeckStudioView({
   onOpenRegenerate,
   onRefineSlide,
   isBusy = false,
-  onApplyImage
+  onApplyImage,
+  onTargetedRegenerate = null
 }) {
   const [isSlideOptionsOpen, setIsSlideOptionsOpen] = useState(false);
   const [pdfExporting, setPdfExporting] = useState(false);
@@ -82,6 +83,15 @@ export default function DeckStudioView({
   const [previousSlideSnapshot, setPreviousSlideSnapshot] = useState(null);
   const [showApprovalBanner, setShowApprovalBanner] = useState(false);
   const [mutationSummary, setMutationSummary] = useState("");
+
+  // Targeted Editing Drawer State (PPT-L10)
+  const [isTargetDrawerOpen, setIsTargetDrawerOpen] = useState(false);
+  const [selectedTargetZone, setSelectedTargetZone] = useState("");
+  const [targetPrompt, setTargetPrompt] = useState("");
+  const [isTargetWorking, setIsTargetWorking] = useState(false);
+  const [targetError, setTargetError] = useState("");
+  const [targetSuccess, setTargetSuccess] = useState("");
+
   const notesPanelRef = React.useRef(null);
   const shouldRevealNotes = React.useRef(false);
 
@@ -224,12 +234,42 @@ export default function DeckStudioView({
     setPreviousSlideSnapshot(null);
   }, [currentSlide?.id]);
 
+  const handleApplyTargetedRegen = async (promptOverride = null) => {
+    const instruction = (promptOverride || targetPrompt).trim();
+    if (!onTargetedRegenerate || isTargetWorking) return;
+    setIsTargetWorking(true);
+    setTargetError("");
+    setTargetSuccess("");
+    try {
+      const slideId = currentSlide?.physical_slide_id || currentSlide?.id;
+      const res = await onTargetedRegenerate({
+        physical_slide_id: slideId,
+        zone_id: selectedTargetZone || null,
+        user_instruction: instruction || "Regenerate target"
+      });
+      setTargetSuccess(res?.diff_summary || "Targeted revision applied successfully.");
+      setTargetPrompt("");
+    } catch (err) {
+      setTargetError(err.message || "Targeted regeneration failed");
+    } finally {
+      setIsTargetWorking(false);
+    }
+  };
+
   const handlePrintPdf = async () => {
     setPdfExporting(true);
     setPdfError('');
-    try { await exportPresentationPdf(deckSpec); }
-    catch (error) { setPdfError(error.message); }
-    finally { setPdfExporting(false); }
+    try {
+      if (deckSpec?.id) {
+        window.open(`/api/presentations/download/${deckSpec.id}/pdf`, '_blank');
+      } else {
+        await exportPresentationPdf(deckSpec);
+      }
+    } catch (error) {
+      setPdfError(error.message);
+    } finally {
+      setPdfExporting(false);
+    }
   };
 
   return (
@@ -334,6 +374,22 @@ export default function DeckStudioView({
         </div>
 
         <div className="toolbar-right">
+          {/* Targeted Edit Drawer Trigger (PPT-L10) */}
+          <DeckControl className="symbolic-btn-wrap">
+            <button
+              type="button"
+              className={`symbolic-action-btn ${isTargetDrawerOpen ? "active" : ""}`}
+              onClick={() => setIsTargetDrawerOpen(!isTargetDrawerOpen)}
+              aria-label="Targeted Slide & Zone Editing"
+            >
+              <Sparkles size={14} />
+              <span className="btn-label-responsive">Targeted edit</span>
+            </button>
+            <span className="symbolic-tooltip">
+              Targeted Editing: Regenerate a specific slide, zone, or layout without regenerating the whole deck
+            </span>
+          </DeckControl>
+
           {/* Executive AI Orb Launcher */}
           <DeckControl className="symbolic-btn-wrap">
             <button
@@ -485,9 +541,12 @@ export default function DeckStudioView({
             <div className="thumbnails-scroll-wrap">
               {deckSpec.slides.map((s, idx) => {
                 const isActive = idx === activeSlideIndex;
+                const slideId = s.physical_slide_id || s.id || `slide-${idx + 1}`;
+                const thumbUrl = s.thumbnail_url || (deckSpec.id ? `/api/presentations/decks/${deckSpec.id}/slides/${slideId}/thumbnail` : null);
+                const slideStatus = s.status || "READY";
                 return (
                   <div
-                    key={s.id || idx}
+                    key={slideId}
                     role="button"
                     tabIndex={0}
                     aria-current={isActive ? "true" : undefined}
@@ -504,8 +563,35 @@ export default function DeckStudioView({
                     <div className="thumb-header">
                       <span className="thumb-idx">{idx + 1}</span>
                       <span className="thumb-layout-tag">{s.layout?.replace(/_/g, " ")}</span>
+                      <span
+                        style={{
+                          fontSize: "9px",
+                          fontWeight: "700",
+                          padding: "1px 5px",
+                          borderRadius: "3px",
+                          textTransform: "uppercase",
+                          letterSpacing: "0.03em",
+                          background: slideStatus === "READY" ? "rgba(16, 185, 129, 0.15)" : "rgba(59, 130, 246, 0.15)",
+                          color: slideStatus === "READY" ? "var(--color-brand-secondary)" : "var(--color-brand-accent, #3b82f6)"
+                        }}
+                      >
+                        {slideStatus}
+                      </span>
                     </div>
-                    <div className="thumb-title-preview">{s.title}</div>
+
+                    {thumbUrl ? (
+                      <div className="thumb-img-wrap" style={{ position: "relative", overflow: "hidden", borderRadius: "4px", minHeight: "55px", background: "var(--color-bg-base)" }}>
+                        <img
+                          src={thumbUrl}
+                          alt={s.title || `Slide ${idx + 1}`}
+                          style={{ width: "100%", height: "auto", display: "block", objectFit: "contain" }}
+                          onError={(e) => { e.currentTarget.style.display = "none"; }}
+                        />
+                        <div className="thumb-title-preview" style={{ padding: "4px 6px" }}>{s.title}</div>
+                      </div>
+                    ) : (
+                      <div className="thumb-title-preview">{s.title}</div>
+                    )}
 
                     {/* Thumbnail slide actions */}
                     <div className="thumb-actions" onClick={(e) => e.stopPropagation()}>
@@ -705,6 +791,160 @@ export default function DeckStudioView({
             </div>
           )}
         </div>
+
+        {/* RIGHT: TARGETED EDITING DRAWER (Non-obstructive side drawer) */}
+        {isTargetDrawerOpen && (
+          <aside
+            className="studio-target-drawer"
+            role="region"
+            aria-label="Targeted editing side panel"
+            style={{
+              width: "320px",
+              minWidth: "300px",
+              background: "var(--color-bg-surface)",
+              borderLeft: "1px solid var(--color-border-subtle)",
+              display: "flex",
+              flexDirection: "column",
+              gap: "14px",
+              padding: "16px",
+              boxShadow: "var(--shadow-sm)",
+              overflowY: "auto"
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid var(--color-border-subtle)", paddingBottom: "10px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                <Sparkles size={15} style={{ color: "var(--color-brand-secondary)" }} />
+                <strong style={{ fontSize: "14px", color: "var(--color-text-primary)" }}>Targeted Editing</strong>
+              </div>
+              <button
+                type="button"
+                className="btn-thumb-action"
+                onClick={() => setIsTargetDrawerOpen(false)}
+                aria-label="Close targeted editing"
+                style={{ border: "none", background: "transparent", cursor: "pointer", fontSize: "14px" }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div style={{ fontSize: "11px", color: "var(--color-text-secondary)", display: "flex", flexDirection: "column", gap: "4px" }}>
+              <div><strong>Slide ID:</strong> {currentSlide?.physical_slide_id || currentSlide?.id || `Slide ${activeSlideIndex + 1}`}</div>
+              <div><strong>Active Title:</strong> {currentSlide?.title || "Untitled"}</div>
+              <div><strong>Layout:</strong> {currentSlide?.layout || "chart_narrative"}</div>
+            </div>
+
+            {/* Zone Selector if zones exist */}
+            {currentSlide?.zones && currentSlide.zones.length > 0 && (
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                <label style={{ fontSize: "12px", fontWeight: "600", color: "var(--color-text-primary)" }}>
+                  Target Zone / Object:
+                </label>
+                <select
+                  value={selectedTargetZone}
+                  onChange={(e) => setSelectedTargetZone(e.target.value)}
+                  style={{
+                    padding: "6px 8px",
+                    borderRadius: "6px",
+                    border: "1px solid var(--color-border-strong)",
+                    background: "var(--color-bg-base)",
+                    fontSize: "12px",
+                    color: "var(--color-text-primary)"
+                  }}
+                >
+                  <option value="">Entire Slide ({currentSlide.physical_slide_id || `Slide ${activeSlideIndex + 1}`})</option>
+                  {currentSlide.zones.map((z, zi) => (
+                    <option key={z.zone_id || zi} value={z.zone_id}>
+                      {z.zone_id} ({z.semantic_role || z.zone_type || "content"})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Quick action buttons */}
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              <span style={{ fontSize: "11px", fontWeight: "600", textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--color-text-secondary)" }}>
+                Quick Targeted Actions
+              </span>
+              <button
+                type="button"
+                className="btn-secondary btn-sm"
+                disabled={isTargetWorking}
+                onClick={() => handleApplyTargetedRegen("try another layout")}
+                style={{ textAlign: "left", fontSize: "12px" }}
+              >
+                ↻ Try Another Layout Variant
+              </button>
+              <button
+                type="button"
+                className="btn-secondary btn-sm"
+                disabled={isTargetWorking}
+                onClick={() => handleApplyTargetedRegen("Refine conclusion headline for executive clarity")}
+                style={{ textAlign: "left", fontSize: "12px" }}
+              >
+                ✦ Refine Headline Clarity
+              </button>
+              <button
+                type="button"
+                className="btn-secondary btn-sm"
+                disabled={isTargetWorking}
+                onClick={() => handleApplyTargetedRegen("Highlight key operational disparity and financial risk")}
+                style={{ textAlign: "left", fontSize: "12px" }}
+              >
+                ⚡ Highlight Key Disparity & Risk
+              </button>
+            </div>
+
+            {/* Custom Instruction Input */}
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleApplyTargetedRegen();
+              }}
+              style={{ display: "flex", flexDirection: "column", gap: "8px", marginTop: "8px" }}
+            >
+              <label htmlFor="targeted-instruction-input" style={{ fontSize: "12px", fontWeight: "600", color: "var(--color-text-primary)" }}>
+                Custom Instruction:
+              </label>
+              <textarea
+                id="targeted-instruction-input"
+                rows={3}
+                value={targetPrompt}
+                onChange={(e) => setTargetPrompt(e.target.value)}
+                placeholder="e.g. Condense bullets to 2 takeaways, switch to variance split..."
+                style={{
+                  width: "100%",
+                  padding: "8px",
+                  borderRadius: "6px",
+                  border: "1px solid var(--color-border-strong)",
+                  background: "var(--color-bg-base)",
+                  fontSize: "12px",
+                  color: "var(--color-text-primary)",
+                  resize: "vertical"
+                }}
+              />
+              <button
+                type="submit"
+                className="btn-primary btn-sm"
+                disabled={isTargetWorking || (!targetPrompt.trim() && !selectedTargetZone)}
+                style={{ marginTop: "4px" }}
+              >
+                {isTargetWorking ? "Applying targeted update..." : "Apply Targeted Revision"}
+              </button>
+            </form>
+
+            {targetError && (
+              <div style={{ fontSize: "11px", color: "var(--color-error)", padding: "6px 8px", background: "var(--color-bg-soft-error)", borderRadius: "4px" }}>
+                {targetError}
+              </div>
+            )}
+            {targetSuccess && (
+              <div style={{ fontSize: "11px", color: "var(--color-brand-secondary)", padding: "6px 8px", background: "var(--color-bg-soft-teal)", borderRadius: "4px" }}>
+                {targetSuccess}
+              </div>
+            )}
+          </aside>
+        )}
       </fieldset>
 
       {/* Royalty-Free Image Picker Modal */}

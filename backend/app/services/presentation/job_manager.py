@@ -242,7 +242,8 @@ class PresentationJobManager:
                     "slide_status_list",
                     "observer_note",
                     "observer_context",
-                    "active_phase", "phase_started_at", "heartbeat_at", "dependency", "phase_events", "error_code"
+                    "active_phase", "phase_started_at", "heartbeat_at", "dependency", "phase_events", "error_code",
+                    "manifest_locked", "studio_stage", "slides", "rendered_slides", "validated_slides", "visually_certified_slides"
                 )
                 if k in job
             }
@@ -322,6 +323,7 @@ class PresentationJobManager:
                         if "extra_json" in r.keys() and r["extra_json"]:
                             extra_data = json.loads(r["extra_json"])
                             res.update(extra_data)
+                            res["extra"] = extra_data
                     except Exception:
                         pass
                     return res

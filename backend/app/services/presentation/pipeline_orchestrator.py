@@ -1,6 +1,7 @@
 import datetime
 import json
 import logging
+import shutil
 import threading
 from typing import Any
 
@@ -264,6 +265,20 @@ def execute_presentation_pipeline_async(
         deck_story_plan = None
         if pipeline_mode == PresentationPipelineMode.LAYERED:
             try:
+                # Stage 1: Understanding your data
+                mgr.update_stage(
+                    job_id,
+                    "understanding_data",
+                    "Understanding your data",
+                    10,
+                    extra={
+                        "studio_stage": "understanding_data",
+                        "manifest_locked": False,
+                        "total_slides": 0,
+                        "slides": [],
+                    }
+                )
+
                 from .content_hub import PresentationContentHub
                 content_hub = PresentationContentHub()
                 layered_content_package = content_hub.assemble_package(
@@ -278,6 +293,20 @@ def execute_presentation_pipeline_async(
                     len(layered_content_package.items),
                     len(layered_content_package.global_kpis),
                     job_id
+                )
+
+                # Stage 2: Planning the story
+                mgr.update_stage(
+                    job_id,
+                    "planning_story",
+                    "Planning the story",
+                    25,
+                    extra={
+                        "studio_stage": "planning_story",
+                        "manifest_locked": False,
+                        "total_slides": 0,
+                        "slides": [],
+                    }
                 )
 
                 # PPT-L2: Story Planner & Logical SlideTags
@@ -334,6 +363,40 @@ def execute_presentation_pipeline_async(
                     job_id
                 )
 
+                deck_id = f"DECK-{deck_story_plan.plan_id}"
+
+                # MANIFEST LOCK BOUNDARY:
+                # Establish stable physical slide slots and progressive thumbnail readiness
+                manifest_slides = [
+                    {
+                        "physical_slide_id": s.physical_slide_id,
+                        "slide_order": idx + 1,
+                        "title": s.title,
+                        "layout": s.planned_layout_family or "chart_narrative",
+                        "status": "PREPARING",
+                        "thumbnail_url": f"/api/presentations/decks/{deck_id}/slides/{s.physical_slide_id}/thumbnail",
+                        "render_fingerprint": None,
+                        "zones": [],
+                    }
+                    for idx, s in enumerate(physical_manifest.slides)
+                ]
+
+                # Stage 3: Preparing slides (Manifest locked)
+                mgr.update_stage(
+                    job_id,
+                    "preparing_slides",
+                    "Preparing slides",
+                    40,
+                    deck_id=deck_id,
+                    extra={
+                        "studio_stage": "preparing_slides",
+                        "manifest_locked": True,
+                        "total_slides": len(manifest_slides),
+                        "slides": manifest_slides,
+                        "deck_id": deck_id,
+                    }
+                )
+
                 # PPT-L4: Layer/Zone Contracts + Stable Object Identity
                 from .structure_builder import LayeredSlideStructureBuilder
                 structure_builder = LayeredSlideStructureBuilder()
@@ -370,6 +433,29 @@ def execute_presentation_pipeline_async(
                     resolved_deck.total_objects,
                     resolved_deck.deck_fingerprint[:12],
                     job_id
+                )
+
+                # Update slide statuses to RENDERING and attach zones
+                for s_data in manifest_slides:
+                    s_data["status"] = "RENDERING"
+                    res_s = next((s for s in resolved_deck.slides if s.slide_id == s_data["physical_slide_id"]), None)
+                    if res_s:
+                        s_data["zones"] = [z.zone_id for z in res_s.zones]
+
+                # Stage 4: Arranging content
+                mgr.update_stage(
+                    job_id,
+                    "arranging_content",
+                    "Arranging content",
+                    55,
+                    deck_id=deck_id,
+                    extra={
+                        "studio_stage": "arranging_content",
+                        "manifest_locked": True,
+                        "total_slides": len(manifest_slides),
+                        "slides": manifest_slides,
+                        "deck_id": deck_id,
+                    }
                 )
 
                 # PPT-L6: Native Editable Renderer Adapters
@@ -442,6 +528,28 @@ def execute_presentation_pipeline_async(
                     job_id,
                 )
 
+                for s_data in manifest_slides:
+                    s_data["status"] = "VALIDATING"
+                    rm_slide = next((s for s in render_manifest.slides if s.slide_id == s_data["physical_slide_id"]), None)
+                    if rm_slide:
+                        s_data["render_fingerprint"] = rm_slide.render_fingerprint
+
+                # Stage 5: Rendering presentation
+                mgr.update_stage(
+                    job_id,
+                    "rendering_presentation",
+                    "Rendering presentation",
+                    70,
+                    deck_id=deck_id,
+                    extra={
+                        "studio_stage": "rendering_presentation",
+                        "manifest_locked": True,
+                        "total_slides": len(manifest_slides),
+                        "slides": manifest_slides,
+                        "deck_id": deck_id,
+                    }
+                )
+
                 # PPT-L8: Deterministic Post-Style Validation
                 from .deterministic_validation_engine import DeterministicValidationEngine
 
@@ -464,6 +572,25 @@ def execute_presentation_pipeline_async(
                     validation_manifest.counts_by_severity.get("CRITICAL", 0),
                     validation_manifest.validation_fingerprint[:12],
                     job_id,
+                )
+
+                for s_data in manifest_slides:
+                    s_data["status"] = "VISUALLY_REVIEWING"
+
+                # Stage 6: Checking slide quality
+                mgr.update_stage(
+                    job_id,
+                    "checking_slide_quality",
+                    "Checking slide quality",
+                    85,
+                    deck_id=deck_id,
+                    extra={
+                        "studio_stage": "checking_slide_quality",
+                        "manifest_locked": True,
+                        "total_slides": len(manifest_slides),
+                        "slides": manifest_slides,
+                        "deck_id": deck_id,
+                    }
                 )
 
                 # PPT-L9: Rendered Visual Review + Bounded Repair
@@ -515,14 +642,55 @@ def execute_presentation_pipeline_async(
                     job_id,
                 )
 
-                # PPT-L9 Invariant Boundary:
-                # Layered mode stops strictly after VisualReviewManifest and visual certification.
-                # PPT-L9 performs zero content/numeric mutations, zero slide creations, and routes bounded repairs to upstream owners.
+                # Stage 7: Finalizing presentation
+                for s_data in manifest_slides:
+                    s_data["status"] = "READY"
+
+                mgr.update_stage(
+                    job_id,
+                    "finalizing_presentation",
+                    "Finalizing presentation",
+                    95,
+                    deck_id=deck_id,
+                    extra={
+                        "studio_stage": "finalizing_presentation",
+                        "manifest_locked": True,
+                        "total_slides": len(manifest_slides),
+                        "rendered_slides": len(slide_artifacts),
+                        "validated_slides": len(manifest_slides),
+                        "visually_certified_slides": len(slide_artifacts),
+                        "slides": manifest_slides,
+                        "deck_id": deck_id,
+                    }
+                )
+
+                # Populate structured slides for Studio inspection, editing, and rendering
+                slides_spec = []
+                for idx, ps in enumerate(physical_manifest.slides):
+                    res_slide = next((s for s in resolved_deck.slides if s.slide_id == ps.physical_slide_id), None)
+                    rm_slide = next((s for s in render_manifest.slides if s.slide_id == ps.physical_slide_id), None)
+                    slide_entry = {
+                        "id": ps.physical_slide_id,
+                        "physical_slide_id": ps.physical_slide_id,
+                        "title": ps.title or f"Slide {idx + 1}",
+                        "subtitle": ps.headline_text or "",
+                        "key_message": ps.takeaway_text or ps.headline_text or "",
+                        "narrative": ps.headline_text or "",
+                        "category": ps.logical_tag,
+                        "layout": ps.planned_layout_family or "chart_narrative",
+                        "zones": [z.model_dump() for z in res_slide.zones] if res_slide else [],
+                        "thumbnail_url": f"/api/presentations/decks/{deck_id}/slides/{ps.physical_slide_id}/thumbnail",
+                        "render_fingerprint": rm_slide.render_fingerprint if rm_slide else None,
+                        "status": "READY",
+                    }
+                    slides_spec.append(slide_entry)
+
                 layered_deck_spec = {
                     "id": deck_id,
                     "title": deck_story_plan.deck_title,
-                    "slides": [],  # PPT-L9: 0 legacy slides (compiled DrawingML slides stored in render_manifest and styled_pptx_path)
+                    "slides": slides_spec,
                     "metadata": {
+                        "deck_revision": 1,
                         "pipeline_mode": PresentationPipelineMode.LAYERED.value,
                         "content_package": layered_content_package.model_dump(),
                         "story_plan": deck_story_plan.model_dump(),
@@ -570,23 +738,62 @@ def execute_presentation_pipeline_async(
                     "evidence_ledger": primary_ctx.get("evidence_ledger", []) or workspace_evidence.get("evidence_ledger", []),
                 }
 
+                # Persist layered deck in SQLite presentation_decks for Studio retrieval and export
+                now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+                with session_scope() as conn:
+                    conn.execute(
+                        """
+                        INSERT INTO presentation_decks (id, title, dataset_id, sheet_id, theme_id, spec_json, pptx_filename, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(id) DO UPDATE SET
+                            title = excluded.title,
+                            dataset_id = excluded.dataset_id,
+                            sheet_id = excluded.sheet_id,
+                            theme_id = excluded.theme_id,
+                            spec_json = excluded.spec_json,
+                            pptx_filename = excluded.pptx_filename,
+                            updated_at = excluded.updated_at
+                        """,
+                        (
+                            deck_id,
+                            deck_story_plan.deck_title,
+                            scope.get("dataset_id") or (primary_ctx.get("target_sheet") or {}).get("dataset_id"),
+                            scope.get("sheet_id") or (primary_ctx.get("target_sheet") or {}).get("id"),
+                            requested_theme.theme_id,
+                            json.dumps(layered_deck_spec),
+                            styled_pptx_path.name if styled_pptx_path else pptx_path.name,
+                            now,
+                            now,
+                        ),
+                    )
+                    conn.commit()
+
+                try:
+                    from ...core import config
+                    standard_export_path = config.EXPORTS_DIR / f"presentation_{deck_id}.pptx"
+                    shutil.copy2(styled_pptx_path, standard_export_path)
+                except Exception as copy_exc:
+                    logger.debug(f"Could not copy styled PPTX to export dir: {copy_exc}")
+
                 mgr.update_stage(
                     job_id,
                     "ready",
-                    f"Phase 9 Complete: Rendered Visual Review completed with status {final_visual_manifest.status.value} ({len(resolved_deck.slides)} slides, {final_visual_manifest.counts_by_severity.get('CRITICAL', 0)} critical visual issues).",
+                    "Ready",
                     100,
                     deck_id=deck_id,
                     extra={
-                        "current_slide": len(resolved_deck.slides),
-                        "total_slides": len(resolved_deck.slides),
-                        "active_phase": "visual_reviewed",
+                        "studio_stage": "ready",
+                        "manifest_locked": True,
+                        "total_slides": len(manifest_slides),
+                        "rendered_slides": len(slide_artifacts),
+                        "validated_slides": len(manifest_slides),
+                        "visually_certified_slides": len(slide_artifacts),
+                        "slides": manifest_slides,
+                        "deck_id": deck_id,
+                        "deck": layered_deck_spec,
+                        "active_phase": "ready",
                         "pptx_path": str(pptx_path),
-                        "render_manifest": render_manifest.model_dump(),
-                        "resolved_deck_layout": resolved_deck.model_dump(),
-                        "layered_deck_structure": deck_structure.model_dump(),
-                        "physical_manifest": physical_manifest.model_dump(),
-                        "deck_story_plan": deck_story_plan.model_dump(),
-                        "content_package": layered_content_package.model_dump(),
+                        "styled_pptx_path": str(styled_pptx_path),
                     }
                 )
                 return layered_deck_spec

@@ -558,6 +558,30 @@ export async function getPresentationJob(jobId) {
   return res.json();
 }
 
+export async function getStudioPresentationStatus(jobId) {
+  const res = await fetch(`${API_BASE}/presentations/jobs/${jobId}/studio-status`);
+  if (!res.ok) throw new Error("Failed to fetch studio presentation status");
+  return res.json();
+}
+
+export async function regeneratePresentationTarget(deckId, targetPayload) {
+  const res = await fetch(`${API_BASE}/presentations/decks/${deckId}/regenerate-target`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(targetPayload)
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Failed to regenerate target");
+  }
+  return res.json();
+}
+
+export function getSlideThumbnailUrl(deckId, slideId, revision = null) {
+  const rev = revision ? `?v=${revision}` : "";
+  return `${API_BASE}/presentations/decks/${deckId}/slides/${slideId}/thumbnail${rev}`;
+}
+
 export async function cancelPresentationJob(jobId) {
   const res = await fetch(`${API_BASE}/presentations/jobs/${jobId}/cancel`, {
     method: "POST"

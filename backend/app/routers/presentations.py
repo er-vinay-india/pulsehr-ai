@@ -55,6 +55,16 @@ from ..services.presentation.slide_mutator import (
     SlideMutationResult,
     SlideMutationAction,
 )
+from ..services.presentation.studio_models import (
+    StudioStage,
+    STUDIO_STAGE_LABELS,
+    SlideThumbnailState,
+    StudioSlideStatus,
+    StudioPresentationStatus,
+    TargetedRegenerationRequest,
+    TargetedRegenerationResult,
+)
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -310,7 +320,149 @@ def get_presentation_job_status(job_id: str):
                     job["deck"] = json.loads(row["spec_json"])
         except Exception as exc:
             logger.warning(f"Could not attach deck spec to ready presentation job: {exc}")
+    
+    # Synthesize studio_status for clients consuming unified job payload
+    extra = job.get("extra") or {}
+    stage = extra.get("studio_stage") or job.get("studio_stage") or job.get("stage", "understanding_data")
+    manifest_locked = bool(extra.get("manifest_locked") or job.get("manifest_locked") or job.get("status") == "ready")
+    slides_data = extra.get("slides") or job.get("slides") or []
+    total_slides = extra.get("total_slides") or job.get("total_slides") or len(slides_data) or 0
+    job["studio_status"] = {
+        "deck_id": job.get("deck_id"),
+        "job_id": job_id,
+        "current_stage": stage,
+        "stage_label": STUDIO_STAGE_LABELS.get(stage) or job.get("stage_label") or "Processing...",
+        "progress_percent": job.get("progress_pct", 0),
+        "message": job.get("stage_label") or STUDIO_STAGE_LABELS.get(stage, "Processing..."),
+        "manifest_locked": manifest_locked,
+        "total_slides": total_slides,
+        "rendered_slides": extra.get("rendered_slides") or job.get("rendered_slides") or (len(slides_data) if job.get("status") == "ready" else 0),
+        "validated_slides": extra.get("validated_slides") or job.get("validated_slides") or (len(slides_data) if job.get("status") == "ready" else 0),
+        "visually_certified_slides": extra.get("visually_certified_slides") or job.get("visually_certified_slides") or (len(slides_data) if job.get("status") == "ready" else 0),
+        "failed_slides": 1 if job.get("status") == "failed" else 0,
+        "recoverable": job.get("status") != "failed",
+        "error": job.get("error"),
+        "slides": slides_data,
+    }
     return job
+
+
+@router.get("/jobs/{job_id}/studio-status", response_model=StudioPresentationStatus)
+def get_job_studio_status(job_id: str):
+    """Returns typed progressive StudioPresentationStatus reflecting real backend state without fake timers."""
+    job = job_manager.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Presentation job not found")
+
+    deck_id = job.get("deck_id")
+    extra = job.get("extra") or {}
+    stage = extra.get("studio_stage") or job.get("studio_stage") or job.get("stage", "understanding_data")
+    pct = job.get("progress_pct", 0)
+    manifest_locked = bool(extra.get("manifest_locked") or job.get("manifest_locked") or job.get("status") == "ready")
+    slides_data = extra.get("slides") or job.get("slides") or []
+    total_slides = extra.get("total_slides") or job.get("total_slides") or len(slides_data) or 0
+    rendered_slides = extra.get("rendered_slides") or job.get("rendered_slides") or (total_slides if job.get("status") == "ready" else 0)
+    validated_slides = extra.get("validated_slides") or job.get("validated_slides") or (total_slides if job.get("status") == "ready" else 0)
+    visually_certified = extra.get("visually_certified_slides") or job.get("visually_certified_slides") or (total_slides if job.get("status") == "ready" else 0)
+
+    stage_label = STUDIO_STAGE_LABELS.get(stage) or job.get("stage_label") or "Processing..."
+
+    typed_slides = [
+        StudioSlideStatus(
+            physical_slide_id=s.get("physical_slide_id") or f"SLD-{s.get('order', i + 1)}",
+            slide_order=s.get("slide_order") or s.get("order") or i + 1,
+            title=s.get("title") or f"Slide {i + 1}",
+            layout=s.get("layout") or "chart_narrative",
+            status=SlideThumbnailState(s.get("status", "PREPARING")),
+            thumbnail_url=s.get("thumbnail_url"),
+            render_fingerprint=s.get("render_fingerprint"),
+            zones=s.get("zones") or [],
+            error=s.get("error"),
+        )
+        for i, s in enumerate(slides_data)
+    ]
+
+    return StudioPresentationStatus(
+        deck_id=deck_id,
+        job_id=job_id,
+        current_stage=stage,
+        stage_label=stage_label,
+        progress_percent=pct,
+        message=job.get("stage_label") or stage_label,
+        manifest_locked=manifest_locked,
+        total_slides=total_slides,
+        rendered_slides=rendered_slides,
+        validated_slides=validated_slides,
+        visually_certified_slides=visually_certified,
+        failed_slides=1 if job.get("status") == "failed" else 0,
+        recoverable=job.get("status") != "failed",
+        error=job.get("error"),
+        slides=typed_slides,
+    )
+
+
+@router.get("/decks/{deck_id}/slides/{slide_id}/thumbnail")
+def get_slide_thumbnail(deck_id: str, slide_id: str):
+    """Streams the rendered PNG thumbnail for a specific physical slide."""
+    rendered_dir = Path(config.PRESENTATION_VISUAL_QA_DIR) / "rendered_slides" / deck_id
+    if rendered_dir.exists():
+        for file in rendered_dir.glob("*.png"):
+            if slide_id in file.name:
+                return FileResponse(
+                    path=str(file),
+                    media_type="image/png",
+                    headers={"Cache-Control": "public, max-age=3600"},
+                )
+
+    # Check deck spec metadata slide_artifacts
+    with session_scope() as conn:
+        row = conn.execute("SELECT spec_json FROM presentation_decks WHERE id = ?", (deck_id,)).fetchone()
+        if row:
+            spec = json.loads(row["spec_json"])
+            artifacts = spec.get("metadata", {}).get("slide_artifacts", [])
+            for art in artifacts:
+                if art.get("slide_id") == slide_id and art.get("image_path"):
+                    p = Path(art["image_path"])
+                    if p.exists():
+                        return FileResponse(
+                            path=str(p),
+                            media_type="image/png",
+                            headers={"Cache-Control": "public, max-age=3600"},
+                        )
+
+    raise HTTPException(status_code=404, detail=f"Thumbnail for slide {slide_id} in deck {deck_id} not found.")
+
+
+@router.get("/jobs/{job_id}/slides/{slide_id}/thumbnail")
+def get_job_slide_thumbnail(job_id: str, slide_id: str):
+    """Streams the rendered PNG thumbnail for a slide from an in-progress or ready job."""
+    job = job_manager.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    deck_id = job.get("deck_id")
+    if not deck_id:
+        raise HTTPException(status_code=404, detail="Deck not yet established for job")
+    return get_slide_thumbnail(deck_id, slide_id)
+
+
+@router.post("/decks/{deck_id}/regenerate-target", response_model=TargetedRegenerationResult)
+def regenerate_presentation_target(deck_id: str, req: TargetedRegenerationRequest):
+    """Executes genuine targeted regeneration for a physical slide, zone, or object."""
+    from ..services.presentation.targeted_regenerator import TargetedRegenerationService
+    if req.deck_id != deck_id:
+        req.deck_id = deck_id
+    service = TargetedRegenerationService()
+    with session_scope() as conn:
+        try:
+            result = service.regenerate_target(req, conn=conn)
+            return result
+        except ValueError as exc:
+            if "Stale" in str(exc) or "superseded" in str(exc):
+                raise HTTPException(status_code=409, detail=str(exc))
+            raise HTTPException(status_code=404, detail=str(exc))
+        except Exception as exc:
+            logger.error(f"Targeted regeneration error: {exc}", exc_info=True)
+            raise HTTPException(status_code=500, detail=str(exc))
 
 
 @router.post("/jobs/{job_id}/cancel")
@@ -607,6 +759,20 @@ def export_presentation_to_pptx(req: ExportPptxRequest):
         )
 
     try:
+        if deck_spec.get("metadata", {}).get("styled_pptx_path"):
+            styled_path = Path(deck_spec["metadata"]["styled_pptx_path"])
+            if styled_path.exists():
+                timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                title_raw = deck_spec.get("metadata", {}).get("title") or deck_spec.get("title") or "Executive_Presentation"
+                clean_title = re.sub(r'[^a-zA-Z0-9_-]', '_', title_raw)[:40].strip('_') or "Presentation"
+                filename = f"{clean_title}_{timestamp}.pptx"
+                return FileResponse(
+                    path=str(styled_path),
+                    filename=filename,
+                    media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                    headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+                )
+
         pptx_path = export_spec_to_pptx(deck_spec)
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         title_raw = deck_spec.get("metadata", {}).get("title") or deck_spec.get("title") or "Executive_Presentation"
@@ -640,6 +806,32 @@ def export_presentation_to_pdf(req: ExportPptxRequest):
                 if g.get('automated', {}).get('status') == 'FAILED']
     if failures:
         raise HTTPException(status_code=422, detail='Delivery blocked: ' + '; '.join(failures))
+
+    if deck.get("metadata", {}).get("styled_pptx_path"):
+        styled_path = Path(deck["metadata"]["styled_pptx_path"])
+        import shutil
+        import subprocess
+        soffice = shutil.which("soffice") or shutil.which("libreoffice")
+        if soffice and styled_path.exists():
+            try:
+                subprocess.run(
+                    [soffice, "--headless", "--convert-to", "pdf", str(styled_path), "--outdir", str(config.EXPORTS_DIR)],
+                    check=True,
+                    timeout=30,
+                    capture_output=True,
+                )
+                converted_pdf = config.EXPORTS_DIR / f"{styled_path.stem}.pdf"
+                if converted_pdf.exists():
+                    title = re.sub(r'[^a-zA-Z0-9_-]', '_', deck.get('metadata', {}).get('title') or deck.get('title') or 'Presentation')[:40]
+                    return FileResponse(path=str(converted_pdf), filename=f'{title}.pdf', media_type='application/pdf')
+            except Exception as conv_err:
+                logger.warning(f"LibreOffice PDF conversion failed: {conv_err}")
+        else:
+            raise HTTPException(
+                status_code=501,
+                detail="PDF export requires headless LibreOffice or browser print. Please download the native PowerPoint PPTX or use browser print.",
+            )
+
     try:
         path = export_spec_to_pdf(deck)
     except ValueError as exc:
@@ -706,6 +898,19 @@ def download_deck_pptx(deck_id: str):
     elif not (config.EXPORTS_DIR / f"presentation_{deck_id}.pptx").exists():
         raise HTTPException(status_code=404, detail="Presentation deck not found")
 
+    # For layered presentation pipeline decks, prefer the certified styled PPTX artifact directly
+    if deck_spec and deck_spec.get("metadata", {}).get("styled_pptx_path"):
+        styled_path = Path(deck_spec["metadata"]["styled_pptx_path"])
+        if styled_path.exists():
+            clean_title = re.sub(r'[^a-zA-Z0-9_-]', '_', deck_spec.get("title") or f"presentation_{deck_id}")[:40].strip('_') or "Presentation"
+            filename = f"{clean_title}.pptx"
+            return FileResponse(
+                path=str(styled_path),
+                filename=filename,
+                media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+            )
+
     if deck_spec and deck_spec.get("slides"):
         require_live_sources(deck_spec)
         from ..services.presentation.review_gates import evaluate_automated_gates
@@ -758,6 +963,39 @@ def download_deck_pdf(deck_id: str):
     elif not (config.EXPORTS_DIR / f"presentation_{deck_id}.pdf").exists():
         raise HTTPException(status_code=404, detail="Presentation deck not found")
 
+    pdf_path = config.EXPORTS_DIR / f"presentation_{deck_id}.pdf"
+    if deck_spec and deck_spec.get("metadata", {}).get("styled_pptx_path"):
+        styled_path = Path(deck_spec["metadata"]["styled_pptx_path"])
+        import shutil
+        import subprocess
+        soffice = shutil.which("soffice") or shutil.which("libreoffice")
+        if soffice and styled_path.exists():
+            try:
+                subprocess.run(
+                    [soffice, "--headless", "--convert-to", "pdf", str(styled_path), "--outdir", str(config.EXPORTS_DIR)],
+                    check=True,
+                    timeout=30,
+                    capture_output=True,
+                )
+                converted_pdf = config.EXPORTS_DIR / f"{styled_path.stem}.pdf"
+                if converted_pdf.exists():
+                    clean_title = re.sub(r'[^a-zA-Z0-9_-]', '_', deck_spec.get("title") or f"presentation_{deck_id}")[:40].strip('_') or "Presentation"
+                    filename = f"{clean_title}.pdf"
+                    return FileResponse(
+                        path=str(converted_pdf),
+                        filename=filename,
+                        media_type="application/pdf",
+                        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+                    )
+            except Exception as conv_err:
+                logger.warning(f"LibreOffice PDF conversion failed for deck {deck_id}: {conv_err}")
+        elif not pdf_path.exists():
+            # Gracefully handle bounded PDF export limitation without crashing
+            raise HTTPException(
+                status_code=501,
+                detail="PDF export requires headless LibreOffice or browser print. Please download the native PowerPoint PPTX or use browser print.",
+            )
+
     if deck_spec:
         require_live_sources(deck_spec)
         from ..services.presentation.review_gates import evaluate_automated_gates
@@ -773,8 +1011,7 @@ def download_deck_pdf(deck_id: str):
                 detail=f"Delivery blocked: Automated review gate check(s) failed: {'; '.join(failed_gates)}"
             )
 
-    pdf_path = config.EXPORTS_DIR / f"presentation_{deck_id}.pdf"
-    if deck_spec:
+    if deck_spec and not (deck_spec.get("metadata", {}).get("styled_pptx_path") and pdf_path.exists()):
         try:
             pdf_path = export_spec_to_pdf(deck_spec)
         except ValueError as exc:

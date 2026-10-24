@@ -23,6 +23,38 @@ class SemanticRole(str, Enum):
     SCIENTIFIC_MEASURE = "SCIENTIFIC_MEASURE"
 
 
+class EnrichmentType(str, Enum):
+    """Orthogonal taxonomy of feature derivation intent."""
+    REFERENCE_LOOKUP = "REFERENCE_LOOKUP"
+    GROUP_BENCHMARK = "GROUP_BENCHMARK"
+    DERIVED_METRIC = "DERIVED_METRIC"
+    EXPERIMENTAL_FEATURE = "EXPERIMENTAL_FEATURE"
+
+
+class TrustStatus(str, Enum):
+    """Operational trust rating for analytical surfacing."""
+    TRUSTED = "TRUSTED"
+    CONDITIONAL = "CONDITIONAL"
+    EXPERIMENTAL = "EXPERIMENTAL"
+    REJECTED = "REJECTED"
+
+
+class EnrichmentProvenance(str, Enum):
+    """Lineage origin of the feature."""
+    REFERENCE_DATASET = "REFERENCE_DATASET"
+    SAME_TABLE_AGGREGATION = "SAME_TABLE_AGGREGATION"
+    DETERMINISTIC_DERIVATION = "DETERMINISTIC_DERIVATION"
+    EXPERIMENTAL_INTERACTION = "EXPERIMENTAL_INTERACTION"
+
+
+class RedundancyClassification(str, Enum):
+    """Classification of collinearity and analytical novelty against base and derived features."""
+    EXACT_TRANSFORMATION = "EXACT_TRANSFORMATION"
+    DISPLAY_TRANSFORMATION = "DISPLAY_TRANSFORMATION"
+    REDUNDANT_ANALYTICAL_FEATURE = "REDUNDANT_ANALYTICAL_FEATURE"
+    DISTINCT_DERIVATION = "DISTINCT_DERIVATION"
+
+
 class EnrichmentColumnProfile(BaseModel):
     """Exhaustive statistical, morphological, and semantic profile of a single dataset column."""
     column: str
@@ -102,6 +134,13 @@ class DerivedFeature(BaseModel):
     utility_score: float = 1.0
     unit: str | None = None
     roles: list[SemanticRole] = Field(default_factory=list)
+    enrichment_type: EnrichmentType = EnrichmentType.DERIVED_METRIC
+    trust_status: TrustStatus = TrustStatus.TRUSTED
+    provenance: EnrichmentProvenance = EnrichmentProvenance.DETERMINISTIC_DERIVATION
+    redundancy_class: RedundancyClassification = RedundancyClassification.DISTINCT_DERIVATION
+    is_suppressed: bool = False
+    rejection_reason: str | None = None
+    bucketing_metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class AnalyticalTable(BaseModel):

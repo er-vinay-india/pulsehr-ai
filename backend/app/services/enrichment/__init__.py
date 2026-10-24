@@ -10,6 +10,10 @@ from .models import (
     EnrichmentColumnProfile,
     SemanticColumnGroup,
     SemanticRole,
+    EnrichmentType,
+    TrustStatus,
+    EnrichmentProvenance,
+    RedundancyClassification,
 )
 from .formula_registry import FormulaRegistry, FormulaDefinition
 from .profiler import EnrichmentProfiler

@@ -251,6 +251,15 @@ from .bounded_repair_orchestrator import (
     RepairDecisionEngine,
     BoundedRepairOrchestrator,
 )
+from .studio_models import (
+    StudioStage,
+    STUDIO_STAGE_LABELS,
+    SlideThumbnailState,
+    StudioSlideStatus,
+    StudioPresentationStatus,
+    TargetedRegenerationRequest,
+    TargetedRegenerationResult,
+)
 
 __all__ = [
     "PresentationPipelineMode",
@@ -432,6 +441,13 @@ __all__ = [
     "MAX_VISUAL_REPAIR_ATTEMPTS",
     "RepairDecisionEngine",
     "BoundedRepairOrchestrator",
+    "StudioStage",
+    "STUDIO_STAGE_LABELS",
+    "SlideThumbnailState",
+    "StudioSlideStatus",
+    "StudioPresentationStatus",
+    "TargetedRegenerationRequest",
+    "TargetedRegenerationResult",
     "THEMES",
     "PresentationJobManager",
     "job_manager",

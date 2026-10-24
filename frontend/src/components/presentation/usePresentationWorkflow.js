@@ -9,6 +9,7 @@ import {
   getSheets,
   updatePresentationDeck,
   regenerateSlide,
+  regeneratePresentationTarget,
   exportPresentationPptx,
   previewPresentationScope
 } from "../../api/client";
@@ -16,19 +17,14 @@ import { exportStandaloneHtmlPresentation } from "../../utils/standaloneHtmlExpo
 import { PRESENTATION_ACTIVE_POLL_MS, PRESENTATION_IDLE_POLL_MS } from "../../config/env.js";
 
 export const STAGES = [
-  { id: "brief_setup", label: "Objective & Brief Setup", desc: "Defining audience seniority, time budget, and decision requested" },
-  { id: "evidence_audit", label: "Evidence Audit & Inventory", desc: "Auditing empirical metrics, data completeness, and sources" },
-  { id: "narrative_arc", label: "Narrative Architecture & Sequence", desc: "Establishing narrative arc, sections, and executive thesis" },
-  { id: "headlines", label: "Slide Headlines & Subheadings", desc: "Crafting evidence-grounded conclusion headlines" },
-  { id: "layout_selection", label: "Wireframes & Layout Selection", desc: "Allocating layout structures based on narrative intent" },
-  { id: "math_reconciliation", label: "Mathematical Reconciliation", desc: "Auditing numbers, denominators, and claim verification" },
-  { id: "graphics_charts", label: "Graphic Content & Charts", desc: "Materializing native charts, data tables, and metrics" },
-  { id: "executive_polish", label: "Executive Language Polish", desc: "Refining tone and narrative clarity preserving complete conclusions" },
-  { id: "visual_qa", label: "Visual Hierarchy & Layout QA", desc: "Auditing spatial canvas density and bounding boxes" },
-  { id: "animation", label: "Animation & Transitions", desc: "Configuring slide motion and entrance cues" },
-  { id: "speaker_notes", label: "Speaker Notes & Rehearsal Timing", desc: "Generating structured notes and timing comparison" },
-  { id: "export_qa", label: "Accessibility & Technical Export QA", desc: "Verifying reading order, chart series, and PPTX export" },
-  { id: "ready", label: "Rehearsal Ready & Review Gates", desc: "Presentation certified and ready for executive review" },
+  { id: "understanding_data", label: "Understanding your data", desc: "Profiling records, metrics, and relationships" },
+  { id: "planning_story", label: "Planning the story", desc: "Structuring storyline, audience thesis, and sections" },
+  { id: "preparing_slides", label: "Preparing slides", desc: "Allocating physical slide sequence and titles" },
+  { id: "arranging_content", label: "Arranging content", desc: "Placing content zones, tables, and comparison splits" },
+  { id: "rendering_presentation", label: "Rendering presentation", desc: "Applying visual theme, colors, and typography" },
+  { id: "checking_slide_quality", label: "Checking slide quality", desc: "Validating layouts, geometry, and visual appearance" },
+  { id: "finalizing_presentation", label: "Finalizing presentation", desc: "Reviewing final presentation and certifying slide readiness" },
+  { id: "ready", label: "Ready", desc: "Presentation certified and ready for executive review" },
 ];
 
 
@@ -75,6 +71,11 @@ export function usePresentationWorkflow({
   const [jobStageLabel, setJobStageLabel] = useState("Initiating pipeline...");
   const [jobError, setJobError] = useState(null);
   const [slideProgressData, setSlideProgressData] = useState(null);
+
+  // Progressive studio progress & stable manifest state (PPT-L10)
+  const [studioStatus, setStudioStatus] = useState(null);
+  const [manifestLocked, setManifestLocked] = useState(false);
+  const [manifestSlides, setManifestSlides] = useState([]);
 
   // Studio deck state
   const [deckSpec, setDeckSpec] = useState(initialDeck);
@@ -218,9 +219,29 @@ export function usePresentationWorkflow({
         if (!isMounted) return;
 
         onJobUpdate(job);
-        setJobProgress(job.progress_pct || 0);
-        setJobStage(job.stage);
-        setJobStageLabel(job.stage_label || "Processing...");
+        const statusObj = job.studio_status;
+        if (statusObj) {
+          setStudioStatus(statusObj);
+          if (statusObj.manifest_locked) {
+            setManifestLocked(true);
+            setManifestSlides(statusObj.slides || []);
+          }
+          if (statusObj.current_stage) {
+            setJobStage(statusObj.current_stage);
+          }
+          if (statusObj.stage_label) {
+            setJobStageLabel(statusObj.stage_label);
+          }
+          setJobProgress(statusObj.progress_percent || job.progress_pct || 0);
+        } else {
+          setJobProgress(job.progress_pct || 0);
+          setJobStage(job.stage);
+          setJobStageLabel(job.stage_label || "Processing...");
+          if (job.extra?.manifest_locked) {
+            setManifestLocked(true);
+            setManifestSlides(job.extra.slides || []);
+          }
+        }
         if (job.current_slide !== undefined || job.total_slides !== undefined || job.slide_status_list) {
           setSlideProgressData((prev) => {
             // Layman explanation:
@@ -334,6 +355,9 @@ export function usePresentationWorkflow({
     setJobProgress(0);
     setJobError(null);
     setSlideProgressData(null);
+    setManifestLocked(false);
+    setManifestSlides([]);
+    setStudioStatus(null);
     try {
       const scope = {
         objective: options.customPrompt || options.objective || objective,
@@ -695,9 +719,40 @@ export function usePresentationWorkflow({
     }
   }, [selectedThemeId, currentJobId]);
 
+  const handleTargetedRegeneration = useCallback(async ({ physical_slide_id, zone_id, object_id, user_instruction }) => {
+    const latest = deckRef.current || deckSpec;
+    if (!latest?.id || !physical_slide_id) return;
+    setIsRegeneratingSlide(true);
+    try {
+      const currentRev = latest.metadata?.deck_revision || 1;
+      const res = await regeneratePresentationTarget(latest.id, {
+        deck_id: latest.id,
+        physical_slide_id,
+        zone_id,
+        object_id,
+        regeneration_reason: "user_request",
+        user_instruction,
+        request_version: currentRev
+      });
+      if (res && res.updated_deck) {
+        commitDeck(res.updated_deck);
+      }
+      return res;
+    } catch (err) {
+      setJobError(`Targeted regeneration failed: ${err.message}`);
+      throw err;
+    } finally {
+      setIsRegeneratingSlide(false);
+    }
+  }, [deckSpec]);
+
   const currentTheme = getSlideTheme(deckSpec?.theme || deckSpec?.metadata?.theme_id || selectedThemeId);
 
   return {
+    studioStatus,
+    manifestLocked,
+    manifestSlides,
+    handleTargetedRegeneration,
     configSession,
     handleNewDeck,
     viewMode,

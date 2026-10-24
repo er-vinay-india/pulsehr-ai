@@ -41,6 +41,9 @@ export default function PresentationPage({
     jobError,
     setJobError,
     slideProgressData,
+    manifestLocked,
+    manifestSlides,
+    handleTargetedRegeneration,
     deckSpec,
     setDeckSpec,
     activeSlideIndex,
@@ -286,6 +289,8 @@ export default function PresentationPage({
             jobStageLabel={jobStageLabel}
             jobError={jobError}
             slideProgressData={slideProgressData}
+            manifestLocked={manifestLocked}
+            manifestSlides={manifestSlides}
             onOpenInStudio={handleOpenInStudio}
             onExportPptx={handleExportPptx}
             onExportHtml={handleExportHtml}
@@ -325,6 +330,7 @@ export default function PresentationPage({
             onSetTransition={handleSetTransition}
             onOpenRegenerate={() => setShowRegenModal(true)}
             onRefineSlide={handleRegenerateSlideSubmit}
+            onTargetedRegenerate={handleTargetedRegeneration}
             isBusy={isRegeneratingSlide}
             onApplyImage={handleSetSlideImage}
           />
