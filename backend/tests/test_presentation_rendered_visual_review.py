@@ -1177,14 +1177,20 @@ def test_130_multimodal_visual_review_chain(sample_l9_certified_deck, tmp_path):
     assert reviewer.calls_count == len(artifacts)
     assert len(captured_payloads) == len(artifacts)
 
-    # Verify image passed as base64 in payload
+    # Verify image passed as base64 in payload (either top-level or in user message via ModelGateway)
     first_payload = captured_payloads[0]
-    assert "images" in first_payload
-    assert len(first_payload["images"]) == 1
-    assert len(first_payload["images"][0]) > 1000  # valid base64 PNG
+    user_msg = next((m for m in first_payload.get("messages", []) if m.get("role") == "user"), None)
+    if user_msg and "images" in user_msg:
+        images_list = user_msg["images"]
+        prompt = user_msg["content"]
+    else:
+        images_list = first_payload.get("images", [])
+        prompt = first_payload.get("prompt", "")
+
+    assert len(images_list) == 1
+    assert len(images_list[0]) > 1000  # valid base64 PNG
 
     # Verify structured semantic context was passed without raw database records
-    prompt = first_payload["prompt"]
     assert "Slide Context:" in prompt
     assert "SLD-PHYS-1" in prompt
     assert "WORKFORCE_HEALTH" in prompt

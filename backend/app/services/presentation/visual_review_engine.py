@@ -18,13 +18,14 @@ import logging
 from pathlib import Path
 from typing import Any, Optional
 
-import httpx
 from PIL import Image, ImageStat
 import pptx
 from pptx.enum.shapes import MSO_SHAPE_TYPE
 from pydantic import ValidationError
 
 from app.core import config
+from app.services.gateway.contracts import AIRequest, AITaskType, ReasoningLevel
+from app.services.gateway.model_gateway import ModelGateway
 from app.services.presentation.layer_zone_models import LayeredDeckStructureSpec, StructuralRole
 from app.services.presentation.layout_models import ResolvedDeckLayout
 from app.services.presentation.qa.gemma_critic import GemmaVisualCritic
@@ -201,69 +202,60 @@ class MultimodalVisualReviewer:
             f"- Structural Role: {semantic_context.get('structural_role', 'OVERVIEW')}\n"
             f"- Zones: {semantic_context.get('zone_count', 1)}\n\n"
             f"Schema:\n"
-            f'{{"status": "PASS"|"WARNING"|"FAIL", "issues": [{{"category": "VISUAL_OVERLAP"|"PRIMARY_VISUAL_OBSCURED"|"AXIS_LABEL_COLLISION"|"TABLE_UNREADABLE"|"TEXT_CLIPPING"|"EXCESSIVE_WHITESPACE", "severity": "INFO"|"WARNING"|"CRITICAL", "description": "...", "visual_evidence": "...", "affected_objects": ["..."], "recommended_owner": "PPT_L5_LAYOUT"|"PPT_L4_STRUCTURE"|"PPT_L3_EXPANSION"|"PPT_L7_STYLE"|"PPT_L6_RENDERER"|"ASSET_PIPELINE", "recommended_action": "LAYOUT_REPLAN_REQUIRED"|"TABLE_SPLIT_REQUIRED"|"RENDER_RETRY_REQUIRED", "confidence": "HIGH"|"MEDIUM"|"LOW"}}]}}'
+            f'{{"status": "PASS"|"WARNING"|"FAIL", "issues": [{{"category": "VISUAL_OVERLAP"|"PRIMARY_VISUAL_OBSCURED"|"AXIS_LABEL_COLLISION"|"TABLE_UNREADABLE"|"TEXT_CLIPPING"|"EXCESSIVE_WHITESPACE", "severity": "INFO"|"WARNING"|"CRITICAL", "description": "...", "visual_evidence": "...", "affected_objects": ["..."], "recommended_owner": "PPT_L5_LAYOUT"|"PPT_L4_STRUCTURE"|"PPT_L3_EXPANSION"|"PPT_L7_STYLE"|"PPT_L6_RENDERER"|"ASSET_PIPELINE", "recommended_action": "LAYOUT_REPLAN_REQUIRED"|"TABLE_SPLIT_REQUIRED"|"RENDER_RETRY_REQUIRED"|"STYLE_ADJUSTMENT_REQUIRED", "confidence": "HIGH"|"MEDIUM"|"LOW"}}]}}'
         )
 
-        payload = {
-            "model": self.model_name,
-            "prompt": f"{system_instruction}\n\n{user_prompt}",
-            "images": [img_b64],
-            "stream": False,
-            "format": "json",
-            "options": {"temperature": 0.1, "num_predict": 1024},
-        }
+        ai_req = AIRequest(
+            task_type=AITaskType.PRESENTATION_AI,
+            required_capability="multimodal_visual_review",
+            system_prompt=system_instruction,
+            prompt=user_prompt,
+            images=[img_b64],
+            format="json",
+            max_latency_ms=self.timeout_seconds * 1000.0,
+            model_override=self.model_name or "gemma4:12b",
+            temperature_override=0.1,
+        )
 
-        try:
-            with httpx.Client(timeout=self.timeout_seconds) as client:
-                res = client.post(f"{self.base_url}/api/generate", json=payload)
-                if res.status_code != 200:
-                    return [
-                        VisualIssue(
-                            issue_id=f"VIS-AI-ERR-{slide_id}",
-                            slide_id=slide_id,
-                            severity=VisualSeverity.CRITICAL,
-                            category=VisualCategory.RENDER_CORRUPTION,
-                            description=f"Visual model endpoint returned HTTP {res.status_code}.",
-                            visual_evidence="Inference endpoint failure.",
-                            recommended_owner=RepairOwner.PPT_L6_RENDERER,
-                            recommended_action=RepairAction.RENDER_RETRY_REQUIRED,
-                            repairable=False,
-                            confidence=VisualConfidence.HIGH,
-                        )
-                    ]
-                raw_text = res.json().get("response", "")
-        except httpx.TimeoutException:
-            logger.warning(f"Visual review timed out for slide {slide_id}.")
+        ai_resp = ModelGateway.execute(ai_req)
+        if not ai_resp.success or not ai_resp.raw_text:
+            err_msg = ai_resp.error or "ModelGateway returned failure or empty response."
+            logger.warning(f"Visual review failed for slide {slide_id}: {err_msg}")
+            is_timeout = "timeout" in err_msg.lower() or "timed out" in err_msg.lower()
             return [
                 VisualIssue(
-                    issue_id=f"VIS-AI-TIMEOUT-{slide_id}",
+                    issue_id=f"VIS-AI-{'TIMEOUT' if is_timeout else 'ERR'}-{slide_id}",
                     slide_id=slide_id,
                     severity=VisualSeverity.CRITICAL,
                     category=VisualCategory.RENDER_CORRUPTION,
-                    description=f"Visual model call timed out after {self.timeout_seconds}s.",
-                    visual_evidence="Inference timeout.",
+                    description=f"Visual model call {'timed out' if is_timeout else 'failed'}: {err_msg}",
+                    visual_evidence="Inference gateway failure.",
                     recommended_owner=RepairOwner.PPT_L6_RENDERER,
                     recommended_action=RepairAction.RENDER_RETRY_REQUIRED,
                     repairable=False,
                     confidence=VisualConfidence.HIGH,
                 )
             ]
-        except Exception as e:
-            logger.warning(f"Visual review endpoint unreachable for slide {slide_id}: {e}.")
-            return [
-                VisualIssue(
-                    issue_id=f"VIS-AI-UNAVAIL-{slide_id}",
-                    slide_id=slide_id,
-                    severity=VisualSeverity.CRITICAL,
-                    category=VisualCategory.RENDER_CORRUPTION,
-                    description=f"Visual model unavailable: {e}.",
-                    visual_evidence="Connection failure to model gateway.",
-                    recommended_owner=RepairOwner.PPT_L6_RENDERER,
-                    recommended_action=RepairAction.RENDER_RETRY_REQUIRED,
-                    repairable=False,
-                    confidence=VisualConfidence.HIGH,
-                )
-            ]
+
+        raw_text = ai_resp.raw_text
+
+        # Canonical aliases mapping to prevent competing repair owner / action taxonomies
+        owner_aliases: dict[str, RepairOwner] = {
+            "CONSTRAINT_LAYOUT_ENGINE": RepairOwner.PPT_L5_LAYOUT,
+            "LAYOUT_ENGINE": RepairOwner.PPT_L5_LAYOUT,
+            "THEME_ENGINE": RepairOwner.PPT_L7_STYLE,
+            "STYLE_ENGINE": RepairOwner.PPT_L7_STYLE,
+            "NATIVE_RENDERER": RepairOwner.PPT_L6_RENDERER,
+            "RENDERER": RepairOwner.PPT_L6_RENDERER,
+            "STRUCTURE_ENGINE": RepairOwner.PPT_L4_STRUCTURE,
+            "EXPANSION_ENGINE": RepairOwner.PPT_L3_EXPANSION,
+            "ASSET_PIPELINE": RepairOwner.ASSET_PIPELINE,
+        }
+        action_aliases: dict[str, RepairAction] = {
+            "REVISE_COORDINATES": RepairAction.LAYOUT_REPLAN_REQUIRED,
+            "ADJUST_THEME_TOKENS": RepairAction.STYLE_ADJUSTMENT_REQUIRED,
+            "RE_RENDER_SHAPE": RepairAction.RENDER_RETRY_REQUIRED,
+        }
 
         # Parse & Validate Output JSON
         try:
@@ -275,9 +267,9 @@ class MultimodalVisualReviewer:
                 sev_str = item.get("severity", "WARNING").upper()
                 sev = VisualSeverity[sev_str] if sev_str in VisualSeverity.__members__ else VisualSeverity.WARNING
                 owner_str = item.get("recommended_owner", "PPT_L5_LAYOUT").upper()
-                owner = RepairOwner[owner_str] if owner_str in RepairOwner.__members__ else RepairOwner.PPT_L5_LAYOUT
+                owner = owner_aliases.get(owner_str, RepairOwner[owner_str] if owner_str in RepairOwner.__members__ else RepairOwner.PPT_L5_LAYOUT)
                 act_str = item.get("recommended_action", "LAYOUT_REPLAN_REQUIRED").upper()
-                act = RepairAction[act_str] if act_str in RepairAction.__members__ else RepairAction.LAYOUT_REPLAN_REQUIRED
+                act = action_aliases.get(act_str, RepairAction[act_str] if act_str in RepairAction.__members__ else RepairAction.LAYOUT_REPLAN_REQUIRED)
                 conf_str = item.get("confidence", "HIGH").upper()
                 conf = VisualConfidence[conf_str] if conf_str in VisualConfidence.__members__ else VisualConfidence.HIGH
 

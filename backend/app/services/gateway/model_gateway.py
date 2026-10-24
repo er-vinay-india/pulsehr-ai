@@ -163,6 +163,7 @@ class ModelGateway:
             "prompt": request.prompt or request.query,
             "system_prompt": request.system_prompt,
             "context": request.context,
+            "images_count": len(request.images),
             "schema": request.structured_output_schema.__name__ if request.structured_output_schema else None,
         })
 
@@ -185,7 +186,10 @@ class ModelGateway:
                 messages = []
                 if request.system_prompt:
                     messages.append({"role": "system", "content": request.system_prompt})
-                messages.append({"role": "user", "content": prompt_content})
+                user_msg: dict[str, Any] = {"role": "user", "content": prompt_content}
+                if request.images:
+                    user_msg["images"] = request.images
+                messages.append(user_msg)
 
                 temp = request.temperature_override if request.temperature_override is not None else 0.15
 
@@ -204,7 +208,7 @@ class ModelGateway:
                 if not any(k in model_candidate.lower() for k in ("deepseek-r1", "r1")):
                     payload["think"] = False
 
-                if request.structured_output_schema is not None:
+                if request.structured_output_schema is not None or request.format == "json":
                     payload["format"] = "json"
 
                 client_timeout = httpx.Timeout(timeout_sec, connect=4.0)

@@ -72,6 +72,8 @@ class AIRequest(BaseModel):
     query: str = ""
     prompt: str = ""
     system_prompt: str | None = None
+    images: list[str] = Field(default_factory=list)
+    format: str | None = None
     context: dict[str, Any] = Field(default_factory=dict)
     evidence_ids: list[str] = Field(default_factory=list)
     user_role: str = "analyst"
