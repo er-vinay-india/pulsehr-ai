@@ -19,6 +19,7 @@ try {
       resolveDir: fileURLToPath(new URL('../', import.meta.url)), loader: 'jsx',
     },
     bundle: true, write: false, platform: 'node', format: 'cjs',
+    loader: { '.scss': 'empty' },
   });
   await writeFile(output, bundle.outputFiles[0].text);
   const { React, renderToStaticMarkup, Boundary, resolveDashboardState, sanitizeError } = createRequire(import.meta.url)(output);
@@ -31,7 +32,10 @@ try {
       }, React.createElement('div', null, 'Analysis content')));
       assert.equal((html.match(/role="alert"/g) || []).length, 1);
       assert.equal((html.match(/<button/g) || []).length, 1);
-      assert.ok(html.includes(error.message), 'display the sanitized message, not the generic fallback');
+      assert.ok(html.includes('Dashboard couldn’t be loaded'));
+      assert.ok(html.includes('Check that the server is available, then try again.'));
+      assert.ok(html.includes('explorer-empty-state'));
+      assert.ok(html.includes('Try again'));
       assert.ok(!html.includes('Analysis content'));
       assert.ok(!html.includes('uploading a fresh copy'));
     }

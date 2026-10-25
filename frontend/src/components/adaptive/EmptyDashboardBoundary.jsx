@@ -2,7 +2,8 @@ import React from "react";
 import { DASHBOARD_STATES } from "../../contracts/DashboardStateContract";
 import EmptyDashboardState from "./EmptyDashboardState";
 import Button from "../../design-system/components/Button";
-import { AlertCircle, RefreshCw } from "lucide-react";
+import { FileSpreadsheet } from "lucide-react";
+import "../../styles/explorer-workspace.scss";
 
 /**
  * EmptyDashboardBoundary (Zero-Data Render Firewall)
@@ -33,28 +34,24 @@ export default function EmptyDashboardBoundary({
 
   // 2. Sanitized Error State (DATASET_ERROR): Mount sanitized error notice
   if (dashboardState === DASHBOARD_STATES.DATASET_ERROR && error) {
+    const serviceUnavailable = ["NETWORK", "SERVER_ERROR"].includes(error.category);
     return (
-      <div className="dashboard-error-boundary" data-testid="dashboard-error-boundary">
-        <div className="adaptive-status-notice error" role="alert" style={{ margin: "24px 0" }}>
-          <AlertCircle size={20} />
-          <div style={{ flex: 1 }}>
-            <strong>{error.title || "Intelligence Notice"}</strong>
-            <p style={{ margin: "4px 0 0 0", fontSize: "0.88rem" }}>{error.userMessage || error.message || "The requested analysis could not be displayed."}</p>
-            {error.actionText && (
-              <p style={{ margin: "4px 0 0 0", fontSize: "0.80rem", opacity: 0.85 }}>{error.actionText}</p>
-            )}
-          </div>
-          <Button
-            variant="GHOST"
-            size="sm"
-            icon={RefreshCw}
-            onClick={onRetry}
-            ariaLabel="Retry loading analysis"
-          >
-            Retry
-          </Button>
-        </div>
-      </div>
+      <section
+        className="dashboard-error-boundary explorer-empty-state"
+        data-testid="dashboard-error-boundary"
+        role="alert"
+        aria-labelledby="dashboard-error-title"
+      >
+        <div className="explorer-empty-icon" aria-hidden="true"><FileSpreadsheet size={28} /></div>
+        <h2 id="dashboard-error-title">{serviceUnavailable ? "Dashboard couldn’t be loaded" : error.title || "Dashboard unavailable"}</h2>
+        <p>{serviceUnavailable
+          ? "Check that the server is available, then try again."
+          : error.userMessage || error.message || "The requested analysis could not be displayed."}</p>
+        {!serviceUnavailable && error.actionText && <p>{error.actionText}</p>}
+        <Button variant="PRIMARY" size="lg" onClick={onRetry} ariaLabel="Try again loading dashboard">
+          Try again
+        </Button>
+      </section>
     );
   }
 

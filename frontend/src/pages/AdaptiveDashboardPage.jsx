@@ -402,7 +402,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab, onOpenUpload }) {
         </div>
 
         {/* Compact Dataset Context & Command Bar */}
-        <div className="adaptive-scope-bar page-command-bar" aria-label="Dataset Command Bar">
+        {dashboardState !== DASHBOARD_STATES.DATASET_ERROR && <div className="adaptive-scope-bar page-command-bar" aria-label="Dataset Command Bar">
           <div className="dataset-selector-and-context">
             {sources.length > 0 && (
               <div className="scope-control-group">
@@ -467,7 +467,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab, onOpenUpload }) {
               </Button>
             )}
           </div>
-        </div>
+        </div>}
       </header>
 
       {/* Runtime Developer Diagnostics Trigger */}
