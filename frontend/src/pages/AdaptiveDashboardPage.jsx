@@ -274,14 +274,6 @@ export default function AdaptiveDashboardPage({ onNavigateTab, onOpenUpload }) {
           } else {
             setCalcError(sanitizeError(err));
           }
-          if (shouldBurst) {
-            setRefreshNotice({
-              type: "error",
-              title: "Refresh Failed",
-              message: err.message || "Failed to recalculate dashboard intelligence.",
-              timestamp: Date.now(),
-            });
-          }
         }
       })
       .finally(() => {
@@ -478,38 +470,6 @@ export default function AdaptiveDashboardPage({ onNavigateTab, onOpenUpload }) {
         </div>
       </header>
 
-      {/* Source Loading or Source Error State */}
-      {sourcesError && (
-        <div className="adaptive-status-notice error" role="alert">
-          <span>{sourcesError.message}</span>
-          <Button
-            variant="GHOST"
-            size="sm"
-            icon={RefreshCw}
-            onClick={loadSources}
-            ariaLabel="Retry loading sources"
-          >
-            Retry
-          </Button>
-        </div>
-      )}
-
-      {/* Calculation Error State */}
-      {calcError && !calculating && (
-        <div className="adaptive-status-notice error" role="alert">
-          <span>{calcError.message}</span>
-          <Button
-            variant="GHOST"
-            size="sm"
-            icon={RefreshCw}
-            onClick={() => setRevision((r) => r + 1)}
-            ariaLabel="Retry calculating executive intelligence"
-          >
-            Retry
-          </Button>
-        </div>
-      )}
-
       {/* Runtime Developer Diagnostics Trigger */}
       {developerMode && data && (
         <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "12px" }}>
@@ -530,10 +490,12 @@ export default function AdaptiveDashboardPage({ onNavigateTab, onOpenUpload }) {
       <SurfaceGuard surface="dashboard">
         <EmptyDashboardBoundary
           dashboardState={dashboardState}
-          error={calcError || sourcesError}
+          error={sourcesError || calcError}
           onRetry={() => {
-            if (sourcesError) loadSources();
-            else setRevision((r) => r + 1);
+            setRefreshNotice(null);
+            setCalcError(null);
+            if (sourcesError) loadSources(true);
+            if (selectedDatasetId) setRevision((r) => r + 1);
           }}
           onNavigateTab={onNavigateTab}
           onOpenUpload={onOpenUpload}

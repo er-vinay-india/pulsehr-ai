@@ -39,7 +39,7 @@ export default function EmptyDashboardBoundary({
           <AlertCircle size={20} />
           <div style={{ flex: 1 }}>
             <strong>{error.title || "Intelligence Notice"}</strong>
-            <p style={{ margin: "4px 0 0 0", fontSize: "0.88rem" }}>{error.userMessage || "The requested analysis could not be displayed."}</p>
+            <p style={{ margin: "4px 0 0 0", fontSize: "0.88rem" }}>{error.userMessage || error.message || "The requested analysis could not be displayed."}</p>
             {error.actionText && (
               <p style={{ margin: "4px 0 0 0", fontSize: "0.80rem", opacity: 0.85 }}>{error.actionText}</p>
             )}

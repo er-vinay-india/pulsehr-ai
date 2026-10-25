@@ -94,10 +94,9 @@ export function sanitizeError(err) {
   ) {
     return {
       title: "Service Notice",
-      message: "An internal service condition occurred while processing this workbook.",
+      message: "The HighView service is temporarily unavailable. Please try again shortly.",
       category: "SERVER_ERROR",
       recoverable: true,
-      actionText: "Please refresh or try uploading a fresh copy of the workbook.",
     };
   }
 
