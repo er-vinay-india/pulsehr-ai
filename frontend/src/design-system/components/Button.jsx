@@ -1,4 +1,5 @@
 import React from "react";
+import "./Button.scss";
 
 /**
  * Standardized Highview Semantic Button.
@@ -25,11 +26,7 @@ export default function Button({
   const normVariant = (variant || "PRIMARY").toUpperCase();
 
   const variantStyles = {
-    PRIMARY: {
-      backgroundColor: "var(--action-primary-bg, #075443)",
-      color: "var(--action-primary-text, #FFFFFF)",
-      border: "1px solid var(--action-primary-border, #075443)",
-    },
+    PRIMARY: {},
     SECONDARY: {
       backgroundColor: "var(--action-secondary-bg, #183B56)",
       color: "var(--action-secondary-text, #FFFFFF)",
@@ -93,7 +90,6 @@ export default function Button({
         opacity: disabled ? 0.5 : 1,
         transition: "all 0.15s ease",
         lineHeight: 1.2,
-        outline: "none",
         ...variantStyles,
         ...sizeStyles,
         ...style,

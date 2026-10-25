@@ -1,0 +1,18 @@
+.hv-btn {
+  &:focus-visible {
+    outline: 2px solid var(--color-brand-accent);
+    outline-offset: 3px;
+  }
+
+  &--primary {
+    background: var(--btn-primary-bg, #075443);
+    color: var(--btn-primary-fg, #fff);
+    border: 1px solid var(--btn-primary-border, #075443);
+    box-shadow: var(--shadow-sm);
+
+    &:hover:not(:disabled) {
+      background: var(--btn-primary-hover, #075443);
+      border-color: var(--btn-primary-hover, #075443);
+    }
+  }
+}

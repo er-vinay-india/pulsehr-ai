@@ -1,3 +1,4 @@
+import Button from "../design-system/components/Button";
 import React, { useEffect, useState, useMemo } from 'react';
 import {
   getSheets,
@@ -726,7 +727,7 @@ export default function DataExplorerPage() {
           <div className="explorer-empty-icon"><FileSpreadsheet size={28} /></div>
           <h2>Workbooks couldn’t be loaded</h2>
           <p>Check that the server is available, then try again.</p>
-          <button type="button" className="btn-primary" onClick={refresh}>Try again</button>
+          <Button variant="PRIMARY" size="lg" onClick={refresh}>Try again</Button>
         </section>
       )}
       {!catalogLoading && catalogLoaded && catalog.sheets.length === 0 && (
@@ -734,9 +735,9 @@ export default function DataExplorerPage() {
           <div className="explorer-empty-icon"><FileSpreadsheet size={28} /></div>
           <h2 id="explorer-empty-title">No workbooks yet</h2>
           <p>Upload a CSV or Excel workbook to explore its records and insights.</p>
-          <button type="button" className="btn-primary" onClick={() => { window.location.hash = 'upload'; }}>
+          <Button variant="PRIMARY" size="lg" onClick={() => { window.location.hash = 'upload'; }}>
             Upload spreadsheet
-          </button>
+          </Button>
           <span className="explorer-empty-hint">CSV, XLS and XLSX supported</span>
         </section>
       )}
