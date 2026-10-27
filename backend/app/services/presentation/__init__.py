@@ -33,6 +33,12 @@ from .pipeline_selector import (
     PresentationPipelineMode,
     PresentationPipelineSelector,
 )
+from .composition import (
+    SlideCompositionEngine,
+    CompositionArchetype,
+    CompositionDecision,
+    DeckCompositionPlan,
+)
 from .content_models import (
     ContentKind,
     ContentRole,
@@ -266,6 +272,10 @@ from .studio_models import (
 __all__ = [
     "PresentationPipelineMode",
     "PresentationPipelineSelector",
+    "SlideCompositionEngine",
+    "CompositionArchetype",
+    "CompositionDecision",
+    "DeckCompositionPlan",
     "ContentKind",
     "ContentRole",
     "PresentationContentItem",

@@ -38,6 +38,11 @@ TASK_MODEL_CASCADES: dict[AITaskType, list[str]] = {
         "qwen3.5:9b",
         "phi4-mini:latest"
     ],
+    AITaskType.PRESENTATION_COMPOSITION: [
+        "qwen3.5:9b",
+        "phi4-mini:latest",
+        "gemma4:12b"
+    ],
     AITaskType.PRESENTATION_TYPOGRAPHY: [
         "phi4-mini-typography",
         "phi4-mini:latest",

@@ -333,6 +333,24 @@ def execute_presentation_pipeline_async(
                     job_id
                 )
 
+                # PPT-L2.5: Slide Composition Intelligence
+                from .composition import SlideCompositionEngine
+                composition_engine = SlideCompositionEngine(use_ai=False)
+                composition_plan = composition_engine.compose_deck(
+                    story_plan=deck_story_plan,
+                    content_pkg=layered_content_package,
+                    metadata={"job_id": job_id, "scope": scope}
+                )
+                workspace_evidence["deck_composition_plan"] = composition_plan.model_dump()
+                logger.info(
+                    "SlideCompositionEngine generated DeckCompositionPlan %s (%d decisions: %d AI, %d fallback) for job %s",
+                    composition_plan.plan_id,
+                    len(composition_plan.slide_decisions),
+                    composition_plan.ai_decisions_count,
+                    composition_plan.fallback_decisions_count,
+                    job_id
+                )
+
                 # PPT-L3: Slide Expansion + Presentation Preflight
                 from .preflight_engine import PresentationPreflightEngine
                 from .expansion_engine import SlideExpansionEngine

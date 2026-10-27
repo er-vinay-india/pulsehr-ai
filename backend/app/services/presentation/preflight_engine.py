@@ -176,13 +176,19 @@ class PresentationPreflightEngine:
         for it in bound_items:
             text_volume += len(it.title or "") + len(it.narrative_takeaway or "")
 
-        # 7. Density grading
+        # 7. Density grading (enriched with PPT-L2.5 Composition density_intent)
+        slide_meta = getattr(l_slide, "metadata", {}) or {}
+        comp_decision = slide_meta.get("composition_decision") or {}
+        density_intent = slide_meta.get("density_intent") or comp_decision.get("density_intent")
+        split_intent = slide_meta.get("split_intent") or comp_decision.get("split_intent")
+
         density = self._grade_density(
             table_rows_max=table_rows_max,
             visuals_count=len(visuals),
             text_volume=text_volume,
             primary_count=primary_count,
-            structural_role=l_slide.structural_role
+            structural_role=l_slide.structural_role,
+            density_intent=density_intent,
         )
 
         # 8. Expansion determination (Split-over-Shrink)
@@ -227,6 +233,34 @@ class PresentationPreflightEngine:
             recommended_slides = min(self.max_slides_per_topic, 2)
             reason = ExpansionReason.NARRATIVE_SEPARATION
 
+        # PPT-L2.5 SplitIntent integration with deterministic overflow safety invariant:
+        # OVERFLOW SAFETY STRICTLY OVERRIDES AI PREFERENCE.
+        split_intent_str = (
+            split_intent.value if hasattr(split_intent, "value") else str(split_intent or "")
+        ).upper()
+
+        if split_intent_str == "PREFER_SPLIT" and l_slide.allow_split and not is_reused_complete:
+            # If multiple items or meaningful table exist, prefer 2 physical slides
+            if (len(bound_items) > 1 or table_rows_max > 6) and recommended_slides == 1:
+                recommended_slides = min(self.max_slides_per_topic, 2)
+                reason = ExpansionReason.CONTENT_DENSITY
+
+        elif split_intent_str == "NO_SPLIT":
+            # Prefer 1 physical slide unless overflow safety strictly requires splitting
+            overflow_safety_mandate = (
+                table_rows_max > MAX_SAFE_TABLE_ROWS_PER_SLIDE
+                or density == ContentDensity.VERY_HIGH
+            )
+            if not overflow_safety_mandate:
+                recommended_slides = 1
+                reason = ExpansionReason.NONE
+
+        # Record deterministic diagnostic tracking in metadata
+        if "composition_consumption" not in slide_meta:
+            slide_meta["composition_consumption"] = {}
+        slide_meta["composition_consumption"]["density_consumed"] = bool(density_intent)
+        slide_meta["composition_consumption"]["split_intent_consumed"] = bool(split_intent)
+
         return LogicalTopicPreflightResult(
             logical_slide_id=l_slide.logical_slide_id,
             semantic_topic=l_slide.semantic_topic,
@@ -263,7 +297,8 @@ class PresentationPreflightEngine:
         visuals_count: int,
         text_volume: int,
         primary_count: int,
-        structural_role: StructuralRole
+        structural_role: StructuralRole,
+        density_intent: Optional[str] = None,
     ) -> ContentDensity:
         """Grades content density based on multifaceted content pressure indicators."""
         if structural_role in (StructuralRole.TITLE, StructuralRole.CLOSING):
@@ -287,6 +322,14 @@ class PresentationPreflightEngine:
 
         if primary_count >= 3:
             score += 2
+
+        # PPT-L2.5 DensityIntent semantic weighting:
+        # SPARSE slides have higher sensitivity to clutter; DENSE slides accommodate data richness
+        d_intent_str = str(density_intent or "").upper()
+        if "SPARSE" in d_intent_str and score >= 2:
+            score += 1
+        elif "DENSE" in d_intent_str and score <= 4:
+            score = max(1, score - 1)
 
         if score >= 6:
             return ContentDensity.VERY_HIGH

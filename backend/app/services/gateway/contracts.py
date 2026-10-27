@@ -28,6 +28,7 @@ class AITaskType(str, enum.Enum):
     NARRATIVE_AI = "NARRATIVE_AI"                # Executive summary, concise explanation, short findings
     AGENTIC_AI = "AGENTIC_AI"                    # Multi-step workflow planning, tool dispatch routing
     PRESENTATION_AI = "PRESENTATION_AI"          # Slide narrative, visual storytelling
+    PRESENTATION_COMPOSITION = "PRESENTATION_COMPOSITION"  # Slide composition archetype, grouping, priority, density
     PRESENTATION_TYPOGRAPHY = "PRESENTATION_TYPOGRAPHY"  # Semantic typography intent, emphasis, and reflow
     DETERMINISTIC_CALCULATION = "DETERMINISTIC_CALCULATION"  # NO MODEL - mathematical bypass
 

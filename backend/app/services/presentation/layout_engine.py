@@ -289,18 +289,146 @@ class ZoneLayoutEngine:
         # 5. PRIMARY VISUAL + INSIGHT NARRATIVE / BULLETS (Standard Workhorse Layout)
         if len(body_zones) == 2:
             z1, z2 = body_zones[0], body_zones[1]
-            gap_h = cfg.zone_gap_h
 
-            # Determine visual ratio vs text ratio (rebalance in attempt 2 if needed)
-            if attempt == 2:
-                vis_ratio = 0.52
-                text_ratio = 0.44
-            elif attempt == 3:
-                vis_ratio = 0.50
-                text_ratio = 0.47
+            # PPT-L2.5 Composition Intelligence parameter extraction
+            comp_decision = slide_spec.metadata.get("composition_decision") or {}
+            visual_priority = str(
+                slide_spec.metadata.get("visual_priority")
+                or comp_decision.get("visual_priority")
+                or "PRIMARY"
+            ).upper()
+
+            density_intent = str(
+                slide_spec.metadata.get("density_intent")
+                or comp_decision.get("density_intent")
+                or "BALANCED"
+            ).upper()
+
+            narrative_placement = str(
+                slide_spec.metadata.get("narrative_placement")
+                or comp_decision.get("narrative_placement")
+                or "BESIDE_VISUAL"
+            ).upper()
+
+            planned_layout = str(
+                slide_spec.metadata.get("planned_layout_family")
+                or ""
+            ).lower()
+
+            # Dynamic spacing scaled by DensityIntent
+            if "SPARSE" in density_intent:
+                gap_h = round(cfg.zone_gap_h * 1.35, 4)
+                gap_v = round(cfg.zone_gap_v * 1.35, 4)
+            elif "DENSE" in density_intent:
+                gap_h = round(cfg.zone_gap_h * 0.70, 4)
+                gap_v = round(cfg.zone_gap_v * 0.70, 4)
             else:
-                vis_ratio = 0.58
-                text_ratio = 0.38
+                gap_h = cfg.zone_gap_h
+                gap_v = cfg.zone_gap_v
+
+            # Identify visual zone vs text zone
+            if z1.zone_type in (ZoneType.PRIMARY_VISUAL, ZoneType.DATA_TABLE):
+                vis_z, text_z = z1, z2
+            else:
+                vis_z, text_z = z2, z1
+
+            # Mark diagnostic consumption tracker
+            if "composition_consumption" not in slide_spec.metadata:
+                slide_spec.metadata["composition_consumption"] = {}
+            slide_spec.metadata["composition_consumption"].update({
+                "archetype_consumed": bool(planned_layout),
+                "visual_priority_consumed": True,
+                "density_consumed": True,
+                "narrative_placement_consumed": True,
+            })
+
+            # Check NarrativePlacementIntent:
+            if "ABOVE_VISUAL" in narrative_placement:
+                # Vertical split: Narrative text zone on top, dominant visual on bottom
+                text_pct = 0.26 if "PRIMARY" in visual_priority else 0.34
+                text_h = round(bb.height * text_pct, 4)
+                vis_h = round(bb.height - text_h - gap_v, 4)
+                bounds_map[text_z.zone_id] = Box2D(
+                    left=bb.left,
+                    top=bb.top,
+                    width=bb.width,
+                    height=text_h,
+                )
+                bounds_map[vis_z.zone_id] = Box2D(
+                    left=bb.left,
+                    top=round(bb.top + text_h + gap_v, 4),
+                    width=bb.width,
+                    height=vis_h,
+                )
+                return bounds_map
+
+            elif "BELOW_VISUAL" in narrative_placement:
+                # Vertical split: Dominant visual on top, takeaway narrative on bottom
+                vis_pct = 0.68 if "PRIMARY" in visual_priority else 0.58
+                vis_h = round(bb.height * vis_pct, 4)
+                text_h = round(bb.height - vis_h - gap_v, 4)
+                bounds_map[vis_z.zone_id] = Box2D(
+                    left=bb.left,
+                    top=bb.top,
+                    width=bb.width,
+                    height=vis_h,
+                )
+                bounds_map[text_z.zone_id] = Box2D(
+                    left=bb.left,
+                    top=round(bb.top + vis_h + gap_v, 4),
+                    width=bb.width,
+                    height=text_h,
+                )
+                return bounds_map
+
+            elif "CALLOUT" in narrative_placement:
+                # Visual dominant with floating / side callout badge
+                w_vis = round(bb.width * 0.72, 4)
+                w_callout = round(bb.width - w_vis - gap_h, 4)
+                bounds_map[vis_z.zone_id] = Box2D(
+                    left=bb.left,
+                    top=bb.top,
+                    width=w_vis,
+                    height=bb.height,
+                )
+                bounds_map[text_z.zone_id] = Box2D(
+                    left=round(bb.left + w_vis + gap_h, 4),
+                    top=round(bb.top + (bb.height * 0.15), 4),
+                    width=w_callout,
+                    height=round(bb.height * 0.65, 4),
+                )
+                return bounds_map
+
+            elif "NONE" in narrative_placement or planned_layout == "full_chart_takeaway":
+                # Dominant visual canvas
+                bounds_map[vis_z.zone_id] = Box2D(
+                    left=bb.left,
+                    top=bb.top,
+                    width=bb.width,
+                    height=bb.height,
+                )
+                bounds_map[text_z.zone_id] = Box2D(
+                    left=bb.left,
+                    top=round(bb.top + bb.height, 4),
+                    width=bb.width,
+                    height=0.0,
+                )
+                return bounds_map
+
+            # Default: BESIDE_VISUAL (Horizontal Left/Right split)
+            # VisualPriority determines visual zone width ratio
+            if "PRIMARY" in visual_priority:
+                vis_ratio = 0.64 if attempt == 1 else (0.58 if attempt == 2 else 0.54)
+                text_ratio = 0.32 if attempt == 1 else (0.38 if attempt == 2 else 0.42)
+            elif "SECONDARY" in visual_priority:
+                vis_ratio = 0.50
+                text_ratio = 0.46
+            elif any(p in visual_priority for p in ("SUPPORTING", "REFERENCE")):
+                vis_ratio = 0.42
+                text_ratio = 0.54
+            else:
+                vis_ratio = 0.58 if attempt == 1 else (0.52 if attempt == 2 else 0.50)
+                text_ratio = 0.38 if attempt == 1 else (0.44 if attempt == 2 else 0.46)
 
             # Ensure map visual gets generous area
             is_map_present = any(
@@ -312,12 +440,6 @@ class ZoneLayoutEngine:
 
             w1 = round(bb.width * vis_ratio, 4)
             w2 = round(bb.width - w1 - gap_h, 4)
-
-            # Left is visual, Right is insight/bullets
-            if z1.zone_type in (ZoneType.PRIMARY_VISUAL, ZoneType.DATA_TABLE):
-                vis_z, text_z = z1, z2
-            else:
-                vis_z, text_z = z2, z1
 
             bounds_map[vis_z.zone_id] = Box2D(
                 left=bb.left,
@@ -594,8 +716,17 @@ class LayoutConstraintEngine:
                 role = TextRole.BULLET
             elif zone_type == ZoneType.KPI_STRIP:
                 role = TextRole.KPI_LABEL
+            elif zone_type == ZoneType.CALLOUT_BADGE:
+                role = TextRole.SUBTITLE
             else:
-                role = TextRole.BODY
+                # PPT-L2.5 Composition typography priority integration
+                typo_prio = str(obj_spec.metadata.get("typography_priority") or "").upper()
+                if typo_prio == "HIGH":
+                    role = TextRole.SUBTITLE
+                elif typo_prio == "SUPPORTING":
+                    role = TextRole.CAPTION
+                else:
+                    role = TextRole.BODY
 
             content_text = obj_spec.narrative_text or obj_spec.headline or obj_spec.name
             bullet_count = 0

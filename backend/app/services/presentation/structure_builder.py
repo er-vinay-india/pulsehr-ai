@@ -24,11 +24,14 @@ from typing import Any, Optional
 
 from .content_models import (
     ContentKind,
+    ContentRole,
     PresentationContentItem,
     PresentationContentPackage,
     VisualStrategy,
 )
 from .story_models import ContentBinding, ContentBindingRole, StructuralRole
+from .composition.label_resolver import GovernedLabelResolver
+from .composition.composition_models import LabelSimplificationIntent
 from .layer_zone_models import (
     CoordinateSpace,
     EditabilityPolicy,
@@ -170,7 +173,43 @@ class LayeredSlideStructureBuilder:
         is_technical_deck: bool,
     ) -> tuple[LayeredSlideSpec, list[SlideObjectSpec], Optional[str]]:
         """Assembles zones and slide objects for a single physical slide."""
-        clean_headline = self._cleanse_text(m_slide.headline, is_technical_deck)
+        # PPT-L2.5 Composition Intelligence extraction
+        comp_decision_dict = m_slide.metadata.get("composition_decision") or {}
+        primary_cid = comp_decision_dict.get("primary_content_id")
+        supporting_cids = set(comp_decision_dict.get("supporting_content_ids") or [])
+        content_groups_raw = comp_decision_dict.get("content_groups") or []
+
+        # Parse LabelSimplificationIntent objects
+        raw_label_intents = (
+            m_slide.metadata.get("label_simplification_intents")
+            or comp_decision_dict.get("label_intents")
+            or []
+        )
+        label_intents: list[LabelSimplificationIntent] = []
+        for li in raw_label_intents:
+            if isinstance(li, LabelSimplificationIntent):
+                label_intents.append(li)
+            elif isinstance(li, dict):
+                label_intents.append(LabelSimplificationIntent(**li))
+
+        any_label_simplified = False
+
+        # Apply governed label simplification to slide headline if applicable
+        raw_headline = m_slide.headline
+        display_headline, headline_was_simplified = GovernedLabelResolver.resolve_label(raw_headline, label_intents)
+        if headline_was_simplified:
+            any_label_simplified = True
+        clean_headline = self._cleanse_text(display_headline, is_technical_deck)
+
+        # Build lookup of content_id -> CompositionContentRole
+        cid_to_comp_role: dict[str, str] = {}
+        for cg in content_groups_raw:
+            cg_role = cg.get("role") if isinstance(cg, dict) else getattr(cg, "role", None)
+            cg_role_val = cg_role.value if hasattr(cg_role, "value") else str(cg_role or "")
+            cg_cids = cg.get("content_ids") if isinstance(cg, dict) else getattr(cg, "content_ids", [])
+            for cid in cg_cids:
+                cid_to_comp_role[cid] = cg_role_val
+
         zones: list[ZoneSpec] = []
         all_slide_objects: list[SlideObjectSpec] = []
         replan_reason: Optional[str] = None
@@ -232,6 +271,12 @@ class LayeredSlideStructureBuilder:
             else:
                 narrative_bindings.append((binding, pkg_item))
 
+        # Prioritize primary content item so it occupies primary zone
+        if primary_cid:
+            visual_bindings.sort(key=lambda pair: 0 if pair[0].content_id == primary_cid else 1)
+            table_bindings.sort(key=lambda pair: 0 if pair[0].content_id == primary_cid else 1)
+            narrative_bindings.sort(key=lambda pair: 0 if pair[0].content_id == primary_cid else 1)
+
         # Check physical capacity feasibility
         if len(visual_bindings) > self.MAX_VISUALS_PER_SLIDE:
             replan_reason = (
@@ -252,7 +297,13 @@ class LayeredSlideStructureBuilder:
                 binding=b,
                 item=item,
                 is_technical_deck=is_technical_deck,
+                comp_role=cid_to_comp_role.get(item.content_id, "PRIMARY_VISUAL" if idx == 0 else "SUPPORTING_VISUAL"),
+                primary_cid=primary_cid,
+                supporting_cids=supporting_cids,
+                label_intents=label_intents,
             )
+            if obj.metadata.get("label_simplified"):
+                any_label_simplified = True
             zone_type = ZoneType.PRIMARY_VISUAL if idx == 0 else ZoneType.SECONDARY_VISUAL
             zone_id = f"{m_slide.physical_slide_id}__ZONE_{zone_type.value}"
             v_zone = ZoneSpec(
@@ -269,15 +320,22 @@ class LayeredSlideStructureBuilder:
 
         # 4. Build Data Table Zone
         if table_bindings:
-            table_objs = [
-                self._create_slide_object(
+            table_objs = []
+            for b, item in table_bindings:
+                t_obj = self._create_slide_object(
                     m_slide=m_slide,
                     binding=b,
                     item=item,
                     is_technical_deck=is_technical_deck,
+                    comp_role=cid_to_comp_role.get(item.content_id, "REFERENCE_DATA"),
+                    primary_cid=primary_cid,
+                    supporting_cids=supporting_cids,
+                    label_intents=label_intents,
                 )
-                for b, item in table_bindings
-            ]
+                if t_obj.metadata.get("label_simplified"):
+                    any_label_simplified = True
+                table_objs.append(t_obj)
+
             t_zone = ZoneSpec(
                 zone_id=f"{m_slide.physical_slide_id}__ZONE_DATA_TABLE",
                 zone_type=ZoneType.DATA_TABLE,
@@ -292,15 +350,22 @@ class LayeredSlideStructureBuilder:
 
         # 5. Build KPI Strip Zone
         if kpi_bindings:
-            kpi_objs = [
-                self._create_slide_object(
+            kpi_objs = []
+            for b, item in kpi_bindings:
+                k_obj = self._create_slide_object(
                     m_slide=m_slide,
                     binding=b,
                     item=item,
                     is_technical_deck=is_technical_deck,
+                    comp_role=cid_to_comp_role.get(item.content_id, "SUPPORTING_METRICS"),
+                    primary_cid=primary_cid,
+                    supporting_cids=supporting_cids,
+                    label_intents=label_intents,
                 )
-                for b, item in kpi_bindings
-            ]
+                if k_obj.metadata.get("label_simplified"):
+                    any_label_simplified = True
+                kpi_objs.append(k_obj)
+
             k_zone = ZoneSpec(
                 zone_id=f"{m_slide.physical_slide_id}__ZONE_KPI_STRIP",
                 zone_type=ZoneType.KPI_STRIP,
@@ -359,15 +424,22 @@ class LayeredSlideStructureBuilder:
             zones.append(n_zone)
             all_slide_objects.append(meta_obj)
         elif narrative_bindings:
-            narrative_objs = [
-                self._create_slide_object(
+            narrative_objs = []
+            for idx, (b, item) in enumerate(narrative_bindings):
+                n_obj = self._create_slide_object(
                     m_slide=m_slide,
                     binding=b,
                     item=item,
                     is_technical_deck=is_technical_deck,
+                    comp_role=cid_to_comp_role.get(item.content_id, "PRIMARY_INSIGHT" if idx == 0 else "SUPPORTING_INSIGHT"),
+                    primary_cid=primary_cid,
+                    supporting_cids=supporting_cids,
+                    label_intents=label_intents,
                 )
-                for b, item in narrative_bindings
-            ]
+                if n_obj.metadata.get("label_simplified"):
+                    any_label_simplified = True
+                narrative_objs.append(n_obj)
+
             n_zone = ZoneSpec(
                 zone_id=f"{m_slide.physical_slide_id}__ZONE_INSIGHT_NARRATIVE",
                 zone_type=ZoneType.INSIGHT_NARRATIVE,
@@ -449,6 +521,16 @@ class LayeredSlideStructureBuilder:
 
         slide_status = StructureStatus.STRUCTURE_REPLAN_REQUIRED if replan_reason else StructureStatus.STRUCTURE_VALIDATED
 
+        slide_meta = dict(m_slide.metadata)
+        if "composition_consumption" not in slide_meta:
+            slide_meta["composition_consumption"] = {}
+        slide_meta["composition_consumption"].update({
+            "archetype_consumed": bool(m_slide.metadata.get("planned_layout_family")),
+            "content_grouping_consumed": bool(cid_to_comp_role),
+            "visual_priority_consumed": bool(comp_decision_dict.get("visual_priority") or m_slide.metadata.get("visual_priority")),
+            "label_intent_consumed": bool(any_label_simplified),
+        })
+
         slide_spec = LayeredSlideSpec(
             physical_slide_id=m_slide.physical_slide_id,
             logical_slide_id=m_slide.logical_slide_id,
@@ -463,7 +545,7 @@ class LayeredSlideStructureBuilder:
             safe_area=SafeAreaSpec(),
             structure_status=slide_status,
             replan_reason=replan_reason,
-            metadata=dict(m_slide.metadata),
+            metadata=slide_meta,
         )
 
         return slide_spec, all_slide_objects, replan_reason
@@ -474,6 +556,10 @@ class LayeredSlideStructureBuilder:
         binding: ContentBinding,
         item: PresentationContentItem,
         is_technical_deck: bool,
+        comp_role: Optional[str] = None,
+        primary_cid: Optional[str] = None,
+        supporting_cids: Optional[set[str]] = None,
+        label_intents: Optional[list[LabelSimplificationIntent]] = None,
     ) -> SlideObjectSpec:
         """Instantiates a stable, truthful SlideObjectSpec from a PresentationContentItem."""
         # Truthful editability policy: defines renderer expectations, not actual rendering outcome
@@ -511,9 +597,22 @@ class LayeredSlideStructureBuilder:
         desc = f"{item.kind.value}_{item.content_id}"
         object_name = self._build_selection_pane_name(m_slide.physical_slide_id, desc)
 
-        clean_headline = self._cleanse_text(item.narrative_takeaway or item.metric_label or item.content_id, is_technical_deck)
+        # Governed label simplification
+        raw_headline = item.narrative_takeaway or item.metric_label or item.content_id
+        display_headline, label_was_simplified = GovernedLabelResolver.resolve_label(raw_headline, label_intents)
+        clean_headline = self._cleanse_text(display_headline, is_technical_deck)
         bullets_text = "\n".join(item.supporting_bullets) if item.supporting_bullets else ""
         clean_narrative = self._cleanse_text(bullets_text, is_technical_deck)
+
+        # Semantic Typography Priority from Composition Role and Content IDs
+        supporting_cids = supporting_cids or set()
+        typo_priority = "MEDIUM"
+        if comp_role == "PRIMARY_INSIGHT" or item.content_id == primary_cid:
+            typo_priority = "HIGH"
+        elif comp_role in ("REFERENCE_DATA", "SUPPORTING_INSIGHT") or item.content_id in supporting_cids:
+            typo_priority = "SUPPORTING"
+        elif comp_role == "SUPPORTING_METRICS":
+            typo_priority = "MEDIUM"
 
         # Audited lineage traceability
         source_traceability: dict[str, Any] = {}
@@ -553,6 +652,11 @@ class LayeredSlideStructureBuilder:
         obj_meta["visual_type"] = v_type
         obj_meta["visual_spec"] = getattr(item, "visual_spec", None) or getattr(binding, "visual_spec", None)
         obj_meta["source_surface"] = getattr(item, "source_surface", None) or getattr(binding, "source_surface", None)
+        obj_meta["composition_role"] = comp_role or "UNASSIGNED"
+        obj_meta["typography_priority"] = typo_priority
+        obj_meta["source_label"] = raw_headline
+        obj_meta["display_label"] = display_headline
+        obj_meta["label_simplified"] = label_was_simplified
 
         return SlideObjectSpec(
             object_id=object_id,
