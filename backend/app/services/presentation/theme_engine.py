@@ -20,6 +20,7 @@ from app.services.presentation.theme_models import (
     FontRole,
     ObjectStyleOutcome,
     PaletteTokens,
+    SemanticColorRole,
     SemanticEmphasis,
     SemanticTokenRole,
     StyleRole,
@@ -276,70 +277,150 @@ class TextStyleResolver:
         return result, audits, warnings
 
 
-class TableStyleResolver:
-    """Resolves colors and borders for native DrawingML tables."""
+class SemanticColorResolver:
+    """Central authoritative resolver for visual presentation colors and contrast.
 
-    def __init__(self, token_resolver: StyleTokenResolver):
-        self.token_resolver = token_resolver
-        self.theme = token_resolver.theme
+    Enforces the semantic split:
+    - DATA / SEMANTIC: Preserves categorical identity, status meaning, and analytical fidelity.
+    - PRESENTATION / CHROME: Adapts to theme template with role-specific contrast thresholds:
+        * Text & Essential Labels: WCAG AAA (>= 7.0:1 normal, >= 4.5:1 large/bold)
+        * Essential Boundaries: Non-text contrast (>= 3.0:1)
+        * Decorative Gridlines: Subtly perceptible (1.2:1 to 2.5:1 against local surface)
+    """
 
-    def resolve_table_style(
-        self,
-        table_object_id: str,
-        slide_bg_hex: str,
-    ) -> tuple[dict[str, Any], list[AccessibilityAuditResult], list[str]]:
-        """Resolves header fill, header text, body text, alternate row fill, and borders."""
-        audits: list[AccessibilityAuditResult] = []
-        warnings: list[str] = []
-
-        header_fill = self.theme.table_tokens.header_fill
-        header_text = self.theme.table_tokens.header_text
-        body_text = self.theme.table_tokens.body_text
-        alt_fill = self.theme.table_tokens.alt_row_fill or slide_bg_hex
-        border_color = self.theme.table_tokens.border
-
-        # Verify header contrast
-        resolved_header_text, h_audit = self.token_resolver.check_and_resolve_contrast(
-            fg_hex=header_text,
-            bg_hex=header_fill,
-            target_id=f"{table_object_id}__HEADER",
-            target_type="TABLE_HEADER",
-            is_large_text=False,
-        )
-        audits.append(h_audit)
-
-        # Verify body contrast
-        resolved_body_text, b_audit = self.token_resolver.check_and_resolve_contrast(
-            fg_hex=body_text,
-            bg_hex=slide_bg_hex,
-            target_id=f"{table_object_id}__BODY",
-            target_type="TABLE_BODY",
-            is_large_text=False,
-        )
-        audits.append(b_audit)
-
-        font_family, f_warnings = FontResolver.resolve_font(self.theme, FontRole.BODY)
-        warnings.extend(f_warnings)
-
-        return {
-            "header_fill_hex": header_fill,
-            "header_text_hex": resolved_header_text,
-            "body_text_hex": resolved_body_text,
-            "alt_row_fill_hex": alt_fill,
-            "border_color_hex": border_color,
-            "font_family": font_family,
-            "header_contrast": h_audit.contrast_ratio,
-            "body_contrast": b_audit.contrast_ratio,
-        }, audits, warnings
-
-
-class ChartStyleResolver:
-    """Resolves deterministic color palettes for chart series and axes."""
-
-    def __init__(self, token_resolver: StyleTokenResolver):
-        self.token_resolver = token_resolver
-        self.theme = token_resolver.theme
+    def __init__(self, theme: ThemeDefinition):
+        self.theme = theme
+        self.policy = theme.accessibility_policy
+        self.token_resolver = StyleTokenResolver(theme)
         self._series_color_cache: dict[str, str] = {}
+
+    def resolve_color(
+        self,
+        role: SemanticColorRole | str,
+        surface_hex: Optional[str] = None,
+        is_large_text: bool = False,
+        target_id: str = "",
+    ) -> tuple[str, AccessibilityAuditResult]:
+        """Resolves color for a semantic role against its immediate surface with deterministic repair."""
+        if isinstance(role, str):
+            try:
+                role_enum = SemanticColorRole(role.upper())
+            except ValueError:
+                role_enum = SemanticColorRole.BODY
+        else:
+            role_enum = role
+
+        # Local surface selection: default to card surface for visuals, slide bg for framing
+        if surface_hex:
+            local_surface = surface_hex
+        elif role_enum in (
+            SemanticColorRole.SLIDE_BACKGROUND,
+            SemanticColorRole.TITLE,
+            SemanticColorRole.SUBTITLE,
+        ):
+            local_surface = self.theme.palette.background
+        else:
+            local_surface = self.theme.palette.surface
+
+        # 1. Surfaces
+        if role_enum == SemanticColorRole.SLIDE_BACKGROUND:
+            return self.theme.palette.background, self._audit(target_id or "SLIDE_BG", "SURFACE", self.theme.palette.background, self.theme.palette.background, 1.0, 1.0, True)
+        if role_enum == SemanticColorRole.CARD_SURFACE:
+            return self.theme.palette.surface, self._audit(target_id or "CARD_BG", "SURFACE", self.theme.palette.surface, self.theme.palette.background, 1.0, 1.0, True)
+        if role_enum == SemanticColorRole.CHART_PLOT_SURFACE:
+            return self.theme.palette.surface, self._audit(target_id or "CHART_PLOT_BG", "SURFACE", self.theme.palette.surface, self.theme.palette.surface, 1.0, 1.0, True)
+        if role_enum == SemanticColorRole.TABLE_HEADER_SURFACE:
+            return self.theme.table_tokens.header_fill, self._audit(target_id or "TABLE_HEADER_BG", "SURFACE", self.theme.table_tokens.header_fill, local_surface, 1.0, 1.0, True)
+        if role_enum == SemanticColorRole.TABLE_ROW_ALT_SURFACE:
+            alt = self.theme.table_tokens.alt_row_fill or local_surface
+            return alt, self._audit(target_id or "TABLE_ROW_ALT_BG", "SURFACE", alt, local_surface, 1.0, 1.0, True)
+
+        # 2. Decorative Gridlines (Target: 1.2:1 to 2.5:1, subtle not harsh)
+        if role_enum in (SemanticColorRole.GRID_LINE, SemanticColorRole.REFERENCE_LINE_SUBTLE):
+            raw_grid = self.theme.get_token_hex(SemanticTokenRole.GRID_LINE)
+            ratio = calculate_contrast_ratio(raw_grid, local_surface)
+            chosen_grid = raw_grid
+            if ratio < 1.2:
+                muted = self.theme.get_token_hex(SemanticTokenRole.TEXT_MUTED)
+                if calculate_contrast_ratio(muted, local_surface) >= 1.2:
+                    chosen_grid = muted
+            return chosen_grid, self._audit(target_id or "GRID_LINE", "DECORATIVE_LINE", chosen_grid, local_surface, ratio, 1.2, ratio >= 1.2)
+
+        # 3. Essential Graphical Boundaries (Target: non-text contrast >= 3.0:1)
+        if role_enum in (SemanticColorRole.CARD_BORDER, SemanticColorRole.AXIS_LINE, SemanticColorRole.TABLE_BORDER):
+            if role_enum == SemanticColorRole.AXIS_LINE:
+                candidate = self.theme.get_token_hex(SemanticTokenRole.TEXT_MUTED)
+            elif role_enum == SemanticColorRole.TABLE_BORDER:
+                candidate = self.theme.table_tokens.border
+            else:
+                candidate = self.theme.border_tokens.subtle
+
+            ratio = calculate_contrast_ratio(candidate, local_surface)
+            if ratio >= 3.0:
+                return candidate, self._audit(target_id or role_enum.value, "BOUNDARY", candidate, local_surface, ratio, 3.0, True)
+
+            strong_border = self.theme.border_tokens.strong
+            r_strong = calculate_contrast_ratio(strong_border, local_surface)
+            if r_strong >= 3.0:
+                return strong_border, self._audit(target_id or role_enum.value, "BOUNDARY", strong_border, local_surface, r_strong, 3.0, True, True, "BORDER_STRONG")
+
+            alt = self.theme.get_token_hex(SemanticTokenRole.TEXT_SECONDARY)
+            r_alt = calculate_contrast_ratio(alt, local_surface)
+            return alt, self._audit(target_id or role_enum.value, "BOUNDARY", alt, local_surface, r_alt, 3.0, r_alt >= 3.0, True, "TEXT_SECONDARY")
+
+        # 4. Data / Semantic Status (Preserve meaning; check legibility >= 2.5:1)
+        if role_enum == SemanticColorRole.STATUS_POSITIVE:
+            c = self.theme.get_token_hex(SemanticTokenRole.SUCCESS)
+            r = calculate_contrast_ratio(c, local_surface)
+            return c, self._audit(target_id or "STATUS_POSITIVE", "SEMANTIC_DATA", c, local_surface, r, 2.5, r >= 2.5)
+        if role_enum == SemanticColorRole.STATUS_NEGATIVE:
+            c = self.theme.get_token_hex(SemanticTokenRole.DANGER)
+            r = calculate_contrast_ratio(c, local_surface)
+            return c, self._audit(target_id or "STATUS_NEGATIVE", "SEMANTIC_DATA", c, local_surface, r, 2.5, r >= 2.5)
+        if role_enum == SemanticColorRole.STATUS_WARNING:
+            c = self.theme.get_token_hex(SemanticTokenRole.WARNING)
+            r = calculate_contrast_ratio(c, local_surface)
+            return c, self._audit(target_id or "STATUS_WARNING", "SEMANTIC_DATA", c, local_surface, r, 2.5, r >= 2.5)
+        if role_enum == SemanticColorRole.STATUS_NEUTRAL:
+            c = self.theme.get_token_hex(SemanticTokenRole.TEXT_MUTED)
+            r = calculate_contrast_ratio(c, local_surface)
+            return c, self._audit(target_id or "STATUS_NEUTRAL", "SEMANTIC_DATA", c, local_surface, r, 2.5, r >= 2.5)
+
+        # 5. Text & Essential Labels (WCAG AAA Target: >= 7.0:1 normal, >= 4.5:1 large/bold)
+        threshold = 4.5 if is_large_text else 7.0
+        if role_enum in (SemanticColorRole.TITLE, SemanticColorRole.KPI_VALUE):
+            candidate = self.theme.get_token_hex(SemanticTokenRole.TEXT_PRIMARY)
+        elif role_enum in (SemanticColorRole.SUBTITLE, SemanticColorRole.AXIS_TITLE, SemanticColorRole.TABLE_HEADER_TEXT):
+            candidate = self.theme.get_token_hex(SemanticTokenRole.TEXT_SECONDARY)
+        elif role_enum in (
+            SemanticColorRole.AXIS_TEXT,
+            SemanticColorRole.TICK_TEXT,
+            SemanticColorRole.LEGEND_TEXT,
+            SemanticColorRole.DATA_LABEL,
+            SemanticColorRole.ANNOTATION_TEXT,
+            SemanticColorRole.KPI_LABEL,
+        ):
+            candidate = self.theme.get_token_hex(SemanticTokenRole.TEXT_SECONDARY)
+        elif role_enum == SemanticColorRole.TABLE_CELL_TEXT:
+            candidate = self.theme.table_tokens.body_text
+        else:
+            candidate = self.theme.get_token_hex(SemanticTokenRole.TEXT_PRIMARY)
+
+        ratio = calculate_contrast_ratio(candidate, local_surface)
+        if ratio >= threshold:
+            return candidate, self._audit(target_id or role_enum.value, "TEXT", candidate, local_surface, ratio, threshold, True)
+
+        # Deterministic Color Repair for text/labels
+        alt_dark = self.theme.get_token_hex(SemanticTokenRole.TEXT_ON_DARK)
+        alt_light = self.theme.get_token_hex(SemanticTokenRole.TEXT_ON_LIGHT)
+        r_dark = calculate_contrast_ratio(alt_dark, local_surface)
+        r_light = calculate_contrast_ratio(alt_light, local_surface)
+
+        best_token = "TEXT_ON_DARK" if r_dark >= r_light else "TEXT_ON_LIGHT"
+        best_candidate = alt_dark if r_dark >= r_light else alt_light
+        best_ratio = max(r_dark, r_light)
+
+        return best_candidate, self._audit(target_id or role_enum.value, "TEXT", best_candidate, local_surface, best_ratio, threshold, best_ratio >= threshold, True, best_token)
 
     def resolve_series_color(
         self,
@@ -352,13 +433,11 @@ class ChartStyleResolver:
         if clean_name in self._series_color_cache:
             return self._series_color_cache[clean_name]
 
-        # Check explicit status intent from upstream
         if status_intent and status_intent in self.theme.chart_palette.status:
             chosen = self.theme.chart_palette.status[status_intent]
             self._series_color_cache[clean_name] = chosen
             return chosen
 
-        # Assign from categorical palette deterministically by index
         palette = self.theme.chart_palette.categorical
         if not palette:
             palette = [self.theme.palette.brand, self.theme.palette.accent]
@@ -368,32 +447,204 @@ class ChartStyleResolver:
 
     def resolve_chart_chrome(
         self,
-        slide_bg_hex: str,
-    ) -> tuple[dict[str, str], list[AccessibilityAuditResult]]:
-        """Resolves axis line, gridline, and label styling with contrast checking."""
+        surface_hex: Optional[str] = None,
+    ) -> tuple[dict[str, Any], list[AccessibilityAuditResult]]:
+        """Resolves complete visual chart chrome with local surface AAA contrast."""
         audits: list[AccessibilityAuditResult] = []
-        
-        axis_color = self.token_resolver.resolve_color(SemanticTokenRole.TEXT_MUTED)
-        grid_color = self.token_resolver.resolve_color(SemanticTokenRole.GRID_LINE)
-        label_color = self.token_resolver.resolve_color(SemanticTokenRole.TEXT_SECONDARY)
+        plot_bg = surface_hex or self.theme.palette.surface
 
-        resolved_label, audit = self.token_resolver.check_and_resolve_contrast(
-            fg_hex=label_color,
-            bg_hex=slide_bg_hex,
-            target_id="CHART_CHROME_LABEL",
-            target_type="CHART_LABEL",
-            is_large_text=False,
-        )
-        audits.append(audit)
+        axis_line, a_audit = self.resolve_color(SemanticColorRole.AXIS_LINE, plot_bg, target_id="CHART_AXIS_LINE")
+        audits.append(a_audit)
+
+        grid_line, g_audit = self.resolve_color(SemanticColorRole.GRID_LINE, plot_bg, target_id="CHART_GRID_LINE")
+        audits.append(g_audit)
+
+        tick_text, t_audit = self.resolve_color(SemanticColorRole.TICK_TEXT, plot_bg, is_large_text=False, target_id="CHART_TICK_TEXT")
+        audits.append(t_audit)
+
+        axis_title, at_audit = self.resolve_color(SemanticColorRole.AXIS_TITLE, plot_bg, is_large_text=False, target_id="CHART_AXIS_TITLE")
+        audits.append(at_audit)
+
+        legend_text, l_audit = self.resolve_color(SemanticColorRole.LEGEND_TEXT, plot_bg, is_large_text=False, target_id="CHART_LEGEND_TEXT")
+        audits.append(l_audit)
+
+        data_label, dl_audit = self.resolve_color(SemanticColorRole.DATA_LABEL, plot_bg, is_large_text=False, target_id="CHART_DATA_LABEL")
+        audits.append(dl_audit)
 
         font_family, _ = FontResolver.resolve_font(self.theme, FontRole.CAPTION)
 
         return {
-            "axis_color_hex": axis_color,
-            "grid_color_hex": grid_color,
-            "label_color_hex": resolved_label,
+            "plot_bg_hex": plot_bg,
+            "axis_line_color_hex": axis_line,
+            "grid_color_hex": grid_line,
+            "tick_text_color_hex": tick_text,
+            "axis_title_color_hex": axis_title,
+            "legend_text_color_hex": legend_text,
+            "data_label_color_hex": data_label,
             "font_family": font_family,
+            # Backward-compatibility aliases
+            "axis_color_hex": axis_line,
+            "label_color_hex": tick_text,
         }, audits
+
+    def resolve_table_chrome(
+        self,
+        surface_hex: Optional[str] = None,
+        table_object_id: str = "TABLE",
+    ) -> tuple[dict[str, Any], list[AccessibilityAuditResult], list[str]]:
+        """Resolves complete table styling with local surface contrast."""
+        audits: list[AccessibilityAuditResult] = []
+        warnings: list[str] = []
+        card_bg = surface_hex or self.theme.palette.surface
+
+        header_fill = self.theme.table_tokens.header_fill
+        header_text, h_audit = self.resolve_color(SemanticColorRole.TABLE_HEADER_TEXT, header_fill, target_id=f"{table_object_id}__HEADER")
+        audits.append(h_audit)
+
+        body_text, b_audit = self.resolve_color(SemanticColorRole.TABLE_CELL_TEXT, card_bg, target_id=f"{table_object_id}__BODY")
+        audits.append(b_audit)
+
+        border_color, brd_audit = self.resolve_color(SemanticColorRole.TABLE_BORDER, card_bg, target_id=f"{table_object_id}__BORDER")
+        audits.append(brd_audit)
+
+        alt_fill = self.theme.table_tokens.alt_row_fill or card_bg
+
+        font_family, f_warnings = FontResolver.resolve_font(self.theme, FontRole.BODY)
+        warnings.extend(f_warnings)
+
+        return {
+            "header_fill_hex": header_fill,
+            "header_text_hex": header_text,
+            "body_text_hex": body_text,
+            "alt_row_fill_hex": alt_fill,
+            "border_color_hex": border_color,
+            "font_family": font_family,
+            "header_contrast": h_audit.contrast_ratio,
+            "body_contrast": b_audit.contrast_ratio,
+        }, audits, warnings
+
+    def resolve_asset_palette(
+        self,
+        surface_hex: Optional[str] = None,
+    ) -> dict[str, Any]:
+        """Resolves full typed RGB/RGBA palette for Pillow and SVG visual rendering."""
+        card_bg = surface_hex or self.theme.palette.surface
+        is_dark = self.theme.is_dark
+
+        card_border, _ = self.resolve_color(SemanticColorRole.CARD_BORDER, card_bg)
+        title_text, _ = self.resolve_color(SemanticColorRole.TITLE, card_bg, is_large_text=True)
+        body_text, _ = self.resolve_color(SemanticColorRole.BODY, card_bg)
+        muted_text, _ = self.resolve_color(SemanticColorRole.TICK_TEXT, card_bg)
+        grid_line, _ = self.resolve_color(SemanticColorRole.GRID_LINE, card_bg)
+        axis_line, _ = self.resolve_color(SemanticColorRole.AXIS_LINE, card_bg)
+
+        success_val = self.theme.get_token_hex(SemanticTokenRole.SUCCESS)
+        danger_val = self.theme.get_token_hex(SemanticTokenRole.DANGER)
+        neutral_val = self.theme.get_token_hex(SemanticTokenRole.TEXT_MUTED)
+
+        def _rgba(hex_str: str, alpha: int = 255) -> tuple[int, int, int, int]:
+            r, g, b = parse_hex_color(hex_str)
+            return (r, g, b, alpha)
+
+        return {
+            "is_dark": is_dark,
+            "card_bg_hex": card_bg,
+            "card_bg_rgba": _rgba(card_bg),
+            "card_border_rgba": _rgba(card_border),
+            "title_text_rgba": _rgba(title_text),
+            "body_text_rgba": _rgba(body_text),
+            "muted_text_rgba": _rgba(muted_text),
+            "grid_line_rgba": _rgba(grid_line),
+            "axis_line_rgba": _rgba(axis_line),
+            "status_success": {
+                "bg_rgba": _rgba(card_bg),
+                "border_rgba": _rgba(success_val, 160),
+                "val_rgba": _rgba(success_val),
+            },
+            "status_danger": {
+                "bg_rgba": _rgba(card_bg),
+                "border_rgba": _rgba(danger_val, 160),
+                "val_rgba": _rgba(danger_val),
+            },
+            "status_neutral": {
+                "bg_rgba": _rgba(card_bg),
+                "border_rgba": _rgba(card_border),
+                "val_rgba": _rgba(neutral_val),
+            },
+        }
+
+    def _audit(
+        self,
+        target_id: str,
+        target_type: str,
+        fg_hex: str,
+        bg_hex: str,
+        ratio: float,
+        threshold: float,
+        passed: bool,
+        auto_resolved: bool = False,
+        resolution_token: Optional[str] = None,
+    ) -> AccessibilityAuditResult:
+        return AccessibilityAuditResult(
+            target_id=target_id,
+            target_type=target_type,
+            foreground_hex=fg_hex,
+            background_hex=bg_hex,
+            contrast_ratio=round(ratio, 2),
+            threshold=threshold,
+            passed=passed,
+            auto_resolved=auto_resolved,
+            resolution_token=resolution_token,
+        )
+
+
+class TableStyleResolver:
+    """Resolves colors and borders for native DrawingML tables."""
+
+    def __init__(self, token_resolver: StyleTokenResolver):
+        self.token_resolver = token_resolver
+        self.theme = token_resolver.theme
+        self.semantic_resolver = SemanticColorResolver(self.theme)
+
+    def resolve_table_style(
+        self,
+        table_object_id: str,
+        slide_bg_hex: str,
+    ) -> tuple[dict[str, Any], list[AccessibilityAuditResult], list[str]]:
+        """Resolves header fill, header text, body text, alternate row fill, and borders."""
+        return self.semantic_resolver.resolve_table_chrome(
+            surface_hex=slide_bg_hex,
+            table_object_id=table_object_id,
+        )
+
+
+class ChartStyleResolver:
+    """Resolves deterministic color palettes for chart series and axes."""
+
+    def __init__(self, token_resolver: StyleTokenResolver):
+        self.token_resolver = token_resolver
+        self.theme = token_resolver.theme
+        self.semantic_resolver = SemanticColorResolver(self.theme)
+
+    def resolve_series_color(
+        self,
+        series_name: str,
+        series_index: int,
+        status_intent: Optional[str] = None,
+    ) -> str:
+        """Deterministically assigns series color while maintaining deck-wide consistency."""
+        return self.semantic_resolver.resolve_series_color(
+            series_name=series_name,
+            series_index=series_index,
+            status_intent=status_intent,
+        )
+
+    def resolve_chart_chrome(
+        self,
+        slide_bg_hex: str,
+    ) -> tuple[dict[str, Any], list[AccessibilityAuditResult]]:
+        """Resolves axis line, gridline, and label styling with contrast checking."""
+        return self.semantic_resolver.resolve_chart_chrome(surface_hex=slide_bg_hex)
 
 
 class ThemeEngine:
@@ -422,6 +673,12 @@ class ThemeEngine:
             return cls._registry[normalized_key]
 
         return cls._registry.get("executive_dark") or next(iter(cls._registry.values()))
+
+    @classmethod
+    def get_semantic_resolver(cls, theme_input: Any = None) -> SemanticColorResolver:
+        """Retrieves or builds a SemanticColorResolver for the resolved theme."""
+        theme = cls.get_theme(theme_input)
+        return SemanticColorResolver(theme)
 
     @classmethod
     def _ensure_registry_loaded(cls) -> None:

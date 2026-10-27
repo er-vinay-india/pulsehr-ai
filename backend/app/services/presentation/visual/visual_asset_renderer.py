@@ -42,6 +42,38 @@ def _get_font(size: int, bold: bool = False) -> ImageFont.ImageFont | ImageFont.
     return ImageFont.load_default()
 
 
+def _get_active_palette(theme_palette: Optional[dict[str, Any]] = None) -> dict[str, Any]:
+    """Returns active typed RGBA palette, defaulting to clean high-contrast light mode."""
+    if theme_palette:
+        return theme_palette
+    return {
+        "is_dark": False,
+        "card_bg_rgba": (255, 255, 255, 255),
+        "canvas_bg_rgba": (248, 250, 252, 255),
+        "card_border_rgba": (226, 232, 240, 255),
+        "title_text_rgba": (15, 23, 42, 255),
+        "body_text_rgba": (30, 41, 59, 255),
+        "muted_text_rgba": (100, 116, 139, 255),
+        "grid_line_rgba": (241, 245, 249, 255),
+        "axis_line_rgba": (203, 213, 225, 255),
+        "status_success": {
+            "bg_rgba": (240, 253, 244, 255),
+            "border_rgba": (187, 247, 208, 255),
+            "val_rgba": (22, 163, 74, 255),
+        },
+        "status_danger": {
+            "bg_rgba": (254, 242, 242, 255),
+            "border_rgba": (254, 202, 202, 255),
+            "val_rgba": (220, 38, 38, 255),
+        },
+        "status_neutral": {
+            "bg_rgba": (248, 250, 252, 255),
+            "border_rgba": (226, 232, 240, 255),
+            "val_rgba": (15, 23, 42, 255),
+        },
+    }
+
+
 class VisualAssetRenderer:
     """Programmatic renderer for faithful visual assets."""
 
@@ -75,9 +107,12 @@ class VisualAssetRenderer:
         height_px: int = 1000,
         title: str = "",
         takeaway: str = "",
+        theme_palette: Optional[dict[str, Any]] = None,
     ) -> Path:
         """Renders an authoritative, high-resolution India Choropleth Density Map."""
-        img = Image.new("RGBA", (width_px, height_px), (248, 250, 252, 255))
+        pal = _get_active_palette(theme_palette)
+        canvas_bg = pal.get("canvas_bg_rgba") or pal["card_bg_rgba"]
+        img = Image.new("RGBA", (width_px, height_px), canvas_bg)
         draw = ImageDraw.Draw(img)
 
         # 1. Load GeoJSON
@@ -230,9 +265,12 @@ class VisualAssetRenderer:
         height_px: int = 850,
         title: str = "",
         takeaway: str = "",
+        theme_palette: Optional[dict[str, Any]] = None,
     ) -> Path:
         """Renders an authoritative, crisp Distribution Box & Whisker Visual."""
-        img = Image.new("RGBA", (width_px, height_px), (248, 250, 252, 255))
+        pal = _get_active_palette(theme_palette)
+        canvas_bg = pal.get("canvas_bg_rgba") or pal["card_bg_rgba"]
+        img = Image.new("RGBA", (width_px, height_px), canvas_bg)
         draw = ImageDraw.Draw(img)
 
         unit = spec.get("unit") or "%"
@@ -258,11 +296,11 @@ class VisualAssetRenderer:
         card_h = height_px - 120
 
         # Background card
-        draw.rounded_rectangle([card_x, card_y, card_x + card_w, card_y + card_h], radius=12, fill=(255, 255, 255, 255), outline=(226, 232, 240, 255), width=2)
+        draw.rounded_rectangle([card_x, card_y, card_x + card_w, card_y + card_h], radius=12, fill=pal["card_bg_rgba"], outline=pal["card_border_rgba"], width=2)
 
         # Title & Metric Header
-        draw.text((card_x + 40, card_y + 35), "Empirical Metric Distribution & Interquartile Spread", fill=(15, 23, 42, 255), font=_get_font(18, bold=True))
-        draw.text((card_x + 40, card_y + 65), f"Primary Dispersion Benchmark: {key_metric} • IQR: {iqr:.1f}{unit}", fill=(71, 85, 105, 255), font=_get_font(13))
+        draw.text((card_x + 40, card_y + 35), "Empirical Metric Distribution & Interquartile Spread", fill=pal["title_text_rgba"], font=_get_font(18, bold=True))
+        draw.text((card_x + 40, card_y + 65), f"Primary Dispersion Benchmark: {key_metric} • IQR: {iqr:.1f}{unit}", fill=pal["muted_text_rgba"], font=_get_font(13))
 
         # Horizontal Box Plot Layout
         plot_left = card_x + 120
@@ -285,39 +323,42 @@ class VisualAssetRenderer:
         x_max = to_x(val_max)
 
         # 1. Axis Line & Background Gridlines
-        draw.line([(plot_left, center_y + box_half_h + 50), (plot_right, center_y + box_half_h + 50)], fill=(203, 213, 225, 255), width=2)
+        draw.line([(plot_left, center_y + box_half_h + 50), (plot_right, center_y + box_half_h + 50)], fill=pal["axis_line_rgba"], width=2)
         for tick_val in [data_min, val_min, q1, median, q3, val_max, data_max]:
             tx = to_x(tick_val)
-            draw.line([(tx, center_y - box_half_h - 20), (tx, center_y + box_half_h + 55)], fill=(241, 245, 249, 255), width=1)
-            draw.line([(tx, center_y + box_half_h + 50), (tx, center_y + box_half_h + 60)], fill=(148, 163, 184, 255), width=2)
-            draw.text((tx - 15, center_y + box_half_h + 65), f"{tick_val:.1f}{unit}", fill=(100, 116, 139, 255), font=_get_font(11))
+            draw.line([(tx, center_y - box_half_h - 20), (tx, center_y + box_half_h + 55)], fill=pal["grid_line_rgba"], width=1)
+            draw.line([(tx, center_y + box_half_h + 50), (tx, center_y + box_half_h + 60)], fill=pal["muted_text_rgba"], width=2)
+            draw.text((tx - 15, center_y + box_half_h + 65), f"{tick_val:.1f}{unit}", fill=pal["muted_text_rgba"], font=_get_font(11))
 
         # 2. Whiskers
-        draw.line([(x_min, center_y), (x_q1, center_y)], fill=(79, 70, 229, 255), width=3)
-        draw.line([(x_q3, center_y), (x_max, center_y)], fill=(79, 70, 229, 255), width=3)
+        whisker_c = (122, 180, 251, 255) if pal["is_dark"] else (79, 70, 229, 255)
+        draw.line([(x_min, center_y), (x_q1, center_y)], fill=whisker_c, width=3)
+        draw.line([(x_q3, center_y), (x_max, center_y)], fill=whisker_c, width=3)
 
         # Whisker Caps
         cap_h = 35
-        draw.line([(x_min, center_y - cap_h), (x_min, center_y + cap_h)], fill=(79, 70, 229, 255), width=4)
-        draw.line([(x_max, center_y - cap_h), (x_max, center_y + cap_h)], fill=(79, 70, 229, 255), width=4)
+        draw.line([(x_min, center_y - cap_h), (x_min, center_y + cap_h)], fill=whisker_c, width=4)
+        draw.line([(x_max, center_y - cap_h), (x_max, center_y + cap_h)], fill=whisker_c, width=4)
 
         # 3. Central Box (IQR: Q1 to Q3)
-        draw.rounded_rectangle([x_q1, center_y - box_half_h, x_q3, center_y + box_half_h], radius=6, fill=(238, 242, 255, 255), outline=(79, 70, 229, 255), width=3)
+        box_fill = (20, 30, 48, 255) if pal["is_dark"] else (238, 242, 255, 255)
+        draw.rounded_rectangle([x_q1, center_y - box_half_h, x_q3, center_y + box_half_h], radius=6, fill=box_fill, outline=whisker_c, width=3)
 
         # 4. Median Line
-        draw.line([(x_med, center_y - box_half_h), (x_med, center_y + box_half_h)], fill=(220, 38, 38, 255), width=4)
+        med_color = pal["status_danger"]["val_rgba"]
+        draw.line([(x_med, center_y - box_half_h), (x_med, center_y + box_half_h)], fill=med_color, width=4)
 
         # 5. Data Callouts / Badges
         # Min
-        draw.text((x_min - 25, center_y - cap_h - 25), f"Min: {val_min:.1f}{unit}", fill=(71, 85, 105, 255), font=_get_font(12, bold=True))
+        draw.text((x_min - 25, center_y - cap_h - 25), f"Min: {val_min:.1f}{unit}", fill=pal["muted_text_rgba"], font=_get_font(12, bold=True))
         # Q1
-        draw.text((x_q1 - 20, center_y - box_half_h - 25), f"Q1: {q1:.1f}{unit}", fill=(67, 56, 202, 255), font=_get_font(12, bold=True))
+        draw.text((x_q1 - 20, center_y - box_half_h - 25), f"Q1: {q1:.1f}{unit}", fill=whisker_c, font=_get_font(12, bold=True))
         # Median
-        draw.text((x_med - 35, center_y - box_half_h - 45), f"Median: {median:.1f}{unit}", fill=(220, 38, 38, 255), font=_get_font(14, bold=True))
+        draw.text((x_med - 35, center_y - box_half_h - 45), f"Median: {median:.1f}{unit}", fill=med_color, font=_get_font(14, bold=True))
         # Q3
-        draw.text((x_q3 - 20, center_y - box_half_h - 25), f"Q3: {q3:.1f}{unit}", fill=(67, 56, 202, 255), font=_get_font(12, bold=True))
+        draw.text((x_q3 - 20, center_y - box_half_h - 25), f"Q3: {q3:.1f}{unit}", fill=whisker_c, font=_get_font(12, bold=True))
         # Max
-        draw.text((x_max - 25, center_y - cap_h - 25), f"Max: {val_max:.1f}{unit}", fill=(71, 85, 105, 255), font=_get_font(12, bold=True))
+        draw.text((x_max - 25, center_y - cap_h - 25), f"Max: {val_max:.1f}{unit}", fill=pal["muted_text_rgba"], font=_get_font(12, bold=True))
 
         temp_file = tempfile.NamedTemporaryFile(suffix=".png", prefix="boxplot_dist_", delete=False)
         img.save(temp_file.name, format="PNG")
@@ -332,9 +373,12 @@ class VisualAssetRenderer:
         height_px: int = 850,
         title: str = "",
         takeaway: str = "",
+        theme_palette: Optional[dict[str, Any]] = None,
     ) -> Path:
         """Renders an authoritative, crisp Benchmark / Bullet Target Visual."""
-        img = Image.new("RGBA", (width_px, height_px), (248, 250, 252, 255))
+        pal = _get_active_palette(theme_palette)
+        canvas_bg = pal.get("canvas_bg_rgba") or pal["card_bg_rgba"]
+        img = Image.new("RGBA", (width_px, height_px), canvas_bg)
         draw = ImageDraw.Draw(img)
 
         unit = spec.get("unit") or "units"
@@ -350,11 +394,13 @@ class VisualAssetRenderer:
         card_h = height_px - 100
 
         # Card container
-        draw.rounded_rectangle([card_x, card_y, card_x + card_w, card_y + card_h], radius=12, fill=(255, 255, 255, 255), outline=(226, 232, 240, 255), width=2)
+        draw.rounded_rectangle([card_x, card_y, card_x + card_w, card_y + card_h], radius=12, fill=pal["card_bg_rgba"], outline=pal["card_border_rgba"], width=2)
 
         # Title & Target Banner
-        draw.text((card_x + 40, card_y + 35), "Entity Performance vs Benchmark Target Threshold", fill=(15, 23, 42, 255), font=_get_font(18, bold=True))
-        draw.text((card_x + 40, card_y + 65), f"Target Benchmark: {benchmark:,.0f} {unit} • Comparative Entity Threshold", fill=(71, 85, 105, 255), font=_get_font(13))
+        display_title = title or "Entity Performance vs Benchmark Target Threshold"
+        draw.text((card_x + 40, card_y + 35), display_title, fill=pal["title_text_rgba"], font=_get_font(18, bold=True))
+        display_takeaway = takeaway or f"Target Benchmark: {benchmark:,.0f} {unit} • Comparative Entity Threshold"
+        draw.text((card_x + 40, card_y + 65), display_takeaway, fill=pal["muted_text_rgba"], font=_get_font(13))
 
         # Chart Geometry
         label_w = 220
@@ -375,30 +421,35 @@ class VisualAssetRenderer:
         bench_x = chart_left + to_bar_w(benchmark)
         bench_top = card_y + 115
         bench_bottom = card_y + 115 + int(row_h * num_items) + 15
-        draw.line([(bench_x, bench_top), (bench_x, bench_bottom)], fill=(220, 38, 38, 255), width=3)
+        target_color = pal["status_danger"]["val_rgba"]
+        draw.line([(bench_x, bench_top), (bench_x, bench_bottom)], fill=target_color, width=3)
 
         # Target badge at top of line
-        draw.rounded_rectangle([bench_x - 70, bench_top - 22, bench_x + 70, bench_top + 4], radius=4, fill=(254, 226, 226, 255), outline=(220, 38, 38, 255), width=1)
-        draw.text((bench_x - 62, bench_top - 18), f"Target: {benchmark/1e6:.1f}M", fill=(185, 28, 28, 255), font=_get_font(11, bold=True))
+        target_bg = pal["status_danger"]["bg_rgba"]
+        target_border = pal["status_danger"]["border_rgba"]
+        draw.rounded_rectangle([bench_x - 70, bench_top - 22, bench_x + 70, bench_top + 4], radius=4, fill=target_bg, outline=target_border, width=1)
+        draw.text((bench_x - 62, bench_top - 18), f"Target: {benchmark/1e6:.1f}M", fill=target_color, font=_get_font(11, bold=True))
 
         # Draw Rows & Bars
+        track_bg = pal["grid_line_rgba"]
+        accent_bar = (122, 180, 251, 255) if pal["is_dark"] else (37, 99, 235, 255)
         for idx, (cat, val) in enumerate(zip(raw_cats, raw_vals)):
             cy = card_y + 120 + int(idx * row_h) + int((row_h - bar_h) / 2)
             # Entity Label
-            draw.text((card_x + 40, cy + 8), str(cat)[:22], fill=(30, 41, 59, 255), font=_get_font(13, bold=True))
+            draw.text((card_x + 40, cy + 8), str(cat)[:22], fill=pal["body_text_rgba"], font=_get_font(13, bold=True))
 
             # Background bar slot (comparison track)
-            draw.rounded_rectangle([chart_left, cy, chart_right, cy + bar_h], radius=4, fill=(241, 245, 249, 255))
+            draw.rounded_rectangle([chart_left, cy, chart_right, cy + bar_h], radius=4, fill=track_bg)
 
             # Foreground value bar
             bw = to_bar_w(val)
             meets_target = val >= benchmark
-            bar_color = (37, 99, 235, 255) if meets_target else (148, 163, 184, 255)
+            bar_color = accent_bar if meets_target else pal["muted_text_rgba"]
             draw.rounded_rectangle([chart_left, cy, chart_left + bw, cy + bar_h], radius=4, fill=bar_color)
 
             # Value label
             val_str = f"{val/1e6:.1f}M {unit}" if val >= 1e6 else f"{val:,.0f} {unit}"
-            draw.text((chart_left + bw + 12, cy + 10), val_str, fill=(15, 23, 42, 255), font=_get_font(12, bold=True))
+            draw.text((chart_left + bw + 12, cy + 10), val_str, fill=pal["title_text_rgba"], font=_get_font(12, bold=True))
 
         temp_file = tempfile.NamedTemporaryFile(suffix=".png", prefix="bullet_benchmark_", delete=False)
         img.save(temp_file.name, format="PNG")
@@ -413,9 +464,12 @@ class VisualAssetRenderer:
         height_px: int = 850,
         title: str = "",
         takeaway: str = "",
+        theme_palette: Optional[dict[str, Any]] = None,
     ) -> Path:
         """Renders an authoritative, crisp 3-Tier Podium Ranking Visual."""
-        img = Image.new("RGBA", (width_px, height_px), (248, 250, 252, 255))
+        pal = _get_active_palette(theme_palette)
+        canvas_bg = pal.get("canvas_bg_rgba") or pal["card_bg_rgba"]
+        img = Image.new("RGBA", (width_px, height_px), canvas_bg)
         draw = ImageDraw.Draw(img)
 
         unit = spec.get("unit") or "usd"
@@ -433,12 +487,12 @@ class VisualAssetRenderer:
         card_w = width_px - 160
         card_h = height_px - 120
 
-        draw.rounded_rectangle([card_x, card_y, card_x + card_w, card_y + card_h], radius=12, fill=(255, 255, 255, 255), outline=(226, 232, 240, 255), width=2)
+        draw.rounded_rectangle([card_x, card_y, card_x + card_w, card_y + card_h], radius=12, fill=pal["card_bg_rgba"], outline=pal["card_border_rgba"], width=2)
 
         display_title = title or "Top 3 High-Velocity Store Locations"
-        draw.text((card_x + 40, card_y + 35), display_title, fill=(15, 23, 42, 255), font=_get_font(20, bold=True))
+        draw.text((card_x + 40, card_y + 35), display_title, fill=pal["title_text_rgba"], font=_get_font(20, bold=True))
         sub_text = takeaway or f"Leader Performance: {key_metric} • Tier-1 Revenue Concentration"
-        draw.text((card_x + 40, card_y + 70), sub_text, fill=(71, 85, 105, 255), font=_get_font(13))
+        draw.text((card_x + 40, card_y + 70), sub_text, fill=pal["muted_text_rgba"], font=_get_font(13))
 
         podium_w = int(card_w * 0.24)
         gap = int(card_w * 0.04)
@@ -453,13 +507,20 @@ class VisualAssetRenderer:
         p2_h = int(card_h * 0.35)
         p3_h = int(card_h * 0.26)
 
-        draw.line([(card_x + 60, base_y), (card_x + card_w - 60, base_y)], fill=(203, 213, 225, 255), width=3)
+        draw.line([(card_x + 60, base_y), (card_x + card_w - 60, base_y)], fill=pal["axis_line_rgba"], width=3)
 
-        tiers = [
-            (2, raw_cats[1], raw_vals[1], p2_x, p2_h, (241, 245, 249, 255), (148, 163, 184, 255), (100, 116, 139, 255), (30, 41, 59, 255), "2nd"),
-            (1, raw_cats[0], raw_vals[0], p1_x, p1_h, (238, 242, 255, 255), (79, 70, 229, 255), (245, 158, 11, 255), (30, 41, 59, 255), "1st LEADER"),
-            (3, raw_cats[2], raw_vals[2], p3_x, p3_h, (254, 243, 199, 255), (217, 119, 6, 255), (180, 83, 9, 255), (30, 41, 59, 255), "3rd"),
-        ]
+        if pal["is_dark"]:
+            tiers = [
+                (2, raw_cats[1], raw_vals[1], p2_x, p2_h, pal["status_neutral"]["bg_rgba"], pal["card_border_rgba"], (100, 116, 139, 255), pal["title_text_rgba"], "2nd"),
+                (1, raw_cats[0], raw_vals[0], p1_x, p1_h, pal["status_neutral"]["bg_rgba"], (122, 180, 251, 255), (245, 158, 11, 255), pal["title_text_rgba"], "1st LEADER"),
+                (3, raw_cats[2], raw_vals[2], p3_x, p3_h, pal["status_neutral"]["bg_rgba"], pal["card_border_rgba"], (180, 83, 9, 255), pal["title_text_rgba"], "3rd"),
+            ]
+        else:
+            tiers = [
+                (2, raw_cats[1], raw_vals[1], p2_x, p2_h, (241, 245, 249, 255), (148, 163, 184, 255), (100, 116, 139, 255), (30, 41, 59, 255), "2nd"),
+                (1, raw_cats[0], raw_vals[0], p1_x, p1_h, (238, 242, 255, 255), (79, 70, 229, 255), (245, 158, 11, 255), (30, 41, 59, 255), "1st LEADER"),
+                (3, raw_cats[2], raw_vals[2], p3_x, p3_h, (254, 243, 199, 255), (217, 119, 6, 255), (180, 83, 9, 255), (30, 41, 59, 255), "3rd"),
+            ]
 
         for rank, cat, val, px, ph, fill_c, out_c, badge_c, txt_c, rank_lbl in tiers:
             top_y = base_y - ph
@@ -474,8 +535,9 @@ class VisualAssetRenderer:
 
             draw.text((px + 20, top_y + 24), str(cat), fill=txt_c, font=_get_font(18, bold=True))
             val_fmt = f"${val/1e3:.1f}K" if val >= 1000 else f"${val:,.0f}"
-            draw.text((px + 20, top_y + 60), val_fmt, fill=(79, 70, 229, 255) if rank == 1 else (71, 85, 105, 255), font=_get_font(22, bold=True))
-            draw.text((px + 20, top_y + 95), "Weekly Sales Volume", fill=(100, 116, 139, 255), font=_get_font(12))
+            leader_val_c = (122, 180, 251, 255) if pal["is_dark"] else (79, 70, 229, 255)
+            draw.text((px + 20, top_y + 60), val_fmt, fill=leader_val_c if rank == 1 else pal["muted_text_rgba"], font=_get_font(22, bold=True))
+            draw.text((px + 20, top_y + 95), "Weekly Sales Volume", fill=pal["muted_text_rgba"], font=_get_font(12))
 
         temp_file = tempfile.NamedTemporaryFile(suffix=".png", prefix="podium_top3_", delete=False)
         img.save(temp_file.name, format="PNG")
@@ -490,9 +552,12 @@ class VisualAssetRenderer:
         height_px: int = 850,
         title: str = "",
         takeaway: str = "",
+        theme_palette: Optional[dict[str, Any]] = None,
     ) -> Path:
         """Renders an authoritative, crisp Merchandise Category Treemap Visual."""
-        img = Image.new("RGBA", (width_px, height_px), (248, 250, 252, 255))
+        pal = _get_active_palette(theme_palette)
+        canvas_bg = pal.get("canvas_bg_rgba") or pal["card_bg_rgba"]
+        img = Image.new("RGBA", (width_px, height_px), canvas_bg)
         draw = ImageDraw.Draw(img)
 
         unit = spec.get("unit") or "usd"
@@ -507,12 +572,12 @@ class VisualAssetRenderer:
         card_w = width_px - 160
         card_h = height_px - 120
 
-        draw.rounded_rectangle([card_x, card_y, card_x + card_w, card_y + card_h], radius=12, fill=(255, 255, 255, 255), outline=(226, 232, 240, 255), width=2)
+        draw.rounded_rectangle([card_x, card_y, card_x + card_w, card_y + card_h], radius=12, fill=pal["card_bg_rgba"], outline=pal["card_border_rgba"], width=2)
 
         display_title = title or "Merchandise Category Revenue Composition"
-        draw.text((card_x + 40, card_y + 35), display_title, fill=(15, 23, 42, 255), font=_get_font(20, bold=True))
+        draw.text((card_x + 40, card_y + 35), display_title, fill=pal["title_text_rgba"], font=_get_font(20, bold=True))
         sub_text = takeaway or f"Category Mix Distribution: {key_metric} • Department Portfolio Share"
-        draw.text((card_x + 40, card_y + 70), sub_text, fill=(71, 85, 105, 255), font=_get_font(13))
+        draw.text((card_x + 40, card_y + 70), sub_text, fill=pal["muted_text_rgba"], font=_get_font(13))
 
         tm_left = card_x + 40
         tm_top = card_y + 115
@@ -567,9 +632,12 @@ class VisualAssetRenderer:
         height_px: int = 850,
         title: str = "",
         takeaway: str = "",
+        theme_palette: Optional[dict[str, Any]] = None,
     ) -> Path:
         """Renders an authoritative, crisp Revenue vs Operating Margin Disparity Range Visual."""
-        img = Image.new("RGBA", (width_px, height_px), (248, 250, 252, 255))
+        pal = _get_active_palette(theme_palette)
+        canvas_bg = pal.get("canvas_bg_rgba") or pal["card_bg_rgba"]
+        img = Image.new("RGBA", (width_px, height_px), canvas_bg)
         draw = ImageDraw.Draw(img)
 
         unit = spec.get("unit") or "usd"
@@ -583,19 +651,19 @@ class VisualAssetRenderer:
         card_w = width_px - 160
         card_h = height_px - 120
 
-        draw.rounded_rectangle([card_x, card_y, card_x + card_w, card_y + card_h], radius=12, fill=(255, 255, 255, 255), outline=(226, 232, 240, 255), width=2)
+        draw.rounded_rectangle([card_x, card_y, card_x + card_w, card_y + card_h], radius=12, fill=pal["card_bg_rgba"], outline=pal["card_border_rgba"], width=2)
 
         display_title = title or "Revenue vs Operating Margin Disparity Range"
-        draw.text((card_x + 40, card_y + 35), display_title, fill=(15, 23, 42, 255), font=_get_font(20, bold=True))
+        draw.text((card_x + 40, card_y + 35), display_title, fill=pal["title_text_rgba"], font=_get_font(20, bold=True))
         sub_text = takeaway or f"Disparity Analysis: {key_metric} • Operational Profitability Benchmark"
-        draw.text((card_x + 40, card_y + 70), sub_text, fill=(71, 85, 105, 255), font=_get_font(13))
+        draw.text((card_x + 40, card_y + 70), sub_text, fill=pal["muted_text_rgba"], font=_get_font(13))
 
         leg_x = card_x + card_w - 380
         leg_y = card_y + 40
         draw.ellipse([leg_x, leg_y + 4, leg_x + 12, leg_y + 16], fill=(37, 99, 235, 255))
-        draw.text((leg_x + 18, leg_y), "Gross Revenue ($)", fill=(51, 65, 85, 255), font=_get_font(12, bold=True))
+        draw.text((leg_x + 18, leg_y), "Gross Revenue ($)", fill=pal["body_text_rgba"], font=_get_font(12, bold=True))
         draw.ellipse([leg_x + 170, leg_y + 4, leg_x + 182, leg_y + 16], fill=(16, 185, 129, 255))
-        draw.text((leg_x + 188, leg_y), "Operating Margin (%)", fill=(51, 65, 85, 255), font=_get_font(12, bold=True))
+        draw.text((leg_x + 188, leg_y), "Operating Margin (%)", fill=pal["body_text_rgba"], font=_get_font(12, bold=True))
 
         chart_left = card_x + 180
         chart_right = card_x + card_w - 140
@@ -607,25 +675,26 @@ class VisualAssetRenderer:
 
         for p in [0.0, 0.25, 0.5, 0.75, 1.0]:
             gx = chart_left + int(chart_w * p)
-            draw.line([(gx, card_y + 115), (gx, card_y + card_h - 45)], fill=(241, 245, 249, 255), width=1)
+            draw.line([(gx, card_y + 115), (gx, card_y + card_h - 45)], fill=pal["grid_line_rgba"], width=1)
 
         for idx, (cat, val) in enumerate(zip(raw_cats, raw_vals)):
             ry = card_y + 130 + int(idx * row_h) + int(row_h / 2)
-            draw.text((card_x + 40, ry - 8), str(cat), fill=(15, 23, 42, 255), font=_get_font(14, bold=True))
+            draw.text((card_x + 40, ry - 8), str(cat), fill=pal["title_text_rgba"], font=_get_font(14, bold=True))
 
             mp = margin_pcts[idx % len(margin_pcts)]
             x_margin = chart_left + int((mp / 30.0) * (chart_w * 0.4))
             max_rev = max(raw_vals) or 30000.0
             x_rev = chart_left + int(chart_w * 0.5) + int(((val / max_rev) * (chart_w * 0.45)))
 
-            draw.rounded_rectangle([x_margin, ry - 4, x_rev, ry + 4], radius=4, fill=(226, 232, 240, 255))
+            draw.rounded_rectangle([x_margin, ry - 4, x_rev, ry + 4], radius=4, fill=pal["card_border_rgba"])
 
-            draw.ellipse([x_margin - 9, ry - 9, x_margin + 9, ry + 9], fill=(16, 185, 129, 255), outline=(255, 255, 255, 255), width=2)
-            draw.text((x_margin - 30, ry - 28), f"{mp:.1f}%", fill=(5, 150, 105, 255), font=_get_font(12, bold=True))
+            draw.ellipse([x_margin - 9, ry - 9, x_margin + 9, ry + 9], fill=(16, 185, 129, 255), outline=pal["card_bg_rgba"][:3] + (255,), width=2)
+            draw.text((x_margin - 30, ry - 28), f"{mp:.1f}%", fill=(5, 150, 105, 255) if not pal["is_dark"] else (110, 231, 183, 255), font=_get_font(12, bold=True))
 
-            draw.ellipse([x_rev - 9, ry - 9, x_rev + 9, ry + 9], fill=(37, 99, 235, 255), outline=(255, 255, 255, 255), width=2)
+            draw.ellipse([x_rev - 9, ry - 9, x_rev + 9, ry + 9], fill=(37, 99, 235, 255), outline=pal["card_bg_rgba"][:3] + (255,), width=2)
             val_lbl = f"${val/1e3:.1f}K" if val >= 1000 else f"${val:,.0f}"
-            draw.text((x_rev + 14, ry - 8), val_lbl, fill=(29, 78, 216, 255), font=_get_font(13, bold=True))
+            val_txt_c = (29, 78, 216, 255) if not pal["is_dark"] else (147, 197, 253, 255)
+            draw.text((x_rev + 14, ry - 8), val_lbl, fill=val_txt_c, font=_get_font(13, bold=True))
 
         temp_file = tempfile.NamedTemporaryFile(suffix=".png", prefix="dumbbell_disparity_", delete=False)
         img.save(temp_file.name, format="PNG")
@@ -640,9 +709,12 @@ class VisualAssetRenderer:
         height_px: int = 850,
         title: str = "",
         takeaway: str = "",
+        theme_palette: Optional[dict[str, Any]] = None,
     ) -> Path:
         """Renders an authoritative, crisp Policy Scenario Card matching ScenarioSummaryCard.jsx."""
-        img = Image.new("RGBA", (width_px, height_px), (248, 250, 252, 255))
+        pal = _get_active_palette(theme_palette)
+        canvas_bg = pal.get("canvas_bg_rgba") or pal["card_bg_rgba"]
+        img = Image.new("RGBA", (width_px, height_px), canvas_bg)
         draw = ImageDraw.Draw(img)
 
         card_x = 80
@@ -650,12 +722,12 @@ class VisualAssetRenderer:
         card_w = width_px - 160
         card_h = height_px - 120
 
-        draw.rounded_rectangle([card_x, card_y, card_x + card_w, card_y + card_h], radius=12, fill=(255, 255, 255, 255), outline=(226, 232, 240, 255), width=2)
+        draw.rounded_rectangle([card_x, card_y, card_x + card_w, card_y + card_h], radius=12, fill=pal["card_bg_rgba"], outline=pal["card_border_rgba"], width=2)
 
         display_title = title or "Commercial Promotion & Markdown Policy"
-        draw.text((card_x + 40, card_y + 35), display_title, fill=(15, 23, 42, 255), font=_get_font(22, bold=True))
+        draw.text((card_x + 40, card_y + 35), display_title, fill=pal["title_text_rgba"], font=_get_font(22, bold=True))
         display_sub = takeaway or "Projected revenue lift under alternative promotion and markdown discount levers."
-        draw.text((card_x + 40, card_y + 75), display_sub, fill=(71, 85, 105, 255), font=_get_font(14))
+        draw.text((card_x + 40, card_y + 75), display_sub, fill=pal["muted_text_rgba"], font=_get_font(14))
 
         grid_top = card_y + 130
         grid_h = card_h - 170
@@ -672,22 +744,16 @@ class VisualAssetRenderer:
             cx = card_x + 40 + idx * (col_w + gap)
             status = col.get("status", "neutral")
             if status == "success":
-                bg_color = (240, 253, 244, 255)
-                border_color = (187, 247, 208, 255)
-                val_color = (22, 163, 74, 255)
+                st = pal["status_success"]
             elif status == "danger":
-                bg_color = (254, 242, 242, 255)
-                border_color = (254, 202, 202, 255)
-                val_color = (220, 38, 38, 255)
+                st = pal["status_danger"]
             else:
-                bg_color = (248, 250, 252, 255)
-                border_color = (226, 232, 240, 255)
-                val_color = (15, 23, 42, 255)
+                st = pal["status_neutral"]
 
-            draw.rounded_rectangle([cx, grid_top, cx + col_w, grid_top + grid_h], radius=10, fill=bg_color, outline=border_color, width=2)
-            draw.text((cx + 25, grid_top + 25), col.get("label", ""), fill=(71, 85, 105, 255), font=_get_font(15, bold=True))
-            draw.text((cx + 25, grid_top + 70), col.get("val", ""), fill=val_color, font=_get_font(36, bold=True))
-            draw.text((cx + 25, grid_top + 130), col.get("note", ""), fill=(100, 116, 139, 255), font=_get_font(13))
+            draw.rounded_rectangle([cx, grid_top, cx + col_w, grid_top + grid_h], radius=10, fill=st["bg_rgba"], outline=st["border_rgba"], width=2)
+            draw.text((cx + 25, grid_top + 25), col.get("label", ""), fill=pal["body_text_rgba"], font=_get_font(15, bold=True))
+            draw.text((cx + 25, grid_top + 70), col.get("val", ""), fill=st["val_rgba"], font=_get_font(36, bold=True))
+            draw.text((cx + 25, grid_top + 130), col.get("note", ""), fill=pal["muted_text_rgba"], font=_get_font(13))
 
             if status == "success":
                 pol_desc = "Simulated 1.25x promotional velocity lift during peak Q4 holiday commercial trading."
@@ -700,11 +766,16 @@ class VisualAssetRenderer:
             line1 = " ".join(words[:6])
             line2 = " ".join(words[6:12])
             line3 = " ".join(words[12:])
-            draw.text((cx + 25, grid_top + 180), line1, fill=(100, 116, 139, 255), font=_get_font(12))
+            draw.text((cx + 25, grid_top + 180), line1, fill=pal["muted_text_rgba"], font=_get_font(12))
             if line2:
-                draw.text((cx + 25, grid_top + 202), line2, fill=(100, 116, 139, 255), font=_get_font(12))
+                draw.text((cx + 25, grid_top + 202), line2, fill=pal["muted_text_rgba"], font=_get_font(12))
             if line3:
-                draw.text((cx + 25, grid_top + 224), line3, fill=(100, 116, 139, 255), font=_get_font(12))
+                draw.text((cx + 25, grid_top + 224), line3, fill=pal["muted_text_rgba"], font=_get_font(12))
+
+        temp_file = tempfile.NamedTemporaryFile(suffix=".png", prefix="scenario_card_", delete=False)
+        img.save(temp_file.name, format="PNG")
+        logger.info("Rendered high-fidelity scenario card to %s", temp_file.name)
+        return Path(temp_file.name)
 
         temp_file = tempfile.NamedTemporaryFile(suffix=".png", prefix="scenario_card_", delete=False)
         img.save(temp_file.name, format="PNG")

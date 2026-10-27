@@ -289,6 +289,7 @@ class ThemeApplicator:
                     # Style chart chrome (axes/labels)
                     chrome_style, chrome_audits = self.chart_resolver.resolve_chart_chrome(slide_bg_hex)
                     all_audits.extend(chrome_audits)
+                    self._apply_chart_chrome(chart, chrome_style, all_warnings)
 
                     all_object_styles.append(
                         ObjectStyleOutcome(
@@ -348,3 +349,106 @@ class ThemeApplicator:
         )
         manifest.style_fingerprint = compute_style_manifest_fingerprint(manifest)
         return prs, manifest
+
+    def _apply_chart_chrome(
+        self,
+        chart: Any,
+        chrome_style: dict[str, Any],
+        all_warnings: list[str],
+    ) -> None:
+        """Applies axis line, ticks, gridlines, legend, and plot area styling to a native chart."""
+        try:
+            tick_hex = chrome_style.get("tick_text_color_hex") or chrome_style.get("label_color_hex")
+            tick_rgb = _hex_to_rgb(tick_hex) if tick_hex else None
+
+            axis_line_hex = chrome_style.get("axis_line_color_hex") or chrome_style.get("axis_color_hex")
+            axis_line_rgb = _hex_to_rgb(axis_line_hex) if axis_line_hex else None
+
+            grid_hex = chrome_style.get("grid_color_hex")
+            grid_rgb = _hex_to_rgb(grid_hex) if grid_hex else None
+
+            axis_title_hex = chrome_style.get("axis_title_color_hex") or tick_hex
+            axis_title_rgb = _hex_to_rgb(axis_title_hex) if axis_title_hex else None
+
+            legend_hex = chrome_style.get("legend_text_color_hex") or tick_hex
+            legend_rgb = _hex_to_rgb(legend_hex) if legend_hex else None
+
+            data_label_hex = chrome_style.get("data_label_color_hex") or tick_hex
+            data_label_rgb = _hex_to_rgb(data_label_hex) if data_label_hex else None
+
+            # 1. Axis styling (Category and Value axes)
+            for axis_name in ("category_axis", "value_axis"):
+                axis = getattr(chart, axis_name, None)
+                if axis is None:
+                    continue
+                try:
+                    if axis_line_rgb:
+                        axis.format.line.color.rgb = axis_line_rgb
+                except Exception as e:
+                    logger.debug("Could not style %s line: %s", axis_name, e)
+                try:
+                    if tick_rgb and hasattr(axis, "tick_labels") and axis.tick_labels:
+                        axis.tick_labels.font.color.rgb = tick_rgb
+                except Exception as e:
+                    logger.debug("Could not style %s tick labels: %s", axis_name, e)
+                try:
+                    if grid_rgb and getattr(axis, "has_major_gridlines", False):
+                        axis.major_gridlines.format.line.color.rgb = grid_rgb
+                except Exception as e:
+                    logger.debug("Could not style %s major gridlines: %s", axis_name, e)
+                try:
+                    if axis_title_rgb and getattr(axis, "has_title", False) and axis.axis_title.has_text_frame:
+                        for p in axis.axis_title.text_frame.paragraphs:
+                            p.font.color.rgb = axis_title_rgb
+                except Exception as e:
+                    logger.debug("Could not style %s title: %s", axis_name, e)
+
+            # 2. Legend styling
+            if getattr(chart, "has_legend", False) and chart.legend is not None:
+                try:
+                    if legend_rgb and hasattr(chart.legend, "font") and chart.legend.font:
+                        chart.legend.font.color.rgb = legend_rgb
+                except Exception as e:
+                    logger.debug("Could not style chart legend font: %s", e)
+
+            # 3. Data labels
+            try:
+                for plot in getattr(chart, "plots", []):
+                    if getattr(plot, "has_data_labels", False) and plot.data_labels is not None:
+                        if data_label_rgb and hasattr(plot.data_labels, "font") and plot.data_labels.font:
+                            plot.data_labels.font.color.rgb = data_label_rgb
+            except Exception as e:
+                logger.debug("Could not style chart data labels: %s", e)
+
+            # 4. Explicit plot area / chart space fill (prevents Office default white box on dark themes)
+            plot_bg_hex = chrome_style.get("plot_bg_hex")
+            if plot_bg_hex:
+                try:
+                    from pptx.oxml.xmlchemy import OxmlElement
+                    from pptx.dml.fill import FillFormat
+                    plot_bg_rgb = _hex_to_rgb(plot_bg_hex)
+                    chart_space = getattr(chart, "_chartSpace", None)
+                    if chart_space is not None:
+                        plot_area = getattr(chart_space, "plotArea", None)
+                        for element in (chart_space, plot_area):
+                            if element is None:
+                                continue
+                            sp_pr = OxmlElement("c:spPr")
+                            fill = FillFormat.from_fill_parent(sp_pr)
+                            fill.solid()
+                            fill.fore_color.rgb = plot_bg_rgb
+                            if element is chart_space:
+                                element.insert_element_before(
+                                    sp_pr,
+                                    "c:txPr",
+                                    "c:externalData",
+                                    "c:printSettings",
+                                    "c:userShapes",
+                                    "c:extLst",
+                                )
+                            else:
+                                element.insert_element_before(sp_pr, "c:extLst")
+                except Exception as e:
+                    logger.debug("Could not set chart plot area background: %s", e)
+        except Exception as e:
+            all_warnings.append(f"Failed to style chart chrome: {e}")

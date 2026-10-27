@@ -70,6 +70,19 @@ class PPTXCompiler:
             content_map[kpi.content_id] = kpi
         structure_slide_map = {s.physical_slide_id: s for s in deck_structure.slides}
 
+        # Resolve theme palette if available in metadata
+        theme_input = (metadata or {}).get("theme") or (metadata or {}).get("theme_id")
+        if not theme_input and metadata and isinstance(metadata.get("scope"), dict):
+            theme_input = metadata["scope"].get("theme") or metadata["scope"].get("theme_id")
+
+        theme_palette: Optional[dict[str, Any]] = None
+        if theme_input:
+            try:
+                from app.services.presentation.theme_engine import ThemeEngine
+                theme_palette = ThemeEngine.get_semantic_resolver(theme_input).resolve_asset_palette()
+            except Exception as e:
+                logger.debug("Could not resolve theme palette in PPTXCompiler: %s", e)
+
         rendered_slides: list[RenderedSlideRecord] = []
         total_objects = 0
         total_editable = 0
@@ -94,6 +107,8 @@ class PPTXCompiler:
             rendered_objects: list[RenderedObjectRecord] = []
 
             for obj_layout in res_slide.object_layouts:
+                if theme_palette and "theme_palette" not in obj_layout.metadata:
+                    obj_layout.metadata["theme_palette"] = theme_palette
                 content_item = content_map.get(obj_layout.content_id)
                 obj_spec = obj_spec_map.get(obj_layout.object_id)
 

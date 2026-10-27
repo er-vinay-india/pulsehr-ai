@@ -72,10 +72,11 @@ class VisualValidator:
 
     @classmethod
     def validate_contrast(cls, tokens: SlideDesignTokens) -> dict[str, Any]:
-        """Validates WCAG contrast ratios for design tokens."""
+        """Validates WCAG contrast ratios for design tokens against local surfaces."""
+        local_surface = tokens.surface or tokens.background
         cr_primary = calculate_contrast_ratio(tokens.primary_text, tokens.background)
-        cr_secondary = calculate_contrast_ratio(tokens.secondary_text, tokens.background)
-        cr_accent = calculate_contrast_ratio(tokens.accent_primary, tokens.background)
+        cr_secondary = calculate_contrast_ratio(tokens.secondary_text, local_surface)
+        cr_accent = calculate_contrast_ratio(tokens.accent_primary, local_surface)
         return {
             "primary_contrast": cr_primary,
             "secondary_contrast": cr_secondary,
@@ -140,16 +141,17 @@ class VisualValidator:
                 remediation="Darken background or lighten text color."
             ))
 
-        # Secondary text vs surface/background
-        cr_secondary = calculate_contrast_ratio(tokens.secondary_text, tokens.background)
-        contrast_ratios["secondary_text_vs_bg"] = cr_secondary
+        # Secondary text vs local surface (card surface if defined, else background)
+        local_surface = tokens.surface or tokens.background
+        cr_secondary = calculate_contrast_ratio(tokens.secondary_text, local_surface)
+        contrast_ratios["secondary_text_vs_surface"] = cr_secondary
         if cr_secondary < 3.0:
             issues.append(VisualValidationIssue(
                 severity="warning",
                 rule_id="WCAG-CONTRAST-SECONDARY",
                 component="typography",
-                message=f"Secondary text contrast ({cr_secondary}:1) is below minimum 3.0:1 threshold.",
-                remediation="Increase lightness separation of secondary text."
+                message=f"Secondary text contrast ({cr_secondary}:1) against local surface is below minimum 3.0:1 threshold.",
+                remediation="Increase lightness separation of secondary text against surface."
             ))
 
         # 2. Content Budget Checks

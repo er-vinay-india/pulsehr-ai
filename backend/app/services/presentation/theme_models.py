@@ -56,6 +56,47 @@ class SemanticTokenRole(str, Enum):
     GRID_LINE = "GRID_LINE"
 
 
+class SemanticColorRole(str, Enum):
+    """Semantic color roles distinguishing data fidelity vs presentation chrome."""
+    # Presentation / Chrome — Text & Labels (Target: WCAG AAA, 7.0:1 normal / 4.5:1 large)
+    TITLE = "TITLE"
+    SUBTITLE = "SUBTITLE"
+    BODY = "BODY"
+    AXIS_TEXT = "AXIS_TEXT"
+    AXIS_TITLE = "AXIS_TITLE"
+    TICK_TEXT = "TICK_TEXT"
+    LEGEND_TEXT = "LEGEND_TEXT"
+    DATA_LABEL = "DATA_LABEL"
+    TABLE_HEADER_TEXT = "TABLE_HEADER_TEXT"
+    TABLE_CELL_TEXT = "TABLE_CELL_TEXT"
+    ANNOTATION_TEXT = "ANNOTATION_TEXT"
+    KPI_LABEL = "KPI_LABEL"
+    KPI_VALUE = "KPI_VALUE"
+
+    # Presentation / Chrome — Essential Graphical Boundaries (Target: non-text >= 3.0:1)
+    CARD_BORDER = "CARD_BORDER"
+    AXIS_LINE = "AXIS_LINE"
+    TABLE_BORDER = "TABLE_BORDER"
+
+    # Presentation / Chrome — Decorative / Subtle Lines (Target: 1.2:1 to 2.5:1, subtle not harsh)
+    GRID_LINE = "GRID_LINE"
+    REFERENCE_LINE_SUBTLE = "REFERENCE_LINE_SUBTLE"
+
+    # Presentation / Chrome — Surfaces
+    SLIDE_BACKGROUND = "SLIDE_BACKGROUND"
+    CARD_SURFACE = "CARD_SURFACE"
+    CHART_PLOT_SURFACE = "CHART_PLOT_SURFACE"
+    TABLE_HEADER_SURFACE = "TABLE_HEADER_SURFACE"
+    TABLE_ROW_ALT_SURFACE = "TABLE_ROW_ALT_SURFACE"
+
+    # Data / Semantic — Preserved (Target: preserve hue; check legibility >= 2.5:1 against plot area)
+    DATA_SERIES = "DATA_SERIES"
+    STATUS_POSITIVE = "STATUS_POSITIVE"
+    STATUS_NEGATIVE = "STATUS_NEGATIVE"
+    STATUS_WARNING = "STATUS_WARNING"
+    STATUS_NEUTRAL = "STATUS_NEUTRAL"
+
+
 class SemanticEmphasis(str, Enum):
     """Semantic visual emphasis hierarchy."""
     PRIMARY = "PRIMARY"

@@ -176,6 +176,7 @@ from .theme_models import (
     ThemeMode,
     FontRole,
     SemanticTokenRole,
+    SemanticColorRole,
     SemanticEmphasis,
     StyleRole,
     PaletteTokens,
@@ -203,6 +204,7 @@ from .theme_engine import (
     TextStyleResolver,
     TableStyleResolver,
     ChartStyleResolver,
+    SemanticColorResolver,
 )
 from .theme_applicator import ThemeApplicator
 from .style_validator import (
@@ -380,6 +382,7 @@ __all__ = [
     "ThemeMode",
     "FontRole",
     "SemanticTokenRole",
+    "SemanticColorRole",
     "SemanticEmphasis",
     "StyleRole",
     "PaletteTokens",
@@ -405,6 +408,7 @@ __all__ = [
     "TextStyleResolver",
     "TableStyleResolver",
     "ChartStyleResolver",
+    "SemanticColorResolver",
     "ThemeApplicator",
     "StyleValidator",
     "StyleValidationIssue",

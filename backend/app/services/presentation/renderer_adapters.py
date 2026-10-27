@@ -362,6 +362,7 @@ class TableRendererAdapter(BaseRendererAdapter):
             getattr(content_item, "visual_strategy", None) == VisualStrategy.REUSE_EXISTING
             or obj_layout.metadata.get("visual_strategy") == "REUSE_EXISTING"
         )
+        theme_palette = obj_layout.metadata.get("theme_palette")
         record = RenderedObjectRecord(
             object_id=obj_layout.object_id,
             object_name=obj_layout.object_name,
@@ -499,6 +500,7 @@ class ChartRendererAdapter(BaseRendererAdapter):
             getattr(content_item, "visual_strategy", None) == VisualStrategy.REUSE_EXISTING
             or obj_layout.metadata.get("visual_strategy") == "REUSE_EXISTING"
         )
+        theme_palette = obj_layout.metadata.get("theme_palette")
         visual_type = (
             getattr(content_item, "visual_type", None)
             or obj_layout.metadata.get("visual_type")
@@ -610,6 +612,7 @@ class ChartRendererAdapter(BaseRendererAdapter):
                     height_px=px_h,
                     title=getattr(content_item, "title", ""),
                     takeaway=getattr(content_item, "narrative_takeaway", ""),
+                    theme_palette=theme_palette,
                 )
                 shape = slide.shapes.add_picture(str(img_path), left, top, width, height)
                 shape.name = obj_layout.object_name
@@ -652,6 +655,7 @@ class ChartRendererAdapter(BaseRendererAdapter):
                     height_px=px_h,
                     title=getattr(content_item, "title", ""),
                     takeaway=getattr(content_item, "narrative_takeaway", ""),
+                    theme_palette=theme_palette,
                 )
                 shape = slide.shapes.add_picture(str(img_path), left, top, width, height)
                 shape.name = obj_layout.object_name
@@ -694,6 +698,7 @@ class ChartRendererAdapter(BaseRendererAdapter):
                     height_px=px_h,
                     title=getattr(content_item, "title", ""),
                     takeaway=getattr(content_item, "narrative_takeaway", ""),
+                    theme_palette=theme_palette,
                 )
                 shape = slide.shapes.add_picture(str(img_path), left, top, width, height)
                 shape.name = obj_layout.object_name
@@ -736,6 +741,7 @@ class ChartRendererAdapter(BaseRendererAdapter):
                     height_px=px_h,
                     title=getattr(content_item, "title", ""),
                     takeaway=getattr(content_item, "narrative_takeaway", ""),
+                    theme_palette=theme_palette,
                 )
                 shape = slide.shapes.add_picture(str(img_path), left, top, width, height)
                 shape.name = obj_layout.object_name
@@ -778,6 +784,7 @@ class ChartRendererAdapter(BaseRendererAdapter):
                     height_px=px_h,
                     title=getattr(content_item, "title", ""),
                     takeaway=getattr(content_item, "narrative_takeaway", ""),
+                    theme_palette=theme_palette,
                 )
                 shape = slide.shapes.add_picture(str(img_path), left, top, width, height)
                 shape.name = obj_layout.object_name
@@ -820,6 +827,7 @@ class ChartRendererAdapter(BaseRendererAdapter):
                     height_px=px_h,
                     title=getattr(content_item, "title", ""),
                     takeaway=getattr(content_item, "narrative_takeaway", ""),
+                    theme_palette=theme_palette,
                 )
                 shape = slide.shapes.add_picture(str(img_path), left, top, width, height)
                 shape.name = obj_layout.object_name
@@ -965,6 +973,7 @@ class RasterRendererAdapter(BaseRendererAdapter):
             getattr(content_item, "visual_strategy", None) == VisualStrategy.REUSE_EXISTING
             or obj_layout.metadata.get("visual_strategy") == "REUSE_EXISTING"
         )
+        theme_palette = obj_layout.metadata.get("theme_palette")
         visual_type = (
             getattr(content_item, "visual_type", None)
             or obj_layout.metadata.get("visual_type")
@@ -983,6 +992,7 @@ class RasterRendererAdapter(BaseRendererAdapter):
                 height_px=px_h,
                 title=getattr(content_item, "title", ""),
                 takeaway=getattr(content_item, "narrative_takeaway", ""),
+                theme_palette=theme_palette,
             )
             shape = slide.shapes.add_picture(str(img_path), left, top, width, height)
             shape.name = obj_layout.object_name
