@@ -39,9 +39,9 @@ TASK_MODEL_CASCADES: dict[AITaskType, list[str]] = {
         "phi4-mini:latest"
     ],
     AITaskType.PRESENTATION_COMPOSITION: [
-        "qwen3.5:9b",
-        "phi4-mini:latest",
-        "gemma4:12b"
+        "granite-composition-v1",
+        "granite4:3b",
+        "granite4:3b-h"
     ],
     AITaskType.PRESENTATION_TYPOGRAPHY: [
         "phi4-mini-typography",
@@ -84,7 +84,12 @@ class ModelRouter:
                 candidates.append(m)
 
         # 5. Low latency budget prioritization: if budget < 12 seconds, ensure fast model is upfront
-        if request.max_latency_ms < 12000.0 and request.reasoning_level != ReasoningLevel.HIGH:
+        # Exclude PRESENTATION_COMPOSITION and PRESENTATION_TYPOGRAPHY to preserve specialized model ownership (Granite for Composition, Phi for Typography)
+        if (
+            request.max_latency_ms < 12000.0
+            and request.reasoning_level != ReasoningLevel.HIGH
+            and request.task_type not in (AITaskType.PRESENTATION_COMPOSITION, AITaskType.PRESENTATION_TYPOGRAPHY)
+        ):
             fast_model = config.MODEL_ROLE_FAST_PRIMARY
             if fast_model in candidates:
                 candidates.remove(fast_model)

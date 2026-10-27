@@ -18,11 +18,13 @@ from ...gateway.model_gateway import ModelGateway, extract_json_payload
 from ..content_models import ContentKind, PresentationContentPackage
 from ..story_models import LogicalSlidePlan, StructuralRole
 from .composition_models import (
+    DEFAULT_COMPOSITION_CONFIDENCE_THRESHOLD,
     CompositionArchetype,
     CompositionContentGroup,
     CompositionContentRole,
     CompositionDecision,
     CompositionDecisionSource,
+    CompositionFailureTelemetry,
     DensityIntent,
     LabelSimplificationIntent,
     NarrativePlacementIntent,
@@ -32,6 +34,19 @@ from .composition_models import (
 from .composition_validator import CompositionDecisionValidator, CompositionValidationError
 
 logger = logging.getLogger(__name__)
+
+FAILURE_CORPUS_PATH = "backend/data/composition_tuning/failure_corpus.jsonl"
+
+
+def _record_failure_telemetry(telemetry: CompositionFailureTelemetry) -> None:
+    """Appends audited failure telemetry to the candidate curation corpus for iterative LoRA tuning."""
+    try:
+        import os
+        os.makedirs(os.path.dirname(FAILURE_CORPUS_PATH), exist_ok=True)
+        with open(FAILURE_CORPUS_PATH, "a", encoding="utf-8") as f:
+            f.write(json.dumps(telemetry.model_dump()) + "\n")
+    except Exception as err:
+        logger.debug("Failed to append to composition failure corpus: %s", err)
 
 
 def _to_human_label(name: str) -> str:
@@ -307,9 +322,11 @@ class AICompositionProvider(CompositionProvider):
         self,
         use_ai: bool = True,
         deterministic_fallback: Optional[DeterministicCompositionProvider] = None,
+        confidence_threshold: float = DEFAULT_COMPOSITION_CONFIDENCE_THRESHOLD,
     ):
         self.use_ai = use_ai
         self.fallback_provider = deterministic_fallback or DeterministicCompositionProvider()
+        self.confidence_threshold = confidence_threshold
 
     def compose_slide(
         self,
@@ -322,19 +339,58 @@ class AICompositionProvider(CompositionProvider):
 
         try:
             decision = self._call_ai_composition(logical_slide, content_pkg, metadata)
+            # Confidence threshold check
+            if decision.confidence < self.confidence_threshold:
+                raise CompositionValidationError(
+                    f"Reported confidence ({decision.confidence:.2f}) below required threshold ({self.confidence_threshold:.2f})"
+                )
+
             # Strict validation
             warnings = CompositionDecisionValidator.validate(decision, logical_slide, content_pkg)
             if warnings:
                 decision.metadata["validation_warnings"] = warnings
+
+            # Tag Granite provenance
+            decision.metadata.setdefault("model_family", "GRANITE")
+            decision.metadata.setdefault("base_model", "granite4:3b")
+            decision.metadata.setdefault("adapter_name", "granite_presentation_composition_lora_v1")
+            decision.metadata.setdefault("adapter_version", "v1")
+            decision.metadata.setdefault("task_type", AITaskType.PRESENTATION_COMPOSITION.value)
+            decision.metadata.setdefault("fallback_used", False)
             return decision
         except Exception as exc:
+            err_msg = str(exc)
             logger.warning(
                 "AI composition failed for logical slide %s; activating deterministic fallback: %s",
                 logical_slide.logical_slide_id,
                 exc,
             )
+            # Classify failure
+            fail_type = "MODEL_ERROR"
+            if "timeout" in err_msg.lower():
+                fail_type = "TIMEOUT"
+            elif "confidence" in err_msg.lower():
+                fail_type = "LOW_CONFIDENCE"
+            elif "unknown content id" in err_msg.lower() or "hallucinat" in err_msg.lower():
+                fail_type = "UNGROUNDED_ID"
+            elif "validation" in err_msg.lower() or isinstance(exc, CompositionValidationError):
+                fail_type = "VALIDATION_ERROR"
+
+            telemetry = CompositionFailureTelemetry(
+                logical_slide_id=logical_slide.logical_slide_id,
+                input_fingerprint=logical_slide.logical_slide_id,
+                failure_type=fail_type,
+                model_response_valid=False,
+                validation_error=err_msg,
+                fallback_used=True,
+            )
+            _record_failure_telemetry(telemetry)
+
             fallback_decision = self.fallback_provider.compose_slide(logical_slide, content_pkg, metadata)
-            fallback_decision.fallback_reason = f"AI failure: {str(exc)}"
+            fallback_decision.fallback_reason = f"AI failure ({fail_type}): {err_msg}"
+            fallback_decision.metadata["model_family"] = "GRANITE"
+            fallback_decision.metadata["fallback_used"] = True
+            fallback_decision.metadata["failure_telemetry"] = telemetry.model_dump()
             return fallback_decision
 
     def _call_ai_composition(
@@ -418,7 +474,7 @@ Return a JSON object matching this schema:
         if not resp.success:
             raise RuntimeError(f"ModelGateway execution failed: {resp.error}")
 
-        raw_payload = resp.structured_output or resp.raw_output
+        raw_payload = resp.parsed or resp.raw_text
         if isinstance(raw_payload, CompositionDecision):
             raw_payload.decision_source = CompositionDecisionSource.AI_MODEL
             return raw_payload

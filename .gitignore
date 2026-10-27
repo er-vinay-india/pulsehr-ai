@@ -26,3 +26,5 @@ backend/data/
 scratch/
 outputs/
 backend/outputs/
+*.safetensors
+backend/models/**/*.safetensors

@@ -108,6 +108,22 @@ class CompositionConsumptionRecord(BaseModel):
     label_intent_consumed: bool = Field(default=False)
 
 
+# Central confidence floor for AI-generated composition decisions
+DEFAULT_COMPOSITION_CONFIDENCE_THRESHOLD: float = 0.65
+
+
+class CompositionFailureTelemetry(BaseModel):
+    """Audited failure telemetry captured when AI composition fails and activates deterministic fallback."""
+    logical_slide_id: str = Field(description="Target logical slide unit identifier")
+    input_fingerprint: str = Field(default="", description="Deterministic SHA-256 fingerprint over input context")
+    failure_type: str = Field(description="Category of failure: TIMEOUT, MODEL_ERROR, VALIDATION_ERROR, LOW_CONFIDENCE, UNGROUNDED_ID")
+    model_response_valid: bool = Field(default=False, description="Whether raw model output parsed as valid JSON/schema")
+    validation_error: Optional[str] = Field(default=None, description="Detailed error from validator or parser")
+    fallback_used: bool = Field(default=True, description="Whether deterministic fallback was engaged")
+    composition_archetype: Optional[str] = Field(default=None, description="Candidate archetype from model if parsed")
+    confidence: Optional[float] = Field(default=None, description="Reported model confidence score if present")
+
+
 class CompositionDecision(BaseModel):
     """Structured semantic composition decision for a single logical slide.
     

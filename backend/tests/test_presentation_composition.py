@@ -610,3 +610,214 @@ def test_end_to_end_composition_to_layout_execution():
     assert consumption.get("label_intent_consumed") is True
 
 
+def test_model_router_granite_composition_routing():
+    """Confirms ModelRouter routes PRESENTATION_COMPOSITION to Granite and preserves specialized ownership."""
+    from app.services.gateway.contracts import AIRequest, AITaskType, ReasoningLevel
+    from app.services.gateway.model_router import ModelRouter, TASK_MODEL_CASCADES
+
+    cascade = TASK_MODEL_CASCADES[AITaskType.PRESENTATION_COMPOSITION]
+    assert "granite-composition-v1" in cascade
+    assert "granite4:3b" in cascade
+    assert cascade[0] == "granite-composition-v1"
+
+    req = AIRequest(
+        task_type=AITaskType.PRESENTATION_COMPOSITION,
+        prompt="Make a composition decision",
+        max_latency_ms=8000.0,
+        reasoning_level=ReasoningLevel.LOW,
+    )
+    candidates = ModelRouter.route_ai_request(req)
+    assert candidates[0] == "granite-composition-v1"
+    assert not any("phi" in c for c in candidates)
+
+
+def test_ai_composition_provider_provenance_and_granite_tagging():
+    """Verifies AICompositionProvider tags Granite provenance and metadata correctly on success."""
+    import json
+    pkg = _make_sample_content_pkg()
+    slide = LogicalSlidePlan(
+        logical_slide_id="GRANITE_PROVENANCE_SLIDE",
+        structural_role=StructuralRole.HERO_ANALYSIS,
+        semantic_topic="Store Performance",
+        section_name="Retail",
+        purpose="Analyze stores",
+        headline="Store Sales Accelerate",
+        content_bindings=[ContentBinding(content_id="item-chart-01")],
+        visual_type="bar",
+    )
+
+    valid_granite_payload = {
+        "logical_slide_id": "GRANITE_PROVENANCE_SLIDE",
+        "composition_archetype": "VISUAL_WITH_INSIGHT",
+        "primary_content_id": "item-chart-01",
+        "visual_priority": "PRIMARY",
+        "density_intent": "BALANCED",
+        "narrative_placement": "BESIDE_VISUAL",
+        "supporting_content_ids": [],
+        "content_groups": [
+            {"role": "PRIMARY_VISUAL", "content_ids": ["item-chart-01"]}
+        ],
+        "split_intent": "SPLIT_IF_REQUIRED",
+        "label_intents": [],
+        "reason_codes": ["GRANITE_COMPOSED"],
+        "confidence": 0.94,
+    }
+
+    from app.services.gateway.contracts import AIResponse, AIExecutionRecord, AITaskType
+    mock_resp = AIResponse(
+        raw_text=json.dumps(valid_granite_payload),
+        parsed=CompositionDecision.model_validate(valid_granite_payload),
+        execution_record=AIExecutionRecord(
+            request_id="test",
+            task_type=AITaskType.PRESENTATION_COMPOSITION,
+            model="granite-composition-v1",
+            structured_input_hash="h1",
+            structured_output_hash="h2",
+            latency_ms=250.0,
+            fallback_used=False,
+            models_attempted=["granite-composition-v1"],
+            entitlement_status="PASS",
+            tokens_used=120,
+            success=True,
+        ),
+        success=True,
+    )
+
+    with patch("app.services.gateway.model_gateway.ModelGateway.execute", return_value=mock_resp):
+        provider = AICompositionProvider(use_ai=True)
+        decision = provider.compose_slide(slide, pkg)
+
+        assert decision.decision_source == CompositionDecisionSource.AI_MODEL
+        assert decision.metadata.get("model_family") == "GRANITE"
+        assert decision.metadata.get("base_model") == "granite4:3b"
+        assert decision.metadata.get("adapter_name") == "granite_presentation_composition_lora_v1"
+        assert decision.metadata.get("adapter_version") == "v1"
+        assert decision.metadata.get("fallback_used") is False
+        assert decision.confidence == 0.94
+
+
+def test_ai_composition_provider_confidence_threshold_fallback():
+    """Verifies that confidence below threshold (0.65) activates deterministic fallback with telemetry."""
+    import json
+    pkg = _make_sample_content_pkg()
+    slide = LogicalSlidePlan(
+        logical_slide_id="LOW_CONF_SLIDE",
+        structural_role=StructuralRole.HERO_ANALYSIS,
+        semantic_topic="Store Performance",
+        section_name="Retail",
+        purpose="Analyze stores",
+        headline="Store Sales Accelerate",
+        content_bindings=[ContentBinding(content_id="item-chart-01")],
+        visual_type="bar",
+    )
+
+    low_conf_payload = {
+        "logical_slide_id": "LOW_CONF_SLIDE",
+        "composition_archetype": "VISUAL_WITH_INSIGHT",
+        "primary_content_id": "item-chart-01",
+        "visual_priority": "PRIMARY",
+        "density_intent": "BALANCED",
+        "narrative_placement": "BESIDE_VISUAL",
+        "supporting_content_ids": [],
+        "content_groups": [
+            {"role": "PRIMARY_VISUAL", "content_ids": ["item-chart-01"]}
+        ],
+        "split_intent": "SPLIT_IF_REQUIRED",
+        "label_intents": [],
+        "reason_codes": ["UNCERTAIN"],
+        "confidence": 0.42,
+    }
+
+    from app.services.gateway.contracts import AIResponse, AIExecutionRecord, AITaskType
+    mock_resp = AIResponse(
+        raw_text=json.dumps(low_conf_payload),
+        parsed=CompositionDecision.model_validate(low_conf_payload),
+        execution_record=AIExecutionRecord(
+            request_id="test-low-conf",
+            task_type=AITaskType.PRESENTATION_COMPOSITION,
+            model="granite-composition-v1",
+            structured_input_hash="h1",
+            structured_output_hash="h2",
+            latency_ms=250.0,
+            fallback_used=False,
+            models_attempted=["granite-composition-v1"],
+            entitlement_status="PASS",
+            tokens_used=120,
+            success=True,
+        ),
+        success=True,
+    )
+
+    with patch("app.services.gateway.model_gateway.ModelGateway.execute", return_value=mock_resp):
+        provider = AICompositionProvider(use_ai=True)
+        decision = provider.compose_slide(slide, pkg)
+
+        assert decision.decision_source == CompositionDecisionSource.DETERMINISTIC_FALLBACK
+        assert "LOW_CONFIDENCE" in decision.fallback_reason
+        assert decision.metadata.get("fallback_used") is True
+        assert decision.metadata.get("model_family") == "GRANITE"
+        assert decision.metadata["failure_telemetry"]["failure_type"] == "LOW_CONFIDENCE"
+
+
+def test_ai_composition_provider_ungrounded_id_fallback():
+    """Verifies that hallucinated/ungrounded content IDs trigger validation failure and fallback."""
+    import json
+    pkg = _make_sample_content_pkg()
+    slide = LogicalSlidePlan(
+        logical_slide_id="UNGROUNDED_SLIDE",
+        structural_role=StructuralRole.HERO_ANALYSIS,
+        semantic_topic="Store Performance",
+        section_name="Retail",
+        purpose="Analyze stores",
+        headline="Store Sales Accelerate",
+        content_bindings=[ContentBinding(content_id="item-chart-01")],
+        visual_type="bar",
+    )
+
+    hallucinated_payload = {
+        "logical_slide_id": "UNGROUNDED_SLIDE",
+        "composition_archetype": "VISUAL_WITH_INSIGHT",
+        "primary_content_id": "hallucinated_item_999",
+        "visual_priority": "PRIMARY",
+        "density_intent": "BALANCED",
+        "narrative_placement": "BESIDE_VISUAL",
+        "supporting_content_ids": [],
+        "content_groups": [
+            {"role": "PRIMARY_VISUAL", "content_ids": ["hallucinated_item_999"]}
+        ],
+        "split_intent": "SPLIT_IF_REQUIRED",
+        "label_intents": [],
+        "reason_codes": ["HALLUCINATION_TEST"],
+        "confidence": 0.95,
+    }
+
+    from app.services.gateway.contracts import AIResponse, AIExecutionRecord, AITaskType
+    mock_resp = AIResponse(
+        raw_text=json.dumps(hallucinated_payload),
+        parsed=CompositionDecision.model_validate(hallucinated_payload),
+        execution_record=AIExecutionRecord(
+            request_id="test-hallucinated",
+            task_type=AITaskType.PRESENTATION_COMPOSITION,
+            model="granite-composition-v1",
+            structured_input_hash="h1",
+            structured_output_hash="h2",
+            latency_ms=250.0,
+            fallback_used=False,
+            models_attempted=["granite-composition-v1"],
+            entitlement_status="PASS",
+            tokens_used=120,
+            success=True,
+        ),
+        success=True,
+    )
+
+    with patch("app.services.gateway.model_gateway.ModelGateway.execute", return_value=mock_resp):
+        provider = AICompositionProvider(use_ai=True)
+        decision = provider.compose_slide(slide, pkg)
+
+        assert decision.decision_source == CompositionDecisionSource.DETERMINISTIC_FALLBACK
+        assert "UNGROUNDED_ID" in decision.fallback_reason
+        assert decision.metadata["failure_telemetry"]["failure_type"] == "UNGROUNDED_ID"
+
+
+
