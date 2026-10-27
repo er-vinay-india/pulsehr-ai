@@ -379,21 +379,32 @@ export default function EvidenceInspectionDrawer({
                       type: "numeric",
                       sortable: true,
                       defaultVisible: true,
-                      render: (val, ev) =>
-                        val ? (
+                      render: (val, ev) => {
+                        let targetIdx = typeof ev.slide_index === "number" ? ev.slide_index - 1 : 0;
+                        if (allSlides && allSlides.length > 0) {
+                          const matchIdx = allSlides.findIndex(s =>
+                            (s.title && ev.title && s.title.toLowerCase().trim() === ev.title.toLowerCase().trim()) ||
+                            (s.finding_id && ev.finding_id && s.finding_id === ev.finding_id) ||
+                            (s.evidence_id && ev.evidence_id && s.evidence_id === ev.evidence_id)
+                          );
+                          if (matchIdx !== -1) {
+                            targetIdx = matchIdx;
+                          }
+                        }
+                        targetIdx = Math.max(0, Math.min((allSlides?.length || 1) - 1, targetIdx));
+                        return (
                           <button
                             type="button"
                             className="btn-jump-slide"
                             onClick={() => {
-                              onSelectSlide(ev.slide_index - 1);
+                              onSelectSlide(targetIdx);
                               setActiveTab("board_briefing");
                             }}
                           >
-                            Slide {val}
+                            Slide {targetIdx + 1}
                           </button>
-                        ) : (
-                          "—"
-                        ),
+                        );
+                      },
                     },
                   ]}
                   rows={evidenceLedger.length > 0 ? evidenceLedger : [currentEvidence]}

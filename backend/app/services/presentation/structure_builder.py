@@ -22,8 +22,13 @@ import logging
 import re
 from typing import Any, Optional
 
-from .content_models import ContentKind, PresentationContentItem, PresentationContentPackage
-from .story_models import ContentBinding, ContentBindingRole
+from .content_models import (
+    ContentKind,
+    PresentationContentItem,
+    PresentationContentPackage,
+    VisualStrategy,
+)
+from .story_models import ContentBinding, ContentBindingRole, StructuralRole
 from .layer_zone_models import (
     CoordinateSpace,
     EditabilityPolicy,
@@ -309,7 +314,51 @@ class LayeredSlideStructureBuilder:
             all_slide_objects.extend(kpi_objs)
 
         # 6. Build Narrative / Bullet Zone
-        if narrative_bindings:
+        is_cover_slide = bool(
+            m_slide.metadata.get("is_cover")
+            or (m_slide.structural_role == StructuralRole.TITLE and not m_slide.content_bindings)
+        )
+        if is_cover_slide:
+            presenter = m_slide.metadata.get("presenter_name") or "[Presenter Name]"
+            org = m_slide.metadata.get("organization_name") or "[Organization / Institution]"
+            role = m_slide.metadata.get("presenter_role")
+            dt = m_slide.metadata.get("presentation_date") or "[Date]"
+            lines = [
+                f"Presented by: {presenter}",
+                f"Organization: {org}",
+            ]
+            if role:
+                lines.append(f"Department / Role: {role}")
+            lines.append(f"Date: {dt}")
+            meta_narrative = "\n".join(lines)
+
+            meta_obj = SlideObjectSpec(
+                object_id=f"{m_slide.physical_slide_id}__OBJ_COVER_METADATA",
+                object_name=self._build_selection_pane_name(m_slide.physical_slide_id, "NARRATIVE_INSIGHT"),
+                name="Presentation Details",
+                content_id=f"{m_slide.physical_slide_id}__METADATA",
+                binding_role=ContentBindingRole.PRIMARY,
+                kind=ContentKind.NARRATIVE_INSIGHT,
+                semantic_topic=m_slide.semantic_topic,
+                editability=EditabilityPolicy.NATIVE_REQUIRED,
+                inheritance_policy=FrameInheritancePolicy.PER_SLIDE,
+                headline="",
+                narrative_text=meta_narrative,
+                data_summary={},
+                source_traceability={"metadata": m_slide.metadata},
+            )
+            n_zone = ZoneSpec(
+                zone_id=f"{m_slide.physical_slide_id}__ZONE_INSIGHT_NARRATIVE",
+                zone_type=ZoneType.INSIGHT_NARRATIVE,
+                layer_role=LayerRole.BODY,
+                coordinate_space=CoordinateSpace.BODY_SPACE,
+                objects=[meta_obj],
+                allowed_kinds=[ContentKind.NARRATIVE_INSIGHT],
+                z_index=6,
+            )
+            zones.append(n_zone)
+            all_slide_objects.append(meta_obj)
+        elif narrative_bindings:
             narrative_objs = [
                 self._create_slide_object(
                     m_slide=m_slide,
@@ -330,44 +379,73 @@ class LayeredSlideStructureBuilder:
             )
             zones.append(n_zone)
             all_slide_objects.extend(narrative_objs)
+        elif m_slide.structural_role in (StructuralRole.CLOSING, StructuralRole.EXECUTIVE_SUMMARY, StructuralRole.TITLE) and m_slide.takeaway_text:
+            clean_takeaway = self._cleanse_text(m_slide.takeaway_text, is_technical_deck)
+            synth_obj = SlideObjectSpec(
+                object_id=f"{m_slide.physical_slide_id}__OBJ_CLOSING_TAKEAWAY",
+                object_name=self._build_selection_pane_name(m_slide.physical_slide_id, "NARRATIVE_INSIGHT"),
+                name="Key Takeaway" if m_slide.structural_role == StructuralRole.TITLE else "Closing Takeaway",
+                content_id=f"{m_slide.physical_slide_id}__TAKEAWAY",
+                binding_role=ContentBindingRole.PRIMARY,
+                kind=ContentKind.NARRATIVE_INSIGHT,
+                semantic_topic=m_slide.semantic_topic,
+                editability=EditabilityPolicy.NATIVE_REQUIRED,
+                inheritance_policy=FrameInheritancePolicy.PER_SLIDE,
+                headline="",
+                narrative_text=clean_takeaway,
+                data_summary={},
+                source_traceability={"physical_slide_id": m_slide.physical_slide_id},
+            )
+            n_zone = ZoneSpec(
+                zone_id=f"{m_slide.physical_slide_id}__ZONE_INSIGHT_NARRATIVE",
+                zone_type=ZoneType.INSIGHT_NARRATIVE,
+                layer_role=LayerRole.BODY,
+                coordinate_space=CoordinateSpace.BODY_SPACE,
+                objects=[synth_obj],
+                allowed_kinds=[ContentKind.NARRATIVE_INSIGHT],
+                z_index=6,
+            )
+            zones.append(n_zone)
+            all_slide_objects.append(synth_obj)
 
         # 7. Build Footnote / Source Citation Zone
-        footnote_sources = set()
-        for _, item in visual_bindings + table_bindings + kpi_bindings + narrative_bindings:
-            if item.source_dataset_id or item.source_sheet_name:
-                src = str(item.source_sheet_name or item.source_dataset_id)
-                footnote_sources.add(src)
-        
-        footnote_text = f"Source: {', '.join(sorted(footnote_sources))}" if footnote_sources else "Source: Internal HR Analytics"
-        clean_footnote = self._cleanse_text(footnote_text, is_technical_deck)
+        if not is_cover_slide:
+            footnote_sources = set()
+            for _, item in visual_bindings + table_bindings + kpi_bindings + narrative_bindings:
+                if item.source_dataset_id or item.source_sheet_name:
+                    src = str(item.source_sheet_name or item.source_dataset_id)
+                    footnote_sources.add(src)
+            
+            footnote_text = f"Source: {', '.join(sorted(footnote_sources))}" if footnote_sources else "Source: Verified Empirical Records"
+            clean_footnote = self._cleanse_text(footnote_text, is_technical_deck)
 
-        footnote_obj = SlideObjectSpec(
-            object_id=f"{m_slide.physical_slide_id}__OBJ_FOOTNOTE",
-            object_name=self._build_selection_pane_name(m_slide.physical_slide_id, "FOOTNOTE"),
-            name="Slide Footnote",
-            content_id=f"{m_slide.physical_slide_id}__FOOTNOTE",
-            binding_role=ContentBindingRole.SUPPORTING,
-            kind=ContentKind.NARRATIVE_INSIGHT,
-            semantic_topic=m_slide.semantic_topic,
-            editability=EditabilityPolicy.NATIVE_REQUIRED,
-            inheritance_policy=FrameInheritancePolicy.MASTER_PREFERRED,
-            headline="",
-            narrative_text=clean_footnote,
-            data_summary={},
-            source_traceability={"sources": sorted(footnote_sources)},
-        )
-        footnote_zone = ZoneSpec(
-            zone_id=f"{m_slide.physical_slide_id}__ZONE_FOOTNOTE",
-            zone_type=ZoneType.FOOTNOTE,
-            layer_role=LayerRole.MASTER_FRAME,
-            coordinate_space=CoordinateSpace.MASTER_FRAME_SPACE,
-            inheritance_policy=FrameInheritancePolicy.MASTER_PREFERRED,
-            objects=[footnote_obj],
-            allowed_kinds=[ContentKind.NARRATIVE_INSIGHT],
-            z_index=7,
-        )
-        zones.append(footnote_zone)
-        all_slide_objects.append(footnote_obj)
+            footnote_obj = SlideObjectSpec(
+                object_id=f"{m_slide.physical_slide_id}__OBJ_FOOTNOTE",
+                object_name=self._build_selection_pane_name(m_slide.physical_slide_id, "FOOTNOTE"),
+                name="Slide Footnote",
+                content_id=f"{m_slide.physical_slide_id}__FOOTNOTE",
+                binding_role=ContentBindingRole.SUPPORTING,
+                kind=ContentKind.NARRATIVE_INSIGHT,
+                semantic_topic=m_slide.semantic_topic,
+                editability=EditabilityPolicy.NATIVE_REQUIRED,
+                inheritance_policy=FrameInheritancePolicy.MASTER_PREFERRED,
+                headline="",
+                narrative_text=clean_footnote,
+                data_summary={},
+                source_traceability={"sources": sorted(footnote_sources)},
+            )
+            footnote_zone = ZoneSpec(
+                zone_id=f"{m_slide.physical_slide_id}__ZONE_FOOTNOTE",
+                zone_type=ZoneType.FOOTNOTE,
+                layer_role=LayerRole.MASTER_FRAME,
+                coordinate_space=CoordinateSpace.MASTER_FRAME_SPACE,
+                inheritance_policy=FrameInheritancePolicy.MASTER_PREFERRED,
+                objects=[footnote_obj],
+                allowed_kinds=[ContentKind.NARRATIVE_INSIGHT],
+                z_index=7,
+            )
+            zones.append(footnote_zone)
+            all_slide_objects.append(footnote_obj)
 
         slide_status = StructureStatus.STRUCTURE_REPLAN_REQUIRED if replan_reason else StructureStatus.STRUCTURE_VALIDATED
 
@@ -399,7 +477,20 @@ class LayeredSlideStructureBuilder:
     ) -> SlideObjectSpec:
         """Instantiates a stable, truthful SlideObjectSpec from a PresentationContentItem."""
         # Truthful editability policy: defines renderer expectations, not actual rendering outcome
-        if item.kind == ContentKind.MAP:
+        is_reused = getattr(item, "visual_strategy", None) == VisualStrategy.REUSE_EXISTING or getattr(binding, "visual_strategy", None) == VisualStrategy.REUSE_EXISTING
+        v_type = getattr(item, "visual_type", None) or getattr(binding, "visual_type", None)
+
+        if is_reused:
+            # Stage 3 Render Policy: route by visual_type
+            if v_type in ("choropleth", "box_plot", "bullet", "treemap", "podium_top_3", "dumbbell", "scenario_card") or item.kind == ContentKind.MAP:
+                editability = EditabilityPolicy.RASTER_ALLOWED
+            elif v_type in ("scatter", "variance_bar", "ranked_bar", "line"):
+                editability = EditabilityPolicy.NATIVE_REQUIRED
+            elif v_type == "table" or item.kind == ContentKind.TABLE:
+                editability = EditabilityPolicy.NATIVE_REQUIRED
+            else:
+                editability = EditabilityPolicy.NATIVE_REQUIRED
+        elif item.kind == ContentKind.MAP:
             # Maps are raster/composite geographic representations in PowerPoint
             editability = EditabilityPolicy.RASTER_ALLOWED
         elif item.kind == ContentKind.IMAGE:
@@ -455,6 +546,14 @@ class LayeredSlideStructureBuilder:
         if item.visual_spec:
             data_summary["chart_type"] = item.visual_spec.get("chart_type")
 
+        obj_meta = dict(getattr(item, "metadata", None) or {})
+        obj_meta["visual_id"] = getattr(item, "visual_id", None) or getattr(binding, "visual_id", None)
+        v_strat = getattr(item, "visual_strategy", None) or getattr(binding, "visual_strategy", None)
+        obj_meta["visual_strategy"] = v_strat.value if hasattr(v_strat, "value") else str(v_strat or "")
+        obj_meta["visual_type"] = v_type
+        obj_meta["visual_spec"] = getattr(item, "visual_spec", None) or getattr(binding, "visual_spec", None)
+        obj_meta["source_surface"] = getattr(item, "source_surface", None) or getattr(binding, "source_surface", None)
+
         return SlideObjectSpec(
             object_id=object_id,
             object_name=object_name,
@@ -469,7 +568,7 @@ class LayeredSlideStructureBuilder:
             narrative_text=clean_narrative,
             data_summary=data_summary,
             source_traceability=source_traceability,
-            metadata=dict(getattr(item, "metadata", None) or {}),
+            metadata=obj_meta,
         )
 
     @classmethod
@@ -479,8 +578,15 @@ class LayeredSlideStructureBuilder:
             return text or ""
         cleaned = re.sub(r"\bSDR(-\d+)?\b", "Dataset", text, flags=re.IGNORECASE)
         cleaned = re.sub(r"\bJoin(Plan|Graph)\b", "Data Integration", cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(r"\bEVID-[A-Za-z0-9_\-]+\b", "Audited Evidence", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"\bEVID-[A-Za-z0-9_\-]+\b", "", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"\bTOPIC-[A-Za-z0-9_\-]+\b", "", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"\bGoverned\s+Topics\b", "", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"\bGoverned\b", "", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"\bSnapshot\b(?:\s+hash)?[:\s]*[a-f0-9]*", "", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"\bComplete\s+Coverage\b", "Comprehensive Coverage", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"\bRecorded\s+data\b", "Empirical data", cleaned, flags=re.IGNORECASE)
         cleaned = re.sub(r"\b[a-f0-9]{32,64}\b", "", cleaned)
         cleaned = re.sub(r"\bcontrol\s+plane\b", "core system", cleaned, flags=re.IGNORECASE)
-        cleaned = re.sub(r"\borchestrator\s+task\b", "pipeline process", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"\bpipeline\b", "workflow", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"\borchestrator\s+task\b", "analytical workflow", cleaned, flags=re.IGNORECASE)
         return cleaned.strip()

@@ -15,7 +15,12 @@ import copy
 import logging
 from typing import Any, Optional
 
-from .content_models import ContentKind, PresentationContentPackage
+from .content_models import (
+    ContentKind,
+    PresentationContentPackage,
+    VisualCompleteness,
+    VisualStrategy,
+)
 from .manifest_models import (
     ContentDensity,
     DeckLengthPolicy,
@@ -199,6 +204,19 @@ class SlideExpansionEngine:
         """Expands a single logical slide into 1..K physical slide instances."""
         base_id = l_slide.logical_slide_id.strip()
 
+        # Stage 4 Guard: REUSE_EXISTING + COMPLETE_VISUAL does not expand based on category count, row count, rank count
+        is_reused_complete = (
+            getattr(l_slide, "visual_strategy", None) == VisualStrategy.REUSE_EXISTING
+            and getattr(l_slide, "visual_completeness", None) == VisualCompleteness.COMPLETE_VISUAL
+        ) or any(
+            getattr(b, "visual_strategy", None) == VisualStrategy.REUSE_EXISTING
+            and getattr(b, "visual_completeness", None) == VisualCompleteness.COMPLETE_VISUAL
+            for b in l_slide.content_bindings
+        )
+        if is_reused_complete:
+            target_physical_count = 1
+            expansion_reason = ExpansionReason.NONE
+
         # Single physical slide case
         if target_physical_count <= 1 or not l_slide.allow_split or len(l_slide.content_bindings) <= 1:
             p_id = f"{base_id}-01"
@@ -217,7 +235,8 @@ class SlideExpansionEngine:
                     section_name=l_slide.section_name,
                     estimated_density=ContentDensity.MEDIUM,
                     expansion_reason=ExpansionReason.NONE,
-                    primary_owner_slide_id=p_id
+                    primary_owner_slide_id=p_id,
+                    metadata={"takeaway": l_slide.takeaway, **getattr(l_slide, "metadata", {})},
                 )
             ]
 
@@ -251,7 +270,8 @@ class SlideExpansionEngine:
                     section_name=l_slide.section_name,
                     estimated_density=ContentDensity.MEDIUM,
                     expansion_reason=expansion_reason,
-                    primary_owner_slide_id=p_id
+                    primary_owner_slide_id=p_id,
+                    metadata={"takeaway": l_slide.takeaway, **getattr(l_slide, "metadata", {})},
                 )
             )
 
@@ -392,8 +412,13 @@ class SlideExpansionEngine:
 
                 # Part 2 gets continuation ID
                 base_id = s.logical_slide_id
+                existing_phys_ids = {ps.physical_slide_id for ps in current_manifest.slides}
                 next_cont = s.continuation_index + 1
                 p2_id = f"{base_id}-{next_cont:02d}"
+                while p2_id in existing_phys_ids:
+                    next_cont += 1
+                    p2_id = f"{base_id}-{next_cont:02d}"
+
                 p2 = PhysicalSlideInstance(
                     physical_slide_id=p2_id,
                     logical_slide_id=s.logical_slide_id,
@@ -416,6 +441,17 @@ class SlideExpansionEngine:
                 shifted = copy.deepcopy(s)
                 shifted.sequence_index += 1
                 new_slides.append(shifted)
+
+        # Renumber sequence indices and continuation indices to maintain strict contiguous ordering
+        logical_counts: dict[str, int] = {}
+        for seq_i, s in enumerate(new_slides, 1):
+            s.sequence_index = seq_i
+            c_idx = logical_counts.get(s.logical_slide_id, 0) + 1
+            logical_counts[s.logical_slide_id] = c_idx
+            s.continuation_index = c_idx
+            s.is_continuation = (c_idx > 1)
+            s.physical_slide_id = f"{s.logical_slide_id}-{c_idx:02d}"
+            s.primary_owner_slide_id = s.physical_slide_id
 
         # Update mappings
         updated_mappings: list[LogicalTopicMapping] = []

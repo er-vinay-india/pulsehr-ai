@@ -84,12 +84,21 @@ export default function DeckGeneratingView({
 
   const displaySlides = manifestSlides.length > 0
     ? manifestSlides
-    : (slideProgressData?.slide_status_list || []);
+    : (slideProgressData?.slide_status_list?.length > 0
+      ? slideProgressData.slide_status_list
+      : (slideProgressData?.total_slides > 0
+        ? Array.from({ length: slideProgressData.total_slides }, (_, i) => ({
+            order: i + 1,
+            title: `Slide ${i + 1}`,
+            status: (i + 1 < slideProgressData.current_slide) ? "READY" : (i + 1 === slideProgressData.current_slide) ? "RENDERING" : "PREPARING"
+          }))
+        : []));
 
   return (
     <div className="pres-generating-body" aria-busy={!isFailed && !isReady}>
-      {/* Centered Loading Card */}
-      <div className="generating-header-card" role="status" aria-live="polite">
+      {/* Terminal outcomes only; active progress belongs to the phase list. */}
+      {(isFailed || isReady) && (
+        <div className="generating-header-card" role="status" aria-live="polite">
         <div className="pipeline-spinner-badge" aria-hidden="true">
           {isFailed ? (
             <AlertTriangle size={26} />
@@ -121,7 +130,7 @@ export default function DeckGeneratingView({
             ? "Your presentation wasn’t completed. Review the issue below, then return to setup or try again."
             : isReady
             ? "All slide checks, deterministic validation, and visual reviews are complete."
-            : (jobStageLabel || currentStage?.desc || "Synthesizing executive presentation...")}
+            : (stageDetail || currentStage?.desc || "Synthesizing executive presentation...")}
         </p>
 
         {/* Progress track */}
@@ -177,6 +186,7 @@ export default function DeckGeneratingView({
           </div>
         )}
       </div>
+      )}
 
       {/* Manifest-Locked Stable Slides Rail */}
       {(manifestLocked || displaySlides.length > 0) && (
@@ -285,7 +295,7 @@ export default function DeckGeneratingView({
                     {s.title || `Slide ${sIdx + 1}`}
                   </div>
                   <div style={{ fontSize: "10px", color: "var(--color-text-secondary)", textTransform: "capitalize" }}>
-                    {s.layout?.replace(/_/g, " ") || "Chart & Insights"}
+                    {s.visual_type?.replace(/_/g, " ") || s.category?.replace(/_/g, " ") || (s.layout === "chart_narrative" ? "Analysis" : s.layout?.replace(/_/g, " ")) || "Analysis"}
                   </div>
                 </div>
               );
@@ -319,7 +329,7 @@ export default function DeckGeneratingView({
 
                 <div className="stage-meta">
                   <div className="stage-title-row">
-                    <span className="stage-title">{st.label}</span>
+                    <span className="stage-title">Phase {idx + 1}: {st.label}</span>
                   </div>
                   <span className="stage-desc">
                     {isCurrent && stageDetail ? stageDetail : (st.desc || st.label)}

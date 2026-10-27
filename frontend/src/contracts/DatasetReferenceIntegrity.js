@@ -51,17 +51,24 @@ export function validateAndResolveDataset(catalog = [], requestedId = "") {
         activeDataset: match,
       };
     }
+    // Explicit requested ID was NOT found in catalog -> preserve requestedId so state contract detects DATASET_DELETED_OR_STALE
+    return {
+      resolvedId: String(requestedId),
+      status: "STALE_NOT_FOUND",
+      staleDetected: true,
+      activeDataset: null,
+    };
   }
 
-  // Case 3: Requested ID was stale or missing, fallback to first valid dataset
+  // Case 3: No requested ID was provided in URL -> default to first available dataset
   const fallback = list[0];
   const targetId = String(fallback.id);
   selfHealUrl(targetId);
 
   return {
     resolvedId: targetId,
-    status: requestedId ? "STALE_HEALED" : "DEFAULT_SELECTED",
-    staleDetected: Boolean(requestedId),
+    status: "DEFAULT_SELECTED",
+    staleDetected: false,
     activeDataset: fallback,
   };
 }

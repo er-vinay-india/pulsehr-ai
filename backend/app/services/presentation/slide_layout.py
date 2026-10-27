@@ -41,6 +41,8 @@ def resolve_slide(slide, theme=None):
     from .visual.design_tokens import slide_theme_preset
     palette = slide_theme_preset(theme)
     brush = bool(palette.get('checklist'))
+    if slide.get('zones'):
+        return None
     layout = slide.get('layout') or ('chart_narrative' if slide.get('chart') or slide.get('chart_data') else 'table_detail' if slide.get('table') or slide.get('table_data') else 'comparison_split')
     if layout not in GEOMETRY['supported_layouts'] or slide.get('talent_9box_data') or slide.get('burnout_strain_data'):
         return None
@@ -242,7 +244,20 @@ def resolve_slide(slide, theme=None):
             text(caption_str, right_x, y_top + img_h + 6, right_w, t['caption'], 'secondary_text', False, 'caption')
         supporting()
     elif layout in ('chart_narrative', 'full_chart_takeaway', 'two_charts'):
-        raise SlideLayoutError(f"Layout '{layout}' contains no chart specification.")
+        has_alt_visual = bool(
+            slide.get('image_path')
+            or slide.get('rendered_image_path')
+            or slide.get('image')
+            or slide.get('visual_type')
+            or slide.get('visual_spec')
+            or slide.get('rendered_objects')
+            or slide.get('zones')
+            or slide.get('metrics')
+        )
+        if has_alt_visual:
+            supporting()
+        else:
+            raise SlideLayoutError(f"Layout '{layout}' contains no chart specification.")
     elif layout in ('action_plan', 'initiative_detail'):
         actions = slide.get('initiatives') or slide.get('structured_proposals') or []
         if not actions:

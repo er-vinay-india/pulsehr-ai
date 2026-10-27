@@ -340,7 +340,15 @@ class AnalyticalOpportunityExecutor:
         r_val = round(cov / max(1e-6, std_x * std_y), 3) if std_x > 0 and std_y > 0 else 0.0
 
         evid_id = f"EVID-OPP-{opp.opportunity_id}"
-        formatted_val = f"r = {r_val:+.2f} ({'Strong' if abs(r_val) > 0.6 else 'Moderate'} association)"
+        if abs(r_val) >= 0.7:
+            strength = "Strong"
+        elif abs(r_val) >= 0.3:
+            strength = "Moderate"
+        elif abs(r_val) >= 0.1:
+            strength = "Weak"
+        else:
+            strength = "Negligible"
+        formatted_val = f"r = {r_val:+.2f} ({strength} association)"
 
         return EvidenceItem(
             evidence_id=evid_id,

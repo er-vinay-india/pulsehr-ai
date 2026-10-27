@@ -32,6 +32,26 @@ export default function EmptyDashboardBoundary({
     );
   }
 
+  // 1b. Stale or Missing Dataset State (DATASET_DELETED_OR_STALE): Mount truthful missing notice
+  if (dashboardState === DASHBOARD_STATES.DATASET_DELETED_OR_STALE) {
+    return (
+      <section
+        className="dashboard-error-boundary explorer-empty-state adaptive-empty-state"
+        data-testid="dashboard-stale-dataset"
+        role="alert"
+        aria-labelledby="dashboard-stale-title"
+      >
+        <div className="explorer-empty-icon adaptive-empty-icon" aria-hidden="true"><FileSpreadsheet size={32} /></div>
+        <h2 id="dashboard-stale-title" className="adaptive-empty-heading">Dataset Not Found</h2>
+        <p className="adaptive-empty-text">The requested dataset does not exist or may have been deleted.</p>
+        <div className="adaptive-empty-hint">Please select another available workbook or upload a fresh copy.</div>
+        <Button variant="PRIMARY" size="lg" onClick={() => (onOpenUpload ? onOpenUpload() : onRetry())} ariaLabel="Upload workbook">
+          Upload Workbook
+        </Button>
+      </section>
+    );
+  }
+
   // 2. Sanitized Error State (DATASET_ERROR): Mount sanitized error notice
   if (dashboardState === DASHBOARD_STATES.DATASET_ERROR && error) {
     const serviceUnavailable = ["NETWORK", "SERVER_ERROR"].includes(error.category);

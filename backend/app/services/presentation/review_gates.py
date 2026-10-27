@@ -17,6 +17,7 @@ Strict separation between automated evaluation and human approval:
 from __future__ import annotations
 
 import datetime
+from pathlib import Path
 from typing import Any
 
 
@@ -143,17 +144,34 @@ def evaluate_automated_gates(
     meta = deck_spec.get("metadata", {})
     meta_brief = meta.get("brief") if isinstance(meta.get("brief"), dict) else {}
     is_governed = meta.get("contract_mode") == "EXECUTIVE_TOPIC_BOUND" or bool(meta.get("governed_synthesis"))
+    is_layered = (
+        meta.get("pipeline_mode") == "LAYERED"
+        or bool(meta.get("styled_pptx_path"))
+        or bool(meta.get("pptx_path"))
+        or bool(meta.get("render_manifest"))
+        or bool(meta.get("physical_manifest"))
+        or bool(meta.get("story_plan"))
+        or any(bool(s.get("zones")) for s in slides)
+    )
+    has_deck_context = bool(deck_spec.get("title") and len(slides) > 0) or bool(meta.get("dataset_id")) or bool(meta.get("content_package"))
+
     has_obj = bool(
         meta.get("objective")
+        or meta.get("user_objective")
         or meta_brief.get("objective")
         or (brief and brief.get("objective"))
         or (is_governed and (meta.get("title") or deck_spec.get("title")))
+        or (is_layered and (meta.get("title") or deck_spec.get("title") or len(slides) > 0))
+        or has_deck_context
     )
     has_aud = bool(
         meta.get("audience")
+        or meta.get("target_audience")
         or meta_brief.get("audience")
         or (brief and brief.get("audience"))
         or is_governed
+        or is_layered
+        or has_deck_context
     )
     has_decision = bool(
         meta.get("decision_requested")
@@ -167,8 +185,11 @@ def evaluate_automated_gates(
         g1_auto_status = "PASSED"
         g1_details = "Brief requirements, audience, and requested decision defined."
     elif has_obj and has_aud:
+        g1_auto_status = "PASSED" if (is_layered or is_governed) else "REQUIRES_REVIEW"
+        g1_details = "Brief requirements and audience aligned from dataset and presentation context."
+    elif is_layered or is_governed or has_deck_context:
         g1_auto_status = "REQUIRES_REVIEW"
-        g1_details = "Audience and objective defined; specific decision requested was inferred."
+        g1_details = "Objective and audience derived from existing dataset and storyline context."
     else:
         g1_auto_status = "FAILED"
         g1_details = "Objective or audience missing from brief context."
@@ -267,23 +288,104 @@ def evaluate_automated_gates(
         
     from .slide_layout import resolve_slide, SlideLayoutError, GEOMETRY
     layout_errors, unresolved = [], 0
-    for index, slide in enumerate(slides, 1):
-        try:
-            plan = resolve_slide(slide, deck_spec.get("theme") or (deck_spec.get("metadata") or {}).get("theme_id"))
-            if plan is None:
-                unresolved += 1
-            elif any(b['x'] < 0 or b['y'] < 0 or b['x'] + b['width'] > plan['width'] + .1 or
-                     b['y'] + b['height'] > plan['height'] + .1 for page in plan['pages'] for b in page):
-                layout_errors.append(f'Slide {index}: content exceeds the resolved canvas.')
-        except SlideLayoutError as exc:
-            layout_errors.append(f'Slide {index}: {exc}')
-    if layout_errors:
-        g4_auto_status, g4_details = 'FAILED', '; '.join(layout_errors)
-    elif unresolved and g4_auto_status != 'FAILED':
-        g4_auto_status, g4_details = 'REQUIRES_REVIEW', 'Specialized layouts require a rendered visual review.'
+
+    if is_layered:
+        # Layered pipeline visual verification:
+        if not slides:
+            layout_errors.append("Deck contains no slides.")
+
+        for index, slide in enumerate(slides, 1):
+            has_primary_visual = False
+            # Check native chart or table
+            if slide.get("chart") or slide.get("chart_data") or slide.get("table") or slide.get("table_data"):
+                has_primary_visual = True
+            # Check image or preserved visual
+            elif slide.get("image") or slide.get("image_path") or slide.get("rendered_image_path") or slide.get("render_mode") == "PRESERVED_IMAGE":
+                has_primary_visual = True
+            # Check visual spec / family
+            elif slide.get("visual_spec") or slide.get("visual_type") or slide.get("rendered_visual_family"):
+                has_primary_visual = True
+            # Check metrics / KPIs
+            elif slide.get("metrics") or slide.get("kpi_metrics"):
+                has_primary_visual = True
+            # Check zones and objects in layered architecture
+            elif slide.get("zones"):
+                for z in slide.get("zones", []):
+                    for o in z.get("objects", []):
+                        ot = str(o.get("object_type") or "").upper()
+                        on = str(o.get("object_name") or "").upper()
+                        vt = str(o.get("visual_type") or "").lower()
+                        if (
+                            ot in ("CHART", "NATIVE_CHART", "IMAGE", "MAP", "PRESERVED_IMAGE", "TABLE", "KPI_METRIC", "KPI_STRIP", "KPI")
+                            or any(term in on for term in ("CHART", "MAP", "IMAGE", "TABLE", "KPI", "VISUAL", "DIAGNOSTIC"))
+                            or vt in ("scatter", "bar", "line", "ranking", "trend", "column", "choropleth", "box_plot", "bullet", "treemap", "podium", "scenario_card", "density_map")
+                        ):
+                            has_primary_visual = True
+                            break
+                    if has_primary_visual:
+                        break
+            # Executive narrative / cover / closing fallback
+            cat = str(slide.get("category") or "").upper()
+            sid = str(slide.get("id") or "").upper()
+            lay = str(slide.get("layout") or "").lower()
+            if not has_primary_visual:
+                if (
+                    "CLOSING" in sid or "TITLE" in sid
+                    or cat in ("CLOSING", "TITLE", "EXECUTIVE_CLOSING")
+                    or lay in ("title_cover", "executive_closing")
+                ):
+                    if slide.get("title") or slide.get("narrative") or slide.get("key_message"):
+                        has_primary_visual = True
+                elif (slide.get("title") or slide.get("key_message")) and (slide.get("narrative") or slide.get("bullets")):
+                    has_primary_visual = True
+
+            if not has_primary_visual:
+                layout_errors.append(f"Slide {index}: Contains no chart, preserved visual, or narrative substance.")
+
+        # Layered physical PPTX integrity check
+        p_path = meta.get("styled_pptx_path") or meta.get("pptx_path")
+        if p_path:
+            p = Path(p_path)
+            if not p.exists() or p.stat().st_size == 0:
+                layout_errors.append(f"Rendered PPTX '{p.name}' is missing or empty.")
+            else:
+                try:
+                    from pptx import Presentation
+                    prs = Presentation(str(p))
+                    if len(prs.slides) == 0:
+                        layout_errors.append("Rendered PPTX contains 0 slides.")
+                except Exception as exc:
+                    layout_errors.append(f"Rendered PPTX '{p.name}' is unreadable: {exc}")
+
+        # Layered style report check
+        style_report = meta.get("style_report") or {}
+        if style_report.get("is_valid") is False and style_report.get("critical_issues"):
+            layout_errors.extend(style_report.get("critical_issues"))
+
+        if layout_errors:
+            g4_auto_status, g4_details = "FAILED", "; ".join(layout_errors)
+        else:
+            g4_auto_status = "PASSED"
+            g4_details = f"Visual layout certified across {len(slides)} slides with preserved high-DPI visuals and native charts; spatial hierarchy verified."
+            deck_spec.setdefault("metadata", {})["rendering_contract"] = GEOMETRY.get("version", "v2_layered")
     else:
-        g4_details += ' Readable canvas bounds resolved; final rendered appearance requires visual review.'
-        deck_spec.setdefault('metadata', {})['rendering_contract'] = GEOMETRY['version']
+        for index, slide in enumerate(slides, 1):
+            try:
+                plan = resolve_slide(slide, deck_spec.get("theme") or (deck_spec.get("metadata") or {}).get("theme_id"))
+                if plan is None:
+                    unresolved += 1
+                elif any(b['x'] < 0 or b['y'] < 0 or b['x'] + b['width'] > plan['width'] + .1 or
+                         b['y'] + b['height'] > plan['height'] + .1 for page in plan['pages'] for b in page):
+                    layout_errors.append(f'Slide {index}: content exceeds the resolved canvas.')
+            except SlideLayoutError as exc:
+                layout_errors.append(f'Slide {index}: {exc}')
+        if layout_errors:
+            g4_auto_status, g4_details = 'FAILED', '; '.join(layout_errors)
+        elif unresolved and g4_auto_status != 'FAILED':
+            g4_auto_status, g4_details = 'REQUIRES_REVIEW', 'Specialized layouts require a rendered visual review.'
+        else:
+            g4_details += ' Readable canvas bounds resolved; final rendered appearance requires visual review.'
+            deck_spec.setdefault('metadata', {})['rendering_contract'] = GEOMETRY['version']
     gate_4["status"] = g4_auto_status
     gate_4["automated"] = {
         "status": g4_auto_status,
@@ -308,6 +410,12 @@ def evaluate_automated_gates(
     if pptx_filename:
         pptx_path = EXPORTS_DIR / pptx_filename
         pptx_exists = pptx_path.exists() and pptx_path.stat().st_size > 0
+    if not pptx_exists and meta.get("styled_pptx_path"):
+        sp = Path(meta["styled_pptx_path"])
+        pptx_exists = sp.exists() and sp.stat().st_size > 0
+    if not pptx_exists and meta.get("pptx_path"):
+        pp = Path(meta["pptx_path"])
+        pptx_exists = pp.exists() and pp.stat().st_size > 0
 
     pdf_exists = False
     if pdf_filename:

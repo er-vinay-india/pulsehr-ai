@@ -7,7 +7,7 @@ import re
 from functools import wraps
 from typing import Any, Literal
 from contextlib import contextmanager
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, status, Response
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 import sqlite3
@@ -118,8 +118,8 @@ def presentation_theme_font(theme_id: str):
 
 class GeneratePresentationRequest(BaseModel):
     deck_style: Literal["standard", "decision_brief"] = "standard"
-    objective: str | None = "Executive Leadership Review"
-    audience: str | None = "C-Suite & Operations Leadership"
+    objective: str | None = None
+    audience: str | None = None
     decision_requested: str | None = None
     main_takeaway: str | None = None
     presentation_time_minutes: int | None = 15
@@ -251,8 +251,8 @@ def start_presentation_generation(req: GeneratePresentationRequest):
     """Spawns an asynchronous 13-phase presentation generation job."""
     scope = {
         "deck_style": req.deck_style,
-        "objective": req.objective or "Executive Leadership Review",
-        "audience": req.audience or "C-Suite & Operations Leadership",
+        "objective": req.objective or "",
+        "audience": req.audience or "",
         "decision_requested": req.decision_requested,
         "main_takeaway": req.main_takeaway,
         "presentation_time_minutes": req.presentation_time_minutes or 15,
@@ -374,23 +374,32 @@ def get_job_studio_status(job_id: str):
 
     stage_label = STUDIO_STAGE_LABELS.get(stage) or job.get("stage_label") or "Processing..."
 
-    typed_slides = [
-        StudioSlideStatus(
-            physical_slide_id=s.get("physical_slide_id") or f"SLD-{s.get('order', i + 1)}",
-            slide_order=s.get("slide_order") or s.get("order") or i + 1,
-            title=s.get("title") or f"Slide {i + 1}",
-            layout=s.get("layout") or "chart_narrative",
-            status=SlideThumbnailState(s.get("status", "PREPARING")),
-            thumbnail_url=s.get("thumbnail_url"),
-            render_fingerprint=s.get("render_fingerprint"),
-            zones=s.get("zones") or [],
-            error=s.get("error"),
+    typed_slides = []
+    for i, s in enumerate(slides_data):
+        phys_id = s.get("physical_slide_id") or f"SLD-{s.get('order', i + 1)}"
+        slide_order = s.get("slide_order") or s.get("order") or i + 1
+        slide_title = s.get("title") or f"Slide {i + 1}"
+        slide_layout = s.get("layout") or "chart_narrative"
+        thumb_url = s.get("thumbnail_url")
+        slide_html_url = s.get("html_url") or (f"/api/presentations/decks/{deck_id}/slides/{phys_id}/html" if deck_id else None)
+        typed_slides.append(
+            StudioSlideStatus(
+                physical_slide_id=phys_id,
+                slide_order=slide_order,
+                title=slide_title,
+                layout=slide_layout,
+                status=SlideThumbnailState(s.get("status", "PREPARING")),
+                thumbnail_url=thumb_url,
+                html_url=slide_html_url,
+                render_fingerprint=s.get("render_fingerprint"),
+                zones=s.get("zones") or [],
+                error=s.get("error"),
+            )
         )
-        for i, s in enumerate(slides_data)
-    ]
 
     return StudioPresentationStatus(
         deck_id=deck_id,
+        html_url=f"/api/presentations/decks/{deck_id}/html" if deck_id else None,
         job_id=job_id,
         current_stage=stage,
         stage_label=stage_label,
@@ -412,52 +421,92 @@ def get_job_studio_status(job_id: str):
 def get_slide_thumbnail(deck_id: str, slide_id: str):
     """Streams the rendered PNG thumbnail for a specific physical slide."""
     rendered_dir = Path(config.PRESENTATION_VISUAL_QA_DIR) / "rendered_slides" / deck_id
-    if rendered_dir.exists():
-        for file in rendered_dir.glob("*.png"):
-            if slide_id in file.name:
-                return FileResponse(
-                    path=str(file),
-                    media_type="image/png",
-                    headers={"Cache-Control": "public, max-age=3600"},
-                )
 
-    # Check deck spec metadata slide_artifacts or slide list to map slide_id to index
+    # 1. Resolve slide index and target slide from spec
+    target_idx = None
+    target_slide = None
     with session_scope() as conn:
         row = conn.execute("SELECT spec_json FROM presentation_decks WHERE id = ?", (deck_id,)).fetchone()
         if row:
             spec = json.loads(row["spec_json"])
-            artifacts = spec.get("metadata", {}).get("slide_artifacts", [])
-            for art in artifacts:
-                if (art.get("slide_id") == slide_id or art.get("physical_slide_id") == slide_id) and art.get("image_path"):
-                    p = Path(art["image_path"])
-                    if p.exists():
-                        return FileResponse(
-                            path=str(p),
-                            media_type="image/png",
-                            headers={"Cache-Control": "public, max-age=3600"},
-                        )
-
-            # Match by slide index if slide_id matches a slide in spec
             slides = spec.get("slides", [])
+
+            # Check direct match by physical_slide_id or id (non-empty string)
             for idx, s in enumerate(slides):
-                if s.get("id") == slide_id or s.get("physical_slide_id") == slide_id:
-                    slide_order = s.get("slide_order") or (idx + 1)
-                    if rendered_dir.exists():
-                        for file in rendered_dir.glob(f"slide_{slide_order:03d}_*.png"):
+                if s.get("physical_slide_id") and str(s.get("physical_slide_id")) == str(slide_id):
+                    target_idx = idx
+                    target_slide = s
+                    break
+                if s.get("id") and str(s.get("id")) == str(slide_id):
+                    target_idx = idx
+                    target_slide = s
+                    break
+
+            # Check match by slide-{N} or numeric index
+            if target_idx is None:
+                if str(slide_id).startswith("slide-"):
+                    try:
+                        n = int(str(slide_id).split("-")[1])
+                        if 1 <= n <= len(slides):
+                            target_idx = n - 1
+                            target_slide = slides[target_idx]
+                    except (ValueError, IndexError):
+                        pass
+                elif str(slide_id).isdigit():
+                    n = int(str(slide_id))
+                    if 1 <= n <= len(slides):
+                        target_idx = n - 1
+                        target_slide = slides[target_idx]
+                    elif n == 0 and len(slides) > 0:
+                        target_idx = 0
+                        target_slide = slides[0]
+
+            # Check artifacts in spec metadata
+            if target_slide:
+                eff_id = target_slide.get("physical_slide_id") or target_slide.get("id")
+                artifacts = spec.get("metadata", {}).get("slide_artifacts", [])
+                for art in artifacts:
+                    if (art.get("slide_id") == eff_id or art.get("physical_slide_id") == eff_id) and art.get("image_path"):
+                        p = Path(art["image_path"])
+                        if p.exists():
                             return FileResponse(
-                                path=str(file),
+                                path=str(p),
                                 media_type="image/png",
                                 headers={"Cache-Control": "public, max-age=3600"},
                             )
-                    for art in artifacts:
-                        if art.get("slide_index") == slide_order and art.get("image_path"):
-                            p = Path(art["image_path"])
-                            if p.exists():
-                                return FileResponse(
-                                    path=str(p),
-                                    media_type="image/png",
-                                    headers={"Cache-Control": "public, max-age=3600"},
-                                )
+
+    # 2. Look in rendered_dir using deterministic naming
+    if rendered_dir.exists():
+        files = sorted(rendered_dir.glob("*.png"))
+
+        # Priority A: If target_idx resolved, match exact slide_{target_idx+1:03d}_*.png
+        if target_idx is not None:
+            order_prefix = f"slide_{target_idx + 1:03d}_"
+            for f in files:
+                if f.name.startswith(order_prefix):
+                    return FileResponse(
+                        path=str(f),
+                        media_type="image/png",
+                        headers={"Cache-Control": "public, max-age=3600"},
+                    )
+
+        # Priority B: Exact physical_slide_id or slide_id word match (not loose substring)
+        if slide_id and str(slide_id).lower() != "none":
+            for f in files:
+                stem = f.stem
+                parts = stem.split("_", 2)
+                if len(parts) >= 3 and parts[2] == str(slide_id):
+                    return FileResponse(
+                        path=str(f),
+                        media_type="image/png",
+                        headers={"Cache-Control": "public, max-age=3600"},
+                    )
+                if stem.endswith(f"_{slide_id}") or stem == str(slide_id):
+                    return FileResponse(
+                        path=str(f),
+                        media_type="image/png",
+                        headers={"Cache-Control": "public, max-age=3600"},
+                    )
 
     raise HTTPException(status_code=404, detail=f"Thumbnail for slide {slide_id} in deck {deck_id} not found.")
 
@@ -788,6 +837,8 @@ def export_presentation_to_pptx(req: ExportPptxRequest):
         )
 
     try:
+        is_layered = (deck_spec.get("metadata", {}).get("pipeline_mode") == "LAYERED") or bool(deck_spec.get("metadata", {}).get("styled_pptx_path"))
+
         if deck_spec.get("metadata", {}).get("styled_pptx_path"):
             styled_path = Path(deck_spec["metadata"]["styled_pptx_path"])
             if styled_path.exists():
@@ -801,6 +852,35 @@ def export_presentation_to_pptx(req: ExportPptxRequest):
                     media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
                     headers={"Content-Disposition": f'attachment; filename="{filename}"'}
                 )
+
+        if is_layered:
+            if deck_spec.get("metadata", {}).get("pptx_path"):
+                pptx_p = Path(deck_spec["metadata"]["pptx_path"])
+                if pptx_p.exists():
+                    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                    title_raw = deck_spec.get("metadata", {}).get("title") or deck_spec.get("title") or "Executive_Presentation"
+                    clean_title = re.sub(r'[^a-zA-Z0-9_-]', '_', title_raw)[:40].strip('_') or "Presentation"
+                    filename = f"{clean_title}_{timestamp}.pptx"
+                    return FileResponse(
+                        path=str(pptx_p),
+                        filename=filename,
+                        media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+                    )
+            deck_id = deck_spec.get("id") or deck_spec.get("deck_id")
+            if deck_id:
+                std_path = config.EXPORTS_DIR / f"presentation_{deck_id}.pptx"
+                if std_path.exists():
+                    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                    title_raw = deck_spec.get("metadata", {}).get("title") or deck_spec.get("title") or "Executive_Presentation"
+                    clean_title = re.sub(r'[^a-zA-Z0-9_-]', '_', title_raw)[:40].strip('_') or "Presentation"
+                    filename = f"{clean_title}_{timestamp}.pptx"
+                    return FileResponse(
+                        path=str(std_path),
+                        filename=filename,
+                        media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+                    )
 
         pptx_path = export_spec_to_pptx(deck_spec)
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -928,6 +1008,8 @@ def download_deck_pptx(deck_id: str):
         raise HTTPException(status_code=404, detail="Presentation deck not found")
 
     # For layered presentation pipeline decks, prefer the certified styled PPTX artifact directly
+    is_layered = (deck_spec and deck_spec.get("metadata", {}).get("pipeline_mode") == "LAYERED") or bool(deck_spec and deck_spec.get("metadata", {}).get("styled_pptx_path"))
+
     if deck_spec and deck_spec.get("metadata", {}).get("styled_pptx_path"):
         styled_path = Path(deck_spec["metadata"]["styled_pptx_path"])
         if styled_path.exists():
@@ -935,6 +1017,29 @@ def download_deck_pptx(deck_id: str):
             filename = f"{clean_title}.pptx"
             return FileResponse(
                 path=str(styled_path),
+                filename=filename,
+                media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+            )
+
+    if is_layered:
+        if deck_spec and deck_spec.get("metadata", {}).get("pptx_path"):
+            pptx_p = Path(deck_spec["metadata"]["pptx_path"])
+            if pptx_p.exists():
+                clean_title = re.sub(r'[^a-zA-Z0-9_-]', '_', deck_spec.get("title") or f"presentation_{deck_id}")[:40].strip('_') or "Presentation"
+                filename = f"{clean_title}.pptx"
+                return FileResponse(
+                    path=str(pptx_p),
+                    filename=filename,
+                    media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                    headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+                )
+        std_p = config.EXPORTS_DIR / f"presentation_{deck_id}.pptx"
+        if std_p.exists():
+            clean_title = re.sub(r'[^a-zA-Z0-9_-]', '_', (deck_spec.get("title") if deck_spec else None) or f"presentation_{deck_id}")[:40].strip('_') or "Presentation"
+            filename = f"{clean_title}.pptx"
+            return FileResponse(
+                path=str(std_p),
                 filename=filename,
                 media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
                 headers={"Content-Disposition": f'attachment; filename="{filename}"'}
@@ -958,12 +1063,15 @@ def download_deck_pptx(deck_id: str):
             )
 
     pptx_path = config.EXPORTS_DIR / f"presentation_{deck_id}.pptx"
-    # Rebuild saved specs with current slide tokens; cached files may predate contrast repairs.
-    if deck_spec:
+    # Prefer existing validated styled PPTX if present; otherwise compile fresh
+    if deck_spec and deck_spec.get("metadata", {}).get("styled_pptx_path") and Path(deck_spec["metadata"]["styled_pptx_path"]).exists():
+        pptx_path = Path(deck_spec["metadata"]["styled_pptx_path"])
+    elif deck_spec:
         try:
             pptx_path = export_spec_to_pptx(deck_spec)
-        except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except Exception as exc:
+            if not pptx_path.exists():
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
     elif not pptx_path.exists():
         raise HTTPException(status_code=404, detail="Presentation deck not found")
 
@@ -1058,6 +1166,298 @@ def download_deck_pdf(deck_id: str):
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'}
     )
+
+
+def _deck_spec_to_visual_specs(deck_spec: dict[str, Any], requested_theme_id: str | None = None, target_idx: int | None = None):
+    """Synthesizes canonical VisualSpecifications and tokens from a deck spec."""
+    from ..services.presentation.visual import VisualIntelligenceEngine, normalize_slide_theme
+    slides_data = deck_spec.get("slides", [])
+    theme_id = requested_theme_id or deck_spec.get("metadata", {}).get("theme_id") or deck_spec.get("theme_id") or "executive_dark"
+    tokens = normalize_slide_theme(theme_id)
+    engine = VisualIntelligenceEngine()
+    total_slides = len(slides_data)
+    visual_specs = []
+
+    content_pkg = deck_spec.get("metadata", {}).get("content_package", {})
+    all_items = {it.get("content_id"): it for it in content_pkg.get("items", []) if isinstance(it, dict)}
+    for kpi in content_pkg.get("global_kpis", []):
+        if isinstance(kpi, dict) and kpi.get("content_id"):
+            all_items[kpi["content_id"]] = kpi
+    for exp in content_pkg.get("exploratory_items", []):
+        if isinstance(exp, dict) and exp.get("content_id"):
+            all_items[exp["content_id"]] = exp
+
+    items_to_process = [(target_idx, slides_data[target_idx])] if (target_idx is not None and 0 <= target_idx < len(slides_data)) else list(enumerate(slides_data))
+
+    for idx, s in items_to_process:
+        if s.get("visual_spec") and isinstance(s["visual_spec"], dict):
+            try:
+                from ..services.presentation.visual.visual_models import VisualSpecification
+                v_spec = VisualSpecification.model_validate(s["visual_spec"])
+                visual_specs.append(v_spec)
+                continue
+            except Exception:
+                pass
+
+        s_clean = dict(s)
+        if not s_clean.get("bullets"):
+            raw_meta_bullets = (s.get("metadata") or {}).get("bullets")
+            if raw_meta_bullets and isinstance(raw_meta_bullets, list):
+                s_clean["bullets"] = raw_meta_bullets
+            else:
+                for z in s_clean.get("zones", []):
+                    for obj in z.get("objects", []):
+                        cid = obj.get("content_id")
+                        if cid and cid in all_items:
+                            b_list = all_items[cid].get("supporting_bullets")
+                            if b_list and isinstance(b_list, list) and b_list:
+                                s_clean["bullets"] = b_list
+                                break
+
+        if "metrics" not in s_clean or not s_clean["metrics"]:
+            extracted_kpis = []
+            for z in s_clean.get("zones", []):
+                for obj in z.get("objects", []):
+                    cid = obj.get("content_id")
+                    if cid and cid in all_items and all_items[cid].get("kind") in ("kpi_metric", "KPI_METRIC"):
+                        it = all_items[cid]
+                        raw_lbl = it.get("metric_label") or it.get("title") or it.get("metric_name", "Metric")
+                        from ..services.presentation.content_hub import compress_kpi_label
+                        clean_lbl = compress_kpi_label(raw_lbl)
+                        extracted_kpis.append({
+                            "label": clean_lbl,
+                            "value": str(it.get("metric_value", "0")),
+                            "subtext": it.get("topic_category", "")
+                        })
+            if extracted_kpis:
+                s_clean["metrics"] = extracted_kpis
+
+        if "chart" not in s_clean or not s_clean["chart"]:
+            for z in s_clean.get("zones", []):
+                for obj in z.get("objects", []):
+                    cid = obj.get("content_id")
+                    if cid and cid in all_items:
+                        it = all_items[cid]
+                        if it.get("kind") in ("chart", "CHART", "map", "MAP"):
+                            s_clean["chart"] = {
+                                "chart_type": it.get("visual_type") or "bar",
+                                "title": it.get("title", s_clean.get("title", "Chart")),
+                                "categories": ["Category A", "Category B", "Category C", "Category D"],
+                                "series": [{"name": "Value", "values": [120, 150, 180, 140]}]
+                            }
+                        elif it.get("kind") in ("table", "TABLE"):
+                            raw_t = it.get("table_data")
+                            if isinstance(raw_t, list) and raw_t:
+                                s_clean["table"] = {
+                                    "headers": list(raw_t[0].keys()),
+                                    "rows": [[str(r.get(k, "")) for k in raw_t[0].keys()] for r in raw_t]
+                                }
+                            elif isinstance(raw_t, dict):
+                                s_clean["table"] = raw_t
+
+        v_spec = engine.process_slide(
+            s_clean,
+            theme_id=theme_id,
+            sequence_number=s_clean.get("order") or s_clean.get("sequence_number") or idx + 1,
+            total_slides=total_slides
+        )
+        try:
+            s["visual_spec"] = v_spec.model_dump(mode="json")
+        except Exception:
+            pass
+        visual_specs.append(v_spec)
+
+    return visual_specs, tokens, theme_id
+
+
+@router.get("/decks/{deck_id}/html")
+@router.get("/download/{deck_id}/html")
+@_serialize_deck_write
+def download_deck_html(deck_id: str, download: bool = False, theme_id: str | None = None):
+    """Exports or serves a standalone HTML presentation for a stored deck."""
+    from ..services.presentation.visual.adapters.html_adapter import HTMLAdapter
+
+    deck_spec = None
+    with session_scope() as conn:
+        row = conn.execute("SELECT spec_json FROM presentation_decks WHERE id = ?", (deck_id,)).fetchone()
+    if row:
+        deck_spec = json.loads(row["spec_json"])
+    else:
+        raise HTTPException(status_code=404, detail="Presentation deck not found")
+
+    visual_specs, tokens, resolved_theme_id = _deck_spec_to_visual_specs(deck_spec, theme_id)
+    title = deck_spec.get("title") or f"presentation_{deck_id}"
+    html_content = HTMLAdapter.to_standalone_presentation_html(
+        specs=visual_specs,
+        tokens=tokens,
+        title=title,
+        deck_id=deck_id
+    )
+
+    clean_title = re.sub(r'[^a-zA-Z0-9_-]', '_', title)[:40].strip('_') or "presentation"
+    headers = {"Cache-Control": "no-cache"}
+    if download:
+        headers["Content-Disposition"] = f'attachment; filename="{clean_title}.html"'
+
+    return Response(content=html_content, media_type="text/html; charset=utf-8", headers=headers)
+
+
+@router.get("/decks/{deck_id}/slides/{slide_id}/html")
+def get_slide_html(deck_id: str, slide_id: str, theme_id: str | None = None):
+    """Streams the rendered HTML for a specific physical slide in an isolated container."""
+    from ..services.presentation.visual.adapters.html_adapter import HTMLAdapter
+
+    deck_spec = None
+    with session_scope() as conn:
+        row = conn.execute("SELECT spec_json FROM presentation_decks WHERE id = ?", (deck_id,)).fetchone()
+    if row:
+        deck_spec = json.loads(row["spec_json"])
+    else:
+        raise HTTPException(status_code=404, detail="Presentation deck not found")
+
+    slides_data = deck_spec.get("slides", [])
+    target_idx = None
+    target_slide = None
+
+    # Check match by physical_slide_id or id (non-empty string)
+    for i, s in enumerate(slides_data):
+        if s.get("physical_slide_id") and str(s.get("physical_slide_id")) == str(slide_id):
+            target_idx = i
+            target_slide = s
+            break
+        if s.get("id") and str(s.get("id")) == str(slide_id):
+            target_idx = i
+            target_slide = s
+            break
+
+    # Match by slide-{N} or numeric index
+    if target_idx is None:
+        if str(slide_id).startswith("slide-"):
+            try:
+                n = int(str(slide_id).split("-")[1])
+                if 1 <= n <= len(slides_data):
+                    target_idx = n - 1
+                    target_slide = slides_data[target_idx]
+            except (ValueError, IndexError):
+                pass
+        elif str(slide_id).isdigit():
+            n = int(str(slide_id))
+            if 1 <= n <= len(slides_data):
+                target_idx = n - 1
+                target_slide = slides_data[target_idx]
+            elif n == 0 and len(slides_data) > 0:
+                target_idx = 0
+                target_slide = slides_data[0]
+        else:
+            for i, s in enumerate(slides_data):
+                if s.get("order") is not None and str(s.get("order")) == str(slide_id):
+                    target_idx = i
+                    target_slide = s
+                    break
+
+    if target_slide is None:
+        raise HTTPException(status_code=404, detail=f"Slide {slide_id} not found in deck {deck_id}")
+
+    visual_specs, tokens, resolved_theme_id = _deck_spec_to_visual_specs(deck_spec, theme_id, target_idx=target_idx)
+    v_spec = visual_specs[0] if visual_specs else None
+    if v_spec is None:
+        raise HTTPException(status_code=404, detail=f"Visual specification could not be generated for slide {slide_id}")
+
+    try:
+        with session_scope() as conn:
+            conn.execute("UPDATE presentation_decks SET spec_json = ? WHERE id = ?", (json.dumps(deck_spec), deck_id))
+    except Exception:
+        pass
+
+    slide_html = HTMLAdapter.to_html_slide(
+        spec=v_spec,
+        tokens=tokens,
+        slide_width=1920,
+        slide_height=1080,
+        use_ai=False
+    )
+
+    theme_vars = tokens.to_scoped_css_variables()
+    var_styles = "; ".join(f"{k}: {v}" for k, v in theme_vars.items())
+
+    isolated_html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {{ {var_styles}; }}
+    * {{ box-sizing: border-box; }}
+    html, body {{
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: {tokens.background};
+      font-family: {tokens.font_body};
+      -webkit-font-smoothing: antialiased;
+      user-select: text;
+    }}
+    .presentation-runtime {{
+      width: 100% !important;
+      height: 100% !important;
+      border: none !important;
+    }}
+  </style>
+</head>
+<body>
+  {slide_html}
+</body>
+</html>"""
+
+    return Response(
+        content=isolated_html,
+        media_type="text/html; charset=utf-8",
+        headers={"Cache-Control": "public, max-age=60"}
+    )
+
+
+class ExportHtmlRequest(BaseModel):
+    deck_spec: dict[str, Any] | None = None
+    deck_id: str | None = None
+    theme_id: str | None = "executive_dark"
+    download: bool = False
+
+
+@router.post("/export-html")
+def export_presentation_to_html(req: ExportHtmlRequest):
+    """Compiles and returns a standalone HTML presentation from a deck spec or deck ID."""
+    from ..services.presentation.visual.adapters.html_adapter import HTMLAdapter
+
+    deck_spec = req.deck_spec
+    if not deck_spec and req.deck_id:
+        with session_scope() as conn:
+            row = conn.execute("SELECT spec_json FROM presentation_decks WHERE id = ?", (req.deck_id,)).fetchone()
+        if row:
+            deck_spec = json.loads(row["spec_json"])
+
+    if not deck_spec:
+        raise HTTPException(status_code=400, detail="Either deck_spec or valid deck_id must be provided.")
+
+    visual_specs, tokens, resolved_theme_id = _deck_spec_to_visual_specs(deck_spec, req.theme_id)
+    title = deck_spec.get("title") or "Executive Presentation"
+    html_content = HTMLAdapter.to_standalone_presentation_html(
+        specs=visual_specs,
+        tokens=tokens,
+        title=title,
+        deck_id=req.deck_id
+    )
+
+    clean_title = re.sub(r'[^a-zA-Z0-9_-]', '_', title)[:40].strip('_') or "presentation"
+    headers = {"Cache-Control": "no-cache"}
+    if req.download:
+        headers["Content-Disposition"] = f'attachment; filename="{clean_title}.html"'
+
+    return Response(content=html_content, media_type="text/html; charset=utf-8", headers=headers)
 
 
 class GenerateNarrationRequest(BaseModel):

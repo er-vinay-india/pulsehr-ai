@@ -181,7 +181,7 @@ export default function DeckStudioView({
           action: mutationAction,
           params: mutationParams,
           slideIndex: activeSlideIndex,
-          slideId: currentSlide.id,
+          slideId: currentSlide.physical_slide_id || currentSlide.id,
           deckId: deckSpec.id,
           prompt
         });
@@ -232,7 +232,7 @@ export default function DeckStudioView({
   React.useEffect(() => {
     setShowApprovalBanner(false);
     setPreviousSlideSnapshot(null);
-  }, [currentSlide?.id]);
+  }, [currentSlide?.physical_slide_id || currentSlide?.id || activeSlideIndex]);
 
   const handleApplyTargetedRegen = async (promptOverride = null) => {
     const instruction = (promptOverride || targetPrompt).trim();
@@ -512,6 +512,22 @@ export default function DeckStudioView({
             </DeckControl>
           )}
 
+          {/* Standalone HTML Export */}
+          <DeckControl className="symbolic-btn-wrap studio-html-action">
+            <button
+              type="button"
+              className="symbolic-action-btn btn-export-html"
+              onClick={handleExportHtml}
+              aria-label="Download Standalone HTML Presentation"
+            >
+              <Download size={14} />
+              <span className="btn-label-responsive">HTML</span>
+            </button>
+            <span className="symbolic-tooltip">
+              Export HTML: Standalone presentation with selectable text & interactive stage
+            </span>
+          </DeckControl>
+
           {/* PDF Export */}
           <DeckControl className="symbolic-btn-wrap">
             <button
@@ -562,7 +578,9 @@ export default function DeckStudioView({
                   >
                     <div className="thumb-header">
                       <span className="thumb-idx">{idx + 1}</span>
-                      <span className="thumb-layout-tag">{s.layout?.replace(/_/g, " ")}</span>
+                      <span className="thumb-layout-tag">
+                        {s.visual_type ? s.visual_type.replace(/_/g, " ") : (s.layout === "chart_narrative" || !s.layout) ? (s.category ? s.category.replace(/_/g, " ") : "Analysis") : s.layout.replace(/_/g, " ")}
+                      </span>
                       <span
                         style={{
                           fontSize: "9px",
@@ -782,7 +800,7 @@ export default function DeckStudioView({
                   const updated = { ...currentSlide, speaker_notes: e.target.value };
                   onUpdateSlide(activeSlideIndex, updated);
                 }}
-                placeholder="Add talking points and executive narrative remarks..."
+                placeholder="Add presentation notes and speaker remarks..."
               />
               {currentLayout?.supporting_notes?.length > 0 && <details className="notes-supporting-detail">
                 <summary>Supporting detail included in export notes</summary>
@@ -830,7 +848,7 @@ export default function DeckStudioView({
             <div style={{ fontSize: "11px", color: "var(--color-text-secondary)", display: "flex", flexDirection: "column", gap: "4px" }}>
               <div><strong>Slide ID:</strong> {currentSlide?.physical_slide_id || currentSlide?.id || `Slide ${activeSlideIndex + 1}`}</div>
               <div><strong>Active Title:</strong> {currentSlide?.title || "Untitled"}</div>
-              <div><strong>Layout:</strong> {currentSlide?.layout || "chart_narrative"}</div>
+              <div><strong>Format:</strong> {currentSlide?.visual_type ? currentSlide.visual_type.replace(/_/g, " ") : (currentSlide?.layout === "chart_narrative" ? "Analytical View" : currentSlide?.layout?.replace(/_/g, " ") || "Analytical View")}</div>
             </div>
 
             {/* Zone Selector if zones exist */}

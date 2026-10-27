@@ -27,7 +27,14 @@ function parseHash() {
   }
   try {
     const params = new URLSearchParams(window.location.search);
-    if (params.get("tab") || params.get("sheet_id") || params.get("evidence_id") || params.get("topic_id")) {
+    const tabParam = params.get("tab");
+    if (tabParam === "dashboard" || tabParam === "adaptive") {
+      return "adaptive";
+    }
+    if (tabParam === "presentation" || tabParam === "presentations") {
+      return "presentation";
+    }
+    if (tabParam || params.get("sheet_id") || params.get("evidence_id") || params.get("topic_id")) {
       return "explorer";
     }
   } catch {}

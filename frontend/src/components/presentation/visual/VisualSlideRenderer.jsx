@@ -49,7 +49,7 @@ export default function VisualSlideRenderer({
     setIsEditingNarrative(false);
     setEditingInsightIdx(null);
     setEditingKpiIdx(null);
-  }, [slide.id, spec.headline, spec.subtitle, slide.title, slide.subtitle, slide.narrative]);
+  }, [slide.physical_slide_id || slide.id, spec.headline, spec.subtitle, slide.title, slide.subtitle, slide.narrative]);
 
   const headline = titleVal;
   const subtitle = subtitleVal;

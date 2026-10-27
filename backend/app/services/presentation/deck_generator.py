@@ -147,17 +147,19 @@ def generate_presentation_deck_spec(
     visuals = dataset_context["visuals"]
 
     detected_persona = detect_dataset_persona(dataset_context)
-    persona_report_title = detected_persona.get("standard_report_name") or "Executive Operational Review & Strategic Performance Diagnostic"
+    from .context_profile import build_presentation_context_profile
+    ctx_profile = build_presentation_context_profile(dataset_context, user_objective=scope.get("objective", ""))
+    persona_report_title = detected_persona.get("standard_report_name") or ctx_profile.derived_deck_title
 
     raw_obj = scope.get("objective")
-    if not raw_obj or raw_obj == "Executive Leadership Review":
-        objective = persona_report_title
+    if not raw_obj or raw_obj in ("Executive Leadership Review", "Executive Operational Review & Strategic Performance Diagnostic"):
+        objective = ctx_profile.derived_deck_title
     else:
         objective = raw_obj
 
     raw_aud = scope.get("audience")
-    if not raw_aud or raw_aud == "C-Suite & Operations Leadership":
-        audience = detected_persona.get("target_audience") or "C-Suite & Operations Leadership"
+    if not raw_aud or raw_aud in ("C-Suite & Operations Leadership", "Executive Leadership"):
+        audience = ctx_profile.likely_audience
     else:
         audience = raw_aud
 

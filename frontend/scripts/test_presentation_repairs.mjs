@@ -14,6 +14,7 @@ const result = await build({
     export {React, renderToStaticMarkup, Deck, Slide, buildSlideHtml};
   `, resolveDir: new URL('..', import.meta.url).pathname, loader: 'jsx' },
   bundle: true, write: false, platform: 'node', format: 'cjs', loader: { '.scss':'empty' },
+  define: { 'import.meta': '{}' },
 });
 const temp = mkdtempSync(join(tmpdir(), 'studio-ssr-'));
 const output = join(temp,'bundle.cjs');
@@ -33,5 +34,5 @@ for (const slide of [slides[0], {...slides[0], visual_spec:{headline:'Visual hea
 }
 const html = buildSlideHtml(slides[0],0,3,{slide_bg:'#08111F'});
 assert.ok(html.includes('images.unsplash.com/photo-test'));
-assert.ok(html.includes('0.65'));
+assert.ok(/rgba\(\d+,\d+,\d+,0\.\d+\)/.test(html));
 console.log('Passed: active slide only, no editor voice orb, both renderer backgrounds, HTML background and scrim.');

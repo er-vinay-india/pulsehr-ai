@@ -42,6 +42,33 @@ class VisualFamily(str, enum.Enum):
     DONUT = "donut"
     KPI_CARD = "kpi_card"
     DATA_TABLE = "data_table"
+    CHOROPLETH = "choropleth"
+    MAP = "map"
+    BOX_PLOT = "box_plot"
+    VARIANCE_BAR = "variance_bar"
+    BULLET = "bullet"
+    TREEMAP = "treemap"
+    PODIUM_TOP_3 = "podium_top_3"
+    DUMBBELL = "dumbbell"
+    SCENARIO_CARD = "scenario_card"
+
+
+class VisualRecommendationTracker:
+    """Tracks and audits visual recommendation bypass for reused dashboard/explorer visuals."""
+    generic_recommendation_calls_for_reused: int = 0
+    story_planner_substitutions: int = 0
+
+    @classmethod
+    def reset(cls) -> None:
+        cls.generic_recommendation_calls_for_reused = 0
+        cls.story_planner_substitutions = 0
+
+    @classmethod
+    def record_recommendation_call(cls, is_reused: bool = False, original_type: str = "", chosen_type: str = "") -> None:
+        if is_reused:
+            cls.generic_recommendation_calls_for_reused += 1
+            if original_type and chosen_type and original_type != chosen_type:
+                cls.story_planner_substitutions += 1
 
 
 class UnsupportedPresentationVisualError(TypeError):
@@ -127,6 +154,9 @@ def compute_visual_semantic_fingerprint(payload: dict[str, Any] | BaseModel) -> 
             "table": "data_table",
             "table_detail": "data_table",
             "data_table": "data_table",
+            "box_plot": "box_plot",
+            "variance_bar": "variance_bar",
+            "bullet": "bullet",
             # Geographic visual families preserve authentic source morphology
             "map": "map",
             "choropleth": "choropleth",
@@ -366,6 +396,114 @@ CHART_CAPABILITY_REGISTRY: dict[VisualFamily, ChartCapability] = {
         multi_series_support=True,
         annotation_support=True,
         fallback_behavior="None (first-class native support)"
+    ),
+    VisualFamily.CHOROPLETH: ChartCapability(
+        family=VisualFamily.CHOROPLETH,
+        studio_renderer="ECharts Geo choropleth map with thematic territory density shading",
+        pptx_renderer="Thematic territory density map with choropleth gradient and legend",
+        pdf_renderer="High-DPI thematic geo vector rendering with density intervals",
+        native_editable=True,
+        reference_line_support=True,
+        data_label_support=True,
+        multi_series_support=False,
+        annotation_support=True,
+        fallback_behavior="None (first-class native support)"
+    ),
+    VisualFamily.MAP: ChartCapability(
+        family=VisualFamily.MAP,
+        studio_renderer="ECharts Geo map with thematic bubbles/regions",
+        pptx_renderer="Vector geographic thematic map graphic",
+        pdf_renderer="High-DPI thematic geo vector rendering",
+        native_editable=True,
+        reference_line_support=True,
+        data_label_support=True,
+        multi_series_support=False,
+        annotation_support=True,
+        fallback_behavior="None (first-class native support)"
+    ),
+    VisualFamily.BOX_PLOT: ChartCapability(
+        family=VisualFamily.BOX_PLOT,
+        studio_renderer="ECharts boxplot / dispersion distribution chart",
+        pptx_renderer="Native statistical box plot with quartile whiskers and median mark",
+        pdf_renderer="High-DPI ReportLab canvas quartile distribution chart with median marker",
+        native_editable=True,
+        reference_line_support=True,
+        data_label_support=True,
+        multi_series_support=True,
+        annotation_support=True,
+        fallback_behavior="None (first-class native support)"
+    ),
+    VisualFamily.VARIANCE_BAR: ChartCapability(
+        family=VisualFamily.VARIANCE_BAR,
+        studio_renderer="ECharts diverging/outlier variance bar chart with baseline",
+        pptx_renderer="Native python-pptx outlier variance bar chart with reference marker",
+        pdf_renderer="High-DPI ReportLab canvas outlier variance bars with reference line",
+        native_editable=True,
+        reference_line_support=True,
+        data_label_support=True,
+        multi_series_support=True,
+        annotation_support=True,
+        fallback_behavior="None (first-class native support)"
+    ),
+    VisualFamily.BULLET: ChartCapability(
+        family=VisualFamily.BULLET,
+        studio_renderer="ECharts executive bullet benchmark chart with target marker",
+        pptx_renderer="Native python-pptx benchmark bullet chart with target line and comparative bands",
+        pdf_renderer="High-DPI ReportLab canvas bullet chart with target threshold indicator",
+        native_editable=True,
+        reference_line_support=True,
+        data_label_support=True,
+        multi_series_support=True,
+        annotation_support=True,
+        fallback_behavior="None (first-class native support)"
+    ),
+    VisualFamily.TREEMAP: ChartCapability(
+        family=VisualFamily.TREEMAP,
+        studio_renderer="ECharts treemap with nested hierarchical category rectangles",
+        pptx_renderer="Faithful merchandise category treemap visual asset",
+        pdf_renderer="High-DPI category treemap visual asset",
+        native_editable=False,
+        reference_line_support=False,
+        data_label_support=True,
+        multi_series_support=True,
+        annotation_support=True,
+        fallback_behavior="None (first-class faithful preserved visual)"
+    ),
+    VisualFamily.PODIUM_TOP_3: ChartCapability(
+        family=VisualFamily.PODIUM_TOP_3,
+        studio_renderer="Executive 3-tier podium ranking visual",
+        pptx_renderer="Faithful 3-tier podium ranking visual asset",
+        pdf_renderer="High-DPI 3-tier podium ranking visual asset",
+        native_editable=False,
+        reference_line_support=False,
+        data_label_support=True,
+        multi_series_support=False,
+        annotation_support=True,
+        fallback_behavior="None (first-class faithful preserved visual)"
+    ),
+    VisualFamily.DUMBBELL: ChartCapability(
+        family=VisualFamily.DUMBBELL,
+        studio_renderer="Executive disparity range / dumbbell comparison visual",
+        pptx_renderer="Faithful disparity range / dumbbell comparison visual asset",
+        pdf_renderer="High-DPI disparity range / dumbbell comparison visual asset",
+        native_editable=False,
+        reference_line_support=True,
+        data_label_support=True,
+        multi_series_support=True,
+        annotation_support=True,
+        fallback_behavior="None (first-class faithful preserved visual)"
+    ),
+    VisualFamily.SCENARIO_CARD: ChartCapability(
+        family=VisualFamily.SCENARIO_CARD,
+        studio_renderer="Executive policy scenario summary card",
+        pptx_renderer="Faithful policy scenario comparison card visual asset",
+        pdf_renderer="High-DPI policy scenario comparison card visual asset",
+        native_editable=False,
+        reference_line_support=False,
+        data_label_support=True,
+        multi_series_support=True,
+        annotation_support=True,
+        fallback_behavior="None (first-class faithful preserved visual)"
     ),
 }
 
@@ -626,10 +764,19 @@ class PresentationVisualSpec(BaseModel):
 
         # Legacy renderer compatibility fallback:
         # Maps geographic visual families (map, choropleth, bubble_map, point_map) to VisualFamily.RANKED_BAR
-        # for legacy PPTX/PDF rendering while strictly preserving source geographic semantics.
-        is_geo_fallback = raw_type in ("map", "choropleth", "bubble_map", "point_map")
+        # for legacy PPTX/PDF rendering ONLY when explicitly requested.
+        # Under Stage 2 REUSE_EXISTING, exact visual families are preserved strictly.
+        v_strat = payload.get("visual_strategy")
+        if hasattr(v_strat, "value"):
+            v_strat = v_strat.value
+        is_reused = v_strat == "REUSE_EXISTING" or (
+            raw_type in ("choropleth", "map", "box_plot", "scatter", "variance_bar", "bullet", "table", "data_table")
+            and bool(vspec.get("chart_type") or vspec.get("values") or payload.get("table_data"))
+        )
+
+        is_geo_fallback = False if is_reused else raw_type in ("bubble_map", "point_map")
         src_vtype = raw_type
-        src_vfamily = "geographic" if is_geo_fallback else raw_type
+        src_vfamily = raw_type
 
         # Map to registered VisualFamily (no re-inferring!)
         family_map = {
@@ -642,14 +789,20 @@ class PresentationVisualSpec(BaseModel):
             "stacked_bar": VisualFamily.STACKED_BAR,
             "stacked_column": VisualFamily.STACKED_BAR,
             "100_percent_stacked_bar": VisualFamily.STACKED_BAR,
-            "bullet": VisualFamily.HORIZONTAL_BAR,
+            "bullet": VisualFamily.BULLET,
             "lollipop": VisualFamily.RANKED_BAR,
-            "podium_top_3": VisualFamily.RANKED_BAR,
-            "variance_bar": VisualFamily.BAR,
-            "dumbbell": VisualFamily.HORIZONTAL_BAR,
+            "podium_top_3": VisualFamily.PODIUM_TOP_3,
+            "podium": VisualFamily.PODIUM_TOP_3,
+            "variance_bar": VisualFamily.VARIANCE_BAR,
+            "dumbbell": VisualFamily.DUMBBELL,
+            "comparison": VisualFamily.DUMBBELL,
             "heatmap": VisualFamily.DATA_TABLE,
-            "box_plot": VisualFamily.DATA_TABLE,
-            "treemap": VisualFamily.DONUT,
+            "box_plot": VisualFamily.BOX_PLOT,
+            "treemap": VisualFamily.TREEMAP,
+            "tree_map": VisualFamily.TREEMAP,
+            "scenario_card": VisualFamily.SCENARIO_CARD,
+            "scenario": VisualFamily.SCENARIO_CARD,
+            "decision_simulator": VisualFamily.SCENARIO_CARD,
             "line": VisualFamily.LINE,
             "area": VisualFamily.LINE,
             "trend": VisualFamily.TREND,
@@ -663,10 +816,10 @@ class PresentationVisualSpec(BaseModel):
             "table": VisualFamily.DATA_TABLE,
             "table_detail": VisualFamily.DATA_TABLE,
             "data_table": VisualFamily.DATA_TABLE,
-            "map": VisualFamily.RANKED_BAR,
-            "choropleth": VisualFamily.RANKED_BAR,
-            "bubble_map": VisualFamily.RANKED_BAR,
-            "point_map": VisualFamily.RANKED_BAR,
+            "map": VisualFamily.MAP,
+            "choropleth": VisualFamily.CHOROPLETH,
+            "bubble_map": VisualFamily.MAP,
+            "point_map": VisualFamily.MAP,
         }
         family = family_map.get(raw_type)
         if not family:
@@ -847,6 +1000,11 @@ class PresentationVisualSpec(BaseModel):
             VisualFamily.DONUT: "donut",
             VisualFamily.KPI_CARD: "kpi_card",
             VisualFamily.DATA_TABLE: "data_table",
+            VisualFamily.CHOROPLETH: "choropleth",
+            VisualFamily.MAP: "map",
+            VisualFamily.BOX_PLOT: "box_plot",
+            VisualFamily.VARIANCE_BAR: "variance_bar",
+            VisualFamily.BULLET: "bullet",
         }
         series_clean = [
             {"name": s.name, "values": [f"{v:.6g}" for v in s.values]}

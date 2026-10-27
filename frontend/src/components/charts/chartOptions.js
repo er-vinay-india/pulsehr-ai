@@ -1,7 +1,7 @@
-import { lightTokens, darkTokens, getThemeTokens } from '../../theme/tokens';
-import { calculateMargins } from '../visualization/layout/calculateMargins';
-import { VISUAL_POLICY } from '../visualization/policy/visualPolicy';
-import { humanizeLabel, formatGovernedNumber, formatExactMeasure } from '../visualization/layout/formatters';
+import { lightTokens, darkTokens, getThemeTokens } from '../../theme/tokens.js';
+import { calculateMargins } from '../visualization/layout/calculateMargins.js';
+import { VISUAL_POLICY } from '../visualization/policy/visualPolicy.js';
+import { humanizeLabel, formatGovernedNumber, formatExactMeasure } from '../visualization/layout/formatters.js';
 
 export const lightPalette = lightTokens.chart.palette;
 export const darkPalette = darkTokens.chart.palette;

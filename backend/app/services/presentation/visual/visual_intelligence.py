@@ -62,6 +62,12 @@ class VisualIntelligenceEngine:
         tokens = normalize_slide_theme(theme_id)
 
         # 1. Unpack fields uniformly
+        meta = {}
+        if isinstance(slide_package_or_dict, dict):
+            meta = slide_package_or_dict.get("metadata", {}) or {}
+        elif hasattr(slide_package_or_dict, "metadata"):
+            meta = getattr(slide_package_or_dict, "metadata", {}) or {}
+
         if hasattr(slide_package_or_dict, "headline"):
             headline = slide_package_or_dict.headline
             subtitle = getattr(slide_package_or_dict, "subtitle", "")
@@ -82,7 +88,7 @@ class VisualIntelligenceEngine:
         else:
             # Plain dict
             d = slide_package_or_dict
-            headline = d.get("title", d.get("headline", "Executive Briefing"))
+            headline = d.get("title", d.get("headline", "Presentation Overview"))
             subtitle = d.get("subtitle", "")
             seq_num = d.get("order", d.get("sequence_number", sequence_number))
             bullets = d.get("bullets", [])
@@ -95,6 +101,18 @@ class VisualIntelligenceEngine:
             raw_layout = d.get("layout")
             ev_citation = d.get("evidence_id", "EVID-EXEC-01")
             proposals = d.get("structured_proposals")
+
+        if not raw_layout and meta.get("planned_layout_family"):
+            raw_layout = meta["planned_layout_family"]
+
+        if meta.get("is_cover"):
+            if not subtitle and meta.get("presentation_subtitle"):
+                subtitle = meta["presentation_subtitle"]
+            elif not subtitle and meta.get("takeaway"):
+                subtitle = meta["takeaway"]
+            if meta.get("presentation_title"):
+                headline = meta["presentation_title"]
+            raw_layout = "title_cover"
 
         # 2. Layout Resolution
         metric_count = len(metrics) if metrics else 0
@@ -199,7 +217,7 @@ class VisualIntelligenceEngine:
             intent=v_type,
             primary_message=key_msg or headline,
             takeaway=key_msg,
-            audience_focus="Executive Decision Makers"
+            audience_focus="Decision Makers & Stakeholders"
         )
 
         # 6. Content Budgets & Insights
@@ -222,7 +240,7 @@ class VisualIntelligenceEngine:
             body_text=" ".join(insights),
             insights=insights,
             budget=budget,
-            table_row_count=len(table_data.get("rows", [])) if table_data else 0
+            table_row_count=len(table_data.get("rows", [])) if isinstance(table_data, dict) else (len(table_data) if isinstance(table_data, list) else 0)
         )
 
         return VisualSpecification(
@@ -247,5 +265,6 @@ class VisualIntelligenceEngine:
             accessibility_report=a11y_report,
             budget_validation=budget_validation,
             chart_selection_reason=chart_selection_reason,
-            generated_at=datetime.datetime.now(datetime.timezone.utc).isoformat()
+            generated_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            metadata=meta
         )

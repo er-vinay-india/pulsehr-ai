@@ -181,8 +181,8 @@ class VisualIntent(BaseModel):
 
 class PresentationBrief(BaseModel):
     """Structured, validated presentation brief defining audience, decision, and constraints."""
-    objective: str = "Executive Leadership Review"
-    audience: str = "C-Suite & Operations Leadership"
+    objective: str = "Analytical Review"
+    audience: str = "Stakeholders"
     decision_requested: str = ""
     main_takeaway: str = ""
     presentation_time_minutes: int = 15

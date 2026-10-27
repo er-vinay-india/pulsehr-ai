@@ -19,10 +19,14 @@ import {
   Target,
   FileText,
   Sliders,
+  ChevronDown,
+  ChevronUp,
+  Info,
 } from "lucide-react";
 import { SLIDE_THEMES } from "../../theme/slideTokens.js";
 import SlideImagePickerModal from "./SlideImagePickerModal.jsx";
 import Select from "../common/Select.jsx";
+import { previewPresentationScope } from "../../api/client.js";
 
 const DEFAULT_THEMES = Object.values(SLIDE_THEMES);
 
@@ -36,44 +40,6 @@ const THEME_PRIORITY = [
   "corporate_navy",
   "electric_studio",
   "creative_voltage",
-];
-
-const INSPIRATION_PROMPTS = [
-  {
-    id: "remote_work",
-    tag: "Productivity & Hybrid",
-    icon: TrendingUp,
-    title: "Q3 Executive Review on Remote Work vs Office Attendance & Operational Productivity",
-    desc: "Evaluates attendance benchmarks, individual productivity variance, and remote policy impacts.",
-  },
-  {
-    id: "turnover_risk",
-    tag: "Retention & Talent",
-    icon: Users,
-    title: "Frontline Turnover Risk, Retention Initiatives & Compensation Impact",
-    desc: "Analyzes frontline attrition trends, competitive pay bands, and targeted retention programs.",
-  },
-  {
-    id: "headcount_alloc",
-    tag: "Strategy & Budget",
-    icon: Layers,
-    title: "Board Strategic Briefing on Headcount Allocation & Departmental Variance",
-    desc: "Boardroom decision review on capacity planning, headcount allocation, and organizational drift.",
-  },
-  {
-    id: "overtime_cost",
-    tag: "Operations & Cost",
-    icon: Clock,
-    title: "Workforce Attendance Optimization & Shift Overtime Cost Containment",
-    desc: "Quantifies shift leakages, overtime run-rates, and schedule optimization cost-reduction opportunities.",
-  },
-];
-
-const AUDIENCE_SUGGESTIONS = [
-  "Executive leadership",
-  "Board of Directors",
-  "CFO & Audit Committee",
-  "People Operations Leaders",
 ];
 
 export default function PromptStudioScreen({
@@ -108,19 +74,36 @@ export default function PromptStudioScreen({
   }, [currentStep]);
 
   const [pathDrafts, setPathDrafts] = useState({
-    dashboard_truth: { audience: "Executive leadership", instructions: "", sourceScope: "single_sheet" },
-    custom_prompt: { audience: "Executive leadership", instructions: "", sourceScope: "single_sheet" },
+    dashboard_truth: { audience: "", instructions: "", sourceScope: "single_sheet" },
+    custom_prompt: { audience: "", instructions: "", sourceScope: "single_sheet" },
   });
   const [brief, setBrief] = useState("");
   const [decisionRequested, setDecisionRequested] = useState("");
   const [mainTakeaway, setMainTakeaway] = useState("");
   const [presentationTimeMinutes, setPresentationTimeMinutes] = useState(15);
   const [deliverable, setDeliverable] = useState("pptx");
-  const [pipelineMode, setPipelineMode] = useState("legacy");
+  const [pipelineMode, setPipelineMode] = useState("layered");
   const [animation, setAnimation] = useState("none");
   const [sourceMode, setSourceMode] = useState("dashboard_truth"); // "dashboard_truth" | "custom_prompt"
   const [customPrompt, setCustomPrompt] = useState("");
+  const [showAdvancedGuidance, setShowAdvancedGuidance] = useState(false);
+  const [scopePreview, setScopePreview] = useState(null);
   const { audience, instructions, sourceScope } = pathDrafts[sourceMode];
+
+  useEffect(() => {
+    let isCurrent = true;
+    previewPresentationScope({
+      scope_type: sourceScope,
+      sheet_id: selectedSheetId ? Number(selectedSheetId) : undefined,
+    })
+      .then((data) => {
+        if (isCurrent) setScopePreview(data);
+      })
+      .catch(() => {});
+    return () => {
+      isCurrent = false;
+    };
+  }, [selectedSheetId, sourceScope]);
 
   const updatePathDraft = (field, value) =>
     setPathDrafts((drafts) => ({
@@ -412,9 +395,9 @@ export default function PromptStudioScreen({
                     </span>
                   )}
                 </div>
-                <h3 className="mode-card-title">Active Dataset Truth</h3>
+                <h3 className="mode-card-title">Use Existing Data</h3>
                 <p className="mode-card-desc">
-                  Directly translates verified metrics, disparity models, and audit evidence into executive slides.
+                  Directly synthesizes verified evidence, charts, figures, and findings into presentation slides.
                 </p>
               </button>
 
@@ -435,9 +418,9 @@ export default function PromptStudioScreen({
                     </span>
                   )}
                 </div>
-                <h3 className="mode-card-title">Custom Objective & Memo</h3>
+                <h3 className="mode-card-title">Provide Context</h3>
                 <p className="mode-card-desc">
-                  Present on a custom operational objective, executive memo, or briefing grounded in data.
+                  Supply custom notes, talking points, or focus areas grounded in the underlying data.
                 </p>
               </button>
             </div>
@@ -468,33 +451,8 @@ export default function PromptStudioScreen({
                       fullWidth
                     />
                     <span className="pres-field-hint">
-                      Extracts baseline facts and disparity models directly from this sheet.
+                      Extracts verified facts, visual assets, and metrics from this dataset.
                     </span>
-                    {detectedPersona && (
-                      <div
-                        className="pres-detected-persona-badge"
-                        style={{
-                          background: "var(--color-bg-soft-teal)",
-                          border: "1px solid var(--color-border-strong)",
-                          borderRadius: "8px",
-                          padding: "8px 12px",
-                          marginTop: "8px",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "space-between"
-                        }}
-                      >
-                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                          <span style={{ width: "7px", height: "7px", borderRadius: "50%", backgroundColor: "var(--color-brand-accent)" }} />
-                          <span style={{ fontSize: "12px", color: "var(--color-brand-accent)", fontWeight: "600" }}>
-                            {detectedPersona.role_title}
-                          </span>
-                        </div>
-                        <span style={{ fontSize: "11px", color: "var(--color-text-muted)" }}>
-                          Standard: {detectedPersona.standard_report_name}
-                        </span>
-                      </div>
-                    )}
                   </div>
 
                   <div className="pres-form-group">
@@ -508,30 +466,73 @@ export default function PromptStudioScreen({
                       value={sourceScope}
                       onChange={(e) => setSourceScope(e.target.value)}
                       options={[
-                        { value: "single_sheet", label: "Active sheet only" },
-                        { value: "workspace", label: "All eligible workspace sheets (Cross-synthesis)" }
+                        { value: "single_sheet", label: "Current Sheet" },
+                        { value: "workspace", label: "Entire Workbook (Multi-sheet synthesis)" }
                       ]}
                       fullWidth
                     />
                     <span className="pres-field-hint">
-                      Defines whether multi-sheet cross-reconciliation synthesis is enabled.
+                      Determines whether cross-sheet evidence synthesis is included.
                     </span>
                   </div>
                 </div>
 
-                <div className="pres-form-group">
-                  <label htmlFor="pres-brief-input" className="pres-field-label">
-                    <Target size={14} className="field-icon" aria-hidden="true" />
-                    <span>Presentation Objective (Optional)</span>
-                  </label>
-                  <input
-                    id="pres-brief-input"
-                    type="text"
-                    className="pres-field-control"
-                    value={brief}
-                    onChange={(e) => setBrief(e.target.value)}
-                    placeholder={detectedPersona?.standard_report_name || "e.g. Executive review of departmental attendance disparities and Q3 headcount risks"}
-                  />
+                {/* Detected Context & Evidence Summary Card */}
+                <div
+                  className="pres-evidence-summary-card"
+                  style={{
+                    background: "var(--color-bg-surface-secondary, rgba(255,255,255,0.03))",
+                    border: "1px solid var(--color-border-subtle, rgba(255,255,255,0.08))",
+                    borderRadius: "10px",
+                    padding: "16px 20px",
+                    marginTop: "16px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    flexWrap: "wrap",
+                    gap: "14px",
+                  }}
+                >
+                  <div>
+                    <div style={{ fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--color-text-muted)" }}>
+                      Detected Context
+                    </div>
+                    <div style={{ fontSize: "15px", fontWeight: "600", color: "var(--color-text-primary)", marginTop: "2px" }}>
+                      {scopePreview?.detected_context || "General Tabular Analytics"}
+                    </div>
+                    {scopePreview?.likely_audience && (
+                      <div style={{ fontSize: "12px", color: "var(--color-text-secondary)", marginTop: "3px" }}>
+                        Likely audience: <span style={{ color: "var(--color-brand-accent)", fontWeight: "500" }}>{scopePreview.likely_audience}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div style={{ display: "flex", gap: "20px", flexWrap: "wrap" }}>
+                    <div style={{ textAlign: "right" }}>
+                      <div style={{ fontSize: "17px", fontWeight: "700", color: "var(--color-brand-accent)" }}>
+                        {scopePreview?.evidence_summary?.visual_assets ?? (dashboardData?.executive_visuals?.length || 0)}
+                      </div>
+                      <div style={{ fontSize: "11px", color: "var(--color-text-muted)" }}>Dashboard Visuals</div>
+                    </div>
+                    <div style={{ textAlign: "right" }}>
+                      <div style={{ fontSize: "17px", fontWeight: "700", color: "var(--color-brand-accent)" }}>
+                        {scopePreview?.evidence_summary?.verified_facts ?? (dashboardData?.executive_topics?.length || 0)}
+                      </div>
+                      <div style={{ fontSize: "11px", color: "var(--color-text-muted)" }}>Verified Findings</div>
+                    </div>
+                    <div style={{ textAlign: "right" }}>
+                      <div style={{ fontSize: "17px", fontWeight: "700", color: "var(--color-brand-accent)" }}>
+                        {scopePreview?.evidence_summary?.analytical_tables ?? 1}
+                      </div>
+                      <div style={{ fontSize: "11px", color: "var(--color-text-muted)" }}>Analytical Tables</div>
+                    </div>
+                    {Boolean(scopePreview?.evidence_summary?.scenario_models) && (
+                      <div style={{ textAlign: "right" }}>
+                        <div style={{ fontSize: "17px", fontWeight: "700", color: "var(--color-brand-accent)" }}>1</div>
+                        <div style={{ fontSize: "11px", color: "var(--color-text-muted)" }}>Scenario Model</div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             )}
@@ -561,63 +562,93 @@ export default function PromptStudioScreen({
                     rows={4}
                     value={customPrompt}
                     onChange={(e) => setCustomPrompt(e.target.value)}
-                    placeholder="Enter your topic, key talking points, or executive mandate (e.g. 'Conduct a comprehensive review of Operations vs Engineering attrition, addressing compensation disparities and Q4 overtime leakages')..."
+                    placeholder="Enter analytical objectives, specific questions, or briefing talking points grounded in the data..."
                   />
-                </div>
-
-                {/* Inspiration Prompt Chips */}
-                <div className="inspiration-container">
-                  <span className="insp-label">Quick Inspiration Topics:</span>
-                  <div className="insp-pills-row" role="group" aria-label="Inspiration prompts">
-                    {INSPIRATION_PROMPTS.map((insp) => {
-                      const fullPrompt = `${insp.title}. ${insp.desc}`;
-                      const isSelected = customPrompt === fullPrompt || customPrompt === insp.title;
-                      return (
-                        <button
-                          key={insp.id}
-                          type="button"
-                          className={`insp-chip ${isSelected ? "selected" : ""}`}
-                          onClick={() => setCustomPrompt(isSelected ? "" : fullPrompt)}
-                          aria-pressed={isSelected}
-                        >
-                          <span className="chip-tag">{insp.tag}:</span>
-                          <span className="chip-title">{insp.title.substring(0, 48)}…</span>
-                        </button>
-                      );
-                    })}
-                  </div>
                 </div>
               </div>
             )}
 
-            {/* Target Audience (Common across both modes) */}
-            <div className="pres-form-section audience-section">
-              <div className="pres-form-group">
-                <label htmlFor="pres-audience-input" className="pres-field-label">
-                  <Users size={14} className="field-icon" aria-hidden="true" />
-                  <span>Target Audience</span>
-                </label>
-                <input
-                  id="pres-audience-input"
-                  type="text"
-                  className="pres-field-control"
-                  value={audience}
-                  onChange={(e) => setAudience(e.target.value)}
-                  placeholder="e.g. Executive leadership, Board of Directors"
-                />
-                <div className="quick-audience-pills">
-                  {AUDIENCE_SUGGESTIONS.map((sug) => (
-                    <button
-                      key={sug}
-                      type="button"
-                      className={`audience-pill ${audience === sug ? "active" : ""}`}
-                      onClick={() => setAudience(sug)}
-                    >
-                      {sug}
-                    </button>
-                  ))}
+            {/* Optional Collapsed Guidance Section */}
+            <div style={{ marginTop: "18px" }}>
+              <button
+                type="button"
+                onClick={() => setShowAdvancedGuidance(!showAdvancedGuidance)}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  color: "var(--color-brand-accent)",
+                  fontSize: "13px",
+                  fontWeight: "600",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  padding: "6px 0",
+                }}
+              >
+                <span>{showAdvancedGuidance ? "Hide presentation guidance" : "Add presentation guidance (optional)"}</span>
+                {showAdvancedGuidance ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+              </button>
+
+              {showAdvancedGuidance && (
+                <div
+                  style={{
+                    marginTop: "12px",
+                    padding: "16px",
+                    borderRadius: "10px",
+                    border: "1px solid var(--color-border-subtle, rgba(255,255,255,0.08))",
+                    background: "var(--color-bg-surface-secondary, rgba(0,0,0,0.15))",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "14px",
+                  }}
+                >
+                  <div className="pres-form-group">
+                    <label htmlFor="pres-guidance-audience" className="pres-field-label">
+                      <Users size={14} className="field-icon" aria-hidden="true" />
+                      <span>Specific Audience (Optional)</span>
+                    </label>
+                    <input
+                      id="pres-guidance-audience"
+                      type="text"
+                      className="pres-field-control"
+                      value={audience}
+                      onChange={(e) => setAudience(e.target.value)}
+                      placeholder={scopePreview?.likely_audience ? `Auto: ${scopePreview.likely_audience}` : "Leave blank for auto-inferred domain audience"}
+                    />
+                  </div>
+
+                  <div className="pres-form-group">
+                    <label htmlFor="pres-guidance-purpose" className="pres-field-label">
+                      <Target size={14} className="field-icon" aria-hidden="true" />
+                      <span>Presentation Purpose / Focus (Optional)</span>
+                    </label>
+                    <input
+                      id="pres-guidance-purpose"
+                      type="text"
+                      className="pres-field-control"
+                      value={brief}
+                      onChange={(e) => setBrief(e.target.value)}
+                      placeholder={scopePreview?.derived_title ? `e.g. Focus on ${scopePreview.derived_title}` : "e.g. Highlight regional variances or specific entity rankings"}
+                    />
+                  </div>
+
+                  <div className="pres-form-group">
+                    <label htmlFor="pres-guidance-notes" className="pres-field-label">
+                      <FileText size={14} className="field-icon" aria-hidden="true" />
+                      <span>Important Point or Additional Constraints (Optional)</span>
+                    </label>
+                    <input
+                      id="pres-guidance-notes"
+                      type="text"
+                      className="pres-field-control"
+                      value={instructions}
+                      onChange={(e) => setInstructions(e.target.value)}
+                      placeholder="e.g. Emphasize top-tier entities or preserve specific detailed breakdown tables"
+                    />
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
 
             {/* Step 1 Actions */}
@@ -654,10 +685,10 @@ export default function PromptStudioScreen({
             <div className="step-card-header">
               <span className="step-badge-indicator">Step 2 of 3</span>
               <h2 id="step2-heading" className="step-card-title" tabIndex={-1}>
-                Choose narrative pacing and depth
+                Choose Narrative Depth
               </h2>
               <p className="step-card-subtitle">
-                Select how deep the boardroom story should go, or calibrate dynamically based on data signals.
+                Select depth and pacing for your analytical presentation. HighView preserves all validated evidence.
               </p>
             </div>
 
@@ -667,34 +698,34 @@ export default function PromptStudioScreen({
                 {
                   count: null,
                   badge: "Recommended",
-                  title: "Adaptive (Auto-Calibrated)",
-                  slides: "8–11 Slides",
-                  time: "~15 mins",
-                  desc: "Dynamically sizes the presentation based on observed disparities, baseline facts, and multi-sheet linkages.",
+                  title: "Auto (Preserve Evidence)",
+                  slides: "Adaptive Length",
+                  time: "Evidence-Driven",
+                  desc: "HighView determines depth from available evidence, preserving all validated charts, figures, and findings.",
                 },
                 {
                   count: 5,
                   badge: "Concise",
-                  title: "Executive Summary",
-                  slides: "5 Slides",
+                  title: "Concise Summary",
+                  slides: "5–6 Slides",
                   time: "~5 mins",
-                  desc: "Focused executive briefing: core baseline, primary strength, prominent headwind, and immediate next steps.",
+                  desc: "Focuses on the strongest baseline metrics and highest-impact visual discoveries.",
                 },
                 {
-                  count: 7,
-                  badge: "Strategic",
-                  title: "Boardroom Decision Brief",
-                  slides: "7 Slides",
+                  count: 8,
+                  badge: "Standard",
+                  title: "Standard Briefing",
+                  slides: "7–9 Slides",
                   time: "~12 mins",
-                  desc: "Balanced strategic review: scope baseline, operational strengths, headwinds, disparity breakdown, and governance.",
+                  desc: "Balanced analytical presentation covering key drivers, disparities, and benchmarks.",
                 },
                 {
-                  count: 10,
-                  badge: "Comprehensive",
-                  title: "Deep-Dive Operating Review",
-                  slides: "10 Slides",
-                  time: "~25 mins",
-                  desc: "Exhaustive operational analysis including cross-dimensional linkages, evidence ledgers, and audit trail limits.",
+                  count: 11,
+                  badge: "Detailed",
+                  title: "Comprehensive Deep Dive",
+                  slides: "10–12 Slides",
+                  time: "~20 mins",
+                  desc: "Broader evidence coverage including exploratory data profiles, distributions, and scenario models.",
                 },
               ].map((opt) => {
                 const isSelected = slideCount === opt.count;
@@ -726,55 +757,9 @@ export default function PromptStudioScreen({
               })}
             </div>
 
-            {/* Executive Brief Specifications */}
-            <div className="pres-form-section brief-spec-section">
-              <div className="pres-form-group">
-                <label htmlFor="pres-main-takeaway-input" className="pres-field-label">
-                  <FileText size={14} className="field-icon" aria-hidden="true" />
-                  <span>Main Takeaway</span>
-                </label>
-                <input
-                  id="pres-main-takeaway-input"
-                  type="text"
-                  className="pres-field-control"
-                  value={mainTakeaway}
-                  onChange={(e) => setMainTakeaway(e.target.value)}
-                  placeholder="e.g. Voluntary attrition concentrated in Engineering; compensation adjustments needed"
-                />
-              </div>
-
-              <div className="pres-form-group" style={{ marginTop: "12px" }}>
-                <label htmlFor="pres-decision-requested-input" className="pres-field-label">
-                  <Sliders size={14} className="field-icon" aria-hidden="true" />
-                  <span>Decision or Action Requested</span>
-                </label>
-                <input
-                  id="pres-decision-requested-input"
-                  type="text"
-                  className="pres-field-control"
-                  value={decisionRequested}
-                  onChange={(e) => setDecisionRequested(e.target.value)}
-                  placeholder="e.g. Approve targeted $2.4M retention equity program for high-impact roles"
-                />
-              </div>
-
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginTop: "12px" }}>
-                <div className="pres-form-group">
-                  <label htmlFor="pres-time-budget-input" className="pres-field-label">
-                    <Clock size={14} className="field-icon" aria-hidden="true" />
-                    <span>Presentation Time Budget (Minutes)</span>
-                  </label>
-                  <input
-                    id="pres-time-budget-input"
-                    type="number"
-                    min="3"
-                    max="60"
-                    className="pres-field-control"
-                    value={presentationTimeMinutes}
-                    onChange={(e) => setPresentationTimeMinutes(Number(e.target.value) || 15)}
-                  />
-                </div>
-
+            {/* Optional Delivery & Secondary Settings */}
+            <div className="pres-form-section brief-spec-section" style={{ marginTop: "24px" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
                 <div className="pres-form-group">
                   <label htmlFor="pres-deliverable-select" className="pres-field-label">
                     <Database size={14} className="field-icon" aria-hidden="true" />
@@ -795,24 +780,52 @@ export default function PromptStudioScreen({
                 </div>
 
                 <div className="pres-form-group">
-                  <label htmlFor="pres-pipeline-select" className="pres-field-label">
-                    <Layers size={14} className="field-icon" aria-hidden="true" />
-                    <span>Presentation Architecture</span>
+                  <label htmlFor="pres-time-budget-input" className="pres-field-label">
+                    <Clock size={14} className="field-icon" aria-hidden="true" />
+                    <span>Presentation Time Budget (Minutes)</span>
                   </label>
-                  <Select
-                    id="pres-pipeline-select"
+                  <input
+                    id="pres-time-budget-input"
+                    type="number"
+                    min="3"
+                    max="60"
                     className="pres-field-control"
-                    value={pipelineMode}
-                    onChange={(e) => setPipelineMode(e.target.value)}
-                    options={[
-                      { value: "legacy", label: "Standard Pipeline (Battle-tested Fallback Default)" },
-                      { value: "layered", label: "Layered Architecture (Next-Gen Native DrawingML + Bounded Review)" }
-                    ]}
-                    fullWidth
+                    value={presentationTimeMinutes}
+                    onChange={(e) => setPresentationTimeMinutes(Number(e.target.value) || 15)}
                   />
-                  <span className="pres-field-hint">
-                    Safe dual-path architecture: defaults to battle-tested standard engine with zero-downtime layered support.
-                  </span>
+                </div>
+              </div>
+
+              {/* Optional Narrative Focus */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginTop: "16px" }}>
+                <div className="pres-form-group">
+                  <label htmlFor="pres-main-takeaway-input" className="pres-field-label">
+                    <FileText size={14} className="field-icon" aria-hidden="true" />
+                    <span>Main Takeaway (Optional)</span>
+                  </label>
+                  <input
+                    id="pres-main-takeaway-input"
+                    type="text"
+                    className="pres-field-control"
+                    value={mainTakeaway}
+                    onChange={(e) => setMainTakeaway(e.target.value)}
+                    placeholder="e.g. Regional population concentrated in northern corridor"
+                  />
+                </div>
+
+                <div className="pres-form-group">
+                  <label htmlFor="pres-decision-requested-input" className="pres-field-label">
+                    <Sliders size={14} className="field-icon" aria-hidden="true" />
+                    <span>Decision or Action (Optional)</span>
+                  </label>
+                  <input
+                    id="pres-decision-requested-input"
+                    type="text"
+                    className="pres-field-control"
+                    value={decisionRequested}
+                    onChange={(e) => setDecisionRequested(e.target.value)}
+                    placeholder="e.g. Align regional resource allocations with observed densities"
+                  />
                 </div>
               </div>
             </div>

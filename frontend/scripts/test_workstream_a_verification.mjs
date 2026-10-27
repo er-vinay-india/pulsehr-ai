@@ -19,8 +19,8 @@ async function testWorkstreamA() {
   await page.setViewport({ width: 1440, height: 1000 });
 
   // 1. Initial Load Test
-  console.log('1. Loading dashboard for dataset 99750...');
-  await page.goto('http://localhost:5175/?dataset_id=99750#adaptive', { waitUntil: 'networkidle2' });
+  console.log('1. Loading dashboard for dataset 99795...');
+  await page.goto('http://localhost:5175/?dataset_id=99795#adaptive', { waitUntil: 'networkidle2' });
   await page.waitForSelector('.unified-dataset-insights-section', { timeout: 10000 });
   console.log('   ✅ Initial dataset loaded successfully without crashes.');
 
@@ -43,7 +43,7 @@ async function testWorkstreamA() {
 
   // 3. Test Developer Mode Scope Diagnostics in Drawer
   console.log('3. Testing Developer Diagnostics chip & drawer...');
-  await page.goto('http://localhost:5175/?dataset_id=99750&dev=true#adaptive', { waitUntil: 'networkidle2' });
+  await page.goto('http://localhost:5175/?dataset_id=99795&dev=true#adaptive', { waitUntil: 'networkidle2' });
   await page.waitForSelector('[data-testid="executive-dashboard-runtime-diagnostic"]', { timeout: 8000 });
   console.log('   ✅ Developer diagnostics trigger chip rendered without pushing down charts.');
   await page.click('[data-testid="executive-dashboard-runtime-diagnostic"]');

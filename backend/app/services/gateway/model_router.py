@@ -38,6 +38,12 @@ TASK_MODEL_CASCADES: dict[AITaskType, list[str]] = {
         "qwen3.5:9b",
         "phi4-mini:latest"
     ],
+    AITaskType.PRESENTATION_TYPOGRAPHY: [
+        "phi4-mini-typography",
+        "phi4-mini:latest",
+        "granite4:3b-h",
+        "qwen3.5:2b"
+    ],
     AITaskType.DETERMINISTIC_CALCULATION: []  # 100% bypass - no model needed
 }
 

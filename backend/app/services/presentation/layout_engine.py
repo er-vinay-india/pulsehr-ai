@@ -185,6 +185,26 @@ class ZoneLayoutEngine:
 
         # 1. TITLE HERO / CLOSING
         if slide_spec.structural_role in (StructuralRole.TITLE, StructuralRole.CLOSING, StructuralRole.THANK_YOU):
+            if slide_spec.structural_role == StructuralRole.TITLE and ZoneType.KPI_STRIP in b_types:
+                kpi_zone = next(z for z in body_zones if z.zone_type == ZoneType.KPI_STRIP)
+                other_zones = [z for z in body_zones if z != kpi_zone]
+                for oz in other_zones:
+                    bounds_map[oz.zone_id] = Box2D(
+                        left=round(bb.left + (bb.width * 0.05), 4),
+                        top=round(bb.top + (bb.height * 0.05), 4),
+                        width=round(bb.width * 0.90, 4),
+                        height=round(bb.height * 0.45, 4),
+                    )
+                kpi_top = round(bb.top + (bb.height * 0.55), 4) if other_zones else round(bb.top + (bb.height * 0.45), 4)
+                kpi_h = round(bb.height * 0.38, 4) if other_zones else round(bb.height * 0.45, 4)
+                bounds_map[kpi_zone.zone_id] = Box2D(
+                    left=bb.left,
+                    top=kpi_top,
+                    width=bb.width,
+                    height=kpi_h,
+                )
+                return bounds_map
+
             for bz in body_zones:
                 bounds_map[bz.zone_id] = Box2D(
                     left=round(bb.left + (bb.width * 0.10), 4),

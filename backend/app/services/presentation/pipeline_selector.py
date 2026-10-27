@@ -54,13 +54,13 @@ class PresentationPipelineSelector:
             return PresentationPipelineMode.LEGACY
 
         # 3. Scope-specified boolean flag
-        if "use_layered_pipeline" in scope:
+        if "use_layered_pipeline" in scope and scope["use_layered_pipeline"] is not None:
             if bool(scope["use_layered_pipeline"]):
                 return PresentationPipelineMode.LAYERED
             return PresentationPipelineMode.LEGACY
 
         # 4. Central configuration default
-        if getattr(config, "PRESENTATION_LAYERED_PIPELINE_ENABLED", False):
+        if getattr(config, "PRESENTATION_LAYERED_PIPELINE_ENABLED", True):
             return PresentationPipelineMode.LAYERED
 
         return PresentationPipelineMode.LEGACY

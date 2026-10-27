@@ -66,6 +66,8 @@ class PPTXCompiler:
 
         # Build fast lookup maps for content items and object specs
         content_map = {item.content_id: item for item in content_package.items}
+        for kpi in content_package.global_kpis:
+            content_map[kpi.content_id] = kpi
         structure_slide_map = {s.physical_slide_id: s for s in deck_structure.slides}
 
         rendered_slides: list[RenderedSlideRecord] = []
@@ -117,6 +119,44 @@ class PPTXCompiler:
                 if obj_record.fallback_applied:
                     total_fallbacks += 1
 
+            # Populate speaker notes with presenter briefing and technical provenance (T31/T33 Lineage)
+            try:
+                notes_slide = prs_slide.notes_slide
+                tf = notes_slide.notes_text_frame
+                notes_lines: list[str] = []
+                if slide_spec and slide_spec.headline:
+                    notes_lines.append(f"Slide: {slide_spec.headline}")
+
+                slide_items = [content_map.get(ol.content_id) for ol in res_slide.object_layouts if ol.content_id in content_map]
+                slide_takeaways = [it.narrative_takeaway or it.takeaway for it in slide_items if it and (it.narrative_takeaway or it.takeaway)]
+                if slide_takeaways:
+                    notes_lines.append("\nKey Takeaways:")
+                    for t in dict.fromkeys(slide_takeaways):
+                        notes_lines.append(f"- {t}")
+
+                # Technical lineage and audit provenance strictly in speaker notes frame
+                prov_topics = [it.visual_id for it in slide_items if it and it.visual_id]
+                prov_evids = [eid for it in slide_items if it for eid in (it.evidence_ids or [])]
+                prov_facts = [it.fact_id for it in slide_items if it and it.fact_id]
+
+                notes_lines.append("\n--- Technical Lineage & Audit Provenance ---")
+                notes_lines.append(f"Physical Slide ID: {res_slide.physical_slide_id}")
+                notes_lines.append(f"Logical Slide ID: {res_slide.logical_slide_id}")
+                if slide_spec:
+                    notes_lines.append(f"Semantic Topic: {slide_spec.semantic_topic}")
+                    role_val = slide_spec.structural_role.value if hasattr(slide_spec.structural_role, "value") else str(slide_spec.structural_role)
+                    notes_lines.append(f"Structural Role: {role_val}")
+                if prov_topics:
+                    notes_lines.append(f"Topic IDs: {', '.join(sorted(set(prov_topics)))}")
+                if prov_evids:
+                    notes_lines.append(f"Evidence IDs: {', '.join(sorted(set(prov_evids)))}")
+                if prov_facts:
+                    notes_lines.append(f"Fact IDs: {', '.join(sorted(set(prov_facts)))}")
+
+                tf.text = "\n".join(notes_lines)
+            except Exception as note_exc:
+                logger.warning("Could not set speaker notes on slide %d: %s", slide_idx, note_exc)
+
             slide_record = RenderedSlideRecord(
                 physical_slide_id=res_slide.physical_slide_id,
                 logical_slide_id=res_slide.logical_slide_id,
@@ -155,6 +195,13 @@ class PPTXCompiler:
             slides=rendered_slides,
         )
 
+        manifest_metadata = dict(metadata or {})
+        try:
+            from app.services.presentation.typography import TypographyResolver
+            manifest_metadata["typography_manifest"] = TypographyResolver.get_current_manifest().model_dump()
+        except Exception:
+            pass
+
         manifest = RenderManifest(
             manifest_id=manifest_id,
             deck_id=resolved_deck.deck_id,
@@ -166,7 +213,7 @@ class PPTXCompiler:
             total_fallbacks=total_fallbacks,
             semantic_render_fingerprint=semantic_fingerprint,
             replan_required=False,
-            metadata=metadata or {},
+            metadata=manifest_metadata,
         )
 
         return manifest, output_path

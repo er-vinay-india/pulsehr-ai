@@ -30,8 +30,47 @@ export async function exportStandaloneHtmlPresentation(deck, selectedTheme = "bo
   const slides = deck.slides;
   const currentTheme = getSlideTheme(deck.theme?.id || deck.metadata?.theme_id || selectedTheme);
 
+  const deckId = deck.id || deck.metadata?.deck_id;
+
+  // 1. PRIMARY DELIVERY PATH: Fetch the certified, server-rendered standalone presentation HTML
+  if (deckId) {
+    try {
+      const resp = await fetch(`/api/presentations/decks/${deckId}/html`);
+      if (resp.ok) {
+        const fullHtml = await resp.text();
+        if (fullHtml && fullHtml.includes("<!DOCTYPE html>")) {
+          if (printPdf) {
+            const printWindow = window.open("", "_blank");
+            if (!printWindow) { alert("Allow the presentation print window to save the deck as PDF."); return; }
+            printWindow.document.open();
+            printWindow.document.write(fullHtml);
+            printWindow.document.close();
+            printWindow.addEventListener("load", () => { printWindow.focus(); printWindow.print(); }, { once: true });
+            return;
+          }
+
+          // Trigger direct attachment download of certified standalone presentation HTML
+          const sanitizedTitle = (deck.title || "presentation").toLowerCase().replace(/[^a-z0-9_-]+/g, "_").slice(0, 40).replace(/^_+|_+$/g, "") || "presentation";
+          const a = document.createElement("a");
+          a.href = `/api/presentations/download/${deckId}/html?download=true`;
+          a.download = `${sanitizedTitle}.html`;
+          document.body.appendChild(a);
+          a.click();
+          setTimeout(() => {
+            if (a.parentNode) a.parentNode.removeChild(a);
+          }, 1000);
+          return;
+        }
+      }
+    } catch (err) {
+      console.warn("Could not fetch server-rendered HTML presentation, falling back to client compiler:", err);
+    }
+  }
+
+  // 2. FALLBACK DELIVERY PATH: Client-side standalone HTML compilation (100% semantic DOM, zero raster image hacks)
   let slidesHtml;
   let exportedSlideCount = slides.length;
+
   if (currentTheme.background_asset) {
     const imageResponse = await fetch(getPresentationThemeAssetUrl(currentTheme.id, 'background'));
     if (!imageResponse.ok) throw new Error('The presentation theme artwork could not be loaded.');
@@ -55,9 +94,13 @@ export async function exportStandaloneHtmlPresentation(deck, selectedTheme = "bo
     }
     const pages = [];
     for (const [idx, slide] of slides.entries()) {
-      const plan = await getPresentationLayoutPreview(currentTheme.id, slide);
-      for (let part = 0; part < plan.pages.length; part++) {
-        pages.push(buildResolvedSlideHtml({ ...slide, order: idx+1 }, pages.length, slides.length, currentTheme, plan, part, background));
+      const plan = await getPresentationLayoutPreview(currentTheme.id, slide).catch(() => null);
+      if (plan && plan.pages && Array.isArray(plan.pages)) {
+        for (let part = 0; part < plan.pages.length; part++) {
+          pages.push(buildResolvedSlideHtml({ ...slide, order: idx+1 }, pages.length, slides.length, currentTheme, plan, part, background));
+        }
+      } else {
+        pages.push(buildSlideHtml(slide, idx, slides.length, currentTheme));
       }
     }
     slidesHtml = pages.join('\n');

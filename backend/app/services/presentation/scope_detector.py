@@ -250,7 +250,7 @@ def preview_presentation_scope(conn, scope: dict[str, Any]) -> dict[str, Any]:
             "disconnected_boundary_note": "No active data sources available."
         }
 
-    scope_type = scope.get("scope_type") or "workspace"
+    scope_type = scope.get("scope_type") or ("single_sheet" if scope.get("sheet_id") else "workspace")
     target_sheet_id = scope.get("sheet_id")
     target_sheet_ids = scope.get("sheet_ids") or []
     target_group_id = scope.get("group_id")
@@ -394,6 +394,28 @@ def preview_presentation_scope(conn, scope: dict[str, Any]) -> dict[str, Any]:
         else f"{sum(s['row_count'] for s in included_sheets_info):,} Recorded Observations"
     )
 
+    detected_context = None
+    likely_audience = None
+    derived_title = None
+    evidence_summary = None
+    try:
+        from .context_profile import build_presentation_context_profile
+        if included_sheets_info:
+            target_sid = included_sheets_info[0]["id"]
+            primary_ctx = capture_dataset_context(conn, sheet_id=target_sid)
+            cp = build_presentation_context_profile(primary_ctx)
+            detected_context = cp.inferred_domain
+            likely_audience = cp.likely_audience
+            derived_title = cp.derived_deck_title
+            evidence_summary = {
+                "visual_assets": cp.visual_asset_count,
+                "verified_facts": cp.fact_count,
+                "analytical_tables": cp.table_count,
+                "scenario_models": 1 if cp.scenario_models_present else 0,
+            }
+    except Exception as exc:
+        logger.warning(f"Could not build context profile for scope preview: {exc}")
+
     return {
         "eligible": total_inc > 0,
         "scope_type": scope_type,
@@ -406,7 +428,11 @@ def preview_presentation_scope(conn, scope: dict[str, Any]) -> dict[str, Any]:
         "is_partial_year": has_partial_year,
         "disconnected_boundary_note": disconnected_note,
         "reporting_period_summary": period_summary,
-        "connected_groups": connected_groups
+        "connected_groups": connected_groups,
+        "detected_context": detected_context,
+        "likely_audience": likely_audience,
+        "derived_title": derived_title,
+        "evidence_summary": evidence_summary,
     }
 
 
@@ -451,6 +477,7 @@ def capture_dataset_context(conn, sheet_id: int | None = None, dataset_id: int |
     # Product Track 3.2: Upstream Governed ExecutiveTopic & PresentationTopic binding
     executive_topics: list[dict[str, Any]] = []
     presentation_topics: list[Any] = []
+    executive_kpis: list[dict[str, Any]] = []
     try:
         from ..adaptive_dashboard.engine import run_adaptive_dashboard
         from .topic_contract import PresentationTopic
@@ -474,10 +501,16 @@ def capture_dataset_context(conn, sheet_id: int | None = None, dataset_id: int |
                 )
                 for t in executive_topics
             ]
+        if hasattr(ad_resp, "executive_kpis") and ad_resp.executive_kpis:
+            executive_kpis = [
+                k if isinstance(k, dict) else k.model_dump()
+                for k in ad_resp.executive_kpis
+            ]
     except Exception as ad_exc:
         logger.warning(f"Could not load governed executive topics from adaptive dashboard: {ad_exc}")
 
     return {
+        "dataset_id": target_sheet.get("dataset_id"),
         "target_sheet": target_sheet,
         "all_sheets": all_sheets,
         "records": records,
@@ -489,7 +522,8 @@ def capture_dataset_context(conn, sheet_id: int | None = None, dataset_id: int |
         "visual_dashboard": visual_dashboard,
         "visuals": visuals,
         "executive_topics": executive_topics,
-        "presentation_topics": presentation_topics
+        "presentation_topics": presentation_topics,
+        "executive_kpis": executive_kpis,
     }
 
 
@@ -565,6 +599,7 @@ def _legacy_collect_workspace_evidence(conn, scope: dict[str, Any]) -> dict[str,
         "is_partial_year": is_partial,
         "disconnected_boundary_note": shared_pkg["disconnected_boundary_note"],
         "executive_topics": primary_ctx.get("executive_topics", []),
-        "presentation_topics": primary_ctx.get("presentation_topics", [])
+        "presentation_topics": primary_ctx.get("presentation_topics", []),
+        "executive_kpis": primary_ctx.get("executive_kpis", [])
     }
 

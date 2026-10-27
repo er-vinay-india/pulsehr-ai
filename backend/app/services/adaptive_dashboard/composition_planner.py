@@ -1418,9 +1418,24 @@ class ExecutiveCompositionPlanner:
                         v_spec["key_metric"] = new_km
                         tokens["key_metric"] = new_km
                     elif intent in ("TARGET_VS_ACTUAL", "TARGET_GAP"):
-                        new_km = f"Target: {v_spec['benchmark']:,.0f} {clean_u}".replace("  ", " ").strip()
+                        bench_val = v_spec.get('benchmark', 0)
+                        if abs(bench_val) >= 1_000_000:
+                            fmt_b = f"{bench_val / 1_000_000:.1f}M"
+                        elif abs(bench_val) >= 1_000:
+                            fmt_b = f"{bench_val / 1_000:.1f}K"
+                        else:
+                            fmt_b = f"{bench_val:,.0f}"
+
+                        new_km = f"Benchmark: {fmt_b}".strip()
                         setattr(story, "title", f"{m_name} vs Benchmark")
-                        setattr(story, "takeaway", f"{top_e} leads performance against the {v_spec['benchmark']:,.0f} {clean_u} cohort benchmark.".replace("  ", " ").strip())
+
+                        is_pop_or_geo = any(k in m_name.lower() for k in ("population", "density", "census")) or any(k in str(detected_entities).lower() for k in ("india", "state", "territory", "district"))
+                        if is_pop_or_geo:
+                            takeaway_text = f"{top_e} is well above the state population benchmark of {fmt_b}."
+                        else:
+                            takeaway_text = f"{top_e} is well above the cohort benchmark of {fmt_b}."
+
+                        setattr(story, "takeaway", takeaway_text)
                         setattr(story, "key_metric", new_km)
                         v_spec["key_metric"] = new_km
                         tokens["key_metric"] = new_km

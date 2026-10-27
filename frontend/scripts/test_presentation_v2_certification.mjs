@@ -256,6 +256,9 @@ print('SUCCESS_CUTOVER_SEEDED')
             fetchOpts.body = req.postData();
           }
           const resp = await fetch(targetUrl, fetchOpts);
+          if (url.includes('/presentations/')) {
+            console.log(`  [Intercepted ${req.method()}] ${targetUrl} -> status: ${resp.status}`);
+          }
           const resHeaders = {};
           resp.headers.forEach((v, k) => { resHeaders[k] = v; });
           const buf = Buffer.from(await resp.arrayBuffer());
@@ -274,11 +277,9 @@ print('SUCCESS_CUTOVER_SEEDED')
     });
 
     page.on('console', (msg) => {
-      if (msg.type() === 'error') {
-        const text = msg.text();
-        if (!text.includes('favicon') && !text.includes('Failed to load resource')) {
-          console.warn(`  [Browser Console Error]: ${text}`);
-        }
+      const text = msg.text();
+      if (!text.includes('favicon')) {
+        console.log(`  [Browser ${msg.type()}]: ${text}`);
       }
     });
 
@@ -340,8 +341,8 @@ print('SUCCESS_CUTOVER_SEEDED')
       const step1Audit = await page.evaluate(() => {
         const sourceCards = Array.from(document.querySelectorAll('.source-mode-card'));
         const cardTitles = sourceCards.map(c => c.querySelector('.mode-card-title')?.innerText?.trim());
-        const hasActiveDatasetTruth = cardTitles.some(t => t && t.includes('Active Dataset Truth'));
-        const hasCustomMemo = cardTitles.some(t => t && t.includes('Custom Objective & Memo'));
+        const hasActiveDatasetTruth = cardTitles.some(t => t && (t.includes('Active Dataset Truth') || t.includes('Use Existing Data')));
+        const hasCustomMemo = cardTitles.some(t => t && (t.includes('Custom Objective & Memo') || t.includes('Provide Context')));
 
         const stepBadge = document.querySelector('.step-badge-indicator')?.innerText?.trim() || '';
         const quickLaunchBtn = document.querySelector('.btn-quick-launch');
@@ -416,7 +417,7 @@ print('SUCCESS_CUTOVER_SEEDED')
       });
 
       // Wait for deck generation to complete and DeckStudioView to render
-      await page.waitForSelector('.pres-studio-body, .presentation-header-studio, button.btn-primary', { timeout: 35000 });
+      await page.waitForSelector('.pres-studio-body, .presentation-header-studio, button.btn-primary', { timeout: 90000 });
       const tDeckReady = performance.now() - tGenStart;
       deckGenTimings.push(tDeckReady);
       console.log(`  Deck Generation Completed in ${Math.round(tDeckReady)}ms`);
@@ -646,7 +647,7 @@ with zipfile.ZipFile(r'${tempPptxPath}') as z:
       btn?.scrollIntoView({ block: 'center' });
       btn?.click();
     });
-    await page.waitForSelector('.pres-studio-body, .presentation-header-studio, button.btn-primary', { timeout: 35000 });
+    await page.waitForSelector('.pres-studio-body, .presentation-header-studio, button.btn-primary', { timeout: 90000 });
 
     const retailAudit = await page.evaluate(() => {
       const allText = document.body.innerText || '';

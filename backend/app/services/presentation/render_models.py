@@ -42,6 +42,12 @@ class ShapeType(str, enum.Enum):
     UNKNOWN = "UNKNOWN"
 
 
+class RenderMode(str, enum.Enum):
+    """Execution mode used to render a visual presentation object."""
+    NATIVE = "NATIVE"
+    PRESERVED_IMAGE = "PRESERVED_IMAGE"
+
+
 class RenderedObjectRecord(BaseModel):
     """Audit record for an individual rendered PowerPoint shape."""
     object_id: str
@@ -55,6 +61,11 @@ class RenderedObjectRecord(BaseModel):
     fallback_applied: bool = False
     fallback_reason: Optional[str] = None
     applied_bounds: Box2D
+    render_mode: Optional[RenderMode] = None
+    source_visual_id: Optional[str] = None
+    source_surface: Optional[str] = None
+    visual_type: Optional[str] = None
+    rendered_visual_family: Optional[str] = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 

@@ -166,9 +166,9 @@ def _fallback_intent(
 
     return PresentationIntent(
         domain=ctx.domain or "Enterprise Operations",
-        purpose=ctx.objective or "Executive Review",
+        purpose=ctx.objective or "Analytical Review",
         primary_goal=primary_goal,
-        target_audience=ctx.audience or "Executive Leadership",
+        target_audience=ctx.audience or "General Stakeholders",
         audience_seniority=default_seniority,
         technical_depth="balanced",
         delivery_mode=default_delivery,

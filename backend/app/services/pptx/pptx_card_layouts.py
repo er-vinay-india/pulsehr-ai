@@ -210,7 +210,8 @@ def _render_kpi_summary_slide(slide, slide_data, colors):
             ctf.margin_top = Inches(0.2)
 
             p_lbl = ctf.paragraphs[0]
-            p_lbl.text = str(m.get("label", "")).upper()
+            from ..presentation.content_hub import compress_kpi_label
+            p_lbl.text = compress_kpi_label(str(m.get("label", ""))).upper()
             p_lbl.font.size = Pt(9)
             p_lbl.font.bold = True
             p_lbl.font.color.rgb = colors["brand"]

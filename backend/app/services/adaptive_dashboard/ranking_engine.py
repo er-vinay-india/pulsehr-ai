@@ -264,7 +264,9 @@ class GenericEntityRankingEngine:
                 sid, sname, sdisp, cols_json, prof_json = s[0], s[1], s[2], s[3], s[4]
                 cols = json.loads(cols_json) if cols_json else []
                 profs = json.loads(prof_json) if prof_json else []
-                prof_map = {p.get("column", ""): p for p in profs}
+                if isinstance(profs, dict):
+                    profs = profs.get("columns") or profs.get("profiles") or []
+                prof_map = {p.get("column", ""): p for p in profs if isinstance(p, dict)}
 
                 # 1. First pass: Identify person entity columns (label + identifier)
                 person_label_col: str | None = None

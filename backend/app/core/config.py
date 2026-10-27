@@ -93,6 +93,13 @@ class HighviewSettings(BaseSettings):
     OLLAMA_BASE_URL: str = Field(default=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"))
     OLLAMA_MODEL: str = Field(default=os.getenv("OLLAMA_MODEL", "qwen3.5:9b"))
     OLLAMA_EMBED_MODEL: str = Field(default=os.getenv("OLLAMA_EMBED_MODEL", "nomic-embed-text:latest"))
+
+    # Dedicated Presentation Typography Model Settings (isolated from HRIDAY)
+    TYPOGRAPHY_MODEL_ENABLED: bool = Field(default_factory=lambda: os.getenv("TYPOGRAPHY_MODEL_ENABLED", "true").lower().strip() in ("1", "true", "yes"))
+    TYPOGRAPHY_MODEL_BASE: str = Field(default_factory=lambda: os.getenv("TYPOGRAPHY_MODEL_BASE", "mlx-community/Phi-4-mini-instruct-mlx-4Bit"))
+    TYPOGRAPHY_MODEL_ADAPTER_PATH: Path = Field(default_factory=lambda: Path(os.getenv("TYPOGRAPHY_MODEL_ADAPTER_PATH") or str(BASE_DIR / "models" / "typography" / "phi4_mini_lora")))
+    TYPOGRAPHY_MODEL_TIMEOUT: float = Field(default_factory=lambda: float(os.getenv("TYPOGRAPHY_MODEL_TIMEOUT", "6.0")))
+    TYPOGRAPHY_MODEL_TEMPERATURE: float = Field(default_factory=lambda: float(os.getenv("TYPOGRAPHY_MODEL_TEMPERATURE", "0.1")))
     EMBEDDING_DIM: int = Field(default=768)
 
     # AI Model Roles
@@ -222,7 +229,7 @@ class HighviewSettings(BaseSettings):
 
     # Presentation Layered & Zonal Architecture (PPT-L0 to PPT-L11) Dual-Path Migration Flag
     PRESENTATION_LAYERED_PIPELINE_ENABLED: bool = Field(
-        default=os.getenv("PRESENTATION_LAYERED_PIPELINE_ENABLED", "false").lower() in ("true", "1", "yes")
+        default=os.getenv("PRESENTATION_LAYERED_PIPELINE_ENABLED", "true").lower() in ("true", "1", "yes")
     )
 
     # Assistant branding & identity
@@ -270,6 +277,12 @@ OLLAMA_BASE_URL = settings.OLLAMA_BASE_URL
 OLLAMA_MODEL = settings.OLLAMA_MODEL
 OLLAMA_EMBED_MODEL = settings.OLLAMA_EMBED_MODEL
 EMBEDDING_DIM = settings.EMBEDDING_DIM
+
+TYPOGRAPHY_MODEL_ENABLED = settings.TYPOGRAPHY_MODEL_ENABLED
+TYPOGRAPHY_MODEL_BASE = settings.TYPOGRAPHY_MODEL_BASE
+TYPOGRAPHY_MODEL_ADAPTER_PATH = settings.TYPOGRAPHY_MODEL_ADAPTER_PATH
+TYPOGRAPHY_MODEL_TIMEOUT = settings.TYPOGRAPHY_MODEL_TIMEOUT
+TYPOGRAPHY_MODEL_TEMPERATURE = settings.TYPOGRAPHY_MODEL_TEMPERATURE
 
 KAGGLE_DATASET = settings.KAGGLE_DATASET
 KAGGLE_LOCAL_CACHE = settings.KAGGLE_LOCAL_CACHE

@@ -634,7 +634,7 @@ export function usePresentationWorkflow({
 
     setIsRegeneratingSlide(true);
     try {
-      const updated = await regenerateSlide(latest, currentSlide.id, prompt);
+      const updated = await regenerateSlide(latest, currentSlide.physical_slide_id || currentSlide.id, prompt);
       commitDeck(updated);
       setShowRegenModal(false);
       setRegeneratePrompt("");

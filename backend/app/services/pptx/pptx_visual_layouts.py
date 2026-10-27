@@ -77,9 +77,33 @@ def _render_chart_narrative_slide(slide, slide_data, colors, theme_palette=None)
         return
 
     if not chart_info:
-        raise ChartExportError(
-            f"Slide '{slide_data.get('title', 'Untitled')}' specifies layout 'chart_narrative' but contains no chart specification."
-        )
+        # Full narrative / closing slide support without chart
+        right_card = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, Inches(5.8), Inches(1.8), Inches(6.7), Inches(4.8))
+        right_card.fill.solid()
+        right_card.fill.fore_color.rgb = colors["card_bg"]
+        right_card.line.color.rgb = colors["card_border"]
+        right_card.line.width = Pt(1)
+        rtf = right_card.text_frame
+        rtf.word_wrap = True
+        rtf.margin_left = Inches(0.3)
+        rtf.margin_right = Inches(0.3)
+        rtf.margin_top = Inches(0.3)
+        p_h = rtf.paragraphs[0]
+        p_h.text = "Strategic Insights & Recommendations"
+        p_h.font.size = Pt(13)
+        p_h.font.bold = True
+        p_h.font.color.rgb = colors["accent"]
+        p_h.space_after = Pt(12)
+        extra_bullets = slide_data.get("bullets", [])[3:] if len(slide_data.get("bullets", [])) > 3 else slide_data.get("bullets", [])
+        for eb in extra_bullets[:4]:
+            peb = rtf.add_paragraph()
+            peb.space_after = Pt(8)
+            reb = peb.add_run()
+            reb.text = "• "
+            reb.font.color.rgb = colors["brand"]
+            reb.font.bold = True
+            add_styled_text_runs(peb, eb, font_size=11, default_color=colors["secondary"])
+        return
     _add_native_chart_shape(slide, chart_info, Inches(5.8), Inches(1.8), Inches(6.7), Inches(4.8), colors, theme_palette=theme_palette)
 
 

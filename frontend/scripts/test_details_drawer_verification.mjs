@@ -3,7 +3,7 @@ import path from 'path';
 
 const ARTIFACT_DIR = '/Users/vinayksharma/.gemini/antigravity/brain/8b03f9e3-5aca-46a9-9b30-abe2f5add822';
 const BASE_URL = 'http://localhost:5175';
-const DATASET_ID = '99767';
+const DATASET_ID = '99795';
 
 async function run() {
   console.log('🚀 Starting Details Drawer Verification (Executive Summary & KPI)...');

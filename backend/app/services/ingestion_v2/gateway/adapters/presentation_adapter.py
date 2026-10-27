@@ -389,6 +389,7 @@ class PresentationIntelligenceAdapter:
         # Check if test artifacts exist for this dataset
         cached_art = self._cached_v2_artifacts.get(str_ds) or {}
         raw_exec_topics = cached_art.get("executive_topics")
+        raw_exec_kpis = cached_art.get("executive_kpis") or []
 
         if not raw_exec_topics:
             dash_resp = dash_adapter.acquire_dashboard_intelligence(
@@ -398,6 +399,7 @@ class PresentationIntelligenceAdapter:
                 db_conn=conn,
             )
             raw_exec_topics = dash_resp.executive_topics
+            raw_exec_kpis = dash_resp.executive_kpis
 
         # 2. Join Safety Filtering on Executive Topics
         # Ensure any multi-sheet relational topic adheres strictly to join safety
@@ -460,6 +462,7 @@ class PresentationIntelligenceAdapter:
         # 5. Populate primary_ctx and assemble workspace evidence package
         primary_ctx["executive_topics"] = safe_exec_topics
         primary_ctx["presentation_topics"] = presentation_topics
+        primary_ctx["executive_kpis"] = raw_exec_kpis
         primary_ctx["governed_v2_active"] = True
 
         included_sheets = preflight.get("included_sheets", [])
@@ -484,6 +487,7 @@ class PresentationIntelligenceAdapter:
             "disconnected_boundary_note": preflight.get("disconnected_boundary_note", "Single dataset evaluated on verified empirical records."),
             "executive_topics": safe_exec_topics,
             "presentation_topics": presentation_topics,
+            "executive_kpis": raw_exec_kpis,
             "governed_v2_active": True,
             "blocked_unsafe_joins_count": blocked_unsafe_joins_count,
             "withheld_ambiguous_joins_count": withheld_ambiguous_joins_count,

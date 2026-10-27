@@ -446,7 +446,7 @@ def run_adaptive_dashboard(
                 resp.relationship_count = ds_intel.relationship_count
                 resp.coverage_warnings = ds_intel.coverage_warnings
                 resp.relationship_graph = ds_intel.relationship_graph.model_dump() if hasattr(ds_intel.relationship_graph, "model_dump") else ds_intel.relationship_graph
-                source_sids = sorted(list(set([sid for c in resp.selected_dashboard_insights for sid in c.get("source_sheet_ids", [])])))
+                source_sids = sorted(list(set([sid for c in resp.selected_dashboard_insights if isinstance(c, dict) for sid in c.get("source_sheet_ids", [])])))
                 resp.source_sheet_ids = source_sids if source_sids else ([sheet_id] if sheet_id else [])
                 resp.source_sheet_count = ds_intel.sheet_count
                 resp.candidate_count = ds_intel.total_evidence_count

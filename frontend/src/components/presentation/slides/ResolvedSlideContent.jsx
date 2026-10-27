@@ -7,6 +7,9 @@ import '../../../styles/resolved-slides.scss';
 
 const requests = new Map();
 export function loadSlideLayout(slide, theme) {
+  if (slide?.physical_slide_id || slide?.thumbnail_url || slide?.zones) {
+    return Promise.resolve(null);
+  }
   const themeId = getSlideTheme(theme).id;
   const key = JSON.stringify([themeId, slide]);
   if (!requests.has(key)) {
@@ -77,7 +80,7 @@ export function ResolvedCanvas({ plan, theme, slideIndex, totalSlides, part = 0,
           </table>
         </div>;
         const textStyle = { ...box, margin: 0, fontSize: block.size, fontFamily: block.font || undefined, lineHeight: 1.22, fontWeight: block.bold ? 700 : 400, color: reflow && block.role === 'header_text' ? theme.primary_text : theme[block.role], whiteSpace: 'pre-wrap' };
-        if (isEditable && block.field && onUpdate) return <textarea key={`${slide?.id}-${index}`} aria-label={`Edit slide ${block.field}`} className="resolved-text-editor"
+        if (isEditable && block.field && onUpdate) return <textarea key={`${slide?.physical_slide_id || slide?.id || index}-${index}`} aria-label={`Edit slide ${block.field}`} className="resolved-text-editor"
           defaultValue={block.text} style={textStyle} onBlur={event => {
             if (event.target.value !== block.text) onUpdate({ ...slide, [block.field]: event.target.value });
           }} />;
@@ -93,10 +96,10 @@ export function ResolvedCanvas({ plan, theme, slideIndex, totalSlides, part = 0,
 export default function ResolvedSlideContent(props) {
   const { plan, error } = useSlideLayout(props.slide, props.theme);
   const [part, setPart] = useState(0);
-  useEffect(() => { setPart(0); }, [props.slide.id, plan]);
+  useEffect(() => { setPart(0); }, [props.slide?.physical_slide_id || props.slide?.id, plan]);
   const theme = getSlideTheme(props.theme);
   if (error) return <div className="resolved-layout-message" role="alert">{error}</div>;
-  if (!plan) return <div className="resolved-layout-message" role="status">Laying out this slide…</div>;
+  if (!plan) return <div className="resolved-layout-message" role="status">Rendering slide preview…</div>;
   const parts = plan.pages?.length || 1;
   return <div className="resolved-slide-view">
     {parts > 1 && <nav className="resolved-table-pages" aria-label="Table continuation pages">

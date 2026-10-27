@@ -502,6 +502,9 @@ class PhysicalSlideManifestValidator:
             if isinstance(obj, dict):
                 for k, v in obj.items():
                     k_lower = str(k).lower()
+                    if k_lower == "visual_spec":
+                        # Skip visual_spec payload (chart data points/axes, e.g. scatter_points with x/y data values)
+                        continue
                     if k_lower in cls.FORBIDDEN_GEOMETRY_FIELDS:
                         found_fields.append(f"{path}.{k}" if path else str(k))
                     _traverse(v, f"{path}.{k}" if path else str(k))

@@ -19,7 +19,10 @@ export default function PresentationSlideContent({
   isEditable = false,
   reflow = false,
   onUpdate = () => {},
-  onViewEvidence = () => {}
+  onViewEvidence = () => {},
+  deckId = null,
+  deckSpec = null,
+  stageMode = "html"
 }) {
   theme = getSlideTheme(theme);
 
@@ -29,6 +32,9 @@ export default function PresentationSlideContent({
   const [isEditingNarrative, setIsEditingNarrative] = useState(false);
   const [narrativeVal, setNarrativeVal] = useState(slide.narrative);
 
+  const [imgLoaded, setImgLoaded] = useState(false);
+  const [imgError, setImgError] = useState(false);
+
   // Sync state whenever active slide changes
   React.useEffect(() => {
     setTitleVal(slide.title || "");
@@ -36,6 +42,22 @@ export default function PresentationSlideContent({
     setIsEditingTitle(false);
     setIsEditingNarrative(false);
   }, [slide.id, slide.title, slide.narrative]);
+
+  const effectiveDeckId = deckId || deckSpec?.id;
+  const slideId = slide.physical_slide_id || slide.id || (slideIndex ? `slide-${slideIndex}` : null);
+  const isLayered = Boolean(
+    slide.physical_slide_id ||
+    slide.thumbnail_url ||
+    slide.zones ||
+    deckSpec?.metadata?.pipeline_mode?.toLowerCase() === "layered" ||
+    deckSpec?.metadata?.pipeline_mode === "LAYERED"
+  );
+  const renderUrl = slide.render_url || slide.thumbnail_url || (effectiveDeckId && slideId ? `/api/presentations/decks/${effectiveDeckId}/slides/${slideId}/thumbnail` : null);
+
+  React.useEffect(() => {
+    setImgLoaded(false);
+    setImgError(false);
+  }, [renderUrl]);
 
   const layout = slide.layout || "chart_narrative";
 
@@ -133,14 +155,151 @@ export default function PresentationSlideContent({
     );
   };
 
-  if (SLIDE_LAYOUT_GEOMETRY.supported_layouts.includes(layout) && !slide.image_url && !slide.talent_9box_data && !slide.burnout_strain_data) {
+  const htmlUrl = effectiveDeckId && slideId ? `/api/presentations/decks/${effectiveDeckId}/slides/${slideId}/html` : null;
+
+  if (isLayered) {
+    if (stageMode === "html" && htmlUrl) {
+      return (
+        <div
+          className="slide-card-wrapper layout-layered-slide"
+          style={{
+            ...slideCssVariables(theme),
+            backgroundColor: theme.bg_color || "#0B0F19",
+            width: "100%",
+            height: "100%",
+            position: "relative",
+            overflow: "hidden"
+          }}
+        >
+          <iframe
+            key={htmlUrl}
+            src={htmlUrl}
+            title={slide.title || `Slide ${slideIndex || 1}`}
+            style={{
+              width: "100%",
+              height: "100%",
+              border: "none",
+              display: "block",
+              background: "transparent",
+              userSelect: "text"
+            }}
+            loading="eager"
+          />
+        </div>
+      );
+    }
+
+    if (renderUrl) {
+      return (
+        <div
+          className="slide-card-wrapper layout-layered-slide"
+          style={{
+            ...slideCssVariables(theme),
+            backgroundColor: theme.bg_color || "#0B0F19",
+            width: "100%",
+            height: "100%",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            position: "relative",
+            overflow: "hidden"
+          }}
+        >
+          {!imgLoaded && !imgError && (
+            <div
+              className="layered-slide-loading"
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "12px",
+                color: theme.secondary_text || "#94A3B8"
+              }}
+            >
+              <div
+                className="spinner-border animate-spin"
+                style={{
+                  width: "28px",
+                  height: "28px",
+                  border: `3px solid ${theme.card_border || "rgba(255,255,255,0.15)"}`,
+                  borderTopColor: theme.brand_color || "#38BDF8",
+                  borderRadius: "50%"
+                }}
+              />
+              <span style={{ fontSize: "14px", fontWeight: 500 }}>Rendering slide preview…</span>
+            </div>
+          )}
+          <img
+            src={renderUrl}
+            alt={slide.title || `Slide ${slideIndex || 1}`}
+            onLoad={() => setImgLoaded(true)}
+            onError={() => setImgError(true)}
+            style={{
+              width: "100%",
+              height: "100%",
+              objectFit: "contain",
+              display: imgLoaded ? "block" : "none",
+              userSelect: "none"
+            }}
+            loading="eager"
+          />
+          {imgError && (
+            <div style={{ color: "#EF4444", fontSize: "14px", fontWeight: 500 }}>
+              Unable to load slide preview
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    return (
+      <div
+        className="slide-card-wrapper layout-layered-slide"
+        style={{
+          ...slideCssVariables(theme),
+          backgroundColor: theme.bg_color || "#0B0F19",
+          width: "100%",
+          height: "100%",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center"
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: "12px",
+            color: theme.secondary_text || "#94A3B8"
+          }}
+        >
+          <div
+            className="spinner-border animate-spin"
+            style={{
+              width: "28px",
+              height: "28px",
+              border: `3px solid ${theme.card_border || "rgba(255,255,255,0.15)"}`,
+              borderTopColor: theme.brand_color || "#38BDF8",
+              borderRadius: "50%"
+            }}
+          />
+          <span style={{ fontSize: "14px", fontWeight: 500 }}>Rendering slide preview…</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (SLIDE_LAYOUT_GEOMETRY.supported_layouts.includes(layout) && !slide.image_url && !slide.background_image && !slide.talent_9box_data && !slide.burnout_strain_data) {
     return <ResolvedSlideContent slide={slide} theme={theme} slideIndex={slideIndex || slide.order || 1}
       totalSlides={totalSlides || slide.total_slides || 1} reflow={reflow} isEditable={isEditable} onUpdate={onUpdate} />;
   }
 
   if (layout === "visual_intelligence" || layout === "process_flow" || (!slide.layout && slide?.visual_spec)) {
     return (
-      <div className={`slide-card-wrapper layout-${layout} visual-spec-active`} style={slideCssVariables(theme)}>
+      <div className={`slide-card-wrapper layout-${layout} visual-spec-active`} style={{ ...slideCssVariables(theme), ...slideBackground(slide, theme) }}>
         <VisualSlideRenderer
           slide={slide}
           visualSpec={slide.visual_spec}

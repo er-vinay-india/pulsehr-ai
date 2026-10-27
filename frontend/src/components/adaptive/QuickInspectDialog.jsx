@@ -114,7 +114,7 @@ export default function QuickInspectDialog({
       width="560px"
       maxWidth="92vw"
       ariaLabel={`Quick Inspect for ${cleanTitle}`}
-      className="quick-inspect-side-panel"
+      className="quick-inspect-side-panel adaptive-inspect-dialog adaptive-inspect-drawer"
     >
       <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
         {isBriefing && briefingData ? (

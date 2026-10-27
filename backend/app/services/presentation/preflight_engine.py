@@ -17,7 +17,13 @@ from __future__ import annotations
 import logging
 from typing import Any, Optional
 
-from .content_models import ContentKind, PresentationContentItem, PresentationContentPackage
+from .content_models import (
+    ContentKind,
+    PresentationContentItem,
+    PresentationContentPackage,
+    VisualCompleteness,
+    VisualStrategy,
+)
 from .manifest_models import (
     ContentDensity,
     DeckLengthPolicy,
@@ -184,7 +190,24 @@ class PresentationPreflightEngine:
         reason = ExpansionReason.NONE
         warnings: list[str] = []
 
-        if not l_slide.allow_split:
+        # Stage 4 Invariant: Complete reused visuals (choropleth, box_plot, scatter, variance_bar, bullet)
+        # communicate the full analytical relationship and default to 1 primary physical slide.
+        # They do not split due to raw category count, row count, or density alone.
+        is_reused_complete = (
+            getattr(l_slide, "visual_strategy", None) == VisualStrategy.REUSE_EXISTING
+            and getattr(l_slide, "visual_completeness", None) == VisualCompleteness.COMPLETE_VISUAL
+        ) or any(
+            getattr(b, "visual_strategy", None) == VisualStrategy.REUSE_EXISTING
+            and getattr(b, "visual_completeness", None) == VisualCompleteness.COMPLETE_VISUAL
+            for b in l_slide.content_bindings
+        )
+
+        if is_reused_complete:
+            recommended_slides = 1
+            reason = ExpansionReason.NONE
+            table_split_recommended = False
+            multi_visual_split_recommended = False
+        elif not l_slide.allow_split:
             # Splitting explicitly prohibited on this logical slide
             recommended_slides = 1
             if density in (ContentDensity.HIGH, ContentDensity.VERY_HIGH):

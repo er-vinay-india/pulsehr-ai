@@ -15,9 +15,9 @@ def build_executive_title_cover_slide(
     current_slide_order: int = 1
 ) -> dict[str, Any]:
     """Generates a high-aesthetic Executive Title Cover Slide adhering to presentation standards."""
-    role_title = persona.get("role_title") or "Executive Leadership"
-    standard_report = persona.get("standard_report_name") or "Executive Operational Review & Strategic Performance Diagnostic"
-    domain = persona.get("industry_domain") or "Enterprise Operations"
+    role_title = persona.get("role_title") or "Stakeholders"
+    standard_report = persona.get("standard_report_name") or "Analytical & Performance Review"
+    domain = persona.get("industry_domain") or "Operations"
 
     title = standard_report
     subtitle = f"Empirical Ground Truth & Strategic Operational Review · {reporting_period_summary}"

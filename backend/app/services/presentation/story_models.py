@@ -39,6 +39,8 @@ from app.services.presentation.content_models import (
     PresentationContentItem,
     PresentationContentPackage,
     UserVisibleContentPolicy,
+    VisualCompleteness,
+    VisualStrategy,
 )
 
 
@@ -85,6 +87,12 @@ class ContentBinding(BaseModel):
     content_id: str = Field(description="Audited ID matching PresentationContentItem.content_id")
     binding_role: ContentBindingRole = Field(default=ContentBindingRole.PRIMARY)
     notes: str | None = Field(default=None, description="Narrative purpose of this binding")
+    visual_id: str | None = Field(default=None, description="Bound visual identifier")
+    visual_strategy: VisualStrategy = Field(default=VisualStrategy.PRESENTATION_RECOMMENDATION)
+    visual_completeness: VisualCompleteness = Field(default=VisualCompleteness.COMPLETE_VISUAL)
+    visual_type: str | None = Field(default=None, description="Bound visual type / chart family")
+    visual_spec: dict[str, Any] | None = Field(default=None, description="Bound visual specification")
+    source_surface: str | None = Field(default=None, description="Originating surface (e.g. dashboard, data_explorer)")
 
 
 class ExclusionReason(str, Enum):
@@ -143,6 +151,13 @@ class LogicalSlidePlan(BaseModel):
     preferred_archetype: str | None = Field(default=None, description="Suggested visual archetype (e.g. CHART_WITH_INSIGHT)")
     allow_split: bool = Field(default=True, description="Whether preflight is permitted to split this unit")
     logical_order: int = Field(default=0, description="Logical story order (1-indexed sequence)")
+    visual_id: str | None = Field(default=None, description="Primary visual identity for this logical slide")
+    visual_strategy: VisualStrategy = Field(default=VisualStrategy.PRESENTATION_RECOMMENDATION)
+    visual_completeness: VisualCompleteness = Field(default=VisualCompleteness.COMPLETE_VISUAL)
+    visual_type: str | None = Field(default=None, description="Primary visual type / chart family")
+    visual_spec: dict[str, Any] | None = Field(default=None, description="Primary visual specification")
+    source_surface: str | None = Field(default=None, description="Primary visual surface")
+    metadata: dict[str, Any] = Field(default_factory=dict, description="Arbitrary metadata such as cover framing")
 
     # Backwards compatibility property for code expecting .tag
     @property
@@ -175,7 +190,7 @@ class DeckStoryPlan(BaseModel):
     sections: list[str] = Field(default_factory=list, description="Ordered presentation section headings")
     logical_slides: list[LogicalSlidePlan] = Field(default_factory=list, description="Ordered logical slide units")
     excluded_content: list[ExcludedContentItem] = Field(default_factory=list, description="Complete ledger of unselected content")
-    target_audience: str = Field(default="Executive Leadership")
+    target_audience: str = Field(default="Stakeholders")
     user_objective: str = Field(default="")
     story_fingerprint: str = Field(default="", description="Deterministic SHA-256 fingerprint over story structure")
     metadata: dict[str, Any] = Field(default_factory=dict)
@@ -195,8 +210,17 @@ class DeckStoryPlan(BaseModel):
                 "takeaway": s.takeaway,
                 "archetype": s.preferred_archetype or "",
                 "allow_split": s.allow_split,
+                "visual_id": s.visual_id or "",
+                "visual_strategy": s.visual_strategy.value if hasattr(s.visual_strategy, "value") else str(s.visual_strategy or ""),
+                "visual_type": s.visual_type or "",
                 "bindings": [
-                    {"id": b.content_id, "role": b.binding_role.value}
+                    {
+                        "id": b.content_id,
+                        "role": b.binding_role.value,
+                        "visual_id": b.visual_id or "",
+                        "visual_strategy": b.visual_strategy.value if hasattr(b.visual_strategy, "value") else str(b.visual_strategy or ""),
+                        "visual_type": b.visual_type or "",
+                    }
                     for b in sorted_bindings
                 ]
             })
@@ -371,6 +395,10 @@ class StoryPlanValidator:
         def _scan(obj: Any, path: str = "") -> None:
             if isinstance(obj, dict):
                 for k, v in obj.items():
+                    # Upstream chart payloads (such as scatter points or data coordinates in visual_spec)
+                    # contain mathematical data attributes ('x', 'y'), not slide layout geometry.
+                    if k == "visual_spec":
+                        continue
                     if k.lower() in cls.FORBIDDEN_PHYSICAL_FIELDS:
                         raise PhysicalLayoutLeakageError(
                             f"Physical layout property '{k}' found at '{path}.{k}'. "

@@ -73,7 +73,7 @@ const deferred = () => { let resolve; const promise = new Promise(r => { resolve
 const require = createRequire(import.meta.url);
 const frontendRoot = fileURLToPath(new URL('../', import.meta.url));
 const temporary = await mkdtemp(path.join(tmpdir(), 'deck-controls-'));
-const apiNames = ['getPresentationThemes', 'startPresentationGeneration', 'getPresentationJob', 'getPresentationDeck', 'cancelPresentationJob', 'getSheets', 'updatePresentationDeck', 'regenerateSlide', 'exportPresentationPptx', 'previewPresentationScope', 'getAdaptiveDashboardPrimaryElement', 'getLatestPresentationDeck', 'deletePresentationDeck', 'getDatasetPersonas'];
+const apiNames = ['getPresentationThemes', 'startPresentationGeneration', 'getPresentationJob', 'getPresentationDeck', 'cancelPresentationJob', 'getSheets', 'updatePresentationDeck', 'regenerateSlide', 'regeneratePresentationTarget', 'exportPresentationPptx', 'previewPresentationScope', 'getAdaptiveDashboardPrimaryElement', 'getLatestPresentationDeck', 'deletePresentationDeck', 'getDatasetPersonas'];
 const api = Object.fromEntries(apiNames.map(name => [name, async () => ({})]));
 api.getPresentationJob = () => new Promise(() => {});
 api.getPresentationThemes = async () => ({ themes: [] });

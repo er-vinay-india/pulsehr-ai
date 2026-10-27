@@ -537,8 +537,9 @@ class TestLateSplitRevisionContract:
 
         if target_slide is None:
             # Configure slide 1 with 2 bindings to test late split
+            orig_b = manifest_v1.slides[1].content_bindings[0]
             manifest_v1.slides[1].content_bindings = [
-                ContentBinding(content_id="ITEM-GROWTH-01", binding_role=ContentBindingRole.PRIMARY),
+                orig_b,
                 ContentBinding(content_id="ITEM-GROWTH-02", binding_role=ContentBindingRole.SUPPORTING),
             ]
             target_slide = manifest_v1.slides[1]

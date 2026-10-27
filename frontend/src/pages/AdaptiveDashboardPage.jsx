@@ -86,6 +86,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab, onOpenUpload }) {
   const [revision, setRevision] = useState(0);
   const [burstCache, setBurstCache] = useState(false);
   const [refreshNotice, setRefreshNotice] = useState(null);
+  const [staleNotice, setStaleNotice] = useState(null);
   const [lastRefreshedAt, setLastRefreshedAt] = useState(null);
 
   useEffect(() => {
@@ -134,6 +135,7 @@ export default function AdaptiveDashboardPage({ onNavigateTab, onOpenUpload }) {
   }, [sources, selectedDatasetId]);
 
   const handleSourceSelect = (newId) => {
+    setStaleNotice(null);
     setSelectedDatasetId(newId);
     selfHealUrl(newId);
   };
@@ -160,7 +162,12 @@ export default function AdaptiveDashboardPage({ onNavigateTab, onOpenUpload }) {
         const resolution = validateAndResolveDataset(list, urlDatasetId);
 
         setSelectedDatasetId(resolution.resolvedId);
-        if (resolution.status === "CATALOG_EMPTY") {
+        if (resolution.staleDetected) {
+          setStaleNotice("Requested dataset was not found or has been removed.");
+        } else {
+          setStaleNotice(null);
+        }
+        if (resolution.status === "CATALOG_EMPTY" || resolution.status === "STALE_NOT_FOUND") {
           setData(null);
           setCalcError(null);
         }
@@ -216,6 +223,12 @@ export default function AdaptiveDashboardPage({ onNavigateTab, onOpenUpload }) {
     if (isDifferentDataset) {
       setData(null);
       lastDatasetIdRef.current = selectedDatasetId;
+    }
+
+    if (sources.length > 0 && !sources.some((s) => String(s.id) === String(selectedDatasetId))) {
+      setData(null);
+      setCalculating(false);
+      return;
     }
 
     if (activeControllerRef.current) {
@@ -386,6 +399,22 @@ export default function AdaptiveDashboardPage({ onNavigateTab, onOpenUpload }) {
             variant="ghost"
             onClick={() => setRefreshNotice(null)}
             ariaLabel="Dismiss notification"
+          />
+        </div>
+      )}
+
+      {/* Stale / Missing Dataset Notice */}
+      {staleNotice && (
+        <div className="adaptive-status-notice error" role="alert">
+          <AlertTriangle size={18} />
+          <span>{staleNotice}</span>
+          <ActionIconButton
+            action="close"
+            buttonSize={26}
+            size={13}
+            variant="ghost"
+            onClick={() => setStaleNotice(null)}
+            ariaLabel="Dismiss message"
           />
         </div>
       )}

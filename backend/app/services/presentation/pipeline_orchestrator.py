@@ -312,10 +312,15 @@ def execute_presentation_pipeline_async(
                 # PPT-L2: Story Planner & Logical SlideTags
                 from .story_planner import StoryPlanner
                 planner = StoryPlanner(use_ai=False)
+                inferred_aud = (
+                    layered_content_package.metadata.get("context_profile", {}).get("likely_audience")
+                    if layered_content_package
+                    else "General stakeholders"
+                )
                 deck_story_plan = planner.plan_story(
                     content_pkg=layered_content_package,
                     user_objective=scope.get("objective", ""),
-                    target_audience=scope.get("audience", "Executive Leadership"),
+                    target_audience=scope.get("audience") or inferred_aud,
                     metadata={"job_id": job_id, "scope": scope}
                 )
                 workspace_evidence["deck_story_plan"] = deck_story_plan.model_dump()
@@ -713,12 +718,15 @@ def execute_presentation_pipeline_async(
                         "subtitle": ps.headline_text or "",
                         "key_message": ps.takeaway_text or ps.headline_text or "",
                         "narrative": ps.headline_text or "",
+                        "bullets": list((ps.metadata or {}).get("bullets") or []),
                         "category": ps.logical_tag,
                         "layout": ps.planned_layout_family or "chart_narrative",
                         "zones": [z.model_dump() for z in res_slide.zones] if res_slide else [],
                         "thumbnail_url": f"/api/presentations/decks/{deck_id}/slides/{ps.physical_slide_id}/thumbnail",
+                        "html_url": f"/api/presentations/decks/{deck_id}/slides/{ps.physical_slide_id}/html",
                         "render_fingerprint": rm_slide.render_fingerprint if rm_slide else None,
                         "status": "READY",
+                        "metadata": dict(ps.metadata or {}),
                     }
                     slides_spec.append(slide_entry)
 
@@ -726,9 +734,13 @@ def execute_presentation_pipeline_async(
                     "id": deck_id,
                     "title": deck_story_plan.deck_title,
                     "slides": slides_spec,
+                    "html_url": f"/api/presentations/decks/{deck_id}/html",
                     "metadata": {
                         "deck_revision": 1,
                         "pipeline_mode": PresentationPipelineMode.LAYERED.value,
+                        "context_profile": layered_content_package.metadata.get("context_profile") if layered_content_package else None,
+                        "evidence_universe_summary": layered_content_package.metadata.get("evidence_universe_summary") if layered_content_package else None,
+                        "coverage_ledger_summary": deck_story_plan.metadata.get("coverage_ledger_summary") or deck_story_plan.metadata.get("coverage_ledger", {}) if deck_story_plan else None,
                         "content_package": layered_content_package.model_dump(),
                         "story_plan": deck_story_plan.model_dump(),
                         "deck_story_plan": deck_story_plan.model_dump(),
@@ -1139,21 +1151,33 @@ def execute_presentation_pipeline_async(
         deck_id = deck_spec["id"]
 
         # Evaluate the Five Review Gates before export
+        default_obj = (
+            scope.get("objective")
+            or (deck_story_plan.deck_title if deck_story_plan else None)
+            or deck_spec.get("title")
+            or "Analytical Review"
+        )
+        default_aud = (
+            scope.get("audience")
+            or (deck_story_plan.target_audience if deck_story_plan else None)
+            or deck_spec.get("metadata", {}).get("likely_audience")
+            or "General stakeholders"
+        )
         brief_data = deck_spec.get("metadata", {}).get("brief") or {
-            "objective": scope.get("objective", "Executive Leadership Review"),
-            "audience": scope.get("audience", "C-Suite & Operations Leadership"),
+            "objective": default_obj,
+            "audience": default_aud,
             "decision_requested": scope.get("decision_requested", ""),
             "main_takeaway": scope.get("main_takeaway", ""),
             "presentation_time_minutes": time_budget_min,
             "deliverable": scope.get("deliverable", "pptx"),
             "citation_requirement": scope.get("citation_requirement", "standard"),
             "motion_preference": motion_pref,
-            "success_criterion": f"After viewing this deck, the audience should understand {scope.get('main_takeaway') or scope.get('objective', 'operations')} and decide or do {scope.get('decision_requested', 'align on strategic priorities')}.",
+            "success_criterion": f"After viewing this deck, the audience should understand {scope.get('main_takeaway') or default_obj} and decide or do {scope.get('decision_requested', 'review findings')}.",
             "is_inferred": not bool(scope.get("decision_requested") and scope.get("main_takeaway")),
         }
         deck_spec.setdefault("metadata", {})["brief"] = brief_data
-        deck_spec["metadata"].setdefault("objective", brief_data.get("objective") or "Executive Leadership Review")
-        deck_spec["metadata"].setdefault("audience", brief_data.get("audience") or "C-Suite & Operations Leadership")
+        deck_spec["metadata"].setdefault("objective", default_obj)
+        deck_spec["metadata"].setdefault("audience", default_aud)
         review_gates = evaluate_automated_gates(
             deck_spec=deck_spec,
             verification_summary=deck_spec["metadata"].get("validation_summary"),

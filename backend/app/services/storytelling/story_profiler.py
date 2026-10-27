@@ -33,29 +33,78 @@ def coerce_to_numeric(series: pd.Series) -> pd.Series:
 
 
 def detect_sheet_domain(columns: list[str]) -> tuple[str, str]:
-    """Detects primary business domain and badge description from column names."""
+    """Detects primary business/analytical domain and badge description from column names.
+    Supports broad classification across demographics, education, retail, healthcare,
+    public administration, scientific research, finance, workforce, operations, etc.
+    """
     cols_clean = [str(c).lower().replace('_', '').replace(' ', '') for c in columns]
 
-    sales_kw = ('sales', 'weeklysales', 'store', 'revenue', 'order', 'orders', 'transaction', 'customer', 'product', 'item', 'price', 'pricing', 'cpi', 'fuelprice', 'unemployment', 'holiday', 'retail', 'margin', 'inventory', 'volume')
-    recruitment_kw = ('candidate', 'applicant', 'stage', 'timetohire', 'requisition', 'recruiter', 'offer', 'interview', 'source')
-    attendance_kw = ('attendance', 'absent', 'absence', 'leave', 'sick', 'present', 'shift', 'hours', 'overtime')
-    performance_kw = ('performance', 'rating', 'score', 'eval', 'kpi', 'goal', 'review', 'competency', 'potential')
-    compensation_kw = ('salary', 'compensation', 'payroll', 'bonus', 'equity', 'wage', 'hourly', 'pay')
-    retention_kw = ('attrition', 'turnover', 'exit', 'tenure', 'resignation', 'retention', 'termination')
-    training_kw = ('training', 'course', 'learning', 'certification', 'skill', 'module')
-    finance_kw = ('ebitda', 'expense', 'expenses', 'profit', 'cashflow', 'asset', 'liability', 'equity', 'opex', 'capex', 'ledger')
-    logistics_kw = ('shipment', 'shipping', 'delivery', 'carrier', 'warehouse', 'freight', 'transit', 'tracking', 'dispatch', 'route')
+    demographics_kw = (
+        'population', 'census', 'density', 'sexratio', 'literacy', 'demographic',
+        'agegroup', 'urban', 'rural', 'inhabitants', 'residents', 'growthrate',
+        'household', 'households'
+    )
+    education_kw = (
+        'student', 'school', 'grade', 'exam', 'score', 'marks', 'class', 'subject',
+        'teacher', 'gpa', 'academic', 'course', 'enrollment', 'tuition', 'curriculum',
+        'degree', 'graduation', 'alumni', 'passrate', 'failrate', 'lecture', 'outcome',
+        'learning', 'pedagogy', 'education'
+    )
+    retail_kw = (
+        'sales', 'weeklysales', 'store', 'revenue', 'order', 'orders', 'transaction',
+        'customer', 'product', 'item', 'price', 'pricing', 'cpi', 'fuelprice',
+        'unemployment', 'holiday', 'retail', 'margin', 'inventory', 'volume', 'sku',
+        'discount', 'markdown', 'pos'
+    )
+    marketing_kw = (
+        'campaign', 'clicks', 'impressions', 'ctr', 'cpc', 'conversion', 'leads',
+        'adspend', 'channel', 'roas', 'attribution', 'funnel', 'reach', 'engagement'
+    )
+    healthcare_kw = (
+        'patient', 'hospital', 'clinical', 'diagnosis', 'symptom', 'admission',
+        'treatment', 'dosage', 'medical', 'disease', 'vaccine', 'health', 'mortality',
+        'morbidity', 'doctor', 'physician', 'clinic', 'icu', 'vitals'
+    )
+    public_admin_kw = (
+        'municipal', 'council', 'voter', 'constituency', 'civic', 'subsidy',
+        'welfare', 'citizen', 'taxpayer', 'governance', 'parliament', 'ward'
+    )
+    scientific_kw = (
+        'specimen', 'sample', 'experiment', 'trial', 'measurement', 'sensor',
+        'wavelength', 'observation', 'species', 'gene', 'protein', 'assay'
+    )
+    finance_kw = (
+        'ebitda', 'expense', 'expenses', 'profit', 'cashflow', 'asset', 'liability',
+        'equity', 'opex', 'capex', 'ledger', 'balance', 'pnl', 'dividend', 'debt'
+    )
+    logistics_kw = (
+        'shipment', 'shipping', 'delivery', 'carrier', 'warehouse', 'freight',
+        'transit', 'tracking', 'dispatch', 'route', 'fleet', 'consignment'
+    )
+    workforce_kw = (
+        'candidate', 'applicant', 'stage', 'timetohire', 'requisition', 'recruiter',
+        'offer', 'interview', 'source', 'attendance', 'absent', 'absence', 'leave',
+        'sick', 'shift', 'overtime', 'performance', 'rating', 'salary', 'compensation',
+        'payroll', 'bonus', 'wage', 'hourly', 'pay', 'attrition', 'turnover', 'exit',
+        'tenure', 'resignation', 'retention', 'termination', 'employee', 'headcount'
+    )
+    geo_kw = (
+        'latitude', 'longitude', 'lat', 'lon', 'coordinates', 'elevation', 'perimeter',
+        'polygon', 'boundary', 'shape', 'spatial', 'geom', 'geojson'
+    )
 
     scores = {
-        'Retail & Commercial Sales Analytics': sum(any(k in c for k in sales_kw) for c in cols_clean),
-        'Recruitment & Hiring Pipeline': sum(any(k in c for k in recruitment_kw) for c in cols_clean),
-        'Attendance & Working Hours': sum(any(k in c for k in attendance_kw) for c in cols_clean),
-        'Performance & Talent Appraisal': sum(any(k in c for k in performance_kw) for c in cols_clean),
-        'Compensation & Payroll': sum(any(k in c for k in compensation_kw) for c in cols_clean),
-        'Workforce Retention & Attrition': sum(any(k in c for k in retention_kw) for c in cols_clean),
-        'Training & Skills Development': sum(any(k in c for k in training_kw) for c in cols_clean),
+        'Demographics & Population Analytics': sum(any(k in c for k in demographics_kw) for c in cols_clean),
+        'Education & Academic Performance': sum(any(k in c for k in education_kw) for c in cols_clean),
+        'Retail & Commercial Sales Analytics': sum(any(k in c for k in retail_kw) for c in cols_clean),
+        'Marketing & Campaign Analytics': sum(any(k in c for k in marketing_kw) for c in cols_clean),
+        'Healthcare & Clinical Analytics': sum(any(k in c for k in healthcare_kw) for c in cols_clean),
+        'Public Administration & Civic Data': sum(any(k in c for k in public_admin_kw) for c in cols_clean),
+        'Scientific & Research Analytics': sum(any(k in c for k in scientific_kw) for c in cols_clean),
         'Finance & Accounting Analytics': sum(any(k in c for k in finance_kw) for c in cols_clean),
         'Supply Chain & Logistics': sum(any(k in c for k in logistics_kw) for c in cols_clean),
+        'Workforce & Talent Analytics': sum(any(k in c for k in workforce_kw) for c in cols_clean),
+        'Geographic & Spatial Analytics': sum(any(k in c for k in geo_kw) for c in cols_clean),
     }
 
     best_domain = max(scores, key=scores.get)

@@ -81,10 +81,14 @@ class AnalyticalOpportunityPlanner:
                 enrich_raw = json.loads(row[1]) if row and row[1] else {}
 
                 profile_map: dict[str, dict[str, Any]] = {}
-                for p in profiles_raw:
-                    cname = p.get("column") or p.get("name") or ""
-                    if cname:
-                        profile_map[cname] = p
+                if isinstance(profiles_raw, dict):
+                    profiles_raw = profiles_raw.get("columns") or profiles_raw.get("profiles") or []
+                if isinstance(profiles_raw, list):
+                    for p in profiles_raw:
+                        if isinstance(p, dict):
+                            cname = p.get("column") or p.get("name") or ""
+                            if cname:
+                                profile_map[cname] = p
 
                 semantic_groups = enrich_raw.get("semantic_groups", [])
 

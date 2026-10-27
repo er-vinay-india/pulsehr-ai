@@ -162,7 +162,7 @@ def reorder_presentation_slides(slides: list[dict[str, Any]], deck_title: str = 
                 s["layout"] = "comparison_split"
             elif any(w in t for w in ["action", "roadmap", "initiative"]):
                 s["layout"] = "action_plan"
-            elif any(w in t for w in ["scope", "baseline", "kpi"]):
+            elif any(w in t for w in ["scope", "baseline", "kpi", "glance"]) or (s.get("metrics") and not s.get("chart") and not s.get("table_data")):
                 s["layout"] = "kpi_summary"
             else:
                 s["layout"] = "chart_narrative"

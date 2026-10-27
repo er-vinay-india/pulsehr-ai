@@ -57,6 +57,7 @@ class StudioSlideStatus(BaseModel):
     layout: str
     status: SlideThumbnailState = SlideThumbnailState.PREPARING
     thumbnail_url: Optional[str] = None
+    html_url: Optional[str] = None
     render_fingerprint: Optional[str] = None
     zones: list[str] = Field(default_factory=list)
     error: Optional[str] = None
@@ -65,6 +66,7 @@ class StudioSlideStatus(BaseModel):
 class StudioPresentationStatus(BaseModel):
     """Typed studio progress contract reflecting real backend state without fake timers."""
     deck_id: Optional[str] = None
+    html_url: Optional[str] = None
     job_id: str
     current_stage: str = StudioStage.UNDERSTANDING_DATA.value
     stage_label: str = "Understanding your data"

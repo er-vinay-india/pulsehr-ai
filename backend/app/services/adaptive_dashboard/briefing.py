@@ -399,14 +399,15 @@ def build_executive_briefing_element(
             subj_nums = [float(n) for n in re.findall(r"\d+(?:\.\d+)?", str(decision.subject_label))]
             sample_nums = [float(n) for n in re.findall(r"\d+(?:\.\d+)?", str(decision.sample_label))]
             obs_nums = [float(n) for n in re.findall(r"\d+(?:\.\d+)?", str(decision.formatted_observed_value))]
-            gap_nums = [float(n) for n in re.findall(r"\d+(?:\.\d+)?", str(decision.formatted_gap_value))]
+            gap_nums = [float(n) for n in re.findall(r"\d+(?:\.\d+)?", str(decision.formatted_gap_value))] + [float(n) for n in re.findall(r"\d+(?:\.\d+)?", str(clean_gap))]
+            act_nums = [float(n) for n in re.findall(r"\d+(?:\.\d+)?", str(action_text))]
             numeric_vals = [
                 decision.observed_value,
                 decision.comparator_value,
                 decision.gap_value,
                 abs(decision.gap_value),
                 decision.sample_size,
-            ] + subj_nums + sample_nums + obs_nums + gap_nums
+            ] + subj_nums + sample_nums + obs_nums + gap_nums + act_nums
             claims.append(
                 BriefingClaim(
                     claim_id="claim_action_decision_focus",

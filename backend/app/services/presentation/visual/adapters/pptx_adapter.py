@@ -42,6 +42,8 @@ class PPTXAdapter:
                 layout_name = "action_plan"
             elif spec.layout.family.value == "TABLE":
                 layout_name = "table_detail"
+            elif spec.layout.family.value in ("CLOSING", "SUMMARY"):
+                layout_name = "comparison_split"
 
         # Transform chart spec to standard exporter chart dictionary
         chart_dict = None
@@ -74,15 +76,48 @@ class PPTXAdapter:
                 "evidence_id": k.get("evidence_id", "EVID-EXEC-01")
             })
 
+        # Ensure layout matches visual assets present
+        if not chart_dict and layout_name in ("chart_narrative", "full_chart_takeaway", "two_charts", "dual_chart", "chart_insight", "chart_full"):
+            if metrics_list:
+                layout_name = "kpi_summary"
+            elif spec.table_data:
+                layout_name = "table_detail"
+            else:
+                layout_name = "comparison_split"
+
+        is_cover = bool(
+            spec.metadata.get("is_cover")
+            or layout_name == "title_cover"
+            or (spec.layout.variant == "title_cover")
+        )
+        if is_cover:
+            layout_name = "title_cover"
+
+        bullets_list = []
+        if is_cover:
+            meta = spec.metadata or {}
+            p_name = meta.get("presenter_name") or "[Presenter Name]"
+            org_name = meta.get("organization_name") or "[Organization / Institution]"
+            p_role = meta.get("presenter_role")
+            p_date = meta.get("presentation_date") or "[Date]"
+            bullets_list.append(f"Presented by: {p_name}")
+            bullets_list.append(f"Organization: {org_name}")
+            if p_role:
+                bullets_list.append(f"Department / Role: {p_role}")
+            bullets_list.append(f"Date: {p_date}")
+        elif spec.insights:
+            bullets_list = list(spec.insights)
+
         # Base slide dictionary
         slide_dict: dict[str, Any] = {
             "slide_index": spec.sequence_number,
             "title": spec.headline,
             "subtitle": spec.subtitle,
-            "category": spec.visual_story.primary_message or "Executive Briefing",
+            "category": spec.visual_story.primary_message or "Presentation Overview",
             "layout": layout_name,
             "narrative": "\n".join(spec.insights) if spec.insights else spec.visual_story.primary_message,
             "takeaway": spec.visual_story.primary_message,
+            "bullets": bullets_list if bullets_list else None,
             "metrics": metrics_list if metrics_list else None,
             "chart": chart_dict,
             "table_data": spec.table_data,
@@ -91,6 +126,7 @@ class PPTXAdapter:
             "evidence_id": spec.source_footer.evidence_citation or "EVID-EXEC-01",
             "source_label": spec.source_footer.dataset_label,
             "metadata": {
+                **spec.metadata,
                 "canonical_family": spec.layout.family.value,
                 "layout_variant": spec.layout.variant,
                 "visual_family": spec.primary_visual.visual_family,
@@ -106,7 +142,7 @@ class PPTXAdapter:
         cls,
         specs: list[VisualSpecification],
         theme_id: str = "bold_signal",
-        deck_title: str = "Executive Presentation"
+        deck_title: str = "Presentation Overview"
     ) -> Any:
         """Exports a list of VisualSpecification slides directly to a native PPTX file."""
         import time

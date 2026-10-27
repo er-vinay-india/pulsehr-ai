@@ -2,6 +2,7 @@ import React, { useMemo, useState, useEffect } from "react";
 import VisualSpecRenderer from "./VisualSpecRenderer";
 import SemanticIcon from "./SemanticIcon";
 import ActionIconButton from "../../design-system/components/ActionIconButton";
+import Button from "../../design-system/components/Button";
 import DataTable from "../DataTable";
 import { resolvePresentationLabel } from "../../design-system/registries/PresentationLabelResolver";
 import { getContextualExplorerTarget } from "../../utils/explorerNavigation";
@@ -252,8 +253,8 @@ export default function ExecutiveVisualCard({
             fontSize: "0.68rem",
             padding: "2px 6px",
             borderRadius: "4px",
-            backgroundColor: isDark ? "rgba(59, 130, 246, 0.2)" : "rgba(219, 234, 254, 0.8)",
-            color: isDark ? "#93c5fd" : "#1d4ed8",
+            backgroundColor: "var(--hv-brand-accent-subtle, rgba(59, 130, 246, 0.15))",
+            color: "var(--color-brand-accent, var(--hv-brand-accent))",
             fontWeight: 600,
           }}
         >
@@ -452,40 +453,21 @@ export default function ExecutiveVisualCard({
             {availableMetrics.map((m) => {
               const isSelected = m.metric_id === (activeMetric?.metric_id || availableMetrics[0].metric_id);
               return (
-                <button
+                <Button
                   key={m.metric_id}
-                  type="button"
+                  variant={isSelected ? "PRIMARY" : "GHOST"}
+                  size="sm"
                   role="tab"
                   aria-selected={isSelected}
                   onClick={() => setSelectedMetricId(m.metric_id)}
                   style={{
-                    padding: "4px 10px",
+                    padding: "3px 8px",
                     fontSize: "0.74rem",
                     fontWeight: isSelected ? 700 : 500,
-                    borderRadius: "6px",
-                    border: isSelected
-                      ? `1px solid ${isDark ? "#38bdf8" : "#2563eb"}`
-                      : `1px solid ${isDark ? "#334155" : "#e2e8f0"}`,
-                    backgroundColor: isSelected
-                      ? isDark
-                        ? "rgba(56, 189, 248, 0.15)"
-                        : "rgba(37, 99, 235, 0.08)"
-                      : isDark
-                      ? "#1e293b"
-                      : "#f8fafc",
-                    color: isSelected
-                      ? isDark
-                        ? "#38bdf8"
-                        : "#1d4ed8"
-                      : isDark
-                      ? "#94a3b8"
-                      : "#475569",
-                    cursor: "pointer",
-                    transition: "all 0.15s ease",
                   }}
                 >
                   {m.label}
-                </button>
+                </Button>
               );
             })}
           </div>
@@ -539,30 +521,21 @@ export default function ExecutiveVisualCard({
               {activeTakeaway}
             </p>
             {isGeospatial && (
-              <button
-                type="button"
+              <Button
+                variant="GHOST"
+                size="sm"
                 onClick={() => setIsRankingDrawerOpen(true)}
                 className="geo-view-ranking-btn"
                 aria-haspopup="dialog"
                 aria-expanded={isRankingDrawerOpen}
                 style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "5px",
-                  background: isDark ? "rgba(56, 189, 248, 0.1)" : "rgba(37, 99, 235, 0.06)",
-                  border: `1px solid ${isDark ? "rgba(56, 189, 248, 0.25)" : "rgba(37, 99, 235, 0.18)"}`,
-                  borderRadius: "6px",
-                  padding: "5px 10px",
-                  color: isDark ? "#38bdf8" : "#2563eb",
                   fontSize: "0.75rem",
                   fontWeight: 600,
-                  cursor: "pointer",
                   whiteSpace: "nowrap",
-                  transition: "all 0.15s ease",
                 }}
               >
                 View ranking →
-              </button>
+              </Button>
             )}
           </figcaption>
         </figure>
@@ -583,8 +556,8 @@ export default function ExecutiveVisualCard({
             aria-labelledby={`geo-drawer-title-${topic.topic_id}`}
             style={{
               width: "min(100%, 720px)",
-              backgroundColor: isDark ? "#0f172a" : "#ffffff",
-              color: isDark ? "#f8fafc" : "#0f172a",
+              backgroundColor: "var(--color-bg-surface, var(--hv-bg-surface))",
+              color: "var(--color-text-primary, var(--hv-text-primary))",
             }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -592,11 +565,11 @@ export default function ExecutiveVisualCard({
               className="drawer-header"
               style={{
                 padding: "16px 20px",
-                borderBottom: `1px solid ${isDark ? "#334155" : "#e2e8f0"}`,
+                borderBottom: "1px solid var(--color-border, var(--hv-border))",
                 display: "flex",
                 justifyContent: "space-between",
                 alignItems: "flex-start",
-                backgroundColor: isDark ? "#1e293b" : "#f8fafc",
+                backgroundColor: "var(--color-bg-surface-alt, var(--hv-bg-surface-alt))",
               }}
             >
               <div>
@@ -606,7 +579,7 @@ export default function ExecutiveVisualCard({
                     margin: 0,
                     fontSize: "1.15rem",
                     fontWeight: 700,
-                    color: isDark ? "#f8fafc" : "#0f172a",
+                    color: "var(--color-text-primary, var(--hv-text-primary))",
                   }}
                 >
                   {activeMetric?.label || "Territory"} Ranking
@@ -614,7 +587,7 @@ export default function ExecutiveVisualCard({
                 <div
                   style={{
                     fontSize: "0.78rem",
-                    color: isDark ? "#94a3b8" : "#64748b",
+                    color: "var(--color-text-secondary, var(--hv-text-secondary))",
                     marginTop: "3px",
                   }}
                 >
@@ -632,34 +605,24 @@ export default function ExecutiveVisualCard({
                       gap: "4px",
                       fontSize: "0.75rem",
                       fontWeight: 600,
-                      color: isDark ? "#38bdf8" : "#2563eb",
+                      color: "var(--color-brand-accent, var(--hv-brand-accent))",
                       textDecoration: "none",
                       padding: "4px 8px",
                       borderRadius: "4px",
-                      border: `1px solid ${isDark ? "rgba(56, 189, 248, 0.3)" : "rgba(37, 99, 235, 0.2)"}`,
+                      border: "1px solid var(--color-border, var(--hv-border))",
                     }}
                   >
                     <span>Explore in Data Explorer</span>
                     <span>→</span>
                   </a>
                 )}
-                <button
-                  type="button"
+                <ActionIconButton
+                  action="close"
                   onClick={() => setIsRankingDrawerOpen(false)}
-                  aria-label="Close ranking drawer"
-                  style={{
-                    background: "none",
-                    border: "none",
-                    color: isDark ? "#94a3b8" : "#64748b",
-                    fontSize: "1.2rem",
-                    cursor: "pointer",
-                    padding: "4px 8px",
-                    borderRadius: "4px",
-                    lineHeight: 1,
-                  }}
-                >
-                  ✕
-                </button>
+                  ariaLabel="Close ranking drawer"
+                  tooltip="Close ranking drawer"
+                  size={16}
+                />
               </div>
             </div>
 
@@ -683,43 +646,25 @@ export default function ExecutiveVisualCard({
                     flexWrap: "wrap",
                   }}
                 >
-                  <span style={{ fontSize: "0.75rem", fontWeight: 600, color: isDark ? "#94a3b8" : "#64748b", marginRight: "4px" }}>
+                  <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--color-text-secondary, var(--hv-text-secondary))", marginRight: "4px" }}>
                     Metric:
                   </span>
                   {availableMetrics.map((m) => {
                     const isSelected = m.metric_id === (activeMetric?.metric_id || availableMetrics[0].metric_id);
                     return (
-                      <button
+                      <Button
                         key={`drawer-m-${m.metric_id}`}
-                        type="button"
+                        variant={isSelected ? "PRIMARY" : "GHOST"}
+                        size="sm"
                         onClick={() => setSelectedMetricId(m.metric_id)}
                         style={{
-                          padding: "3px 8px",
+                          padding: "2px 8px",
                           fontSize: "0.72rem",
                           fontWeight: isSelected ? 700 : 500,
-                          borderRadius: "5px",
-                          border: isSelected
-                            ? `1px solid ${isDark ? "#38bdf8" : "#2563eb"}`
-                            : `1px solid ${isDark ? "#334155" : "#e2e8f0"}`,
-                          backgroundColor: isSelected
-                            ? isDark
-                              ? "rgba(56, 189, 248, 0.15)"
-                              : "rgba(37, 99, 235, 0.08)"
-                            : isDark
-                            ? "#1e293b"
-                            : "#f8fafc",
-                          color: isSelected
-                            ? isDark
-                              ? "#38bdf8"
-                              : "#1d4ed8"
-                            : isDark
-                            ? "#94a3b8"
-                            : "#475569",
-                          cursor: "pointer",
                         }}
                       >
                         {m.label}
-                      </button>
+                      </Button>
                     );
                   })}
                 </div>

@@ -548,7 +548,8 @@ class GenericBusinessExecutiveAnalytics(IExecutiveAnalyticsStrategy):
                     except (ValueError, TypeError):
                         pass
 
-            if numeric_count >= 5:
+            min_numeric_required = min(5, max(1, len(rows[:10])))
+            if numeric_count >= min_numeric_required:
                 num_cols.append(k)
             else:
                 distinct_vals = set(str(r.get(k, "")).strip() for r in rows if r.get(k) is not None)

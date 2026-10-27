@@ -38,6 +38,7 @@ export default function FrontendSlidesDeck({
   const [isMobileViewport, setIsMobileViewport] = useState(() => typeof window !== "undefined" && window.innerWidth <= 768);
   const [forceDesktopMode, setForceDesktopMode] = useState(false);
   const [forceMobileMode, setForceMobileMode] = useState(false);
+  const [stageMode, setStageMode] = useState("html"); // "html" (Live Accessible HTML) | "snapshot" (PPTX Raster Image)
   const [inlineEditActive, setInlineEditActive] = useState(false);
   const [showEditPrompt, setShowEditPrompt] = useState(false);
   const hidePromptTimeout = useRef(null);
@@ -223,11 +224,11 @@ export default function FrontendSlidesDeck({
   const progressPct = slides.length > 1 ? ((activeSlideIndex + 1) / slides.length) * 100 : 100;
 
   const editor = isEditable && !readOnly && inlineEditActive && currentSlide && (
-    <div id="deck-slide-text-editor" className="pres-slide-text-editor" key={currentSlide.id} role="region" aria-label="Edit slide text">
+    <div id="deck-slide-text-editor" className="pres-slide-text-editor" key={currentSlide.physical_slide_id || currentSlide.id || activeSlideIndex} role="region" aria-label="Edit slide text">
       {[['title', 'Title'], ['subtitle', 'Subtitle'], ['narrative', 'Body'], ['bullets', 'Takeaways (one per line)']].map(([field, label]) => (
         <label key={field}>{label}
           <textarea aria-label={`Slide ${label}`} rows={field === "bullets" ? 3 : 2}
-            key={`${currentSlide.id}-${field}-${JSON.stringify(currentSlide[field])}`}
+            key={`${currentSlide.physical_slide_id || currentSlide.id || activeSlideIndex}-${field}-${JSON.stringify(currentSlide[field])}`}
             defaultValue={field === "bullets" ? (currentSlide.bullets || []).map(item => typeof item === "string" ? item : item.text).join("\n") : currentSlide[field] || ""}
             onBlur={event => {
               const value = field === "bullets" ? event.target.value.split("\n").filter(Boolean) : event.target.value;
@@ -285,6 +286,9 @@ export default function FrontendSlidesDeck({
               isEditable={!readOnly && (isEditable && inlineEditActive)}
               onUpdate={updated => onUpdateSlide(activeSlideIndex, updated)}
               onViewEvidence={onViewEvidence}
+              deckId={deckId || deckSpec?.id}
+              deckSpec={deckSpec}
+              stageMode={stageMode}
             />
           )}
         </div>
@@ -354,6 +358,21 @@ export default function FrontendSlidesDeck({
               <span className="symbolic-tooltip">Download Standalone HTML Deck (Zero-Dependency)</span>
             </DeckControl>
           )}
+
+          <DeckControl className="symbolic-btn-wrap">
+            <button
+              type="button"
+              className={`symbolic-action-btn ${stageMode === "html" ? "active" : ""}`}
+              onClick={() => setStageMode(m => m === "html" ? "snapshot" : "html")}
+              aria-label="Toggle between Live HTML and PPTX Snapshot"
+            >
+              <FileText size={14} />
+              <span className="btn-label-responsive">{stageMode === "html" ? "Live HTML" : "PPTX Image"}</span>
+            </button>
+            <span className="symbolic-tooltip">
+              {stageMode === "html" ? "Viewing Live Accessible HTML (Click to switch to PPTX Image)" : "Viewing PPTX Image Snapshot (Click to switch to Live HTML)"}
+            </span>
+          </DeckControl>
 
           <DeckControl className="symbolic-btn-wrap">
             <button
@@ -429,7 +448,7 @@ export default function FrontendSlidesDeck({
             const isActive = idx === activeSlideIndex;
             return (
               <div
-                key={slide.id || idx}
+                key={slide.physical_slide_id || slide.id || idx}
                 className={`slide ${isActive ? "active visible" : ""}`}
                 data-transition={slide.transition || deckSpec?.metadata?.transition || "none"}
                 data-animation={slide.animation || "none"}
@@ -447,6 +466,9 @@ export default function FrontendSlidesDeck({
                   isEditable={!readOnly && (isEditable && inlineEditActive) && isActive}
                   onUpdate={updated => onUpdateSlide(idx, updated)}
                   onViewEvidence={onViewEvidence}
+                  deckId={deckId || deckSpec?.id}
+                  deckSpec={deckSpec}
+                  stageMode={stageMode}
                 />
               </div>
             );

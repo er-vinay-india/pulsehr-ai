@@ -91,7 +91,7 @@ class SlideContextObserver:
         self.scope = scope or {}
         self.primary_ctx = primary_ctx or {}
         self.workspace_evidence = workspace_evidence or {}
-        self.objective = self.scope.get("objective") or "Executive Leadership Review"
+        self.objective = self.scope.get("objective") or self.scope.get("title") or "Analytical Presentation"
         self.domain = self.primary_ctx.get("domain") or "Operations"
 
         # 1. Lock in the exact slide count right in Phase 1

@@ -56,7 +56,11 @@ def build_shared_evidence_package(conn, scope: dict[str, Any]) -> dict[str, Any]
         raise ValueError("Cannot assemble evidence package: No eligible datasets in presentation scope.")
 
     included_sheets = preflight["included_sheets"]
-    primary_sheet_id = included_sheets[0]["id"]
+    target_sid = scope.get("sheet_id")
+    if target_sid and any(s["id"] == int(target_sid) for s in included_sheets):
+        primary_sheet_id = int(target_sid)
+    else:
+        primary_sheet_id = included_sheets[0]["id"]
 
     # 1. Pull sheet contexts and deterministic profiles
     sheet_contexts = {}

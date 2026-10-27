@@ -85,6 +85,7 @@ def validate_briefing_claims(
             flags=re.IGNORECASE,
         )
         text_without_dates = re.sub(r"\b\d{4}-\d{2}(?:-\d{2})?\b", " ", text_without_dates)
+        text_without_dates = re.sub(r"\b\d{4}-\d{4}\b", " ", text_without_dates)
 
         clean_text = text_without_dates
         if available_components:
@@ -97,7 +98,7 @@ def validate_briefing_claims(
                 if hasattr(comp, "subject_label") and comp.subject_label and any(c.isdigit() for c in str(comp.subject_label)):
                     clean_text = clean_text.replace(str(comp.subject_label), " ")
 
-        tokens = re.findall(r"(?<![\w#])[-+]?\$?\d{1,3}(?:,\d{3})*(?:\.\d+)?(?:[kKmMbBtT])?%?(?![a-zA-Z0-9_])", clean_text)
+        tokens = re.findall(r"(?<![\w#])[-+]?\$?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?(?:[kKmMbBtT])?%?(?![a-zA-Z0-9_])", clean_text)
         for token in tokens:
             clean_tok = token.replace(",", "").replace("$", "").rstrip("%").lstrip("+")
             suffix = ""

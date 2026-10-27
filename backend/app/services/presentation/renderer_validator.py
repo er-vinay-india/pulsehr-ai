@@ -200,4 +200,36 @@ class RendererValidator:
                         f"Geometry mismatch for object '{obj_layout.object_id}': layout bounds {b2} != applied bounds {b1}"
                     )
 
+                # Hard rendering guard for reused visuals (Stage 3)
+                v_strat = (
+                    obj_record.metadata.get("visual_strategy")
+                    or obj_layout.metadata.get("visual_strategy")
+                )
+                if hasattr(v_strat, "value"):
+                    v_strat = v_strat.value
+
+                if v_strat == "REUSE_EXISTING":
+                    upstream_vtype = (
+                        obj_record.visual_type
+                        or obj_record.metadata.get("visual_type")
+                        or obj_layout.metadata.get("visual_type")
+                    )
+                    r_mode = (
+                        obj_record.render_mode.value
+                        if hasattr(obj_record.render_mode, "value")
+                        else str(obj_record.render_mode or obj_record.metadata.get("render_mode") or "")
+                    )
+                    r_fam = (
+                        obj_record.rendered_visual_family
+                        or obj_record.metadata.get("rendered_visual_family")
+                    )
+
+                    # Hard rule: rendered_visual_family == upstream_vtype OR render_mode == PRESERVED_IMAGE
+                    if r_mode != "PRESERVED_IMAGE" and r_fam != upstream_vtype:
+                        raise RendererValidationError(
+                            f"Visual family substitution prohibited for REUSE_EXISTING visual '{obj_layout.object_id}': "
+                            f"Upstream visual_type is '{upstream_vtype}', but rendered as family '{r_fam}' "
+                            f"with render_mode '{r_mode}'."
+                        )
+
         logger.info("Programmatic validation PASSED for presentation: %s (%d slides)", pptx_path.name, expected_slide_count)

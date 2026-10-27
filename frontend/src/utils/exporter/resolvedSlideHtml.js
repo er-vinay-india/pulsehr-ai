@@ -3,7 +3,8 @@ import { escapeHtml, generateSvgChartHtml } from './exportFormatter.js';
 // Uses the server's export geometry; never truncates checklist items or table rows.
 export function buildResolvedSlideHtml(slide, index, total, theme, plan, part = 0, background = '') {
   const box = block => `position:absolute;left:${block.x}px;top:${block.y}px;width:${block.width}px;height:${block.height}px;`;
-  const blocks = (plan.pages || [plan.blocks])[part];
+  const pagesList = plan?.pages || (plan?.blocks ? [plan.blocks] : [[]]);
+  const blocks = pagesList[part] || pagesList[0] || [];
   const content = blocks.map(block => {
     if (block.kind === 'checklist') return `<div style="${box(block)}display:flex;gap:10px;align-items:flex-start;font-size:${block.size}px;line-height:1.22;">
       <span aria-hidden="true" style="width:${block.icon_size}px;height:${block.icon_size}px;margin-top:2px;flex-shrink:0;border:2px solid currentColor;border-radius:50%;display:flex;align-items:center;justify-content:center;font:700 22px/1 Arial;">✓</span>
@@ -16,6 +17,6 @@ export function buildResolvedSlideHtml(slide, index, total, theme, plan, part = 
   }).join('');
   return `<section class="slide ${index === 0 ? 'active visible' : ''}" data-index="${index}" style="background:${theme.bg_color};color:${theme.primary_text};${background ? `background-image:url('${escapeHtml(background)}');background-size:100% 100%;` : ''}">
     <div style="position:relative;width:${plan.width}px;height:${plan.height}px;transform:scale(2);transform-origin:top left;font-family:${theme.font_body};">${content}
-      <div style="position:absolute;left:762px;top:510px;width:150px;font-size:11px;text-align:right;">Slide ${slide.order || index+1} of ${total}${plan.pages.length > 1 ? ` · ${part+1}/${plan.pages.length}` : ''}</div>
+      <div style="position:absolute;left:762px;top:510px;width:150px;font-size:11px;text-align:right;">Slide ${slide.order || index+1} of ${total}${pagesList.length > 1 ? ` · ${part+1}/${pagesList.length}` : ''}</div>
     </div></section>`;
 }

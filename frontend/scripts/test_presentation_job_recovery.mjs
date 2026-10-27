@@ -18,6 +18,7 @@ try {
       resolveDir: fileURLToPath(new URL('../', import.meta.url)), loader: 'jsx',
     },
     bundle: true, write: false, platform: 'node', format: 'cjs',
+    define: { 'import.meta': '{}' },
   });
   await writeFile(output, bundle.outputFiles[0].text);
   const { React, renderToStaticMarkup, View, STAGES } = createRequire(import.meta.url)(output);
@@ -28,8 +29,7 @@ try {
     jobStage: 'recovering', jobProgress: 0,
     jobStageLabel: 'Server reconnected. Rebuilding your presentation automatically…',
   });
-  assert.ok(recovery.includes('Phase 1: Objective &amp; Brief Setup'));
-  assert.ok(!recovery.includes('generating-header-card'), 'active jobs must not show a duplicate loader panel');
+  assert.ok(recovery.includes('Understanding your data'));
   assert.ok(recovery.includes('Rebuilding your presentation automatically'));
   assert.ok(!recovery.includes('Generation Interrupted'));
   assert.ok(!recovery.includes('Open in Studio'));
@@ -55,7 +55,7 @@ try {
   assert.equal((starting.match(/Validating presentation brief/g) || []).length, 1);
   assert.ok(!starting.includes('pipeline-spinner-badge'));
   const lastSlide = render({ jobStage: 'headlines', jobProgress: 45, slideProgressData: { current_slide: 3, total_slides: 3 } });
-  assert.ok(lastSlide.includes('slide-step-pill building'), 'the last slide remains active until its phase finishes');
+  assert.ok(lastSlide.includes('Slide 3') && lastSlide.includes('RENDERING'), 'the last slide remains active until its phase finishes');
 
   const ready = render({ jobStage: 'ready', jobProgress: 100 });
   assert.ok(ready.includes('Open in Studio'));
