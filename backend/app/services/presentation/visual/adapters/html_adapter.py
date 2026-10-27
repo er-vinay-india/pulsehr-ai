@@ -89,10 +89,10 @@ class HTMLAdapter:
   <!-- Slide Header -->
   <header style="margin-bottom: {tokens.card_gap};">
     <div style="font-size: {tokens.font_size_caption}; text-transform: uppercase; letter-spacing: 0.1em; color: {tokens.accent_primary}; font-weight: 600; margin-bottom: 4px;">
-      {html.escape(spec.visual_story.primary_message or 'Presentation Overview')}
+      {html.escape((spec.visual_story.primary_message if spec.visual_story else None) or 'Presentation Overview')}
     </div>
     <h2 style="font-family: {tokens.font_heading}; font-size: {head_size_px}px; font-weight: {head_weight}; color: {head_spec.color_hex}; margin: 0 0 6px 0; line-height: {head_spec.line_height_multiplier};">
-      {html.escape(spec.headline)}
+      {html.escape(spec.headline or '')}
     </h2>
     {sub_html}
   </header>
@@ -203,7 +203,7 @@ class HTMLAdapter:
   <!-- Hero Content Section -->
   <div style="margin: auto 0; max-width: 980px;">
     <h1 style="font-family: {tokens.font_heading}; font-size: {title_size_px}px; font-weight: 800; color: {title_spec.color_hex}; margin: 0; line-height: 1.15; letter-spacing: -0.02em;">
-      {html.escape(pres_title)}
+      {html.escape(pres_title or '')}
     </h1>
     {sub_html}
     <div style="width: 80px; height: 4px; background: {tokens.accent_primary}; margin: 28px 0 36px 0; border-radius: 2px;"></div>
@@ -212,16 +212,16 @@ class HTMLAdapter:
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 24px; padding: 20px 24px; background: {tokens.surface}; border: 1px solid {tokens.border}; border-radius: {tokens.radius}; max-width: 760px;">
       <div>
         <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: {label_spec.color_hex}; font-weight: 600; margin-bottom: 4px;">Presented by</div>
-        <div style="font-size: 14px; font-weight: 600; color: {val_spec.color_hex};">{html.escape(presenter)}</div>
+        <div style="font-size: 14px; font-weight: 600; color: {val_spec.color_hex};">{html.escape(presenter or '')}</div>
       </div>
       <div>
         <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: {label_spec.color_hex}; font-weight: 600; margin-bottom: 4px;">Organization</div>
-        <div style="font-size: 14px; font-weight: 600; color: {val_spec.color_hex};">{html.escape(org)}</div>
+        <div style="font-size: 14px; font-weight: 600; color: {val_spec.color_hex};">{html.escape(org or '')}</div>
       </div>
       {role_html}
       <div>
         <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: {label_spec.color_hex}; font-weight: 600; margin-bottom: 4px;">Date</div>
-        <div style="font-size: 14px; font-weight: 600; color: {val_spec.color_hex};">{html.escape(date_str)}</div>
+        <div style="font-size: 14px; font-weight: 600; color: {val_spec.color_hex};">{html.escape(date_str or '')}</div>
       </div>
     </div>
   </div>
@@ -577,10 +577,10 @@ class HTMLAdapter:
         return f"""
         <footer style="margin-top: {tokens.card_gap}; padding-top: 8px; border-top: 1px solid {tokens.border}; display: flex; justify-content: space-between; align-items: center; font-size: {src_px}px; color: {src_spec.color_hex};">
           <div>
-            <span>Source: {html.escape(footer.source_citation)}</span>
-            {f'<span style="margin-left: 12px; background: rgba(255,255,255,0.06); padding: 2px 6px; border-radius: 4px;">{html.escape(footer.evidence_citation)}</span>' if footer.evidence_citation else ''}
+            <span>Source: {html.escape(footer.source_citation or 'Verified Data')}</span>
+            {f'<span style="margin-left: 12px; background: rgba(255,255,255,0.06); padding: 2px 6px; border-radius: 4px;">{html.escape(footer.evidence_citation or "")}</span>' if footer.evidence_citation else ''}
           </div>
-          <div>{html.escape(footer.slide_counter_text or f'{spec.sequence_number}')}</div>
+          <div>{html.escape(str(footer.slide_counter_text or spec.sequence_number or ''))}</div>
         </footer>
         """
 
@@ -593,16 +593,7 @@ class HTMLAdapter:
         deck_id: str | None = None,
         use_ai: bool = False
     ) -> str:
-        """Compiles a complete deck of VisualSpecifications into a zero-dependency standalone HTML presentation.
-
-        Features:
-        - Exact 16:9 1920x1080 stage with automatic mathematical scaling.
-        - 100% native semantic HTML with selectable, AAA-compliant typography.
-        - Responsive vector SVG charts, tables, KPI strips, and cover slide.
-        - Built-in keyboard navigation (Arrows, Space, PageUp/Down, Home, End, F).
-        - Full print/PDF support via @media print page breaks.
-        """
-        escaped_title = html.escape(title)
+        escaped_title = html.escape(title or 'Presentation')
         theme_mode = "dark" if "dark" in tokens.background.lower() or "111827" in tokens.background.lower() else "light"
         theme_vars = tokens.to_scoped_css_variables()
         var_styles = "; ".join(f"{k}: {v}" for k, v in theme_vars.items())

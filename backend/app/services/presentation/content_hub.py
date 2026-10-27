@@ -29,6 +29,7 @@ from .content_models import (
     VisualCompleteness,
     VisualStrategy,
 )
+from .topic_contract import compute_canonical_semantic_hash
 
 logger = logging.getLogger(__name__)
 
@@ -222,6 +223,8 @@ class DashboardContentProvider(PresentationContentProvider):
                     visual_spec=vspec,
                     evidence_ids=list(t_dict.get("evidence_ids") or []),
                     fact_id=t_dict.get("fact_id"),
+                    topic_id=t_dict.get("topic_id") or topic_id,
+                    semantic_hash=t_dict.get("semantic_hash") or (compute_canonical_semantic_hash(t_dict) if "topic_id" in t_dict else None),
                     source_sheet_name=(dataset_context.get("target_sheet") or {}).get("name"),
                     dimension_name=t_dict.get("dimension") or t_dict.get("ranking_direction"),
                     metric_name=t_dict.get("metric"),
@@ -756,8 +759,6 @@ class PresentationContentHub:
             or scope.get("title")
             or "Audited Dataset"
         )
-        domain = scope.get("domain") or dataset_context.get("domain") or "general"
-
         # PPT Architecture: Deterministically assemble PresentationEvidenceUniverse & ContextProfile
         from .presentation_evidence import build_presentation_evidence_universe
         evidence_universe = build_presentation_evidence_universe(
@@ -767,10 +768,17 @@ class PresentationContentHub:
         )
         context_profile = evidence_universe.context_profile
 
+        explicit_domain = scope.get("domain") or dataset_context.get("domain")
+        final_domain = (
+            str(explicit_domain).strip()
+            if explicit_domain and str(explicit_domain).strip().lower() != "general"
+            else (context_profile.inferred_domain or "General")
+        )
+
         pkg = PresentationContentPackage(
             package_id=f"PKG-{uuid.uuid4().hex[:8].upper()}",
             dataset_name=dataset_name,
-            domain=context_profile.inferred_domain or domain,
+            domain=final_domain,
             items=ranked_items,
             available_topics=available_topics,
             global_kpis=kpi_items[:4],
@@ -782,6 +790,7 @@ class PresentationContentHub:
                 "provider_status": provider_status,
                 "max_items_limit": max_items,
                 "context_profile": context_profile.model_dump(),
+                "evidence_universe": evidence_universe.model_dump(),
                 "evidence_universe_summary": {
                     "total_artifacts": len(evidence_universe.all_artifacts),
                     "kpis": len(evidence_universe.kpis),

@@ -25,10 +25,12 @@ class TestDatabaseIsolationError(LiveDatabaseIsolationError):
 
 def is_test_environment() -> bool:
     """Returns True if the current process is running under pytest or explicit test environment."""
+    import sys
     return bool(
         os.getenv("TESTING") == "true"
         or os.getenv("PYTEST_CURRENT_TEST")
         or os.getenv("APP_ENV") == "test"
+        or "pytest" in sys.modules
     )
 
 

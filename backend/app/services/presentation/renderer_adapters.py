@@ -125,7 +125,16 @@ class TextRendererAdapter(BaseRendererAdapter):
 
         # Extract exact text without mutation
         text_lines: list[str] = []
-        if obj_spec and obj_spec.headline:
+        is_kpi = (
+            (content_item and (content_item.kind == ContentKind.KPI_METRIC or getattr(content_item, "visual_type", None) == "kpi_metric"))
+            or (obj_spec and getattr(obj_spec, "kind", None) == ContentKind.KPI_METRIC)
+            or ("kpi" in (obj_layout.object_name or "").lower())
+        )
+        if is_kpi and content_item and content_item.metric_value is not None:
+            val_text = str(content_item.metric_value).strip()
+            lbl_text = str(content_item.metric_label or content_item.title or "").strip()
+            text_lines = [val_text, lbl_text] if lbl_text else [val_text]
+        elif obj_spec and obj_spec.headline:
             text_lines = [obj_spec.headline]
         elif content_item:
             if content_item.supporting_bullets and len(content_item.supporting_bullets) > 0:
@@ -187,9 +196,13 @@ class TextRendererAdapter(BaseRendererAdapter):
             else:
                 p = tf.add_paragraph()
             p.text = line
-            p.font.size = Pt(font_size_pt)
-            if typo_spec.font_weight in ("bold", "600"):
-                p.font.bold = True
+            if is_kpi and idx > 0:
+                p.font.size = Pt(max(10.0, min(14.0, font_size_pt * 0.4)))
+                p.font.bold = False
+            else:
+                p.font.size = Pt(font_size_pt)
+                if typo_spec.font_weight in ("bold", "600"):
+                    p.font.bold = True
             p.font.color.rgb = text_rgb
 
         record = RenderedObjectRecord(

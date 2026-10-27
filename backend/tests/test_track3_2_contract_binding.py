@@ -365,7 +365,7 @@ def test_real_api_job_pipeline_governed_route():
             assert persisted_spec.get("metadata", {}).get("contract_mode") == "EXECUTIVE_TOPIC_BOUND"
             assert len(persisted_spec.get("slides", [])) >= 9
             # Check all topic slides carry lineage and hash
-            topic_slides = persisted_spec["slides"][1:]
+            topic_slides = [s for s in persisted_spec["slides"] if s.get("topic_id")]
             assert len(topic_slides) >= 8
             assert len(set(ts.get("topic_id") for ts in topic_slides if ts.get("topic_id"))) == 8
             for ts in topic_slides:

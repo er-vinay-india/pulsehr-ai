@@ -298,9 +298,6 @@ class PresentationIntelligenceAdapter:
                     scope=scope,
                     decision=fallback_decision,
                 )
-                if "metadata" not in v1_evidence:
-                    v1_evidence["metadata"] = {}
-                v1_evidence["metadata"]["route_provenance"] = fallback_decision.model_dump()
                 v1_evidence["metadata"]["fallback_recovery"] = True
                 v1_evidence["metadata"]["gateway_decision_ms"] = round(gw_duration_ms, 3)
                 v1_evidence["metadata"]["total_execution_ms"] = round((time.perf_counter() - t0) * 1000, 3)

@@ -93,6 +93,8 @@ class PresentationContentItem(BaseModel):
     # Governed provenance (strictly isolated from user-visible presentation text)
     evidence_ids: list[str] = Field(default_factory=list)
     fact_id: str | None = None
+    topic_id: str | None = None
+    semantic_hash: str | None = None
     source_dataset_id: int | str | None = None
     source_sheet_name: str | None = None
     dimension_name: str | None = None

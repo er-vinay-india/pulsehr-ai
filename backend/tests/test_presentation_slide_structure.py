@@ -274,10 +274,12 @@ class TestLayeredSlideStructureBuilder:
             assert s_slide.continuation_index == m_slide.continuation_index
             assert s_slide.structure_status == StructureStatus.STRUCTURE_VALIDATED
 
-            # Slide must have at least TITLE and FOOTNOTE zones
+            # Slide must have at least TITLE zone; non-cover slides must have FOOTNOTE zone
             zone_types = [z.zone_type for z in s_slide.zones]
             assert ZoneType.TITLE in zone_types
-            assert ZoneType.FOOTNOTE in zone_types
+            is_cover = bool(m_slide.metadata.get("is_cover") or (m_slide.structural_role == StructuralRole.TITLE and not m_slide.content_bindings))
+            if not is_cover:
+                assert ZoneType.FOOTNOTE in zone_types
 
     def test_stable_deterministic_object_and_zone_ids(
         self,

@@ -10,6 +10,12 @@ from app.services import sheet_catalog
 
 from app.core.db_isolation import assert_test_database_isolation, LIVE_DB_PATH
 
+import os
+import shutil
+os.environ["TESTING"] = "true"
+os.environ["APP_ENV"] = "test"
+os.environ["HIGHVIEW_ENVIRONMENT"] = "test"
+
 _LIVE_DB_SESSION_START_STATE = None
 
 def get_live_db_state():
@@ -46,7 +52,14 @@ def pytest_sessionstart(session):
 @pytest.fixture(autouse=True)
 def isolated_workspace(request, tmp_path, monkeypatch):
     test_db = tmp_path / 'db' / 'test.sqlite3'
+    test_db.parent.mkdir(parents=True, exist_ok=True)
     monkeypatch.setattr(config, 'DB_PATH', test_db)
+    monkeypatch.setattr(config.settings, 'DB_PATH', test_db)
+    monkeypatch.setenv('DATABASE_PATH', str(test_db))
+    monkeypatch.setenv('HIGHVIEW_DB_PATH', str(test_db))
+    monkeypatch.setenv('TESTING', 'true')
+    monkeypatch.setenv('APP_ENV', 'test')
+
     assert_test_database_isolation(test_db)
     assert test_db.resolve() != LIVE_DB_PATH, "CRITICAL: Test DB matches Live DB!"
     monkeypatch.setattr(config, 'UPLOADS_DIR', tmp_path / 'uploads')
@@ -72,7 +85,11 @@ def isolated_workspace(request, tmp_path, monkeypatch):
     if request.node.get_closest_marker("unit") and not request.node.get_closest_marker("db"):
         return
 
-    init_db()
+    baseline_path = Path(__file__).resolve().parent.parent / "data" / "db_backups_safety" / "pulsehr.sqlite3.pristine_i8_3_baseline"
+    if baseline_path.exists():
+        shutil.copyfile(baseline_path, test_db)
+    else:
+        init_db()
 
 
 @pytest.fixture

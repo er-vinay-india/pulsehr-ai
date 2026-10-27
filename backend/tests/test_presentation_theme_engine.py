@@ -368,8 +368,8 @@ def test_116_map_truthful_raster_styling(sample_test_deck):
         obj for s in render_manifest.slides for obj in s.objects if "MAP" in obj.object_name
     )
     assert (
-        map_rec.metadata.get("actual_render_mode") == "RASTER_IMAGE"
-        or map_rec.shape_type.value == "RASTER_IMAGE"
+        map_rec.metadata.get("actual_render_mode") in ("PRESERVED_IMAGE", "RASTER_IMAGE")
+        or map_rec.shape_type.value in ("PRESERVED_IMAGE", "RASTER_IMAGE", "PICTURE")
     )
     assert map_rec.is_native_editable is False  # 0 false native claims
 

@@ -69,7 +69,8 @@ class DeterministicStoryPlanner:
         user_objective: str = "",
         target_audience: str = "Stakeholders",
         max_logical_slides: int | None = None,
-        metadata: dict[str, Any] | None = None
+        metadata: dict[str, Any] | None = None,
+        evidence_universe: Optional[Any] = None,
     ) -> DeckStoryPlan:
         """Constructs a validated DeckStoryPlan from a PresentationContentPackage."""
         plan_id = f"PLAN-{content_pkg.package_id}"
@@ -108,10 +109,20 @@ class DeterministicStoryPlanner:
             source_scope = "DASHBOARD_ONLY"
         meta["source_scope"] = source_scope
 
-        # Initialize Artifact Coverage Ledger (Stage D)
+        # Initialize Artifact Coverage Ledger (Stage D) & Resolve Evidence Universe
         from .coverage_ledger import ArtifactCoverageLedger, ArtifactDisposition
         from .presentation_evidence import CommonArtifactDescriptor, SourceSurface, PresentationEvidenceUniverse
         coverage_ledger = ArtifactCoverageLedger()
+
+        if evidence_universe is None:
+            raw_eu = meta.get("evidence_universe") or content_pkg.metadata.get("evidence_universe")
+            if isinstance(raw_eu, PresentationEvidenceUniverse):
+                evidence_universe = raw_eu
+            elif isinstance(raw_eu, dict):
+                try:
+                    evidence_universe = PresentationEvidenceUniverse(**raw_eu)
+                except Exception as ex:
+                    logger.debug("Could not deserialize evidence_universe: %s", ex)
 
         # 1. Parse Objective Focus & Category Priorities
         obj_lower = (user_objective or "").lower()
@@ -448,7 +459,7 @@ class DeterministicStoryPlanner:
             # Data Explorer table: By canonical default, COMPLETE_EVIDENCE includes all Data Explorer and EDA evidence.
             # Limited scope (Dashboard only) is ONLY triggered if the user explicitly restricts the source scope
             # (e.g. source_scope="DASHBOARD_ONLY", explicit "source scope: dashboard only", or explicit "Executive Summary" without exploratory data).
-            if item.role == ContentRole.EXPLORATORY_TABLE or item.source_surface == "data_explorer":
+            if item.role == ContentRole.EXPLORATORY_TABLE or (item.source_surface == "data_explorer" and item.kind == ContentKind.TABLE):
                 is_dashboard_only_explicit = (
                     str(source_scope).upper() in ("DASHBOARD_ONLY", "DASHBOARD")
                     or "dashboard only" in obj_lower
@@ -732,6 +743,10 @@ class DeterministicStoryPlanner:
                 metadata=closing_metadata,
             )
         )
+
+        # Verify no silent loss against the authoritative evidence universe
+        if evidence_universe is not None:
+            coverage_ledger.verify_no_silent_loss(evidence_universe)
 
         # Attach coverage ledger summary & context profile metadata
         meta["coverage_ledger"] = coverage_ledger.get_summary()
@@ -1329,7 +1344,8 @@ class StoryPlanner:
         user_objective: str = "",
         target_audience: str = "Stakeholders",
         max_logical_slides: int | None = None,
-        metadata: dict[str, Any] | None = None
+        metadata: dict[str, Any] | None = None,
+        evidence_universe: Optional[Any] = None,
     ) -> DeckStoryPlan:
         """Plans a structured, objective-driven presentation narrative.
         
@@ -1339,6 +1355,7 @@ class StoryPlanner:
             target_audience: Intended executive stakeholder audience.
             max_logical_slides: Upper ceiling on logical slide units.
             metadata: Additional operational metadata.
+            evidence_universe: Optional authoritative evidence universe.
             
         Returns:
             Validated DeckStoryPlan conforming to all architectural invariants.
@@ -1349,7 +1366,8 @@ class StoryPlanner:
                 user_objective=user_objective,
                 target_audience=target_audience,
                 max_logical_slides=max_logical_slides,
-                metadata=metadata
+                metadata=metadata,
+                evidence_universe=evidence_universe,
             )
         else:
             plan = self.deterministic_planner.plan(
@@ -1357,7 +1375,8 @@ class StoryPlanner:
                 user_objective=user_objective,
                 target_audience=target_audience,
                 max_logical_slides=max_logical_slides,
-                metadata=metadata
+                metadata=metadata,
+                evidence_universe=evidence_universe,
             )
 
         # Invariant validation

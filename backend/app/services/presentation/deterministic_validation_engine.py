@@ -638,20 +638,21 @@ class DeterministicValidationEngine:
                     if not text_content:
                         continue
 
-                    # Estimated text height based on paragraphs, runs, and font sizes
-                    total_chars = len(text_content)
+                    # Estimated text height calculated per paragraph using each paragraph's own font size
                     box_width_pt = shape.width / 12700.0   # EMUs to points
                     box_height_pt = shape.height / 12700.0
 
-                    font_size = 14.0
+                    est_required_height = 0.0
+                    total_est_lines = 0
                     for p in tf.paragraphs:
-                        if p.font.size:
-                            font_size = p.font.size.pt
-                            break
-
-                    chars_per_line = max(10, int(box_width_pt / (font_size * 0.55)))
-                    est_lines = max(1, total_chars // chars_per_line + (1 if total_chars % chars_per_line else 0))
-                    est_required_height = est_lines * (font_size * 1.3)
+                        p_text = p.text.strip()
+                        if not p_text:
+                            continue
+                        p_font_size = p.font.size.pt if (p.font and p.font.size) else 14.0
+                        chars_per_line = max(10, int(box_width_pt / (p_font_size * 0.55)))
+                        p_lines = max(1, len(p_text) // chars_per_line + (1 if len(p_text) % chars_per_line else 0))
+                        total_est_lines += p_lines
+                        est_required_height += p_lines * (p_font_size * 1.3)
 
                     # If estimated text height exceeds box height by > 25%, flag severe clipping
                     if est_required_height > box_height_pt * 1.25:
@@ -661,7 +662,7 @@ class DeterministicValidationEngine:
                             f"Text in shape '{shape.name}' severely exceeds box height: est {est_required_height:.1f}pt vs {box_height_pt:.1f}pt.",
                             slide_id=slide_id,
                             object_name=shape.name,
-                            evidence={"est_lines": est_lines, "box_height_pt": box_height_pt},
+                            evidence={"est_lines": total_est_lines, "box_height_pt": box_height_pt},
                         )
 
         # -------------------------------------------------------------

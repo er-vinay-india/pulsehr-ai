@@ -38,10 +38,13 @@ def seed_test_sales_sheet(client: TestClient | None = None) -> int:
     csv_bytes = "\n".join(csv_lines).encode("utf-8")
     resp = client.post("/api/upload/file", files={"file": ("walmart_sales.csv", csv_bytes, "text/csv")})
     assert resp.status_code == 200
+    upload_data = resp.json()
+    if upload_data.get("sheet_ids"):
+        return upload_data["sheet_ids"][0]
     sheets_resp = client.get("/api/sheets")
     assert sheets_resp.status_code == 200
     sheets = sheets_resp.json()["sheets"]
-    return sheets[0]["id"]
+    return sheets[-1]["id"]
 
 
 def test_theme_registry():
