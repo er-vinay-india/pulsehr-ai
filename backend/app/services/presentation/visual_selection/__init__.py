@@ -12,7 +12,11 @@ from .selection_models import (
 from .normalization import normalize_to_visual_family, RAW_TO_VISUAL_FAMILY
 from .candidate_generator import VisualCandidateGenerator
 from .validator import VisualSelectionValidator, VisualSelectionValidationError
-from .selection_provider import DeterministicVisualSelectionProvider
+from .selection_provider import (
+    AIVisualSelectionProvider,
+    DeterministicVisualSelectionProvider,
+    VisualSelectionProvider,
+)
 from .spec_builder import PresentationVisualSpecBuilder
 from .visual_intelligence_service import VisualSelectionIntelligence
 
@@ -26,7 +30,9 @@ __all__ = [
     "VisualCandidateGenerator",
     "VisualSelectionValidator",
     "VisualSelectionValidationError",
+    "VisualSelectionProvider",
     "DeterministicVisualSelectionProvider",
+    "AIVisualSelectionProvider",
     "PresentationVisualSpecBuilder",
     "VisualSelectionIntelligence",
 ]

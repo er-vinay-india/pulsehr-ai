@@ -1,6 +1,6 @@
 from pathlib import Path
 import os
-from typing import Any
+from typing import Any, Optional
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -239,6 +239,14 @@ class HighviewSettings(BaseSettings):
         default=os.getenv("PRESENTATION_LAYERED_PIPELINE_ENABLED", "true").lower() in ("true", "1", "yes")
     )
 
+    # Visual Selection Intelligence (Phase 3) Configuration
+    PRESENTATION_VISUAL_SELECTION_CONFIDENCE_THRESHOLD: float = Field(
+        default=float(os.getenv("PRESENTATION_VISUAL_SELECTION_CONFIDENCE_THRESHOLD", "0.60"))
+    )
+    PRESENTATION_VISUAL_SELECTION_MODEL: Optional[str] = Field(
+        default=os.getenv("PRESENTATION_VISUAL_SELECTION_MODEL", None)
+    )
+
     # Assistant branding & identity
     ASSISTANT_NAME: str = Field(default=os.getenv("ASSISTANT_NAME", "HRIDAY"))
     ASSISTANT_PRODUCT_NAME: str = Field(default=os.getenv("ASSISTANT_PRODUCT_NAME", "HighView"))
@@ -339,6 +347,8 @@ PRESENTATION_VISUAL_QA_CAPTURE_SCREENSHOTS = settings.PRESENTATION_VISUAL_QA_CAP
 PRESENTATION_VISUAL_QA_KEEP_SCREENSHOTS = settings.PRESENTATION_VISUAL_QA_KEEP_SCREENSHOTS
 PRESENTATION_VISUAL_QA_DIR = settings.PRESENTATION_VISUAL_QA_DIR
 PRESENTATION_LAYERED_PIPELINE_ENABLED = settings.PRESENTATION_LAYERED_PIPELINE_ENABLED
+PRESENTATION_VISUAL_SELECTION_CONFIDENCE_THRESHOLD = settings.PRESENTATION_VISUAL_SELECTION_CONFIDENCE_THRESHOLD
+PRESENTATION_VISUAL_SELECTION_MODEL = settings.PRESENTATION_VISUAL_SELECTION_MODEL
 
 ASSISTANT_NAME = settings.ASSISTANT_NAME
 ASSISTANT_PRODUCT_NAME = settings.ASSISTANT_PRODUCT_NAME

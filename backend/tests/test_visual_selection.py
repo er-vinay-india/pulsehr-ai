@@ -24,12 +24,14 @@ from app.services.presentation.story_models import (
     StructuralRole,
 )
 from app.services.presentation.visual_selection import (
+    AIVisualSelectionProvider,
     DataShapeProfile,
     DeterministicVisualSelectionProvider,
     PresentationVisualSpecBuilder,
     VisualCandidateGenerator,
     VisualSelectionDecision,
     VisualSelectionIntelligence,
+    VisualSelectionSource,
     VisualSelectionValidator,
 )
 from app.services.presentation.visual_selection.normalization import normalize_to_visual_family
@@ -423,4 +425,307 @@ def test_renderer_adapter_governed_fallback():
     assert record.metadata["original_visual"] == "bar"
     assert record.metadata["fallback_visual"] == "raster"
     assert record.metadata["canonical_visual_family"] == "bar"
+
+
+# ==============================================================================
+# AI-ASSISTED VISUAL SELECTION OVER DETERMINISTIC CANDIDATE SET
+# ==============================================================================
+
+def test_ai_provider_selects_from_valid_candidates():
+    """Verifies that AIVisualSelectionProvider selects cleanly among the valid candidates."""
+    provider = AIVisualSelectionProvider(use_ai=True)
+
+    profile = DataShapeProfile(
+        content_id="ITEM-TREND-01",
+        is_temporal=True,
+        category_count=6,
+    )
+    candidates = [VisualFamily.LINE, VisualFamily.TREND, VisualFamily.BAR, VisualFamily.DATA_TABLE]
+
+    mock_ai = {
+        "selected_visual_family": "line",
+        "selected_visual_variant": "standard",
+        "reason_codes": ["CHRONOLOGICAL_FLOW", "CONTINUOUS_TRAJECTORY"],
+        "confidence": 0.95,
+        "diagnostic_notes": "Line chart clearly expresses the multi-period attrition trend.",
+    }
+
+    item = PresentationContentItem(
+        content_id="ITEM-TREND-01",
+        role=ContentRole.KEY_FINDING,
+        kind=ContentKind.CHART,
+        topic_category="Attrition",
+        title="Monthly Attrition Trajectory",
+    )
+
+    decision = provider.select_visual(
+        content_id="ITEM-TREND-01",
+        profile=profile,
+        candidates=candidates,
+        analytical_intent="Attrition",
+        content_item=item,
+        metadata={"mock_ai_response": mock_ai},
+    )
+
+    assert decision.selected_visual_family == VisualFamily.LINE
+    assert decision.decision_source == VisualSelectionSource.AI_MODEL
+    assert decision.confidence == 0.95
+    assert "CHRONOLOGICAL_FLOW" in decision.reason_codes
+    assert decision.selected_visual_family in candidates
+
+
+def test_ai_provider_rejects_hallucinated_family_and_falls_back():
+    """Verifies that if AI returns a family outside the valid candidates list, it is rejected and falls back."""
+    provider = AIVisualSelectionProvider(use_ai=True)
+
+    profile = DataShapeProfile(
+        content_id="ITEM-TREND-02",
+        is_temporal=True,
+        category_count=6,
+    )
+    candidates = [VisualFamily.LINE, VisualFamily.TREND, VisualFamily.BAR, VisualFamily.DATA_TABLE]
+
+    # AI attempts to invent or choose an invalid/non-candidate family (e.g. pie)
+    mock_ai = {
+        "selected_visual_family": "pie",
+        "selected_visual_variant": "standard",
+        "reason_codes": ["WRONG_CHOICE"],
+        "confidence": 0.9,
+    }
+
+    decision = provider.select_visual(
+        content_id="ITEM-TREND-02",
+        profile=profile,
+        candidates=candidates,
+        analytical_intent="Attrition",
+        metadata={"mock_ai_response": mock_ai},
+    )
+
+    # Invariant: AI choice outside candidates is strictly rejected, deterministic fallback is invoked
+    assert decision.decision_source == VisualSelectionSource.DETERMINISTIC_FALLBACK
+    assert decision.selected_visual_family == VisualFamily.LINE  # deterministic derivation chooses LINE
+    assert any("AI_FALLBACK" in r for r in decision.reason_codes)
+
+
+def test_ai_provider_rejects_low_confidence_and_falls_back():
+    """Verifies that if AI confidence falls below threshold, deterministic fallback is invoked."""
+    provider = AIVisualSelectionProvider(use_ai=True, confidence_threshold=0.8)
+
+    profile = DataShapeProfile(
+        content_id="ITEM-RANK-01",
+        is_ranked=True,
+        category_count=4,
+    )
+    candidates = [VisualFamily.RANKED_BAR, VisualFamily.HORIZONTAL_BAR, VisualFamily.DATA_TABLE]
+
+    mock_ai = {
+        "selected_visual_family": "ranked_bar",
+        "confidence": 0.5,  # below 0.8
+    }
+
+    decision = provider.select_visual(
+        content_id="ITEM-RANK-01",
+        profile=profile,
+        candidates=candidates,
+        analytical_intent="Rankings",
+        metadata={"mock_ai_response": mock_ai},
+    )
+
+    assert decision.decision_source == VisualSelectionSource.DETERMINISTIC_FALLBACK
+    assert any("AI_FALLBACK" in r for r in decision.reason_codes)
+
+
+def test_ai_provider_rejects_malformed_json_and_falls_back():
+    """Verifies that if AI output is malformed, deterministic fallback is cleanly triggered."""
+    provider = AIVisualSelectionProvider(use_ai=True)
+
+    profile = DataShapeProfile(
+        content_id="ITEM-MALFORMED",
+        is_temporal=True,
+        category_count=5,
+    )
+    candidates = [VisualFamily.LINE, VisualFamily.BAR, VisualFamily.DATA_TABLE]
+
+    decision = provider.select_visual(
+        content_id="ITEM-MALFORMED",
+        profile=profile,
+        candidates=candidates,
+        metadata={"mock_ai_response": "Broken text without valid JSON {{{{}"},
+    )
+
+    assert decision.decision_source == VisualSelectionSource.DETERMINISTIC_FALLBACK
+    assert decision.selected_visual_family in candidates
+
+
+def test_ai_provider_bypasses_ai_for_reusable_source_visual():
+    """Verifies 'same visual first' invariant: trustworthy source visual from dashboard bypasses AI entirely."""
+    provider = AIVisualSelectionProvider(use_ai=True)
+
+    profile = DataShapeProfile(
+        content_id="ITEM-REUSE-01",
+        is_geographic=True,
+        has_existing_visual=True,
+        existing_visual_type="choropleth",
+        existing_visual_id="GEO-01",
+        source_surface="dashboard",
+    )
+    candidates = [VisualFamily.CHOROPLETH, VisualFamily.MAP, VisualFamily.RANKED_BAR]
+
+    # Even if mock_ai would choose something else, AI is never invoked for trusted existing visual
+    decision = provider.select_visual(
+        content_id="ITEM-REUSE-01",
+        profile=profile,
+        candidates=candidates,
+        metadata={"mock_ai_response": {"selected_visual_family": "map"}},
+    )
+
+    assert decision.decision_source == VisualSelectionSource.REUSE_EXISTING
+    assert decision.selected_visual_family == VisualFamily.CHOROPLETH
+    assert decision.reuse_strategy == VisualStrategy.REUSE_EXISTING
+
+
+def test_ai_provider_bypasses_ai_for_single_candidate():
+    """Verifies that when only 1 candidate exists, AI arbitration is bypassed."""
+    provider = AIVisualSelectionProvider(use_ai=True)
+
+    profile = DataShapeProfile(
+        content_id="ITEM-SINGLE",
+        metric_count=1,
+        category_count=1,
+    )
+    candidates = [VisualFamily.KPI_CARD]
+
+    decision = provider.select_visual(
+        content_id="ITEM-SINGLE",
+        profile=profile,
+        candidates=candidates,
+        metadata={"mock_ai_response": {"selected_visual_family": "bar"}},
+    )
+
+    # Invariant: single candidate does not invoke AI
+    assert decision.selected_visual_family == VisualFamily.KPI_CARD
+    assert decision.decision_source == VisualSelectionSource.DETERMINISTIC_SELECTION
+
+
+def test_ai_provider_strictly_rejects_alias_and_does_not_normalize():
+    """Verifies invariant: AI output is NEVER normalized or repaired.
+    
+    If AI returns an alias such as 'area' (which normalizes to LINE in legacy metadata)
+    when candidates are [LINE, TREND, BAR], it must be strictly rejected and fall back.
+    """
+    provider = AIVisualSelectionProvider(use_ai=True)
+
+    profile = DataShapeProfile(
+        content_id="ITEM-ALIAS-01",
+        is_temporal=True,
+        category_count=6,
+    )
+    candidates = [VisualFamily.LINE, VisualFamily.TREND, VisualFamily.BAR]
+
+    # AI returns alias 'area' which normalize_to_visual_family would have converted to LINE
+    mock_ai = {
+        "selected_visual_family": "area",
+        "selected_visual_variant": "standard",
+        "reason_codes": ["AI_ALIAS_TEST"],
+        "confidence": 0.95,
+    }
+
+    decision = provider.select_visual(
+        content_id="ITEM-ALIAS-01",
+        profile=profile,
+        candidates=candidates,
+        analytical_intent="Attrition",
+        metadata={"mock_ai_response": mock_ai},
+    )
+
+    # Invariant: rejected as non-candidate, falls back to deterministic provider
+    assert decision.decision_source == VisualSelectionSource.DETERMINISTIC_FALLBACK
+    assert any("AI_FALLBACK:VisualSelectionValidationError" in r for r in decision.reason_codes)
+    assert decision.selected_visual_family == VisualFamily.LINE  # deterministic derivation chooses LINE
+
+
+def test_ai_provider_strictly_rejects_column_alias_and_does_not_normalize():
+    """Verifies that 'column' alias (legacy alias of BAR) is strictly rejected from AI output."""
+    provider = AIVisualSelectionProvider(use_ai=True)
+
+    profile = DataShapeProfile(
+        content_id="ITEM-ALIAS-02",
+        category_count=4,
+    )
+    candidates = [VisualFamily.BAR, VisualFamily.DATA_TABLE]
+
+    mock_ai = {
+        "selected_visual_family": "column",
+        "selected_visual_variant": "standard",
+        "reason_codes": ["AI_COLUMN_TEST"],
+        "confidence": 0.95,
+    }
+
+    decision = provider.select_visual(
+        content_id="ITEM-ALIAS-02",
+        profile=profile,
+        candidates=candidates,
+        metadata={"mock_ai_response": mock_ai},
+    )
+
+    assert decision.decision_source == VisualSelectionSource.DETERMINISTIC_FALLBACK
+    assert any("AI_FALLBACK:VisualSelectionValidationError" in r for r in decision.reason_codes)
+
+
+def test_ai_provider_rejects_unknown_family_and_falls_back():
+    """Verifies that completely unknown or invented family names are rejected and fall back."""
+    provider = AIVisualSelectionProvider(use_ai=True)
+
+    profile = DataShapeProfile(
+        content_id="ITEM-UNKNOWN-01",
+        category_count=4,
+    )
+    candidates = [VisualFamily.BAR, VisualFamily.DATA_TABLE]
+
+    mock_ai = {
+        "selected_visual_family": "quantum_chart",
+        "selected_visual_variant": "standard",
+        "reason_codes": ["INVENTED_CHART"],
+        "confidence": 0.95,
+    }
+
+    decision = provider.select_visual(
+        content_id="ITEM-UNKNOWN-01",
+        profile=profile,
+        candidates=candidates,
+        metadata={"mock_ai_response": mock_ai},
+    )
+
+    assert decision.decision_source == VisualSelectionSource.DETERMINISTIC_FALLBACK
+    assert any("AI_FALLBACK:VisualSelectionValidationError" in r for r in decision.reason_codes)
+
+
+def test_visual_selection_confidence_threshold_single_source():
+    """Verifies that PRESENTATION_VISUAL_SELECTION_CONFIDENCE_THRESHOLD in config.py is the single authoritative source."""
+    from app.core import config
+    from app.services.presentation.visual_selection import selection_models
+
+    # Authoritative source in config
+    assert config.PRESENTATION_VISUAL_SELECTION_CONFIDENCE_THRESHOLD == 0.60
+
+    # selection_models must NOT contain duplicate numeric definitions
+    assert not hasattr(selection_models, "DEFAULT_VISUAL_SELECTION_CONFIDENCE_THRESHOLD")
+    assert not hasattr(selection_models, "VISUAL_SELECTION_CONFIDENCE_THRESHOLD")
+
+    # AIVisualSelectionProvider directly reads config.PRESENTATION_VISUAL_SELECTION_CONFIDENCE_THRESHOLD
+    provider = AIVisualSelectionProvider()
+    assert provider.confidence_threshold == config.PRESENTATION_VISUAL_SELECTION_CONFIDENCE_THRESHOLD
+
+
+def test_model_router_visual_selection_unassigned_and_no_phi():
+    """Verifies that Visual Selection model selection is decoupled, unassigned, and does not include Phi."""
+    from app.services.gateway.contracts import AITaskType
+    from app.services.gateway.model_router import TASK_MODEL_CASCADES
+
+    cascade = TASK_MODEL_CASCADES[AITaskType.PRESENTATION_VISUAL_SELECTION]
+    # Phi is strictly Typography specialist; must NOT be assigned to visual selection
+    assert not any("phi" in m.lower() for m in cascade)
+    # Granite is strictly Composition specialist; must NOT be in visual selection cascade
+    assert not any("granite-composition" in m.lower() for m in cascade)
+
 

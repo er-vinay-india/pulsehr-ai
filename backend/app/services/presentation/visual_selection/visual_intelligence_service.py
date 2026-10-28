@@ -14,7 +14,11 @@ from ..presentation_visual_spec import PresentationVisualSpec, VisualFamily
 from .candidate_generator import VisualCandidateGenerator
 from .normalization import normalize_to_visual_family
 from .selection_models import DataShapeProfile, VisualSelectionDecision
-from .selection_provider import DeterministicVisualSelectionProvider
+from .selection_provider import (
+    AIVisualSelectionProvider,
+    DeterministicVisualSelectionProvider,
+    VisualSelectionProvider,
+)
 from .spec_builder import PresentationVisualSpecBuilder
 
 logger = logging.getLogger(__name__)
@@ -26,11 +30,17 @@ class VisualSelectionIntelligence:
     def __init__(
         self,
         candidate_generator: Optional[VisualCandidateGenerator] = None,
-        selection_provider: Optional[DeterministicVisualSelectionProvider] = None,
+        selection_provider: Optional[VisualSelectionProvider] = None,
         spec_builder: Optional[PresentationVisualSpecBuilder] = None,
+        use_ai: bool = False,
     ) -> None:
         self.candidate_generator = candidate_generator or VisualCandidateGenerator()
-        self.selection_provider = selection_provider or DeterministicVisualSelectionProvider()
+        if selection_provider is not None:
+            self.selection_provider = selection_provider
+        elif use_ai:
+            self.selection_provider = AIVisualSelectionProvider(use_ai=True)
+        else:
+            self.selection_provider = DeterministicVisualSelectionProvider()
         self.spec_builder = spec_builder or PresentationVisualSpecBuilder()
 
     def profile_content_item(self, item: PresentationContentItem) -> DataShapeProfile:
@@ -123,7 +133,8 @@ class VisualSelectionIntelligence:
 
     def select_visual_for_item(
         self,
-        item: PresentationContentItem
+        item: PresentationContentItem,
+        metadata: Optional[dict[str, Any]] = None,
     ) -> tuple[PresentationVisualSpec, VisualSelectionDecision]:
         """Runs the complete Visual Selection Intelligence pipeline for a single content item."""
         profile = self.profile_content_item(item)
@@ -133,18 +144,21 @@ class VisualSelectionIntelligence:
             profile=profile,
             candidates=candidates,
             analytical_intent=item.topic_category,
+            content_item=item,
+            metadata=metadata,
         )
         spec = self.spec_builder.build_spec(item=item, decision=decision, profile=profile)
         return spec, decision
 
     def process_content_package(
         self,
-        pkg: PresentationContentPackage
+        pkg: PresentationContentPackage,
+        metadata: Optional[dict[str, Any]] = None,
     ) -> PresentationContentPackage:
         """Processes an entire PresentationContentPackage, enriching all items with canonical PresentationVisualSpecs."""
         enriched_items: list[PresentationContentItem] = []
         for it in pkg.items:
-            spec, decision = self.select_visual_for_item(it)
+            spec, decision = self.select_visual_for_item(it, metadata=metadata)
             it.presentation_visual_spec = spec
             it.visual_type = spec.family.value
             it.visual_strategy = decision.reuse_strategy
@@ -161,7 +175,7 @@ class VisualSelectionIntelligence:
 
         enriched_kpis: list[PresentationContentItem] = []
         for kpi in pkg.global_kpis:
-            spec, decision = self.select_visual_for_item(kpi)
+            spec, decision = self.select_visual_for_item(kpi, metadata=metadata)
             kpi.presentation_visual_spec = spec
             kpi.visual_type = spec.family.value
             kpi.visual_strategy = decision.reuse_strategy

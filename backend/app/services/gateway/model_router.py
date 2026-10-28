@@ -49,6 +49,18 @@ TASK_MODEL_CASCADES: dict[AITaskType, list[str]] = {
         "granite4:3b-h",
         "qwen3.5:2b"
     ],
+    # UNASSIGNED / DEVELOPMENT_ONLY: Model selection for PRESENTATION_VISUAL_SELECTION is postponed.
+    # The provider/gateway architecture is frozen independently from model selection.
+    # Phi is specialized for Typography; Granite for Composition. Neither is assigned to visual selection.
+    # Configurable via config.PRESENTATION_VISUAL_SELECTION_MODEL; uses development fallback during dev testing.
+    AITaskType.PRESENTATION_VISUAL_SELECTION: (
+        [config.PRESENTATION_VISUAL_SELECTION_MODEL]
+        if getattr(config, "PRESENTATION_VISUAL_SELECTION_MODEL", None)
+        else [
+            "qwen3.5:9b",
+            "gemma4:12b",
+        ]
+    ),
     AITaskType.DETERMINISTIC_CALCULATION: []  # 100% bypass - no model needed
 }
 

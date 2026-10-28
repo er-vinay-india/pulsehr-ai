@@ -30,6 +30,7 @@ class AITaskType(str, enum.Enum):
     PRESENTATION_AI = "PRESENTATION_AI"          # Slide narrative, visual storytelling
     PRESENTATION_COMPOSITION = "PRESENTATION_COMPOSITION"  # Slide composition archetype, grouping, priority, density
     PRESENTATION_TYPOGRAPHY = "PRESENTATION_TYPOGRAPHY"  # Semantic typography intent, emphasis, and reflow
+    PRESENTATION_VISUAL_SELECTION = "PRESENTATION_VISUAL_SELECTION"  # Visual morphology selection over candidate sets
     DETERMINISTIC_CALCULATION = "DETERMINISTIC_CALCULATION"  # NO MODEL - mathematical bypass
 
 
