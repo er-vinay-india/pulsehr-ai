@@ -31,7 +31,7 @@
     "project_name": null,
     "report_to": null,
     "resume_adapter_file": null,
-    "save_every": 30,
+    "save_every": 20,
     "seed": 42,
     "steps_per_eval": 20,
     "steps_per_report": 10,

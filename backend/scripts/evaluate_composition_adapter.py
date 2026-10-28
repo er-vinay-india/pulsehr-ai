@@ -1,4 +1,9 @@
-"""Evaluate fine-tuned Granite Composition LoRA adapter on validation and holdout sets.
+"""Evaluate fine-tuned Granite Composition LoRA checkpoints (20, 40, 60) on validation and holdout sets.
+
+Compares:
+- Iteration 20 checkpoint
+- Iteration 40 checkpoint
+- Iteration 60 checkpoint
 
 Computes:
 - Schema-valid output rate
@@ -10,21 +15,30 @@ Computes:
 from __future__ import annotations
 
 import json
+import re
+import shutil
 from pathlib import Path
 from mlx_lm import load, generate
 from app.services.presentation.composition.composition_models import CompositionDecision
 from app.services.presentation.composition.composition_validator import CompositionDecisionValidator
-from app.services.presentation.story_models import LogicalSlidePlan, StructuralRole, ContentBinding, ContentBindingRole
 
-def evaluate():
+def evaluate_checkpoint(adapter_weights_file: str, checkpoint_name: str) -> dict[str, Any]:
     model_path = "mlx-community/granite-3b-code-instruct-4bit"
-    adapter_path = "backend/models/granite_presentation_composition_lora_v1"
+    adapter_dir = Path("backend/models/granite_presentation_composition_lora_v1")
+    
+    # Temporarily copy target checkpoint to adapters.safetensors for mlx_lm loading
+    target_weights = adapter_dir / adapter_weights_file
+    active_weights = adapter_dir / "adapters.safetensors"
+    shutil.copyfile(target_weights, active_weights)
 
-    print("Loading Granite base model with LoRA adapter...")
-    model, tokenizer = load(model_path, adapter_path=adapter_path)
-    print("Loaded fine-tuned model!")
-
+    print(f"\n========================================================")
+    print(f"EVALUATING CHECKPOINT: {checkpoint_name} ({adapter_weights_file})")
+    print(f"========================================================")
+    
+    model, tokenizer = load(model_path, adapter_path=str(adapter_dir))
     data_dir = Path("backend/data/composition_tuning")
+    
+    results = {}
     for split in ["valid", "holdout"]:
         records_path = data_dir / f"{split}.jsonl"
         with open(records_path) as f:
@@ -35,11 +49,10 @@ def evaluate():
         hallucinated_id = 0
         invalid_enum = 0
         forbidden_rendering = 0
+        details = []
 
-        print(f"\nEvaluating on {split} set ({total} examples)...")
         for rec in lines:
             messages = rec["messages"]
-            # Format prompt using tokenizer chat template
             prompt = tokenizer.apply_chat_template(messages[:2], tokenize=False, add_generation_prompt=True)
             response = generate(
                 model,
@@ -49,27 +62,26 @@ def evaluate():
                 verbose=False,
             )
 
-            # Check for forbidden rendering patterns in raw text
             lower_resp = response.lower()
             if any(term in lower_resp for term in ["pt", "rgb(", "#", "drawingml", "<svg", "width:", "height:"]):
                 forbidden_rendering += 1
 
-            # Extract JSON
+            m = re.search(r"\{[\s\S]*\}", response)
+            if not m:
+                invalid_enum += 1
+                details.append((rec["example_id"], "NO_JSON_FOUND"))
+                continue
+
             try:
-                # Find outermost JSON object
-                import re
-                m = re.search(r"\{[\s\S]*\}", response)
-                if not m:
-                    raise ValueError("No JSON object found")
                 data = json.loads(m.group(0))
                 decision = CompositionDecision.model_validate(data)
                 schema_valid += 1
             except Exception as e:
-                print(f"  [{rec['example_id']}] JSON/Schema error: {e}")
                 invalid_enum += 1
+                details.append((rec["example_id"], f"SCHEMA/ENUM_ERR: {e}"))
                 continue
 
-            # Check grounding against expected bound IDs
+            # Grounding check
             grounded_ids = set()
             for b in rec["messages"][1]["content"].split("AVAILABLE CONTENT BINDINGS:")[1].split("]")[0].split('"content_id":'):
                 if '"' in b:
@@ -84,14 +96,52 @@ def evaluate():
 
             ungrounded = used_ids - grounded_ids
             if ungrounded:
-                print(f"  [{rec['example_id']}] Hallucinated IDs: {ungrounded}")
                 hallucinated_id += 1
+                details.append((rec["example_id"], f"UNGROUNDED_IDS: {ungrounded}"))
 
-        print(f"Results for {split}:")
-        print(f"  Schema-valid rate: {schema_valid / total * 100:.1f}% ({schema_valid}/{total})")
-        print(f"  Hallucinated-ID rate: {hallucinated_id / total * 100:.1f}% ({hallucinated_id}/{total})")
-        print(f"  Invalid-enum rate: {invalid_enum / total * 100:.1f}% ({invalid_enum}/{total})")
-        print(f"  Forbidden-rendering rate: {forbidden_rendering / total * 100:.1f}% ({forbidden_rendering}/{total})")
+        res_split = {
+            "total": total,
+            "schema_valid": schema_valid,
+            "schema_valid_rate": schema_valid / total,
+            "hallucinated_id": hallucinated_id,
+            "hallucinated_id_rate": hallucinated_id / total,
+            "invalid_enum": invalid_enum,
+            "invalid_enum_rate": invalid_enum / total,
+            "forbidden_rendering": forbidden_rendering,
+            "forbidden_rendering_rate": forbidden_rendering / total,
+            "details": details,
+        }
+        results[split] = res_split
+        print(f"Split [{split}]: Schema Valid={schema_valid}/{total} ({schema_valid/total*100:.1f}%), "
+              f"Invalid Enum={invalid_enum}/{total}, Hallucinated={hallucinated_id}/{total}, "
+              f"Forbidden Rendering={forbidden_rendering}/{total}")
+        if details:
+            for ex_id, err in details:
+                print(f"   -> {ex_id}: {err}")
+
+    return results
+
+def main():
+    checkpoints = [
+        ("0000020_adapters.safetensors", "Iteration 20 (Val Loss: 0.155)"),
+        ("0000040_adapters.safetensors", "Iteration 40 (Val Loss: 0.159)"),
+        ("0000060_adapters.safetensors", "Iteration 60 (Val Loss: 0.172)"),
+    ]
+    
+    summary = {}
+    for filename, name in checkpoints:
+        res = evaluate_checkpoint(filename, name)
+        summary[name] = res
+        
+    print("\n\n========================================================")
+    print("CHECKPOINT COMPARISON SUMMARY")
+    print("========================================================")
+    for name, res in summary.items():
+        v = res["valid"]
+        h = res["holdout"]
+        print(f"{name}:")
+        print(f"  Validation Schema-Valid: {v['schema_valid_rate']*100:.1f}% ({v['schema_valid']}/{v['total']}) | Enums Invalid: {v['invalid_enum']}")
+        print(f"  Holdout    Schema-Valid: {h['schema_valid_rate']*100:.1f}% ({h['schema_valid']}/{h['total']}) | Enums Invalid: {h['invalid_enum']}")
 
 if __name__ == "__main__":
-    evaluate()
+    main()
