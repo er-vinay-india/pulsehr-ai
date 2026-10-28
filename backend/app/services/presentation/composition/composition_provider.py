@@ -162,7 +162,16 @@ class DeterministicCompositionProvider(CompositionProvider):
             confidence=1.0,
             decision_source=CompositionDecisionSource.DETERMINISTIC_FALLBACK,
             diagnostic_rationale=f"Deterministic mapping based on structural role {role_str} and visual type {visual_type}",
-            metadata={"rule_engine": "v1_deterministic"},
+            metadata={
+                "rule_engine": "v1_deterministic",
+                "model_family": "GRANITE",
+                "base_model": "mlx-community/granite-4.0-h-micro-4bit",
+                "adapter_loaded": False,
+                "adapter_name": "none",
+                "adapter_version": "none",
+                "checkpoint": "none",
+                "fallback_used": True,
+            },
         )
 
         return decision
@@ -352,9 +361,11 @@ class AICompositionProvider(CompositionProvider):
 
             # Tag Granite provenance
             decision.metadata.setdefault("model_family", "GRANITE")
-            decision.metadata.setdefault("base_model", "granite4:3b")
-            decision.metadata.setdefault("adapter_name", "granite_presentation_composition_lora_v1")
+            decision.metadata.setdefault("base_model", "mlx-community/granite-4.0-h-micro-4bit")
+            decision.metadata.setdefault("adapter_name", "granite4_presentation_composition_lora_v1")
             decision.metadata.setdefault("adapter_version", "v1")
+            decision.metadata.setdefault("checkpoint", "0000020_adapters.safetensors")
+            decision.metadata.setdefault("adapter_loaded", False)
             decision.metadata.setdefault("task_type", AITaskType.PRESENTATION_COMPOSITION.value)
             decision.metadata.setdefault("fallback_used", False)
             return decision
@@ -389,6 +400,11 @@ class AICompositionProvider(CompositionProvider):
             fallback_decision = self.fallback_provider.compose_slide(logical_slide, content_pkg, metadata)
             fallback_decision.fallback_reason = f"AI failure ({fail_type}): {err_msg}"
             fallback_decision.metadata["model_family"] = "GRANITE"
+            fallback_decision.metadata["base_model"] = "mlx-community/granite-4.0-h-micro-4bit"
+            fallback_decision.metadata["adapter_loaded"] = False
+            fallback_decision.metadata["adapter_name"] = "none"
+            fallback_decision.metadata["adapter_version"] = "none"
+            fallback_decision.metadata["checkpoint"] = "none"
             fallback_decision.metadata["fallback_used"] = True
             fallback_decision.metadata["failure_telemetry"] = telemetry.model_dump()
             return fallback_decision
@@ -409,17 +425,7 @@ class AICompositionProvider(CompositionProvider):
                 "notes": b.notes or "",
             })
 
-        prompt = f"""You are HighView's Slide Composition Intelligence Engine.
-Your task is to make a high-level SEMANTIC COMPOSITION DECISION for the following logical presentation slide.
-
-CRITICAL RULES:
-1. Zero coordinates (x, y, width, height).
-2. Zero typography measurements (pt, font size).
-3. Zero colors (hex, rgb).
-4. Zero DrawingML, SVG, or HTML markup.
-5. Reference ONLY the valid content IDs listed below. Never hallucinate or invent new content IDs.
-
-SLIDE CONTEXT:
+        user_prompt = f"""SLIDE CONTEXT:
 - Logical Slide ID: "{logical_slide.logical_slide_id}"
 - Structural Role: "{logical_slide.structural_role}"
 - Semantic Topic: "{logical_slide.semantic_topic}"
@@ -432,40 +438,32 @@ SLIDE CONTEXT:
 AVAILABLE CONTENT BINDINGS:
 {json.dumps(bound_items_desc, indent=2)}
 
-VALID ARCHETYPES:
+Emit the structured JSON CompositionDecision."""
+
+        system_prompt = """You are HighView's Slide Composition Intelligence Engine.
+Your task is to make a high-level SEMANTIC COMPOSITION DECISION for the following logical presentation slide.
+
+CRITICAL RULES:
+1. Zero coordinates (x, y, width, height).
+2. Zero typography measurements (pt, font size).
+3. Zero colors (hex, rgb).
+4. Zero DrawingML, SVG, or HTML markup.
+5. Reference ONLY the valid content IDs listed below. Never hallucinate or invent new content IDs.
+
+Valid Archetypes:
 HERO_METRIC, KPI_GRID, VISUAL_HERO, VISUAL_WITH_INSIGHT, VISUAL_WITH_SUPPORTING_METRICS,
 COMPARISON, RANKING, DISTRIBUTION, CORRELATION, SCENARIO, TABLE_DEEP_DIVE, OUTLIER_SUMMARY,
 MULTI_INSIGHT, EXECUTIVE_SYNTHESIS, TITLE_COVER, CLOSING_SUMMARY
 
-Return a JSON object matching this schema:
-{{
-  "logical_slide_id": "{logical_slide.logical_slide_id}",
-  "composition_archetype": "<ONE_OF_VALID_ARCHETYPES>",
-  "primary_content_id": "<content_id or null>",
-  "visual_priority": "PRIMARY" | "SECONDARY" | "SUPPORTING" | "REFERENCE",
-  "density_intent": "SPARSE" | "BALANCED" | "DENSE",
-  "narrative_placement": "NONE" | "ABOVE_VISUAL" | "BESIDE_VISUAL" | "BELOW_VISUAL" | "CALLOUT",
-  "supporting_content_ids": ["<content_id>"],
-  "content_groups": [
-    {{
-      "role": "PRIMARY_VISUAL" | "PRIMARY_INSIGHT" | "SUPPORTING_METRICS" | "SUPPORTING_INSIGHT" | "COMPARISON_CARD" | "REFERENCE_DATA" | "CONTEXT_SUMMARY" | "CALLOUT",
-      "content_ids": ["<content_id>"]
-    }}
-  ],
-  "split_intent": "NO_SPLIT" | "SPLIT_IF_REQUIRED" | "PREFER_SPLIT",
-  "reason_codes": ["<concise_code>"],
-  "confidence": 0.95,
-  "diagnostic_rationale": "<one sentence justification>"
-}}
-"""
+Return only a valid JSON object matching the CompositionDecision schema."""
 
         req = AIRequest(
             task_type=AITaskType.PRESENTATION_COMPOSITION,
-            prompt=prompt,
-            system_prompt="You are a specialized slide composition planning specialist. Emit only valid JSON.",
+            prompt=user_prompt,
+            system_prompt=system_prompt,
             structured_output_schema=CompositionDecision,
             reasoning_level=ReasoningLevel.LOW,
-            max_latency_ms=10000.0,
+            max_latency_ms=12000.0,
             report_id=f"composition-{logical_slide.logical_slide_id}",
             step_name="slide_composition",
         )
@@ -488,6 +486,9 @@ Return a JSON object matching this schema:
         if isinstance(raw_payload, dict):
             decision = CompositionDecision.model_validate(raw_payload)
             decision.decision_source = CompositionDecisionSource.AI_MODEL
+            decision.metadata.setdefault("adapter_loaded", False)
+            decision.metadata.setdefault("model_family", "GRANITE")
+            decision.metadata.setdefault("base_model", resp.execution_record.model if resp.execution_record else "granite4:3b-h")
             return decision
 
         raise ValueError(f"Unexpected response format from ModelGateway: {type(raw_payload)}")

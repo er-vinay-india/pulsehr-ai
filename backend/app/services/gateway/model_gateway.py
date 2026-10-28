@@ -158,6 +158,17 @@ class ModelGateway:
                 deterministic_bypass=True,
             )
 
+        # 1b. Dedicated Specialist Route for PRESENTATION_COMPOSITION (Granite 4 LoRA on Metal)
+        if request.task_type == AITaskType.PRESENTATION_COMPOSITION and getattr(config, "COMPOSITION_MODEL_ENABLED", True):
+            try:
+                from ..presentation.composition.specialist import GraniteCompositionSpecialist
+                if GraniteCompositionSpecialist.is_available():
+                    return GraniteCompositionSpecialist.execute_request(request)
+            except Exception as e:
+                logger.warning(
+                    "Granite composition specialist execution failed: %s; falling back to candidate cascade", e
+                )
+
         # 2. Compute Input Hash
         inp_hash = compute_hash({
             "prompt": request.prompt or request.query,

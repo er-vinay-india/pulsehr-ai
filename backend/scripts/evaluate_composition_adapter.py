@@ -1,15 +1,7 @@
-"""Evaluate fine-tuned Granite Composition LoRA checkpoints (20, 40, 60) on validation and holdout sets.
+"""Evaluate fine-tuned Granite 4 Composition LoRA checkpoints (20, 40, 60) on validation and holdout sets.
 
-Compares:
-- Iteration 20 checkpoint
-- Iteration 40 checkpoint
-- Iteration 60 checkpoint
-
-Computes:
-- Schema-valid output rate
-- Hallucinated-ID rate
-- Invalid-enum rate
-- Forbidden-rendering-instruction rate (coordinates, colors, fonts, markup)
+Base Model: mlx-community/granite-4.0-h-micro-4bit
+Adapter Path: backend/models/granite4_presentation_composition_lora_v1
 """
 
 from __future__ import annotations
@@ -18,21 +10,21 @@ import json
 import re
 import shutil
 from pathlib import Path
+from typing import Any
 from mlx_lm import load, generate
 from app.services.presentation.composition.composition_models import CompositionDecision
 from app.services.presentation.composition.composition_validator import CompositionDecisionValidator
 
 def evaluate_checkpoint(adapter_weights_file: str, checkpoint_name: str) -> dict[str, Any]:
-    model_path = "mlx-community/granite-3b-code-instruct-4bit"
-    adapter_dir = Path("backend/models/granite_presentation_composition_lora_v1")
+    model_path = "mlx-community/granite-4.0-h-micro-4bit"
+    adapter_dir = Path("backend/models/granite4_presentation_composition_lora_v1")
     
-    # Temporarily copy target checkpoint to adapters.safetensors for mlx_lm loading
     target_weights = adapter_dir / adapter_weights_file
     active_weights = adapter_dir / "adapters.safetensors"
     shutil.copyfile(target_weights, active_weights)
 
     print(f"\n========================================================")
-    print(f"EVALUATING CHECKPOINT: {checkpoint_name} ({adapter_weights_file})")
+    print(f"EVALUATING GRANITE 4 CHECKPOINT: {checkpoint_name} ({adapter_weights_file})")
     print(f"========================================================")
     
     model, tokenizer = load(model_path, adapter_path=str(adapter_dir))
@@ -81,7 +73,6 @@ def evaluate_checkpoint(adapter_weights_file: str, checkpoint_name: str) -> dict
                 details.append((rec["example_id"], f"SCHEMA/ENUM_ERR: {e}"))
                 continue
 
-            # Grounding check
             grounded_ids = set()
             for b in rec["messages"][1]["content"].split("AVAILABLE CONTENT BINDINGS:")[1].split("]")[0].split('"content_id":'):
                 if '"' in b:
@@ -123,9 +114,9 @@ def evaluate_checkpoint(adapter_weights_file: str, checkpoint_name: str) -> dict
 
 def main():
     checkpoints = [
-        ("0000020_adapters.safetensors", "Iteration 20 (Val Loss: 0.155)"),
-        ("0000040_adapters.safetensors", "Iteration 40 (Val Loss: 0.159)"),
-        ("0000060_adapters.safetensors", "Iteration 60 (Val Loss: 0.172)"),
+        ("0000020_adapters.safetensors", "Granite 4 Iteration 20 (Val Loss: 0.161)"),
+        ("0000040_adapters.safetensors", "Granite 4 Iteration 40 (Val Loss: 0.189)"),
+        ("0000060_adapters.safetensors", "Granite 4 Iteration 60 (Val Loss: 0.205)"),
     ]
     
     summary = {}
@@ -134,7 +125,7 @@ def main():
         summary[name] = res
         
     print("\n\n========================================================")
-    print("CHECKPOINT COMPARISON SUMMARY")
+    print("GRANITE 4 CHECKPOINT COMPARISON SUMMARY")
     print("========================================================")
     for name, res in summary.items():
         v = res["valid"]

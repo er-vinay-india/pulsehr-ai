@@ -1,0 +1,43 @@
+{
+    "adapter_path": "backend/models/granite4_presentation_composition_lora_v1",
+    "batch_size": 2,
+    "clear_cache_threshold": 0,
+    "config": "backend/data/composition_tuning/lora_config_granite4.yaml",
+    "data": "backend/data/composition_tuning",
+    "fine_tune_type": "lora",
+    "grad_accumulation_steps": 1,
+    "grad_checkpoint": true,
+    "iters": 60,
+    "learning_rate": 0.0001,
+    "lora_parameters": {
+        "rank": 8,
+        "alpha": 16.0,
+        "dropout": 0.05,
+        "scale": 2.0
+    },
+    "lr_schedule": null,
+    "mask_prompt": true,
+    "max_seq_length": 2048,
+    "model": "mlx-community/granite-4.0-h-micro-4bit",
+    "num_layers": 16,
+    "optimizer": "adamw",
+    "optimizer_config": {
+        "adam": {},
+        "adamw": {},
+        "muon": {},
+        "sgd": {},
+        "adafactor": {}
+    },
+    "project_name": null,
+    "report_to": null,
+    "resume_adapter_file": null,
+    "save_every": 20,
+    "seed": 42,
+    "steps_per_eval": 20,
+    "steps_per_report": 10,
+    "test": false,
+    "test_batches": 500,
+    "train": true,
+    "trust_remote_code": false,
+    "val_batches": -1
+}

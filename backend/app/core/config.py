@@ -100,6 +100,13 @@ class HighviewSettings(BaseSettings):
     TYPOGRAPHY_MODEL_ADAPTER_PATH: Path = Field(default_factory=lambda: Path(os.getenv("TYPOGRAPHY_MODEL_ADAPTER_PATH") or str(BASE_DIR / "models" / "typography" / "phi4_mini_lora")))
     TYPOGRAPHY_MODEL_TIMEOUT: float = Field(default_factory=lambda: float(os.getenv("TYPOGRAPHY_MODEL_TIMEOUT", "6.0")))
     TYPOGRAPHY_MODEL_TEMPERATURE: float = Field(default_factory=lambda: float(os.getenv("TYPOGRAPHY_MODEL_TEMPERATURE", "0.1")))
+
+    # Dedicated Presentation Composition Model Settings (Granite 4 LoRA on Apple Silicon Metal)
+    COMPOSITION_MODEL_ENABLED: bool = Field(default_factory=lambda: os.getenv("COMPOSITION_MODEL_ENABLED", "true").lower().strip() in ("1", "true", "yes"))
+    COMPOSITION_MODEL_BASE: str = Field(default_factory=lambda: os.getenv("COMPOSITION_MODEL_BASE", "mlx-community/granite-4.0-h-micro-4bit"))
+    COMPOSITION_MODEL_ADAPTER_PATH: Path = Field(default_factory=lambda: Path(os.getenv("COMPOSITION_MODEL_ADAPTER_PATH") or str(BASE_DIR / "models" / "granite4_presentation_composition_lora_v1")))
+    COMPOSITION_MODEL_TIMEOUT: float = Field(default_factory=lambda: float(os.getenv("COMPOSITION_MODEL_TIMEOUT", "12.0")))
+    COMPOSITION_MODEL_TEMPERATURE: float = Field(default_factory=lambda: float(os.getenv("COMPOSITION_MODEL_TEMPERATURE", "0.15")))
     EMBEDDING_DIM: int = Field(default=768)
 
     # AI Model Roles
@@ -283,6 +290,12 @@ TYPOGRAPHY_MODEL_BASE = settings.TYPOGRAPHY_MODEL_BASE
 TYPOGRAPHY_MODEL_ADAPTER_PATH = settings.TYPOGRAPHY_MODEL_ADAPTER_PATH
 TYPOGRAPHY_MODEL_TIMEOUT = settings.TYPOGRAPHY_MODEL_TIMEOUT
 TYPOGRAPHY_MODEL_TEMPERATURE = settings.TYPOGRAPHY_MODEL_TEMPERATURE
+
+COMPOSITION_MODEL_ENABLED = settings.COMPOSITION_MODEL_ENABLED
+COMPOSITION_MODEL_BASE = settings.COMPOSITION_MODEL_BASE
+COMPOSITION_MODEL_ADAPTER_PATH = settings.COMPOSITION_MODEL_ADAPTER_PATH
+COMPOSITION_MODEL_TIMEOUT = settings.COMPOSITION_MODEL_TIMEOUT
+COMPOSITION_MODEL_TEMPERATURE = settings.COMPOSITION_MODEL_TEMPERATURE
 
 KAGGLE_DATASET = settings.KAGGLE_DATASET
 KAGGLE_LOCAL_CACHE = settings.KAGGLE_LOCAL_CACHE

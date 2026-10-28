@@ -29,6 +29,7 @@ from .composition_provider import (
 )
 from .composition_validator import CompositionDecisionValidator, CompositionValidationError
 from .label_resolver import GovernedLabelResolver
+from .specialist import GraniteCompositionSpecialist
 
 __all__ = [
     "SlideCompositionEngine",
@@ -52,4 +53,5 @@ __all__ = [
     "AICompositionProvider",
     "CompositionDecisionValidator",
     "CompositionValidationError",
+    "GraniteCompositionSpecialist",
 ]

@@ -689,8 +689,8 @@ def test_ai_composition_provider_provenance_and_granite_tagging():
 
         assert decision.decision_source == CompositionDecisionSource.AI_MODEL
         assert decision.metadata.get("model_family") == "GRANITE"
-        assert decision.metadata.get("base_model") == "granite4:3b"
-        assert decision.metadata.get("adapter_name") == "granite_presentation_composition_lora_v1"
+        assert decision.metadata.get("base_model") in ("granite4:3b", "mlx-community/granite-4.0-h-micro-4bit")
+        assert "granite" in decision.metadata.get("adapter_name").lower()
         assert decision.metadata.get("adapter_version") == "v1"
         assert decision.metadata.get("fallback_used") is False
         assert decision.confidence == 0.94

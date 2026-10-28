@@ -40,8 +40,8 @@ TASK_MODEL_CASCADES: dict[AITaskType, list[str]] = {
     ],
     AITaskType.PRESENTATION_COMPOSITION: [
         "granite-composition-v1",
+        "granite4:3b-h",
         "granite4:3b",
-        "granite4:3b-h"
     ],
     AITaskType.PRESENTATION_TYPOGRAPHY: [
         "phi4-mini-typography",

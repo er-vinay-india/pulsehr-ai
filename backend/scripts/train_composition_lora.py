@@ -16,9 +16,10 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 logger = logging.getLogger(__name__)
 
 
-def run_lora_training():
-    config_file = Path("backend/data/composition_tuning/lora_config.yaml")
-    adapter_dir = Path("backend/models/granite_presentation_composition_lora_v1")
+def run_lora_training(config_path: str | None = None):
+    cfg_str = config_path or (sys.argv[1] if len(sys.argv) > 1 else "backend/data/composition_tuning/lora_config_granite4.yaml")
+    config_file = Path(cfg_str)
+    adapter_dir = Path("backend/models/granite4_presentation_composition_lora_v1")
     adapter_dir.mkdir(parents=True, exist_ok=True)
 
     cmd = [
