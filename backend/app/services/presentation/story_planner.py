@@ -218,6 +218,7 @@ class DeterministicStoryPlanner:
                         visual_strategy=kpi.visual_strategy,
                         visual_type=kpi.visual_type,
                         visual_spec=kpi.visual_spec,
+                        presentation_visual_spec=getattr(kpi, "presentation_visual_spec", None),
                         source_surface=kpi.source_surface,
                     )
                     for kpi in content_pkg.global_kpis[:4]
@@ -302,6 +303,7 @@ class DeterministicStoryPlanner:
                         visual_strategy=kpi.visual_strategy,
                         visual_type=kpi.visual_type,
                         visual_spec=kpi.visual_spec,
+                        presentation_visual_spec=getattr(kpi, "presentation_visual_spec", None),
                         source_surface=kpi.source_surface,
                     )
                     for kpi in content_pkg.global_kpis[:4]
@@ -507,6 +509,7 @@ class DeterministicStoryPlanner:
                     visual_completeness=item.visual_completeness,
                     visual_type=item.visual_type,
                     visual_spec=item.visual_spec,
+                    presentation_visual_spec=getattr(item, "presentation_visual_spec", None),
                     source_surface=item.source_surface,
                 )
             ]
@@ -526,6 +529,7 @@ class DeterministicStoryPlanner:
                                 visual_completeness=cand.visual_completeness,
                                 visual_type=cand.visual_type,
                                 visual_spec=cand.visual_spec,
+                                presentation_visual_spec=getattr(cand, "presentation_visual_spec", None),
                                 source_surface=cand.source_surface,
                             )
                         )
@@ -547,13 +551,10 @@ class DeterministicStoryPlanner:
                         )
                         break
 
-            # Archetype suggestion
-            if item.visual_strategy == VisualStrategy.REUSE_EXISTING and item.visual_type:
-                archetype = f"REUSED_{item.visual_type.upper()}"
-            elif item.kind in (ContentKind.CHART, ContentKind.MAP):
-                archetype = "CHART_WITH_INSIGHT"
-            else:
-                archetype = "DATA_TABLE_DETAIL"
+            # Archetype suggestion - neutralized from visual ownership
+            # Visual Selection Intelligence determines WHAT visual representation to use,
+            # while Granite Composition resolves HOW it coexists as a layout archetype.
+            archetype = None
 
             # Apply user visible policy to clean headline/takeaway in normal business decks
             headline = item.title
@@ -613,6 +614,7 @@ class DeterministicStoryPlanner:
                     visual_completeness=item.visual_completeness,
                     visual_type=item.visual_type,
                     visual_spec=item.visual_spec,
+                    presentation_visual_spec=getattr(item, "presentation_visual_spec", None),
                     source_surface=item.source_surface,
                 )
             )
@@ -1244,6 +1246,7 @@ class AIStoryPlanner:
                 s_surf = pkg_item.source_surface if pkg_item else b_data.get("source_surface")
 
                 b_role = ContentBindingRole(b_data.get("binding_role", "PRIMARY"))
+                cand_pspec = getattr(pkg_item, "presentation_visual_spec", None)
                 parsed_bindings.append(
                     ContentBinding(
                         content_id=cid,
@@ -1252,6 +1255,7 @@ class AIStoryPlanner:
                         visual_strategy=v_strat,
                         visual_type=v_type,
                         visual_spec=v_spec,
+                        presentation_visual_spec=cand_pspec,
                         source_surface=s_surf,
                     )
                 )
@@ -1276,6 +1280,7 @@ class AIStoryPlanner:
                     visual_strategy=primary_b.visual_strategy if primary_b else VisualStrategy.PRESENTATION_RECOMMENDATION,
                     visual_type=primary_b.visual_type if primary_b else None,
                     visual_spec=primary_b.visual_spec if primary_b else None,
+                    presentation_visual_spec=primary_b.presentation_visual_spec if primary_b else None,
                     source_surface=primary_b.source_surface if primary_b else None,
                 )
             )

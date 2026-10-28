@@ -735,6 +735,17 @@ class PresentationVisualSpec(BaseModel):
     source_visual_family: str = ""
     is_legacy_fallback: bool = False
 
+    # Semantic governance fields for Visual Selection Intelligence
+    visual_variant: str = "standard"
+    reuse_strategy: str = "DERIVE_NEW_VISUAL"
+    visual_completeness: str = "COMPLETE_VISUAL"
+    is_scenario: bool = False
+    table_data: list[dict[str, Any]] | None = None
+    reason_codes: list[str] = Field(default_factory=list)
+    confidence: float = 1.0
+    source_surface: str | None = None
+    source_data_reference: dict[str, Any] | None = None
+
     @classmethod
     def from_governed_visual(
         cls,

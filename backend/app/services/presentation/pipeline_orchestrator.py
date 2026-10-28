@@ -309,6 +309,26 @@ def execute_presentation_pipeline_async(
                     }
                 )
 
+                # PPT-L1.5: Visual Selection Intelligence (Canonical PresentationVisualSpec)
+                from .visual_selection import VisualSelectionIntelligence
+                visual_intelligence = VisualSelectionIntelligence()
+                layered_content_package = visual_intelligence.process_content_package(layered_content_package)
+                workspace_evidence["visual_selection_processed"] = True
+                workspace_evidence["visual_specs_summary"] = [
+                    {
+                        "content_id": it.content_id,
+                        "visual_family": it.presentation_visual_spec.family.value if it.presentation_visual_spec else None,
+                        "reuse_strategy": it.visual_strategy.value if hasattr(it.visual_strategy, "value") else str(it.visual_strategy),
+                        "is_scenario": getattr(it.presentation_visual_spec, "is_scenario", False) if it.presentation_visual_spec else False,
+                    }
+                    for it in layered_content_package.items
+                ]
+                logger.info(
+                    "VisualSelectionIntelligence processed %d items into canonical PresentationVisualSpecs for job %s",
+                    len(layered_content_package.items),
+                    job_id
+                )
+
                 # PPT-L2: Story Planner & Logical SlideTags
                 from .story_planner import StoryPlanner
                 planner = StoryPlanner(use_ai=False)
@@ -336,11 +356,36 @@ def execute_presentation_pipeline_async(
                 # PPT-L2.5: Slide Composition Intelligence
                 from .composition import SlideCompositionEngine
                 composition_engine = SlideCompositionEngine(use_ai=False)
+
+                # Granite Read-Only Baseline: Capture visual representations before Composition Intelligence
+                visual_baseline = {
+                    s.logical_slide_id: (
+                        s.visual_type,
+                        s.visual_id,
+                        getattr(s.presentation_visual_spec, "semantic_hash", None) if getattr(s, "presentation_visual_spec", None) else None,
+                    )
+                    for s in deck_story_plan.logical_slides
+                }
+
                 composition_plan = composition_engine.compose_deck(
                     story_plan=deck_story_plan,
                     content_pkg=layered_content_package,
                     metadata={"job_id": job_id, "scope": scope}
                 )
+
+                # Granite Read-Only Immutability Verification: Visual representation must not be mutated
+                for s in deck_story_plan.logical_slides:
+                    before_fp = visual_baseline.get(s.logical_slide_id)
+                    current_spec_hash = getattr(s.presentation_visual_spec, "semantic_hash", None) if getattr(s, "presentation_visual_spec", None) else None
+                    after_fp = (s.visual_type, s.visual_id, current_spec_hash)
+                    if before_fp and before_fp != after_fp:
+                        logger.warning(
+                            "Granite Composition attempted to mutate visual representation on slide %s: before=%s, after=%s. Reverting to preserve Visual Selection authority.",
+                            s.logical_slide_id, before_fp, after_fp
+                        )
+                        s.visual_type = before_fp[0]
+                        s.visual_id = before_fp[1]
+
                 workspace_evidence["deck_composition_plan"] = composition_plan.model_dump()
                 logger.info(
                     "SlideCompositionEngine generated DeckCompositionPlan %s (%d decisions: %d AI, %d fallback) for job %s",

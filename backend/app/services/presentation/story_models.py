@@ -92,6 +92,7 @@ class ContentBinding(BaseModel):
     visual_completeness: VisualCompleteness = Field(default=VisualCompleteness.COMPLETE_VISUAL)
     visual_type: str | None = Field(default=None, description="Bound visual type / chart family")
     visual_spec: dict[str, Any] | None = Field(default=None, description="Bound visual specification")
+    presentation_visual_spec: Any = Field(default=None, description="Bound canonical PresentationVisualSpec instance or dump")
     source_surface: str | None = Field(default=None, description="Originating surface (e.g. dashboard, data_explorer)")
 
 
@@ -156,6 +157,7 @@ class LogicalSlidePlan(BaseModel):
     visual_completeness: VisualCompleteness = Field(default=VisualCompleteness.COMPLETE_VISUAL)
     visual_type: str | None = Field(default=None, description="Primary visual type / chart family")
     visual_spec: dict[str, Any] | None = Field(default=None, description="Primary visual specification")
+    presentation_visual_spec: Any = Field(default=None, description="Primary canonical PresentationVisualSpec instance or dump")
     source_surface: str | None = Field(default=None, description="Primary visual surface")
     metadata: dict[str, Any] = Field(default_factory=dict, description="Arbitrary metadata such as cover framing")
 

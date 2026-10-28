@@ -651,6 +651,9 @@ class LayeredSlideStructureBuilder:
         obj_meta["visual_strategy"] = v_strat.value if hasattr(v_strat, "value") else str(v_strat or "")
         obj_meta["visual_type"] = v_type
         obj_meta["visual_spec"] = getattr(item, "visual_spec", None) or getattr(binding, "visual_spec", None)
+        p_spec = getattr(item, "presentation_visual_spec", None) or getattr(binding, "presentation_visual_spec", None)
+        if p_spec:
+            obj_meta["presentation_visual_spec"] = p_spec.model_dump() if hasattr(p_spec, "model_dump") else p_spec
         obj_meta["source_surface"] = getattr(item, "source_surface", None) or getattr(binding, "source_surface", None)
         obj_meta["composition_role"] = comp_role or "UNASSIGNED"
         obj_meta["typography_priority"] = typo_priority

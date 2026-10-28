@@ -84,6 +84,7 @@ class PresentationContentItem(BaseModel):
 
     # Visual / Data payloads
     visual_spec: dict[str, Any] | None = Field(default=None, description="Governed visual specification")
+    presentation_visual_spec: Any = Field(default=None, description="Authoritative PresentationVisualSpec instance or dump")
     table_data: list[dict[str, Any]] | None = Field(default=None, description="Governed tabular data partition")
     metric_value: str | None = Field(default=None, description="Formatted KPI string, e.g. '1.21B' or '17.7%'")
     metric_label: str | None = Field(default=None, description="Business metric label")

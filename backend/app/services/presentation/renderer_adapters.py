@@ -437,8 +437,17 @@ class ChartRendererAdapter(BaseRendererAdapter):
         elif obj_layout.metadata.get("visual_spec"):
             chart_spec = obj_layout.metadata["visual_spec"]
 
+        p_spec = getattr(content_item, "presentation_visual_spec", None) or obj_layout.metadata.get("presentation_visual_spec")
+        canonical_fam = None
+        if p_spec:
+            if hasattr(p_spec, "family"):
+                canonical_fam = p_spec.family.value if hasattr(p_spec.family, "value") else str(p_spec.family)
+            elif isinstance(p_spec, dict) and "family" in p_spec:
+                canonical_fam = p_spec["family"]
+
         visual_type = (
-            getattr(content_item, "visual_type", None)
+            canonical_fam
+            or getattr(content_item, "visual_type", None)
             or obj_layout.metadata.get("visual_type")
             or chart_spec.get("chart_type", "column")
         )
@@ -496,13 +505,22 @@ class ChartRendererAdapter(BaseRendererAdapter):
         elif obj_layout.metadata.get("visual_spec"):
             chart_spec = obj_layout.metadata["visual_spec"]
 
+        p_spec = getattr(content_item, "presentation_visual_spec", None) or obj_layout.metadata.get("presentation_visual_spec")
+        canonical_fam = None
+        if p_spec:
+            if hasattr(p_spec, "family"):
+                canonical_fam = p_spec.family.value if hasattr(p_spec.family, "value") else str(p_spec.family)
+            elif isinstance(p_spec, dict) and "family" in p_spec:
+                canonical_fam = p_spec["family"]
+
         is_reused = (
             getattr(content_item, "visual_strategy", None) == VisualStrategy.REUSE_EXISTING
             or obj_layout.metadata.get("visual_strategy") == "REUSE_EXISTING"
         )
         theme_palette = obj_layout.metadata.get("theme_palette")
         visual_type = (
-            getattr(content_item, "visual_type", None)
+            canonical_fam
+            or getattr(content_item, "visual_type", None)
             or obj_layout.metadata.get("visual_type")
             or chart_spec.get("chart_type", "column")
         )
@@ -933,6 +951,10 @@ class ChartRendererAdapter(BaseRendererAdapter):
                 rec.fallback_applied = True
                 rec.fallback_reason = f"DrawingML chart creation failed: {exc}"
                 rec.is_native_editable = False
+                rec.metadata["original_visual"] = visual_type
+                rec.metadata["fallback_visual"] = "raster"
+                rec.metadata["fallback_reason"] = rec.fallback_reason
+                rec.metadata["canonical_visual_family"] = canonical_fam
                 return shape, rec
 
             raise
@@ -974,8 +996,17 @@ class RasterRendererAdapter(BaseRendererAdapter):
             or obj_layout.metadata.get("visual_strategy") == "REUSE_EXISTING"
         )
         theme_palette = obj_layout.metadata.get("theme_palette")
+        p_spec = getattr(content_item, "presentation_visual_spec", None) or obj_layout.metadata.get("presentation_visual_spec")
+        canonical_fam = None
+        if p_spec:
+            if hasattr(p_spec, "family"):
+                canonical_fam = p_spec.family.value if hasattr(p_spec.family, "value") else str(p_spec.family)
+            elif isinstance(p_spec, dict) and "family" in p_spec:
+                canonical_fam = p_spec["family"]
+
         visual_type = (
-            getattr(content_item, "visual_type", None)
+            canonical_fam
+            or getattr(content_item, "visual_type", None)
             or obj_layout.metadata.get("visual_type")
         )
         source_v_id = getattr(content_item, "visual_id", None) or obj_layout.metadata.get("visual_id")
