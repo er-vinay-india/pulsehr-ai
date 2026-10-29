@@ -178,3 +178,27 @@ def test_stale_editor_cannot_restore_deleted_data(endpoint):
     assert response.status_code == 409
     assert remaining('presentation_decks') == ['kept']
     assert not (config.EXPORTS_DIR/'presentation_removed.pptx').exists()
+
+
+@pytest.mark.parametrize('url,method', [
+    ('/api/upload/datasets/bulk-delete', 'post'),
+    ('/api/upload/datasets/7', 'delete'),
+    ('/api/upload/datasets', 'delete'),
+])
+def test_readonly_storage_returns_actionable_json(url, method, monkeypatch):
+    from app.services import dataset_deletion
+    seed_sources()
+    original = dataset_deletion.get_connection
+
+    def readonly_connection():
+        conn = original()
+        conn.execute('PRAGMA query_only = ON')
+        return conn
+
+    monkeypatch.setattr(dataset_deletion, 'get_connection', readonly_connection)
+    response = (client.post(url, json={'dataset_ids': [7]}) if method == 'post'
+                else client.delete(url))
+    assert response.status_code == 503
+    assert 'read-only' in response.json()['detail']
+    assert remaining('dataset_uploads') == [7, 20]
+    assert (config.UPLOADS_DIR / 'source_7.csv').exists()

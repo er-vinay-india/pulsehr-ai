@@ -385,11 +385,25 @@ export async function openExecutivePrintReport() {
   }
 }
 
+async function readDeletionResponse(res) {
+  let result;
+  try {
+    result = await res.json();
+  } catch {
+    throw new Error(`Could not confirm workbook deletion (HTTP ${res.status}). Refresh the workbook list before retrying.`);
+  }
+  if (!res.ok) {
+    throw new Error(typeof result?.detail === "string" ? result.detail : `Could not delete workbooks (HTTP ${res.status}). Please retry.`);
+  }
+  if (!result || typeof result !== "object" || Array.isArray(result)) {
+    throw new Error("Could not confirm workbook deletion. Refresh the workbook list before retrying.");
+  }
+  return result;
+}
+
 export async function deleteDataset(id) {
   const res = await fetch(`${API_BASE}/upload/datasets/${id}`, { method: "DELETE" });
-  const result = await res.json();
-  if (!res.ok) throw new Error(typeof result.detail === 'string' ? result.detail : "Could not delete workbook. Please retry.");
-  return result;
+  return readDeletionResponse(res);
 }
 
 export async function bulkDeleteDatasets(datasetIds = [], deleteAll = false) {
@@ -398,15 +412,12 @@ export async function bulkDeleteDatasets(datasetIds = [], deleteAll = false) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ dataset_ids: datasetIds, delete_all: deleteAll })
   });
-  const result = await res.json();
-  if (!res.ok) throw new Error(typeof result.detail === 'string' ? result.detail : "Could not delete selected workbooks. Please retry.");
-  return result;
+  return readDeletionResponse(res);
 }
 
 export async function deleteAllDatasets() {
   const res = await fetch(`${API_BASE}/upload/datasets`, { method: "DELETE" });
-  if (!res.ok) throw new Error("Failed to delete all datasets");
-  return res.json();
+  return readDeletionResponse(res);
 }
 
 export async function submitDatasetBrief(datasetId, brief) {

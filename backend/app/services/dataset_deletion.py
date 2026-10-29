@@ -1,6 +1,7 @@
 """Delete source data and its materializations; retain only unfinished file cleanup tasks."""
 import json
 import logging
+import sqlite3
 import sys
 from pathlib import Path
 
@@ -143,8 +144,9 @@ def delete_datasets(dataset_ids=None, *, delete_all=False):
     if not delete_all and (not dataset_ids or any(type(i) is not int or i <= 0 for i in dataset_ids)):
         raise HTTPException(400, 'Select at least one valid workbook to delete.')
     with data_lifecycle_lock:
-        conn = get_connection()
+        conn = None
         try:
+            conn = get_connection()
             ids = set(dataset_ids or [])
             rows = conn.execute('SELECT * FROM dataset_uploads').fetchall()
             rows = [row for row in rows if delete_all or row['id'] in ids]
@@ -438,8 +440,18 @@ def delete_datasets(dataset_ids=None, *, delete_all=False):
                 'deleted_deck_ids': sorted(deck_ids),
             }
             return result
+        except sqlite3.OperationalError as exc:
+            logger.exception('Dataset deletion storage failure')
+            if 'readonly' in str(exc).lower() or 'read-only' in str(exc).lower():
+                detail = 'Workbook storage is read-only. Restore write access to the database and retry deletion.'
+            elif 'locked' in str(exc).lower():
+                detail = 'Workbook storage is busy. Wait for the current operation to finish and retry deletion.'
+            else:
+                detail = 'Workbook storage is unavailable. Refresh the workbook list before retrying deletion.'
+            raise HTTPException(503, detail) from exc
         except Exception:
             logger.exception('Dataset deletion failed: dataset_ids=%s delete_all=%s', dataset_ids, delete_all)
             raise
         finally:
-            conn.close()
+            if conn is not None:
+                conn.close()
